@@ -1,0 +1,59 @@
+---
+name: compute
+title: Compute Resource
+description: Define what to run and what it needs
+
+parameters:
+  image:
+    type: string
+    description: Container image to deploy (e.g., "myregistry.azurecr.io/my-app:v1.0.0")
+    required: true
+
+  ports:
+    type: array
+    items:
+      name: string
+      port: integer
+      protocol: string
+    description: Ports to expose
+    optional: true
+    example:
+      - name: http
+        port: 8080
+        protocol: TCP
+
+  cpu:
+    type: string
+    description: CPU request (e.g., "500m", "1", "2")
+    default: "500m"
+
+  memory:
+    type: string
+    description: Memory request (e.g., "512Mi", "1Gi")
+    default: "512Mi"
+
+  replicas:
+    type: integer
+    description: Number of instances
+    default: 1
+
+  max_replicas:
+    type: integer
+    description: Maximum instances for scaling (0 = no scaling)
+    default: 0
+
+  network_access:
+    type: enum
+    values: [internal, public]
+    description: Internal only or exposed externally
+    default: internal
+
+  health_check_path:
+    type: string
+    description: Health check endpoint (e.g., "/health")
+    optional: true
+
+  health_check_port:
+    type: integer
+    description: Port where health check endpoint is listening
+    optional: true

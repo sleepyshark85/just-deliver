@@ -1,0 +1,121 @@
+# Landing Zone Definition Schema — Shared Infrastructure Only
+# This schema defines what teams must provide to request a landing zone.
+#
+# SHARED INFRASTRUCTURE = the foundation all workloads run on
+# - Subscriptions and management hierarchy
+# - Identity and access control
+# - Network topology (VNets, subnets)
+# - Cost controls
+#
+# ORGANIZATIONAL POLICIES (auto-applied, not team-defined):
+# - Security policies and encryption standards
+# - Compliance frameworks and audit logging
+# - Monitoring and observability baseline
+# - Network security rules and peering
+# - Resource limits and quotas
+#
+# OPERATIONAL DETAILS (not part of landing zone):
+# - Workload resources (databases, app services)
+# - Application-specific configurations
+# - Team automation or scheduled tasks
+# - Custom policy overrides
+
+---
+apiVersion: "v1"                    # REQUIRED
+kind: "LandingZoneDefinition"       # REQUIRED
+
+metadata:                           # REQUIRED
+  name: "lz-team-a"                # REQUIRED: Unique identifier ([a-z0-9\-]+)
+  displayName: "Team A"             # REQUIRED: Human-readable name
+  owner:                            # REQUIRED
+    team: "Team A"                  # REQUIRED: Team name
+    email: "team-a-leads@litmos.com"  # REQUIRED: Team contact email
+
+spec:                               # REQUIRED
+
+  # --- IDENTITY & ACCESS ---
+  identity:                         # REQUIRED
+    domain: "team-a.litmos.com"     # REQUIRED: Custom domain for this team
+
+    accessGroups:                   # REQUIRED: Who can access (at least one)
+      - name: "grp-team-a-developers"  # REQUIRED: Group name
+        roles: ["Contributor"]        # REQUIRED: RBAC roles
+
+  # --- GOVERNANCE & COST ---
+  governance:                       # REQUIRED
+    tags:                           # REQUIRED: Mandatory org tags
+      CostCenter: "CC-12345"        # REQUIRED: Org cost center code
+      Team: "TeamA"                 # REQUIRED: Team identifier
+      Environment: "development"    # REQUIRED: Enum: development, test, production
+
+    budget:                         # OPTIONAL: Monthly spend limit
+      monthlyLimitUsd: 1000         # OPTIONAL (default: environment-based)
+
+  # --- SUBSCRIPTIONS ---
+  subscriptions:                    # REQUIRED: Environments to create
+    - name: "sub-team-a-dev"        # REQUIRED: Subscription identifier
+      displayName: "Team A - Dev"   # REQUIRED: Portal display name
+      environment: "development"    # REQUIRED: Enum: development, test, production
+
+  # --- NETWORKING ---
+  networking:                       # REQUIRED
+    primaryRegion: "westeurope"     # REQUIRED: Primary Azure region
+
+    vnets:                          # REQUIRED: Virtual networks
+      - subscriptionName: "sub-team-a-dev"  # REQUIRED: Which subscription
+        name: "vnet-team-a-dev"     # REQUIRED: VNet name
+        addressSpace: "10.1.1.0/24" # REQUIRED: Non-overlapping CIDR block
+        subnets:                    # REQUIRED: At least one subnet
+          - name: "subnet-apps"     # REQUIRED: Subnet name
+            addressPrefix: "10.1.1.0/25"  # REQUIRED: Subnet CIDR
+
+---
+# WHAT GETS AUTO-APPLIED (teams don't define these):
+#
+# Identity:
+#   ✅ Administrative Unit: auto-created from team name
+#   ✅ Entra ID groups created automatically
+#   ✅ RBAC roles assigned automatically
+#   ✅ Conditional Access policies: org-wide standards
+#
+# Governance:
+#   ✅ Required org tags: auto-applied (CostCenter, Team, Environment, ManagedBy)
+#   ✅ Compliance frameworks: org defaults (SOC2, etc.)
+#   ✅ Budget alerts: 80% and 100% thresholds (default)
+#   ✅ Cost allocation: automatic via tags
+#
+# Networking:
+#   ✅ Secondary subnets: auto-provisioned for isolation
+#   ✅ VNet peering: auto-connected to regional hub
+#   ✅ Network security rules: org-wide policies applied
+#   ✅ Private DNS: auto-configured
+#   ✅ Flow logs: auto-enabled
+#   ✅ Network Watcher: auto-enabled
+#
+# Security:
+#   ✅ Encryption at rest: AES-256 (org policy)
+#   ✅ Transport encryption: TLS1.2+ (org policy)
+#   ✅ Azure Policies: all org-wide policies enforced
+#   ✅ Azure Defender: auto-enabled
+#   ✅ Threat detection: auto-enabled
+#   ✅ Privilege Access Management: auto-enabled
+#
+# Observability:
+#   ✅ Log Analytics: centralized (law-platform-shared)
+#   ✅ Diagnostics: auto-enabled on all resources
+#   ✅ Application Insights: auto-enabled
+#   ✅ Monitoring: standard baselines applied
+#   ✅ Alerting: standard thresholds applied
+#
+# Management:
+#   ✅ Management Group: auto-determined from environment
+#   ✅ Subscription policies: auto-assigned based on management group
+#   ✅ Resource quotas: auto-enforced per environment
+#
+# Automation:
+#   ✅ Provisioning method: Pulumi/TypeScript (standard)
+#   ✅ Approval workflow: platform team (standard)
+#   ✅ Self-healing policies: auto-enabled
+#
+# Teams ask for: What makes them different from standard
+# Platform provides: Everything else via organizational defaults

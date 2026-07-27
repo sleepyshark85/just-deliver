@@ -1,0 +1,292 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver.litmos.com/schemas/landing-zone-definition.schema.json",
+  "title": "Landing Zone Definition",
+  "description": "Schema for validating landing zone definition files submitted to the IDP",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "enum": ["v1"],
+      "description": "Schema version"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["LandingZoneDefinition"],
+      "description": "Resource type"
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "displayName", "owner"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^lz-[a-z0-9-]+$",
+          "description": "Unique identifier (must start with 'lz-' and contain only lowercase letters, numbers, hyphens)"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Human-readable name for Azure portal"
+        },
+        "owner": {
+          "type": "object",
+          "required": ["team", "email"],
+          "properties": {
+            "team": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Team name"
+            },
+            "email": {
+              "type": "string",
+              "format": "email",
+              "description": "Team contact email address"
+            }
+          },
+          "additionalProperties": false
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp (auto-set by platform)"
+        },
+        "lastModified": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last modified timestamp (auto-set by platform)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "spec": {
+      "type": "object",
+      "required": ["identity", "governance", "subscriptions", "networking"],
+      "properties": {
+        "identity": {
+          "type": "object",
+          "required": ["domain", "accessGroups"],
+          "properties": {
+            "domain": {
+              "type": "string",
+              "format": "hostname",
+              "description": "Custom domain for this team (must be verified in Entra ID)"
+            },
+            "administrativeUnit": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "AU name (auto-generated if not provided)"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "accessGroups": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["name", "roles"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^grp-[a-z0-9-]+$",
+                    "description": "Security group name"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "roles": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "enum": ["Owner", "Contributor", "Reader", "UserAccessAdministrator"],
+                      "description": "Azure RBAC role"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "description": "Entra ID security groups (at least one required)"
+            }
+          },
+          "additionalProperties": false
+        },
+        "governance": {
+          "type": "object",
+          "required": ["tags"],
+          "properties": {
+            "tags": {
+              "type": "object",
+              "required": ["CostCenter", "Team", "Environment"],
+              "properties": {
+                "CostCenter": {
+                  "type": "string",
+                  "pattern": "^CC-[0-9]+$",
+                  "description": "Org cost center code (required)"
+                },
+                "Team": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Team identifier (required)"
+                },
+                "Environment": {
+                  "type": "string",
+                  "enum": ["development", "test", "production"],
+                  "description": "Environment type (required)"
+                },
+                "DataClassification": {
+                  "type": "string",
+                  "enum": ["Public", "Internal", "Confidential", "Restricted"],
+                  "description": "Data classification level (optional)"
+                }
+              },
+              "additionalProperties": true,
+              "description": "Mandatory and optional tags"
+            },
+            "budget": {
+              "type": "object",
+              "properties": {
+                "monthlyLimitUsd": {
+                  "type": "number",
+                  "minimum": 100,
+                  "maximum": 1000000,
+                  "description": "Monthly spend limit in USD (optional, uses environment default if omitted)"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "subscriptions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "displayName", "environment"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^sub-[a-z0-9-]+$",
+                "description": "Subscription identifier"
+              },
+              "displayName": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Name shown in Azure portal"
+              },
+              "environment": {
+                "type": "string",
+                "enum": ["development", "test", "production"],
+                "description": "Environment type (determines management group and policy limits)"
+              },
+              "billingAccountId": {
+                "type": "string",
+                "description": "Billing account (optional, defaults to 'default')"
+              },
+              "parentManagementGroup": {
+                "type": "string",
+                "description": "Management group (auto-determined from environment if omitted)"
+              },
+              "description": {
+                "type": "string",
+                "description": "Subscription description (optional)"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Subscriptions to create (at least one required)"
+        },
+        "networking": {
+          "type": "object",
+          "required": ["primaryRegion", "vnets"],
+          "properties": {
+            "primaryRegion": {
+              "type": "string",
+              "enum": [
+                "westeurope", "eastus", "eastus2", "centralus", "northeurope",
+                "japaneast", "australiaeast", "uksouth", "southeastasia",
+                "canadacentral", "germanywestcentral"
+              ],
+              "description": "Primary Azure region"
+            },
+            "secondaryRegions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "westeurope", "eastus", "eastus2", "centralus", "northeurope",
+                  "japaneast", "australiaeast", "uksouth", "southeastasia",
+                  "canadacentral", "germanywestcentral"
+                ]
+              },
+              "description": "DR/failover regions (optional)"
+            },
+            "vnets": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["subscriptionName", "name", "addressSpace", "subnets"],
+                "properties": {
+                  "subscriptionName": {
+                    "type": "string",
+                    "description": "Subscription this VNet belongs to"
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "^vnet-[a-z0-9-]+$",
+                    "description": "VNet name"
+                  },
+                  "addressSpace": {
+                    "type": "string",
+                    "pattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])/([0-9]|[1-2][0-9]|3[0-2])$",
+                    "description": "VNet CIDR block (e.g., 10.1.1.0/24)"
+                  },
+                  "subnets": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": ["name", "addressPrefix"],
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "pattern": "^subnet-[a-z0-9-]+$",
+                          "description": "Subnet name"
+                        },
+                        "addressPrefix": {
+                          "type": "string",
+                          "pattern": "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])/([0-9]|[1-2][0-9]|3[0-2])$",
+                          "description": "Subnet CIDR block (must be within VNet addressSpace)"
+                        },
+                        "purpose": {
+                          "type": "string",
+                          "description": "Subnet purpose (optional)"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "description": "Virtual networks (at least one required)"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
