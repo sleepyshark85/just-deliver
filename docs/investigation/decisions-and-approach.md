@@ -20,6 +20,8 @@ Evaluated: Port.io, Backstage, Humanitec, Azure Deployment Environments. None fu
 
 Humanitec is conceptually closest but still requires significant customisation. Custom build is the right call.
 
+**Note on SCORE:** The SCORE workload specification was evaluated as a potential container runtime layer. See [[score-evaluation]] for detailed comparison. Conclusion: SCORE could be adopted as an optional component for the container runtime layer, but it does not address infrastructure provisioning or release workflow requirements.
+
 ## Provisioning: Pulumi with Automation API
 
 **Why Pulumi over Terraform or Bicep:**
