@@ -1,0 +1,5 @@
+config:
+  azure-native:location: southeastasia
+  provisioner:resourceGroupName: rg-just-deliver
+  # App Service names are globally unique across Azure - change this if it's taken.
+  provisioner:appName: just-deliver-sample-app
