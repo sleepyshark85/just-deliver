@@ -1,5 +1,0 @@
-name: provisioner
-runtime: dotnet
-description: Sample project testing Pulumi Automation API provisioning on Azure
-backend:
-  url: file://~

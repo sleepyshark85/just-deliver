@@ -1,0 +1,3 @@
+config:
+  resource-group:resourceGroupName: rg-just-deliver
+  resource-group:location: southeastasia

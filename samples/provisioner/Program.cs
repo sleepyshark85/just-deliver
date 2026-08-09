@@ -1,77 +1,93 @@
-using Pulumi;
-using Pulumi.Automation;
-using Pulumi.AzureNative.Resources;
-using Pulumi.AzureNative.Web;
-using Pulumi.AzureNative.Web.Inputs;
+using jd.bp.pulumi;
+using jd.core.bp;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
-const string projectName = "provisioner";
-const string stackName = "dev";
-var workDir = Directory.GetCurrentDirectory();
+var baseDir = Directory.GetCurrentDirectory();
 
-// Inline Pulumi program: provisions a resource group + a Free tier (F1) App Service.
-// Config values come straight from Pulumi.dev.yaml, read natively by the Pulumi
-// engine via Config - no custom parsing.
-static Task<IDictionary<string, object?>> PulumiProgram()
+var services = new ServiceCollection();
+services.AddLogging(builder => builder.AddConsole());
+services.RegisterPulumiBackend(options =>
 {
-    var config = new Config();
-    var resourceGroupName = config.Require("resourceGroupName");
-    var appName = config.Require("appName");
+    options.BackendUrl = "file://~";
+    // Local backend still encrypts state; passphrase is required non-interactively.
+    // Use an empty passphrase for this local sample/testing only.
+    options.ConfigPassPhrase = "";
+});
 
-    var resourceGroup = new ResourceGroup(resourceGroupName, new ResourceGroupArgs
-    {
-        ResourceGroupName = resourceGroupName,
-    });
+var provider = services.BuildServiceProvider();
+var backendProvider = provider.GetRequiredService<IBackEndProvider>();
 
-    var appServicePlan = new AppServicePlan($"{appName}-plan", new AppServicePlanArgs
-    {
-        ResourceGroupName = resourceGroup.Name,
-        Kind = "App",
-        Sku = new SkuDescriptionArgs
-        {
-            Name = "F1",
-            Tier = "Free",
-        },
-    });
+// --- Step 1: provision the resource group ---
+Console.WriteLine("=== resource-group: deploy ===");
 
-    var webApp = new WebApp(appName, new WebAppArgs
-    {
-        Name = appName,
-        ResourceGroupName = resourceGroup.Name,
-        ServerFarmId = appServicePlan.Id,
-    });
+var resourceGroupContent = await File.ReadAllTextAsync(Path.Combine(baseDir, "resource-group", "Pulumi.yaml"));
 
-    return Task.FromResult<IDictionary<string, object?>>(new Dictionary<string, object?>
+var resourceGroupResult = await backendProvider.DeployAsync(new DeploymentPackage
+{
+    Name = "resource-group",
+    Version = "dev",
+    DeploymentContent = resourceGroupContent,
+    DeploymentParameters = new Dictionary<string, ConfigEntry>
     {
-        ["resourceGroupName"] = resourceGroup.Name,
-        ["resourceGroupId"] = resourceGroup.Id,
-        ["appServicePlanId"] = appServicePlan.Id,
-        ["webAppDefaultHostName"] = webApp.DefaultHostName,
-    });
+        ["resourceGroupName"] = new ConfigEntry("rg-just-deliver"),
+        ["location"] = new ConfigEntry("southeastasia"),
+    },
+});
+
+var resourceGroupName = resourceGroupResult.Outputs["resourceGroupName"].Value
+    ?? throw new InvalidOperationException("resource-group stack did not export resourceGroupName");
+
+Console.WriteLine($"Resource group provisioned: {resourceGroupName}");
+
+// --- Step 2: feed that output into app-service's config, then provision it ---
+Console.WriteLine();
+Console.WriteLine("=== app-service: deploy ===");
+
+var appServiceContent = await File.ReadAllTextAsync(Path.Combine(baseDir, "app-service", "Pulumi.yaml"));
+
+var appServiceResult = await backendProvider.DeployAsync(new DeploymentPackage
+{
+    Name = "app-service",
+    Version = "dev",
+    DeploymentContent = appServiceContent,
+    DeploymentParameters = new Dictionary<string, ConfigEntry>
+    {
+        ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
+        ["location"] = new ConfigEntry("southeastasia"),
+
+        // App Service Plan
+        ["planName"] = new ConfigEntry("just-deliver-sample-app-plan"),
+        ["skuName"] = new ConfigEntry("F1"),
+        ["skuTier"] = new ConfigEntry("Free"),
+        ["skuSize"] = new ConfigEntry("F1"),
+        ["skuFamily"] = new ConfigEntry("F"),
+        ["skuCapacity"] = new ConfigEntry("1"),
+        ["planKind"] = new ConfigEntry("App"),
+        ["reserved"] = new ConfigEntry("false"),
+
+        // Web App - name must be globally unique across Azure
+        ["appName"] = new ConfigEntry("just-deliver-sample-app"),
+        ["webAppKind"] = new ConfigEntry("app"),
+        ["httpsOnly"] = new ConfigEntry("true"),
+        ["alwaysOn"] = new ConfigEntry("false"),
+        ["http20Enabled"] = new ConfigEntry("true"),
+        ["ftpsState"] = new ConfigEntry("Disabled"),
+        ["netFrameworkVersion"] = new ConfigEntry("v4.0"),
+        ["use32BitWorkerProcess"] = new ConfigEntry("true"),
+    },
+});
+
+Console.WriteLine();
+Console.WriteLine("=== Outputs ===");
+Console.WriteLine("resource-group:");
+foreach (var (key, value) in resourceGroupResult.Outputs)
+{
+    Console.WriteLine($"  {key}: {value.Value}");
 }
 
-var stackArgs = new InlineProgramArgs(projectName, stackName, PulumiFn.Create(PulumiProgram))
-{
-    // Points at the folder containing Pulumi.yaml + Pulumi.dev.yaml so the Pulumi
-    // CLI reads project/stack settings and config directly from those files.
-    WorkDir = workDir,
-    EnvironmentVariables = new Dictionary<string, string?>
-    {
-        // Local backend still encrypts state; passphrase is required non-interactively.
-        // Use an empty passphrase for this local sample/testing only.
-        ["PULUMI_CONFIG_PASSPHRASE"] = ""
-    }
-};
-
-var stack = await LocalWorkspace.CreateOrSelectStackAsync(stackArgs);
-
-Console.WriteLine("Refreshing stack...");
-await stack.RefreshAsync(new RefreshOptions { OnStandardOutput = Console.WriteLine });
-
-Console.WriteLine("Running pulumi up...");
-var result = await stack.UpAsync(new UpOptions { OnStandardOutput = Console.WriteLine });
-
-Console.WriteLine($"Update summary: {result.Summary.Result}");
-foreach (var (key, value) in result.Outputs)
+Console.WriteLine("app-service:");
+foreach (var (key, value) in appServiceResult.Outputs)
 {
     Console.WriteLine($"  {key}: {value.Value}");
 }

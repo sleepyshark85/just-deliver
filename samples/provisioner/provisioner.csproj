@@ -8,9 +8,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Pulumi" Version="3.110.0" />
     <PackageReference Include="Pulumi.Automation" Version="3.110.0" />
-    <PackageReference Include="Pulumi.AzureNative" Version="3.24.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\jd.core\jd.core.csproj" />
+    <ProjectReference Include="..\..\src\backend-providers\jd.bp.pulumi\jd.bp.pulumi.csproj" />
   </ItemGroup>
 
 </Project>

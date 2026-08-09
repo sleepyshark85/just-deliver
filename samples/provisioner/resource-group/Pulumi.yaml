@@ -1,0 +1,25 @@
+name: resource-group
+runtime: yaml
+description: Provisions an Azure Resource Group
+
+configuration:
+  resourceGroupName:
+    type: String
+    description: Name of the resource group to create
+
+  location:
+    type: String
+    default: southeastasia
+    description: Azure region the resource group is created in
+
+resources:
+  resourceGroup:
+    type: azure-native:resources:ResourceGroup
+    properties:
+      resourceGroupName: ${resourceGroupName}
+      location: ${location}
+
+outputs:
+  resourceGroupName: ${resourceGroup.name}
+  resourceGroupId: ${resourceGroup.id}
+  location: ${resourceGroup.location}
