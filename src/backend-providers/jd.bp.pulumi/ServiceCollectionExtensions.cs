@@ -10,6 +10,6 @@ public static class ServiceCollectionExtensions
     {
         services.Configure(action);
         services.AddSingleton<IResourceChangeParser<StepEventMetadata>, PulumiResourceChangeParser>();
-        services.AddSingleton<IBackEndProvider, BackendProvider>();
+        services.AddSingleton<IBackEndProvider, PulumiBackendProvider>();
     }
 }

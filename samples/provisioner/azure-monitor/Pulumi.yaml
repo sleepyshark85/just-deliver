@@ -1,0 +1,44 @@
+name: azure-monitor
+runtime: yaml
+description: Provisions an Azure Monitor Log Analytics Workspace
+
+configuration:
+  resourceGroupName:
+    type: String
+    description: Resource group the workspace is created in
+
+  location:
+    type: String
+    default: southeastasia
+    description: Azure region the workspace is created in
+
+  workspaceName:
+    type: String
+    description: Name of the Log Analytics Workspace
+
+  # "Free" is the legacy no-cost SKU (capped at 500MB/day ingestion, 7 day retention).
+  skuName:
+    type: String
+    default: Free
+    description: Workspace SKU (Free, PerGB2018, PerNode, Premium, Standalone, Standard, CapacityReservation)
+
+  retentionInDays:
+    type: Integer
+    default: 7
+    description: Data retention in days (Free tier is capped at 7)
+
+resources:
+  workspace:
+    type: azure-native:operationalinsights:Workspace
+    properties:
+      resourceGroupName: ${resourceGroupName}
+      location: ${location}
+      workspaceName: ${workspaceName}
+      sku:
+        name: ${skuName}
+      retentionInDays: ${retentionInDays}
+
+outputs:
+  workspaceId: ${workspace.id}
+  workspaceName: ${workspace.name}
+  workspaceCustomerId: ${workspace.customerId}

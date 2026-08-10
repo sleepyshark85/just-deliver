@@ -66,27 +66,100 @@ var appServiceResult = await backendProvider.DeployAsync(new DeploymentPackage
     },
 });
 
+// --- Step 3: provision the Log Analytics workspace backing Azure Monitor ---
+Console.WriteLine();
+Console.WriteLine("=== azure-monitor: deploy ===");
+
+var azureMonitorContent = await File.ReadAllTextAsync(Path.Combine(baseDir, "azure-monitor", "Pulumi.yaml"));
+var azureMonitorDefaultParametersContent = await ReadIfExistsAsync(Path.Combine(baseDir, "azure-monitor", "Pulumi.default.yaml"));
+
+var azureMonitorResult = await backendProvider.DeployAsync(new DeploymentPackage
+{
+    Name = "azure-monitor",
+    Version = "dev",
+    DeploymentContent = azureMonitorContent,
+    DeploymentDefaultParametersContent = azureMonitorDefaultParametersContent,
+    DeploymentParameters = new Dictionary<string, ConfigEntry>
+    {
+        ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
+        ["location"] = new ConfigEntry("southeastasia"),
+        ["workspaceName"] = new ConfigEntry("just-deliver-sample-logs"),
+    },
+});
+
+var workspaceResourceId = azureMonitorResult.Outputs["workspaceId"].Value
+    ?? throw new InvalidOperationException("azure-monitor stack did not export workspaceId");
+
+// --- Step 4: provision Application Insights, tied to that workspace ---
+Console.WriteLine();
+Console.WriteLine("=== application-insights: deploy ===");
+
+var appInsightsContent = await File.ReadAllTextAsync(Path.Combine(baseDir, "application-insights", "Pulumi.yaml"));
+var appInsightsDefaultParametersContent = await ReadIfExistsAsync(Path.Combine(baseDir, "application-insights", "Pulumi.default.yaml"));
+
+var appInsightsResult = await backendProvider.DeployAsync(new DeploymentPackage
+{
+    Name = "application-insights",
+    Version = "dev",
+    DeploymentContent = appInsightsContent,
+    DeploymentDefaultParametersContent = appInsightsDefaultParametersContent,
+    DeploymentParameters = new Dictionary<string, ConfigEntry>
+    {
+        ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
+        ["location"] = new ConfigEntry("southeastasia"),
+        ["appInsightsName"] = new ConfigEntry("just-deliver-sample-appinsights"),
+        ["workspaceResourceId"] = new ConfigEntry(workspaceResourceId),
+    },
+});
+
+// --- Step 5: provision the Cosmos DB account, database, and container ---
+Console.WriteLine();
+Console.WriteLine("=== cosmos-db: deploy ===");
+
+var cosmosDbContent = await File.ReadAllTextAsync(Path.Combine(baseDir, "cosmos-db", "Pulumi.yaml"));
+var cosmosDbDefaultParametersContent = await ReadIfExistsAsync(Path.Combine(baseDir, "cosmos-db", "Pulumi.default.yaml"));
+
+var cosmosDbResult = await backendProvider.DeployAsync(new DeploymentPackage
+{
+    Name = "cosmos-db",
+    Version = "dev",
+    DeploymentContent = cosmosDbContent,
+    DeploymentDefaultParametersContent = cosmosDbDefaultParametersContent,
+    DeploymentParameters = new Dictionary<string, ConfigEntry>
+    {
+        ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
+        ["location"] = new ConfigEntry("southeastasia"),
+        ["accountName"] = new ConfigEntry("just-deliver-sample-cosmos"),
+    },
+});
+
 Console.WriteLine();
 Console.WriteLine("=== Outputs ===");
-Console.WriteLine("resource-group:");
-foreach (var (key, value) in resourceGroupResult.Outputs)
-{
-    Console.WriteLine($"  {key}: {value.Value}");
-}
-
-Console.WriteLine("app-service:");
-foreach (var (key, value) in appServiceResult.Outputs)
-{
-    Console.WriteLine($"  {key}: {value.Value}");
-}
+PrintOutputs("resource-group", resourceGroupResult);
+PrintOutputs("app-service", appServiceResult);
+PrintOutputs("azure-monitor", azureMonitorResult);
+PrintOutputs("application-insights", appInsightsResult);
+PrintOutputs("cosmos-db", cosmosDbResult);
 
 Console.WriteLine();
 Console.WriteLine("=== Changes ===");
 PrintChanges("resource-group", resourceGroupResult);
 PrintChanges("app-service", appServiceResult);
+PrintChanges("azure-monitor", azureMonitorResult);
+PrintChanges("application-insights", appInsightsResult);
+PrintChanges("cosmos-db", cosmosDbResult);
 
 static async Task<string?> ReadIfExistsAsync(string path) =>
     File.Exists(path) ? await File.ReadAllTextAsync(path) : null;
+
+static void PrintOutputs(string name, DeploymentResult result)
+{
+    Console.WriteLine($"{name}:");
+    foreach (var (key, value) in result.Outputs)
+    {
+        Console.WriteLine($"  {key}: {value.Value}");
+    }
+}
 
 static void PrintChanges(string name, DeploymentResult result)
 {

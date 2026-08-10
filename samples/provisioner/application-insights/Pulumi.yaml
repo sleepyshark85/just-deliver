@@ -1,0 +1,44 @@
+name: application-insights
+runtime: yaml
+description: Provisions a workspace-based Azure Application Insights component
+
+configuration:
+  resourceGroupName:
+    type: String
+    description: Resource group the component is created in
+
+  location:
+    type: String
+    default: southeastasia
+    description: Azure region the component is created in
+
+  appInsightsName:
+    type: String
+    description: Name of the Application Insights component
+
+  # Workspace-based Application Insights (the only mode for new resources) has no
+  # tier/SKU knob - it bills consumption-based, with the first 5GB/month free.
+  workspaceResourceId:
+    type: String
+    description: Resource ID of the Log Analytics Workspace to associate with (from the azure-monitor stack's output)
+
+  applicationType:
+    type: String
+    default: web
+    description: Application type (web, other)
+
+resources:
+  component:
+    type: azure-native:insights:Component
+    properties:
+      resourceGroupName: ${resourceGroupName}
+      location: ${location}
+      kind: web
+      applicationType: ${applicationType}
+      workspaceResourceId: ${workspaceResourceId}
+
+outputs:
+  appInsightsId: ${component.id}
+  appInsightsName: ${component.name}
+  instrumentationKey: ${component.instrumentationKey}
+  connectionString: ${component.connectionString}

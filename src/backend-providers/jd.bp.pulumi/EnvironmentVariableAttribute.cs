@@ -1,7 +1,7 @@
 namespace jd.bp.pulumi;
 
 [AttributeUsage(AttributeTargets.Property)]
-public class EnvironmentVariableAttribute : Attribute
+internal class EnvironmentVariableAttribute : Attribute
 {
     public EnvironmentVariableAttribute(string name)
     {

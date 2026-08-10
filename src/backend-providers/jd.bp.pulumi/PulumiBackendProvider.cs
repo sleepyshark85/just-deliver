@@ -7,15 +7,15 @@ using System.Linq;
 
 namespace jd.bp.pulumi;
 
-internal class BackendProvider : IBackEndProvider
+internal class PulumiBackendProvider : IBackEndProvider
 {
     private readonly IOptionsMonitor<PulumiBackendOptions> _optionsMonitor;
-    private readonly ILogger<BackendProvider> _logger;
+    private readonly ILogger<PulumiBackendProvider> _logger;
     private readonly IResourceChangeParser<StepEventMetadata> _resourceChangeParser;
 
-    public BackendProvider(
+    public PulumiBackendProvider(
         IOptionsMonitor<PulumiBackendOptions> optionsMonitor,
-        ILogger<BackendProvider> logger,
+        ILogger<PulumiBackendProvider> logger,
         IResourceChangeParser<StepEventMetadata> resourceChangeParser)
     {
         _optionsMonitor = optionsMonitor;

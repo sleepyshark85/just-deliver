@@ -1,0 +1,5 @@
+config:
+  cosmos-db:databaseName: appdb
+  cosmos-db:containerName: items
+  cosmos-db:partitionKeyPath: /id
+  cosmos-db:enableFreeTier: true
