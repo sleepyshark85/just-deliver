@@ -16,16 +16,19 @@ configuration:
     type: String
     description: Name of the Log Analytics Workspace
 
-  # "Free" is the legacy no-cost SKU (capped at 500MB/day ingestion, 7 day retention).
+  # The legacy Free/Standard/Premium SKUs can no longer be provisioned - PerGB2018
+  # is the only creatable SKU now. It's still $0 in practice: every subscription
+  # gets 5GB/month free ingestion (shared across PerGB2018 workspaces) plus 31
+  # days of free retention.
   skuName:
     type: String
-    default: Free
-    description: Workspace SKU (Free, PerGB2018, PerNode, Premium, Standalone, Standard, CapacityReservation)
+    default: PerGB2018
+    description: Workspace SKU (PerGB2018 is the only provisionable SKU; legacy Free/Standard/Premium are retired)
 
   retentionInDays:
     type: Integer
-    default: 7
-    description: Data retention in days (Free tier is capped at 7)
+    default: 31
+    description: Data retention in days (31 days is included at no extra cost)
 
 resources:
   workspace:
