@@ -29,7 +29,7 @@ configuration:
 
 resources:
   component:
-    type: azure-native:insights:Component
+    type: azure-native:applicationinsights:Component
     properties:
       resourceGroupName: ${resourceGroupName}
       location: ${location}
