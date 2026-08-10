@@ -27,6 +27,15 @@ configuration:
     default: web
     description: Application type (web, other)
 
+  # Optional: rejects instrumentation-key/API-key ingestion, requiring an Entra ID
+  # token instead (callers need the Monitoring Metrics Publisher role). Off by
+  # default - the browser/JavaScript SDK can't authenticate this way, so enabling
+  # it silently drops any client-side telemetry.
+  disableLocalAuth:
+    type: Boolean
+    default: false
+    description: Require Entra ID authentication for telemetry ingestion
+
 resources:
   component:
     type: azure-native:applicationinsights:Component
@@ -36,6 +45,7 @@ resources:
       kind: web
       applicationType: ${applicationType}
       workspaceResourceId: ${workspaceResourceId}
+      disableLocalAuth: ${disableLocalAuth}
 
 outputs:
   appInsightsId: ${component.id}

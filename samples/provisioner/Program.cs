@@ -10,6 +10,10 @@ var preview = args.Contains("--preview");
 // don't need passwordless wiring, so it's off unless explicitly requested.
 var wireManagedIdentity = args.Contains("--wire-managed-identity");
 
+// Despite the name, this built-in role covers publishing all telemetry types to
+// Application Insights, not just metrics.
+const string MonitoringMetricsPublisherRoleId = "3913510d-42f4-4e42-8a64-420c390055eb";
+
 var services = new ServiceCollection();
 services.AddLogging(builder => builder.AddConsole());
 services.RegisterPulumiBackend(options =>
@@ -57,6 +61,7 @@ var appInsightsResult = await RunStackAsync("application-insights", new Dictiona
     ["location"] = new ConfigEntry("southeastasia"),
     ["appInsightsName"] = new ConfigEntry("just-deliver-sample-appinsights"),
     ["workspaceResourceId"] = new ConfigEntry(workspaceResourceId),
+    ["disableLocalAuth"] = new ConfigEntry(wireManagedIdentity ? "true" : "false"),
 });
 
 // --- Step 5: provision the Cosmos DB account, database, and container ---
@@ -67,11 +72,14 @@ var cosmosDbResult = await RunStackAsync("cosmos-db", new Dictionary<string, Con
     ["accountName"] = new ConfigEntry("just-deliver-sample-cosmos"),
 });
 
-// --- Step 6 (optional): grant the Web App's managed identity access to Cosmos DB ---
+// --- Steps 6 and 7 (optional): grant the Web App's managed identity data access ---
 DeploymentResult? cosmosDbAccessResult = null;
+DeploymentResult? appInsightsAccessResult = null;
 if (wireManagedIdentity)
 {
     var appServicePrincipalId = GetChainedValue(appServiceResult, "webAppPrincipalId", "<unknown-until-deployed>");
+
+    // Cosmos DB SQL API has its own data-plane role system, separate from Azure RBAC.
     var cosmosAccountId = GetChainedValue(cosmosDbResult, "accountId", "<unknown-until-deployed>");
     var cosmosAccountName = GetChainedValue(cosmosDbResult, "accountName", "just-deliver-sample-cosmos");
 
@@ -82,6 +90,18 @@ if (wireManagedIdentity)
         ["accountName"] = new ConfigEntry(cosmosAccountName),
         ["principalId"] = new ConfigEntry(appServicePrincipalId),
     });
+
+    // Application Insights uses plain Azure RBAC, so it reuses the generic
+    // role-assignment definition under its own deployment name.
+    var appInsightsId = GetChainedValue(appInsightsResult, "appInsightsId", "<unknown-until-deployed>");
+
+    appInsightsAccessResult = await RunStackAsync("appinsights-metrics-publisher", new Dictionary<string, ConfigEntry>
+    {
+        ["scope"] = new ConfigEntry(appInsightsId),
+        ["roleDefinitionId"] = new ConfigEntry(BuildRoleDefinitionId(appInsightsId, MonitoringMetricsPublisherRoleId)),
+        ["principalId"] = new ConfigEntry(appServicePrincipalId),
+        ["roleAssignmentId"] = new ConfigEntry("5d1e7c92-4b3a-4f8e-9a2d-1c6b8e4f7a3b"),
+    }, definition: "role-assignment");
 }
 
 Console.WriteLine();
@@ -95,6 +115,10 @@ if (cosmosDbAccessResult is not null)
 {
     PrintOutputs("cosmos-db-access", cosmosDbAccessResult);
 }
+if (appInsightsAccessResult is not null)
+{
+    PrintOutputs("appinsights-metrics-publisher", appInsightsAccessResult);
+}
 
 Console.WriteLine();
 Console.WriteLine("=== Changes ===");
@@ -107,14 +131,23 @@ if (cosmosDbAccessResult is not null)
 {
     PrintChanges("cosmos-db-access", cosmosDbAccessResult);
 }
-
-async Task<DeploymentResult> RunStackAsync(string name, Dictionary<string, ConfigEntry> parameters)
+if (appInsightsAccessResult is not null)
 {
+    PrintChanges("appinsights-metrics-publisher", appInsightsAccessResult);
+}
+
+// `definition` names the folder the Pulumi.yaml comes from; `name` is the deployment
+// (stack) name. They differ when a shared definition is deployed more than once -
+// each deployment needs its own name so it gets its own state.
+async Task<DeploymentResult> RunStackAsync(string name, Dictionary<string, ConfigEntry> parameters, string? definition = null)
+{
+    var definitionFolder = definition ?? name;
+
     Console.WriteLine();
     Console.WriteLine($"=== {name}: {(preview ? "preview" : "deploy")} ===");
 
-    var content = await File.ReadAllTextAsync(Path.Combine(baseDir, name, "Pulumi.yaml"));
-    var defaultParametersContent = await ReadIfExistsAsync(Path.Combine(baseDir, name, "Pulumi.default.yaml"));
+    var content = await File.ReadAllTextAsync(Path.Combine(baseDir, definitionFolder, "Pulumi.yaml"));
+    var defaultParametersContent = await ReadIfExistsAsync(Path.Combine(baseDir, definitionFolder, "Pulumi.default.yaml"));
 
     var package = new DeploymentPackage
     {
@@ -137,6 +170,19 @@ string GetChainedValue(DeploymentResult result, string outputKey, string preview
 
 static async Task<string?> ReadIfExistsAsync(string path) =>
     File.Exists(path) ? await File.ReadAllTextAsync(path) : null;
+
+// Built-in role definitions are addressed by a subscription-scoped path. Every ARM
+// resource ID starts with /subscriptions/{id}, so derive it from the target scope
+// rather than making the caller supply the subscription separately.
+static string BuildRoleDefinitionId(string scope, string roleId)
+{
+    var segments = scope.Split('/', StringSplitOptions.RemoveEmptyEntries);
+    var subscriptionId = segments.Length >= 2 && segments[0] == "subscriptions"
+        ? segments[1]
+        : "<unknown-subscription>";
+
+    return $"/subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/{roleId}";
+}
 
 static void PrintOutputs(string name, DeploymentResult result)
 {
