@@ -2,6 +2,7 @@ using jd.bp.pulumi;
 using jd.core.bp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 
 var baseDir = Directory.GetCurrentDirectory();
 
@@ -79,5 +80,23 @@ foreach (var (key, value) in appServiceResult.Outputs)
     Console.WriteLine($"  {key}: {value.Value}");
 }
 
+Console.WriteLine();
+Console.WriteLine("=== Changes ===");
+PrintChanges("resource-group", resourceGroupResult);
+PrintChanges("app-service", appServiceResult);
+
 static async Task<string?> ReadIfExistsAsync(string path) =>
     File.Exists(path) ? await File.ReadAllTextAsync(path) : null;
+
+static void PrintChanges(string name, DeploymentResult result)
+{
+    Console.WriteLine($"{name}:");
+    Console.WriteLine($"  summary: {string.Join(", ", result.Summary.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");
+    foreach (var change in result.Changes)
+    {
+        var properties = change.ChangedProperties.Count > 0
+            ? $" [{string.Join(", ", change.ChangedProperties)}]"
+            : "";
+        Console.WriteLine($"  {change.Operation} {change.Type} ({change.Urn}){properties}");
+    }
+}
