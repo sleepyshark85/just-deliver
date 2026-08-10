@@ -6,6 +6,9 @@ using System.Linq;
 
 var baseDir = Directory.GetCurrentDirectory();
 var preview = args.Contains("--preview");
+// Managed identity + Cosmos DB role assignment are opt-in - most samples/environments
+// don't need passwordless wiring, so it's off unless explicitly requested.
+var wireManagedIdentity = args.Contains("--wire-managed-identity");
 
 var services = new ServiceCollection();
 services.AddLogging(builder => builder.AddConsole());
@@ -35,6 +38,7 @@ var appServiceResult = await RunStackAsync("app-service", new Dictionary<string,
     ["location"] = new ConfigEntry("southeastasia"),
     ["planName"] = new ConfigEntry("just-deliver-sample-app-plan"),
     ["appName"] = new ConfigEntry("just-deliver-sample-app"),
+    ["identityType"] = new ConfigEntry(wireManagedIdentity ? "SystemAssigned" : "None"),
 });
 
 // --- Step 3: provision the Log Analytics workspace backing Azure Monitor ---
@@ -63,6 +67,23 @@ var cosmosDbResult = await RunStackAsync("cosmos-db", new Dictionary<string, Con
     ["accountName"] = new ConfigEntry("just-deliver-sample-cosmos"),
 });
 
+// --- Step 6 (optional): grant the Web App's managed identity access to Cosmos DB ---
+DeploymentResult? cosmosDbAccessResult = null;
+if (wireManagedIdentity)
+{
+    var appServicePrincipalId = GetChainedValue(appServiceResult, "webAppPrincipalId", "<unknown-until-deployed>");
+    var cosmosAccountId = GetChainedValue(cosmosDbResult, "accountId", "<unknown-until-deployed>");
+    var cosmosAccountName = GetChainedValue(cosmosDbResult, "accountName", "just-deliver-sample-cosmos");
+
+    cosmosDbAccessResult = await RunStackAsync("cosmos-db-access", new Dictionary<string, ConfigEntry>
+    {
+        ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
+        ["accountId"] = new ConfigEntry(cosmosAccountId),
+        ["accountName"] = new ConfigEntry(cosmosAccountName),
+        ["principalId"] = new ConfigEntry(appServicePrincipalId),
+    });
+}
+
 Console.WriteLine();
 Console.WriteLine("=== Outputs ===");
 PrintOutputs("resource-group", resourceGroupResult);
@@ -70,6 +91,10 @@ PrintOutputs("app-service", appServiceResult);
 PrintOutputs("azure-monitor", azureMonitorResult);
 PrintOutputs("application-insights", appInsightsResult);
 PrintOutputs("cosmos-db", cosmosDbResult);
+if (cosmosDbAccessResult is not null)
+{
+    PrintOutputs("cosmos-db-access", cosmosDbAccessResult);
+}
 
 Console.WriteLine();
 Console.WriteLine("=== Changes ===");
@@ -78,6 +103,10 @@ PrintChanges("app-service", appServiceResult);
 PrintChanges("azure-monitor", azureMonitorResult);
 PrintChanges("application-insights", appInsightsResult);
 PrintChanges("cosmos-db", cosmosDbResult);
+if (cosmosDbAccessResult is not null)
+{
+    PrintChanges("cosmos-db-access", cosmosDbAccessResult);
+}
 
 async Task<DeploymentResult> RunStackAsync(string name, Dictionary<string, ConfigEntry> parameters)
 {

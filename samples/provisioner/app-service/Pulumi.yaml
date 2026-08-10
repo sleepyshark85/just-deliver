@@ -78,6 +78,12 @@ configuration:
     default: app
     description: Web app kind (app, app,linux, app,container,linux, ...)
 
+  # Optional: set to "None" to skip granting the app an Azure AD identity.
+  identityType:
+    type: String
+    default: SystemAssigned
+    description: Managed identity type (SystemAssigned or None)
+
   httpsOnly:
     type: Boolean
     default: true
@@ -226,6 +232,8 @@ resources:
       location: ${location}
       serverFarmId: ${appServicePlan.id}
       kind: ${webAppKind}
+      identity:
+        type: ${identityType}
       httpsOnly: ${httpsOnly}
       clientAffinityEnabled: ${clientAffinityEnabled}
       clientCertEnabled: ${clientCertEnabled}
@@ -262,3 +270,4 @@ outputs:
   webAppId: ${webApp.id}
   webAppName: ${webApp.name}
   webAppDefaultHostName: ${webApp.defaultHostName}
+  webAppPrincipalId: ${webApp.identity.principalId}

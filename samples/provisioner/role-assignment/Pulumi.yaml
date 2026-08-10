@@ -1,0 +1,47 @@
+name: role-assignment
+runtime: yaml
+description: >
+  Generic Azure RBAC role assignment, reusable across most resource types
+  (Storage, Key Vault, Service Bus, SQL DB, etc.). Grants a principal (e.g. a
+  managed identity) a built-in or custom role at a given scope, so it can skip
+  connection strings/keys in favor of Azure AD auth.
+  Not for Cosmos DB SQL API data-plane access - that has its own separate
+  role-assignment mechanism (see the cosmos-db-access stack).
+
+configuration:
+  scope:
+    type: String
+    description: Resource ID the role applies to (e.g. a storage account, key vault, or resource group)
+
+  roleDefinitionId:
+    type: String
+    description: Full role definition resource ID, e.g. /subscriptions/{sub}/providers/Microsoft.Authorization/roleDefinitions/{guid} for a built-in role
+
+  principalId:
+    type: String
+    description: Principal ID of the identity to grant the role to (e.g. a Web App's managed identity)
+
+  principalType:
+    type: String
+    default: ServicePrincipal
+    description: Principal type (ServicePrincipal, User, Group) - ServicePrincipal covers managed identities
+
+  # Fixed rather than random - RoleAssignment just needs a GUID that's unique
+  # within the scope; a stable one is fine for a single assignment.
+  roleAssignmentId:
+    type: String
+    default: 3f2b1a4e-9c6d-4a1b-8e2f-6a7b5c4d3e2f
+    description: GUID identifying this role assignment
+
+resources:
+  roleAssignment:
+    type: azure-native:authorization:RoleAssignment
+    properties:
+      scope: ${scope}
+      roleAssignmentName: ${roleAssignmentId}
+      roleDefinitionId: ${roleDefinitionId}
+      principalId: ${principalId}
+      principalType: ${principalType}
+
+outputs:
+  roleAssignmentId: ${roleAssignment.id}

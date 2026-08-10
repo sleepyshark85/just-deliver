@@ -1,0 +1,45 @@
+name: cosmos-db-access
+runtime: yaml
+description: >
+  Optional: grants a principal (e.g. a Web App's system-assigned managed identity)
+  Azure AD data-plane access to a Cosmos DB account, so it can skip account
+  keys/connection strings. Deploy this only if you're wiring up managed identity.
+
+configuration:
+  resourceGroupName:
+    type: String
+    description: Resource group the Cosmos DB account is in
+
+  accountId:
+    type: String
+    description: Resource ID of the Cosmos DB account (from the cosmos-db stack's output)
+
+  accountName:
+    type: String
+    description: Name of the Cosmos DB account (from the cosmos-db stack's output)
+
+  principalId:
+    type: String
+    description: Principal ID of the identity to grant access to (e.g. a Web App's managed identity)
+
+  # Fixed rather than random - SqlResourceSqlRoleAssignment just needs a GUID
+  # that's unique within the account; a stable one is fine for a single assignment.
+  roleAssignmentId:
+    type: String
+    default: 8fb1cd39-c0b4-4e1c-8a3e-8b7f5e8e2f4a
+    description: GUID identifying this role assignment
+
+resources:
+  # Built-in "Cosmos DB Built-in Data Contributor" role definition.
+  dataContributorRoleAssignment:
+    type: azure-native:cosmosdb:SqlResourceSqlRoleAssignment
+    properties:
+      resourceGroupName: ${resourceGroupName}
+      accountName: ${accountName}
+      roleAssignmentId: ${roleAssignmentId}
+      roleDefinitionId: ${accountId}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002
+      principalId: ${principalId}
+      scope: ${accountId}
+
+outputs:
+  roleAssignmentId: ${dataContributorRoleAssignment.id}
