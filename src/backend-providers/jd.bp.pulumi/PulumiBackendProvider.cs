@@ -25,6 +25,50 @@ internal class PulumiBackendProvider : IBackEndProvider
 
     public async Task<DeploymentResult> DeployAsync(DeploymentPackage package)
     {
+        var (stack, changes, onEvent) = await PrepareStackAsync(package);
+
+        var stackUpResult = await stack.UpAsync(new UpOptions
+        {
+            Logger = _logger,
+            OnEvent = onEvent,
+        });
+
+        return new DeploymentResult()
+        {
+            Outputs = stackUpResult.Outputs.ToDictionary(
+                kvp => kvp.Key,
+                kvp => new ConfigEntry(kvp.Value.Value.ToString(), kvp.Value.IsSecret)
+            ),
+            Summary = stackUpResult.Summary.ResourceChanges?.ToDictionary(
+                kvp => kvp.Key.ToString(),
+                kvp => kvp.Value
+            ) ?? new Dictionary<string, int>(),
+            Changes = changes,
+        };
+    }
+
+    public async Task<DeploymentResult> PreviewAsync(DeploymentPackage package)
+    {
+        var (stack, changes, onEvent) = await PrepareStackAsync(package);
+
+        var previewResult = await stack.PreviewAsync(new PreviewOptions
+        {
+            OnEvent = onEvent,
+        });
+
+        return new DeploymentResult()
+        {
+            Outputs = new Dictionary<string, ConfigEntry>(),
+            Summary = previewResult.ChangeSummary?.ToDictionary(
+                kvp => kvp.Key.ToString(),
+                kvp => kvp.Value
+            ) ?? new Dictionary<string, int>(),
+            Changes = changes,
+        };
+    }
+
+    private async Task<(WorkspaceStack Stack, List<ResourceChange> Changes, Action<EngineEvent> OnEvent)> PrepareStackAsync(DeploymentPackage package)
+    {
         var workDir = Path.Combine(_optionsMonitor.CurrentValue.ScratchDireisctory, "just-deliver", package.Name, package.Version);
         Directory.CreateDirectory(workDir);
 
@@ -60,23 +104,7 @@ internal class PulumiBackendProvider : IBackEndProvider
             OnEvent = OnEngineEvent,
             OnStandardError = error => _logger.LogError(error),
         });
-        var stackUpResult = await stack.UpAsync(new UpOptions
-        {
-            Logger = _logger,
-            OnEvent = OnEngineEvent,
-        });
 
-        return new DeploymentResult()
-        {
-            Outputs = stackUpResult.Outputs.ToDictionary(
-                kvp => kvp.Key,
-                kvp => new ConfigEntry(kvp.Value.Value.ToString(), kvp.Value.IsSecret)
-            ),
-            Summary = stackUpResult.Summary.ResourceChanges?.ToDictionary(
-                kvp => kvp.Key.ToString(),
-                kvp => kvp.Value
-            ) ?? new Dictionary<string, int>(),
-            Changes = changes,
-        };
+        return (stack, changes, OnEngineEvent);
     }
 }

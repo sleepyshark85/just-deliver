@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using System.Linq;
 
 var baseDir = Directory.GetCurrentDirectory();
+var preview = args.Contains("--preview");
 
 var services = new ServiceCollection();
 services.AddLogging(builder => builder.AddConsole());
@@ -20,117 +21,46 @@ var provider = services.BuildServiceProvider();
 var backendProvider = provider.GetRequiredService<IBackEndProvider>();
 
 // --- Step 1: provision the resource group ---
-Console.WriteLine("=== resource-group: deploy ===");
-
-var resourceGroupContent = await File.ReadAllTextAsync(Path.Combine(baseDir, "resource-group", "Pulumi.yaml"));
-var resourceGroupDefaultParametersContent = await ReadIfExistsAsync(Path.Combine(baseDir, "resource-group", "Pulumi.default.yaml"));
-
-var resourceGroupResult = await backendProvider.DeployAsync(new DeploymentPackage
+var resourceGroupResult = await RunStackAsync("resource-group", new Dictionary<string, ConfigEntry>
 {
-    Name = "resource-group",
-    Version = "dev",
-    DeploymentContent = resourceGroupContent,
-    DeploymentDefaultParametersContent = resourceGroupDefaultParametersContent,
-    DeploymentParameters = new Dictionary<string, ConfigEntry>
-    {
-        ["resourceGroupName"] = new ConfigEntry("rg-just-deliver"),
-        ["location"] = new ConfigEntry("southeastasia"),
-    },
+    ["resourceGroupName"] = new ConfigEntry("rg-just-deliver"),
+    ["location"] = new ConfigEntry("southeastasia"),
 });
-
-var resourceGroupName = resourceGroupResult.Outputs["resourceGroupName"].Value
-    ?? throw new InvalidOperationException("resource-group stack did not export resourceGroupName");
-
-Console.WriteLine($"Resource group provisioned: {resourceGroupName}");
+var resourceGroupName = GetChainedValue(resourceGroupResult, "resourceGroupName", "rg-just-deliver");
 
 // --- Step 2: feed that output into app-service's config, then provision it ---
-Console.WriteLine();
-Console.WriteLine("=== app-service: deploy ===");
-
-var appServiceContent = await File.ReadAllTextAsync(Path.Combine(baseDir, "app-service", "Pulumi.yaml"));
-var appServiceDefaultParametersContent = await ReadIfExistsAsync(Path.Combine(baseDir, "app-service", "Pulumi.default.yaml"));
-
-var appServiceResult = await backendProvider.DeployAsync(new DeploymentPackage
+var appServiceResult = await RunStackAsync("app-service", new Dictionary<string, ConfigEntry>
 {
-    Name = "app-service",
-    Version = "dev",
-    DeploymentContent = appServiceContent,
-    DeploymentDefaultParametersContent = appServiceDefaultParametersContent,
-    // Only parameters not already covered by Pulumi.default.yaml.
-    DeploymentParameters = new Dictionary<string, ConfigEntry>
-    {
-        ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
-        ["location"] = new ConfigEntry("southeastasia"),
-        ["planName"] = new ConfigEntry("just-deliver-sample-app-plan"),
-        ["appName"] = new ConfigEntry("just-deliver-sample-app"),
-    },
+    ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
+    ["location"] = new ConfigEntry("southeastasia"),
+    ["planName"] = new ConfigEntry("just-deliver-sample-app-plan"),
+    ["appName"] = new ConfigEntry("just-deliver-sample-app"),
 });
 
 // --- Step 3: provision the Log Analytics workspace backing Azure Monitor ---
-Console.WriteLine();
-Console.WriteLine("=== azure-monitor: deploy ===");
-
-var azureMonitorContent = await File.ReadAllTextAsync(Path.Combine(baseDir, "azure-monitor", "Pulumi.yaml"));
-var azureMonitorDefaultParametersContent = await ReadIfExistsAsync(Path.Combine(baseDir, "azure-monitor", "Pulumi.default.yaml"));
-
-var azureMonitorResult = await backendProvider.DeployAsync(new DeploymentPackage
+var azureMonitorResult = await RunStackAsync("azure-monitor", new Dictionary<string, ConfigEntry>
 {
-    Name = "azure-monitor",
-    Version = "dev",
-    DeploymentContent = azureMonitorContent,
-    DeploymentDefaultParametersContent = azureMonitorDefaultParametersContent,
-    DeploymentParameters = new Dictionary<string, ConfigEntry>
-    {
-        ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
-        ["location"] = new ConfigEntry("southeastasia"),
-        ["workspaceName"] = new ConfigEntry("just-deliver-sample-logs"),
-    },
+    ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
+    ["location"] = new ConfigEntry("southeastasia"),
+    ["workspaceName"] = new ConfigEntry("just-deliver-sample-logs"),
 });
-
-var workspaceResourceId = azureMonitorResult.Outputs["workspaceId"].Value
-    ?? throw new InvalidOperationException("azure-monitor stack did not export workspaceId");
+var workspaceResourceId = GetChainedValue(azureMonitorResult, "workspaceId", "<unknown-until-deployed>");
 
 // --- Step 4: provision Application Insights, tied to that workspace ---
-Console.WriteLine();
-Console.WriteLine("=== application-insights: deploy ===");
-
-var appInsightsContent = await File.ReadAllTextAsync(Path.Combine(baseDir, "application-insights", "Pulumi.yaml"));
-var appInsightsDefaultParametersContent = await ReadIfExistsAsync(Path.Combine(baseDir, "application-insights", "Pulumi.default.yaml"));
-
-var appInsightsResult = await backendProvider.DeployAsync(new DeploymentPackage
+var appInsightsResult = await RunStackAsync("application-insights", new Dictionary<string, ConfigEntry>
 {
-    Name = "application-insights",
-    Version = "dev",
-    DeploymentContent = appInsightsContent,
-    DeploymentDefaultParametersContent = appInsightsDefaultParametersContent,
-    DeploymentParameters = new Dictionary<string, ConfigEntry>
-    {
-        ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
-        ["location"] = new ConfigEntry("southeastasia"),
-        ["appInsightsName"] = new ConfigEntry("just-deliver-sample-appinsights"),
-        ["workspaceResourceId"] = new ConfigEntry(workspaceResourceId),
-    },
+    ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
+    ["location"] = new ConfigEntry("southeastasia"),
+    ["appInsightsName"] = new ConfigEntry("just-deliver-sample-appinsights"),
+    ["workspaceResourceId"] = new ConfigEntry(workspaceResourceId),
 });
 
 // --- Step 5: provision the Cosmos DB account, database, and container ---
-Console.WriteLine();
-Console.WriteLine("=== cosmos-db: deploy ===");
-
-var cosmosDbContent = await File.ReadAllTextAsync(Path.Combine(baseDir, "cosmos-db", "Pulumi.yaml"));
-var cosmosDbDefaultParametersContent = await ReadIfExistsAsync(Path.Combine(baseDir, "cosmos-db", "Pulumi.default.yaml"));
-
-var cosmosDbResult = await backendProvider.DeployAsync(new DeploymentPackage
+var cosmosDbResult = await RunStackAsync("cosmos-db", new Dictionary<string, ConfigEntry>
 {
-    Name = "cosmos-db",
-    Version = "dev",
-    DeploymentContent = cosmosDbContent,
-    DeploymentDefaultParametersContent = cosmosDbDefaultParametersContent,
-    DeploymentParameters = new Dictionary<string, ConfigEntry>
-    {
-        ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
-        ["location"] = new ConfigEntry("southeastasia"),
-        ["accountName"] = new ConfigEntry("just-deliver-sample-cosmos"),
-    },
+    ["resourceGroupName"] = new ConfigEntry(resourceGroupName),
+    ["location"] = new ConfigEntry("southeastasia"),
+    ["accountName"] = new ConfigEntry("just-deliver-sample-cosmos"),
 });
 
 Console.WriteLine();
@@ -148,6 +78,33 @@ PrintChanges("app-service", appServiceResult);
 PrintChanges("azure-monitor", azureMonitorResult);
 PrintChanges("application-insights", appInsightsResult);
 PrintChanges("cosmos-db", cosmosDbResult);
+
+async Task<DeploymentResult> RunStackAsync(string name, Dictionary<string, ConfigEntry> parameters)
+{
+    Console.WriteLine();
+    Console.WriteLine($"=== {name}: {(preview ? "preview" : "deploy")} ===");
+
+    var content = await File.ReadAllTextAsync(Path.Combine(baseDir, name, "Pulumi.yaml"));
+    var defaultParametersContent = await ReadIfExistsAsync(Path.Combine(baseDir, name, "Pulumi.default.yaml"));
+
+    var package = new DeploymentPackage
+    {
+        Name = name,
+        Version = "dev",
+        DeploymentContent = content,
+        DeploymentDefaultParametersContent = defaultParametersContent,
+        DeploymentParameters = parameters,
+    };
+
+    return preview ? await backendProvider.PreviewAsync(package) : await backendProvider.DeployAsync(package);
+}
+
+// Preview doesn't produce real outputs (nothing was actually created), so chained
+// stacks fall back to the value that would be passed in instead of reading it back.
+string GetChainedValue(DeploymentResult result, string outputKey, string previewFallback) =>
+    preview
+        ? previewFallback
+        : result.Outputs[outputKey].Value ?? throw new InvalidOperationException($"stack did not export {outputKey}");
 
 static async Task<string?> ReadIfExistsAsync(string path) =>
     File.Exists(path) ? await File.ReadAllTextAsync(path) : null;

@@ -40,7 +40,7 @@ configuration:
 
 resources:
   account:
-    type: azure-native:documentdb:DatabaseAccount
+    type: azure-native:cosmosdb:DatabaseAccount
     properties:
       resourceGroupName: ${resourceGroupName}
       location: ${location}
@@ -55,7 +55,7 @@ resources:
           failoverPriority: 0
 
   database:
-    type: azure-native:documentdb:SqlResourceSqlDatabase
+    type: azure-native:cosmosdb:SqlResourceSqlDatabase
     properties:
       resourceGroupName: ${resourceGroupName}
       accountName: ${account.name}
@@ -64,7 +64,7 @@ resources:
         id: ${databaseName}
 
   container:
-    type: azure-native:documentdb:SqlResourceSqlContainer
+    type: azure-native:cosmosdb:SqlResourceSqlContainer
     properties:
       resourceGroupName: ${resourceGroupName}
       accountName: ${account.name}
