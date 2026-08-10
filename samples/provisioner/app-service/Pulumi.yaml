@@ -78,12 +78,6 @@ configuration:
     default: app
     description: Web app kind (app, app,linux, app,container,linux, ...)
 
-  # Optional: set to "None" to skip granting the app an Azure AD identity.
-  identityType:
-    type: String
-    default: SystemAssigned
-    description: Managed identity type (SystemAssigned or None)
-
   httpsOnly:
     type: Boolean
     default: true
@@ -232,8 +226,13 @@ resources:
       location: ${location}
       serverFarmId: ${appServicePlan.id}
       kind: ${webAppKind}
+      # Always created: an identity with no role assignments grants nothing and
+      # costs nothing, and keeping it unconditional means the principalId output
+      # below is always resolvable (Pulumi YAML can't conditionally emit outputs).
+      # Whether anything is *granted* to it is the opt-in part - see the
+      # cosmos-db-access and role-assignment stacks.
       identity:
-        type: ${identityType}
+        type: SystemAssigned
       httpsOnly: ${httpsOnly}
       clientAffinityEnabled: ${clientAffinityEnabled}
       clientCertEnabled: ${clientCertEnabled}

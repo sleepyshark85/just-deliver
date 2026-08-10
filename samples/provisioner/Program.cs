@@ -6,8 +6,8 @@ using System.Linq;
 
 var baseDir = Directory.GetCurrentDirectory();
 var preview = args.Contains("--preview");
-// Managed identity + Cosmos DB role assignment are opt-in - most samples/environments
-// don't need passwordless wiring, so it's off unless explicitly requested.
+// The Web App always gets a managed identity (inert on its own); granting it access
+// to Cosmos DB / App Insights is the opt-in part.
 var wireManagedIdentity = args.Contains("--wire-managed-identity");
 
 // Despite the name, this built-in role covers publishing all telemetry types to
@@ -42,7 +42,6 @@ var appServiceResult = await RunStackAsync("app-service", new Dictionary<string,
     ["location"] = new ConfigEntry("southeastasia"),
     ["planName"] = new ConfigEntry("just-deliver-sample-app-plan"),
     ["appName"] = new ConfigEntry("just-deliver-sample-app"),
-    ["identityType"] = new ConfigEntry(wireManagedIdentity ? "SystemAssigned" : "None"),
 });
 
 // --- Step 3: provision the Log Analytics workspace backing Azure Monitor ---
