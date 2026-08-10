@@ -94,9 +94,10 @@ static void PrintChanges(string name, DeploymentResult result)
     Console.WriteLine($"  summary: {string.Join(", ", result.Summary.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");
     foreach (var change in result.Changes)
     {
-        var properties = change.ChangedProperties.Count > 0
-            ? $" [{string.Join(", ", change.ChangedProperties)}]"
-            : "";
-        Console.WriteLine($"  {change.Operation} {change.Type} ({change.Urn}){properties}");
+        Console.WriteLine($"  {change.Operation} {change.Type} ({change.Urn})");
+        foreach (var property in change.ChangedProperties)
+        {
+            Console.WriteLine($"    {property.Path}: {property.OldValue ?? "<none>"} -> {property.NewValue ?? "<none>"}");
+        }
     }
 }

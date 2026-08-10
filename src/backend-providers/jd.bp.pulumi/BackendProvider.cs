@@ -11,11 +11,16 @@ internal class BackendProvider : IBackEndProvider
 {
     private readonly IOptionsMonitor<PulumiBackendOptions> _optionsMonitor;
     private readonly ILogger<BackendProvider> _logger;
+    private readonly IResourceChangeParser<StepEventMetadata> _resourceChangeParser;
 
-    public BackendProvider(IOptionsMonitor<PulumiBackendOptions> optionsMonitor, ILogger<BackendProvider> logger)
+    public BackendProvider(
+        IOptionsMonitor<PulumiBackendOptions> optionsMonitor,
+        ILogger<BackendProvider> logger,
+        IResourceChangeParser<StepEventMetadata> resourceChangeParser)
     {
         _optionsMonitor = optionsMonitor;
         _logger = logger;
+        _resourceChangeParser = resourceChangeParser;
     }
 
     public async Task<DeploymentResult> DeployAsync(DeploymentPackage package)
@@ -43,18 +48,11 @@ internal class BackendProvider : IBackEndProvider
         void OnEngineEvent(EngineEvent engineEvent)
         {
             var metadata = engineEvent.ResourcePreEvent?.Metadata;
-            if (metadata is null || metadata.Op == OperationType.Same)
+            var change = metadata is null ? null : _resourceChangeParser.Parse(metadata);
+            if (change is not null)
             {
-                return;
+                changes.Add(change);
             }
-
-            changes.Add(new ResourceChange
-            {
-                Urn = metadata.Urn,
-                Type = metadata.Type,
-                Operation = metadata.Op.ToString(),
-                ChangedProperties = metadata.DetailedDiff?.Keys.ToList() ?? new List<string>(),
-            });
         }
 
         await stack.RefreshAsync(new RefreshOptions
