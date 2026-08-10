@@ -1,11 +1,5 @@
 config:
-  # Placement - resourceGroupName is normally written here by the orchestrator
-  # (via SetConfigAsync) using the resource-group stack's output.
-  app-service:resourceGroupName: rg-just-deliver
-  app-service:location: southeastasia
-
   # App Service Plan
-  app-service:planName: just-deliver-sample-app-plan
   app-service:skuName: F1
   app-service:skuTier: Free
   app-service:skuSize: F1
@@ -15,7 +9,6 @@ config:
   app-service:reserved: false
 
   # Web App - name must be globally unique across Azure
-  app-service:appName: just-deliver-sample-app
   app-service:webAppKind: app
   app-service:httpsOnly: true
   app-service:alwaysOn: false

@@ -24,6 +24,11 @@ internal class BackendProvider : IBackEndProvider
 
         await File.WriteAllTextAsync(Path.Combine(workDir, "Pulumi.yaml"), package.DeploymentContent);
 
+        if (!string.IsNullOrEmpty(package.DeploymentDefaultParametersContent))
+        {
+            await File.WriteAllTextAsync(Path.Combine(workDir, $"Pulumi.{package.Name}.yaml"), package.DeploymentDefaultParametersContent);
+        }
+
         var stack = await LocalWorkspace.CreateOrSelectStackAsync(new LocalProgramArgs(package.Name, workDir)
         {
             EnvironmentVariables = _optionsMonitor.CurrentValue.GetEnvironmentVariables(),

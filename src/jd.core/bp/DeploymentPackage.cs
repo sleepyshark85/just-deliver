@@ -9,5 +9,6 @@ public class DeploymentPackage
     public string Version { get; set; }
 
     public string DeploymentContent { get; set; }
+    public string? DeploymentDefaultParametersContent { get; set; }
     public Dictionary<string, ConfigEntry> DeploymentParameters { get; set; }
 }
