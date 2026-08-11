@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Pulumi.Automation;
 using Pulumi.Automation.Events;
 using System.Linq;
+using System.Text.Json;
 
 namespace jd.bp.pulumi;
 
@@ -37,7 +38,7 @@ internal class PulumiBackendProvider : IBackEndProvider
         {
             Outputs = stackUpResult.Outputs.ToDictionary(
                 kvp => kvp.Key,
-                kvp => new ConfigEntry(kvp.Value.Value.ToString(), kvp.Value.IsSecret)
+                kvp => new ConfigEntry(FormatOutputValue(kvp.Value.Value), kvp.Value.IsSecret)
             ),
             Summary = stackUpResult.Summary.ResourceChanges?.ToDictionary(
                 kvp => kvp.Key.ToString(),
@@ -86,7 +87,9 @@ internal class PulumiBackendProvider : IBackEndProvider
 
         await stack.SetAllConfigAsync(package.DeploymentParameters.ToDictionary(
             kvp => kvp.Key,
-            kvp => new ConfigValue(kvp.Value.Value, kvp.Value.IsSecret)));
+            kvp => new ConfigValue(
+                kvp.Value.Value ?? throw new ArgumentException($"Parameter '{kvp.Key}' has no value.", nameof(package)),
+                kvp.Value.IsSecret)));
 
         var changes = new List<ResourceChange>();
         void OnEngineEvent(EngineEvent engineEvent)
@@ -107,4 +110,14 @@ internal class PulumiBackendProvider : IBackEndProvider
 
         return (stack, changes, OnEngineEvent);
     }
+
+    // Stack outputs are typed as object because a Pulumi program can export any
+    // JSON-serializable shape, so scalars, collections, and null all need handling.
+    private static string? FormatOutputValue(object? value) => value switch
+    {
+        null => null,
+        string text => text,
+        System.Collections.IEnumerable => JsonSerializer.Serialize(value),
+        _ => value.ToString(),
+    };
 }

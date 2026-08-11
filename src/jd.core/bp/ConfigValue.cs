@@ -1,11 +1,15 @@
 public class ConfigEntry
 {
-    public string Value { get; set; }
+    /// <summary>
+    /// Null when read back from a deployment output the stack exported as null -
+    /// callers reading a value they require should fail rather than treat it as empty.
+    /// </summary>
+    public string? Value { get; set; }
 
     public bool IsSecret { get; set; }
 
     public ConfigEntry(
-        string value,
+        string? value,
         bool isSecret = false)
     {
         this.Value = value;

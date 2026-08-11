@@ -7,7 +7,12 @@ namespace jd.definitionvalidator;
 
 public class YamlSchemaValidator
 {
-    private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder().Build();
+    // Without type inference every scalar deserialises as a string, so `port: 8080`
+    // arrives as "8080" and any `integer`/`boolean` constraint in the schema fails.
+    // Quoted scalars still stay strings.
+    private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder()
+        .WithAttemptingUnquotedStringTypeDeserialization()
+        .Build();
 
     public YamlSchemaValidator()
     {

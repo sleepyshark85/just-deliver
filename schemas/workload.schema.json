@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/workload.schema.json",
+  "title": "just-deliver Workload",
+  "description": "What a development team declares their workload needs. Teams specify what, not how - sizing, SKUs, security and monitoring settings come from platform mappings and global IT Ops policies.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "container"],
+  "properties": {
+    "apiVersion": {
+      "description": "Schema version this definition is written against.",
+      "enum": ["just-deliver/v1"]
+    },
+    "kind": {
+      "enum": ["Workload"]
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "team", "environment"],
+      "properties": {
+        "name": {
+          "description": "Workload identifier. Used to generate resource names, so it must be DNS-safe and short enough to survive per-resource prefixes and suffixes.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+        },
+        "team": {
+          "description": "Owning team. Drives approval routing and cost attribution.",
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "description": "Target environment. The same definition deploys to every environment; the platform mapping adjusts sizing per environment.",
+          "enum": ["dev", "staging", "production"]
+        }
+      }
+    },
+    "container": {
+      "description": "Container runtime spec (SCORE-compatible subset). Health checks, resource limits, and scaling rules come from global policy.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image"],
+      "properties": {
+        "image": {
+          "description": "Fully qualified image reference including tag.",
+          "type": "string",
+          "minLength": 1
+        },
+        "variables": {
+          "description": "Environment variables. Values may reference provisioned resources with ${resource.<type>.<output>}, substituted at deployment time.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["port"],
+            "properties": {
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "protocol": {
+                "enum": ["TCP", "UDP"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "requires": {
+      "description": "Infrastructure the workload needs, declared by type only. The platform picks the concrete resource and its configuration.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "$comment": "Overrides must carry a reason. Expressed as anyOf/not rather than draft-07 'dependencies', which NJsonSchema silently ignores.",
+        "anyOf": [
+          { "not": { "required": ["overrides"] } },
+          { "required": ["override_reason"] }
+        ],
+        "properties": {
+          "type": {
+            "description": "Resource type. Must have a corresponding platform mapping - extend this list as mappings are added.",
+            "enum": ["database", "cache", "queue", "storage", "secrets", "cdn"]
+          },
+          "overrides": {
+            "description": "Escape hatch for edge cases the platform mapping does not yet cover. Only fields on the platform's override whitelist are accepted, and overrides do not persist across deployments.",
+            "type": "object",
+            "minProperties": 1
+          },
+          "override_reason": {
+            "description": "Why the override is needed. Required whenever overrides are present - this feeds the platform team's review of which mappings need to change.",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

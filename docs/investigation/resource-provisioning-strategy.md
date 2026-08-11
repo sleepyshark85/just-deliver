@@ -66,13 +66,6 @@ requires:
   - type: cache
   
   - type: queue
-
-# Release workflow
-approval:
-  required: true
-  stakeholders:
-    - role: development-lead
-    - role: ops-lead
 ```
 
 ### Design Rationale
@@ -81,6 +74,7 @@ approval:
 - **Container spec is minimal.** Only image, variables, and port. Health checks and resource limits come from global policy.
 - **Resource names are implicit.** Platform generates resource IDs based on workload name + type.
 - **Environment-aware.** Same workload definition deploys to dev/staging/prod; platform adjusts resource sizing per environment.
+- **No approval or release workflow.** Who signs off is a property of the release process, not of the workload, and is defined separately. Keeping it out means a workload definition describes only what to build, and sign-off rules can change without teams editing their definitions.
 
 ### What Teams Don't Specify (Yet)
 

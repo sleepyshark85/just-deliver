@@ -6,7 +6,7 @@ Prove the core IDP capability: a developer defines their workload in YAML and th
 ## Scope
 
 ### Developer Experience
-- Write a workload definition in YAML (app name, which sample app, database type, monitoring)
+- Write a workload definition in YAML (app name, owning team, environment, container image, and the resource types the app needs)
 - Run one CLI command: `platform deploy workload.yaml`
 - App is provisioned and live on Azure with all dependencies (database, App Insights)
 - Secrets and connection strings automatically configured so the app can use them
@@ -94,43 +94,66 @@ Developer has live app with working database
 
 ## Workload Definition Schema
 
+Canonical schema: [`schemas/workload.schema.json`](../schemas/workload.schema.json). Design rationale: [Resource Provisioning & Workload Definition Strategy](investigation/resource-provisioning-strategy.md). The MVP implements a subset of that schema — it does not define a separate shape.
+
 Example `workload.yaml`:
 
 ```yaml
-apiVersion: v1
+apiVersion: just-deliver/v1
 kind: Workload
+
 metadata:
   name: my-app
-  namespace: dev
-spec:
-  appTemplate: dotnet-sample-v1  # predefined app template
-  database:
-    type: postgresql
-    version: "14"
-  monitoring:
-    appInsights: true
-  resources:
-    compute: standard  # App Service SKU
+  team: platform-team
+  environment: dev
+
+container:
+  image: myregistry.azurecr.io/dotnet-sample:1.0.0
+  variables:
+    LOG_LEVEL: info
+  ports:
+    - port: 8080
+
+requires:
+  - type: database
 ```
 
 ### Workload Definition Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `metadata.name` | string | Yes | App name (used as resource prefix) |
-| `spec.appTemplate` | string | Yes | Which sample app to deploy (e.g., dotnet-sample-v1) |
-| `spec.database.type` | string | Yes | Database type (only PostgreSQL in MVP) |
-| `spec.database.version` | string | No | Database version (default: 14) |
-| `spec.monitoring.appInsights` | bool | No | Enable App Insights (default: true) |
-| `spec.resources.compute` | string | No | App Service tier (default: standard) |
+| `apiVersion` | string | Yes | `just-deliver/v1` |
+| `kind` | string | Yes | `Workload` |
+| `metadata.name` | string | Yes | App name, used as a resource prefix. DNS-safe, max 40 chars. |
+| `metadata.team` | string | Yes | Owning team |
+| `metadata.environment` | string | Yes | `dev` in MVP; `staging`/`production` in later phases |
+| `container.image` | string | Yes | Fully qualified image reference including tag |
+| `container.variables` | map | No | Environment variables. May reference resource outputs with `${resource.<type>.<output>}` |
+| `container.ports` | array | No | Ports the container listens on |
+| `requires[].type` | string | Yes | Resource type the app needs. `database` in MVP. |
+
+### What Teams Do Not Specify
+
+Deliberately absent from the definition, per the two-layer model:
+
+| Concern | Where it comes from |
+|---------|--------------------|
+| Database engine, version, SKU | Platform mapping for `database` |
+| App Service tier / compute size | Platform mapping for the container runtime |
+| Application Insights and Log Analytics | `enforce-monitoring` global policy — attached to every workload, never requested |
+| Encryption, tags, network rules | Global IT Ops policies |
+| Approvals and sign-off | Release process, defined outside the workload |
+
+Teams declare *what*, not *how*. If a team hits a case the mapping does not cover, they use the `overrides` escape hatch (which requires an `override_reason`), not a new workload field.
 
 ---
 
 ## Out of Scope (Phase 2+)
 
 - Multiple environments (staging, prod) — only dev in MVP
-- Multiple app templates — hardcoded to ONE sample app
-- Multiple database types — PostgreSQL only
+- Multiple resource types — `database` only; no mappings yet for cache, queue, storage, secrets, or cdn
+- Multiple database engines — the `database` mapping resolves to a single engine
+- Team overrides — the schema accepts them; the MVP does not yet apply the whitelist or approval gates
 - Advanced networking (VPNs, private endpoints, custom routing)
 - Approval workflows or governance policies
 - GUI/dashboard — CLI only
