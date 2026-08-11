@@ -1,0 +1,69 @@
+---
+name: monitoring
+title: Monitoring Mapping
+description: >
+  Log Analytics workspace plus a workspace-based Application Insights component.
+  Attached by the enforce-monitoring global policy - teams never declare this,
+  which is why the sample workload lists only a database.
+
+resource_type: monitoring
+
+deployments:
+  - id: log-analytics
+    definition: azure-monitor
+    parameters:
+      resourceGroupName: ${deployment.resource-group.resourceGroupName}
+      location: ${env.location}
+      workspaceName: log-${workload.metadata.name}-${env.name}
+      # PerGB2018 is the only provisionable SKU; the legacy Free tier was retired
+      # and Azure now rejects workspace creation against it.
+      skuName: PerGB2018
+      retentionInDays: 31
+    environments:
+      production:
+        retentionInDays: 90
+
+  - id: app-insights
+    definition: application-insights
+    parameters:
+      resourceGroupName: ${deployment.resource-group.resourceGroupName}
+      location: ${env.location}
+      appInsightsName: appi-${workload.metadata.name}-${env.name}
+      workspaceResourceId: ${deployment.log-analytics.workspaceId}
+      applicationType: web
+      # Left off deliberately. Enabling it makes the ingestion endpoint reject
+      # instrumentation-key auth, and the browser/JavaScript SDK cannot present an
+      # Entra token - client-side telemetry would stop with nothing surfaced in the
+      # portal. Enable per-workload only once one is known to be server-side only.
+      disableLocalAuth: false
+
+  # Lets the workload's managed identity publish telemetry through Entra ID rather
+  # than an instrumentation key. Inert while disableLocalAuth is false, so granting
+  # it up front costs nothing and removes a step if a workload later opts in.
+  - id: app-insights-publisher
+    definition: role-assignment
+    parameters:
+      scope: ${deployment.app-insights.appInsightsId}
+      role: monitoring-metrics-publisher
+      principalId: ${deployment.app.webAppPrincipalId}
+      principalType: ServicePrincipal
+
+outputs:
+  # NOT referenceable from a workload: references are restricted to types listed in
+  # `requires`, and monitoring is policy-attached so it never appears there.
+  #
+  # Consequence: an app cannot ask for its own App Insights connection string, but
+  # it needs one to send telemetry. So the platform has to INJECT this as an env
+  # var rather than the team referencing it - the `inject:` half of
+  # enforce-monitoring, which does not exist yet. Until then, telemetry is unwired.
+  #
+  # The connection string is an endpoint identifier, not a credential - App Insights
+  # SDKs need it for routing even under Entra authentication.
+  connection_string: ${deployment.app-insights.connectionString}
+
+# Retention and auth mode are compliance-relevant, so neither is overrideable.
+override_whitelist: []
+
+# NOTE: role-assignment defaults roleAssignmentId to a fixed GUID. That holds only
+# while each workload gets its own App Insights component. Granting several
+# principals against one scope needs a generated per-assignment id.

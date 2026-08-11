@@ -47,7 +47,7 @@
           "minLength": 1
         },
         "variables": {
-          "description": "Environment variables. Values may reference provisioned resources with ${resource.<type>.<output>}, substituted at deployment time.",
+          "description": "Environment variables. Values may reference provisioned resources with ${resources.<type>.<output>}, substituted at deployment time. Only types listed in `requires` may be referenced; policy-attached resources cannot.",
           "type": "object",
           "additionalProperties": { "type": "string" }
         },

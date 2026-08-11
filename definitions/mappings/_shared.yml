@@ -1,0 +1,69 @@
+---
+name: mappings-shared
+title: Shared Mapping Settings
+description: >
+  Settings common to every resource mapping in this folder. Not a resource type -
+  the platform loads this first, then each <resource-type>.yml alongside it.
+
+# Where the Pulumi definitions referenced by `definition:` live.
+definitions_root: samples/provisioner
+
+# Expression forms usable in any mapping's `parameters` and `outputs`:
+#   ${workload.<path>}          field from the submitted workload definition
+#   ${env.<key>}                value from the `environments` block below
+#   ${deployment.<id>.<output>} an output of any deployment, in any mapping file
+# Anything without ${} is a literal.
+#
+# Deployment ids are global across this folder, not scoped per file. That is
+# deliberate: database.yml refers to ${deployment.app.webAppPrincipalId} so its
+# role assignment waits for compute to hand over an identity. Deployment order is
+# derived from these references, never from file or declaration order, and a
+# reference cycle is a mapping error.
+#
+# Splitting per resource means a duplicate id in two files is now possible and
+# would silently rebind a reference - the loader must reject duplicates.
+
+environments:
+  dev:
+    location: southeastasia
+    # Shared, pre-existing registry that CI pushes images to. Not provisioned
+    # per workload - see container_registry note below.
+    container_registry_id: /subscriptions/<subscription-id>/resourceGroups/<shared-rg>/providers/Microsoft.ContainerRegistry/registries/<registry-name>
+  staging:
+    location: southeastasia
+    container_registry_id: /subscriptions/<subscription-id>/resourceGroups/<shared-rg>/providers/Microsoft.ContainerRegistry/registries/<registry-name>
+  production:
+    location: southeastasia
+    container_registry_id: /subscriptions/<subscription-id>/resourceGroups/<shared-rg>/providers/Microsoft.ContainerRegistry/registries/<registry-name>
+
+# Built-in Azure role IDs. The executor expands `role:` into the full
+# /subscriptions/{id}/providers/Microsoft.Authorization/roleDefinitions/{guid}
+# path, taking the subscription from the target scope.
+roles:
+  monitoring-metrics-publisher: 3913510d-42f4-4e42-8a64-420c390055eb
+  log-analytics-reader: 73c42c96-874c-492b-b04d-ab87d138a893
+  acr-pull: 7f951dda-4ed3-4680-a7ca-43fe172d538d
+
+# Provisioned for every workload whether or not it asks. Teams cannot request or
+# decline these - they exist because global policy says so.
+policy_attached:
+  - foundation
+  - monitoring
+
+# Declared in the workload schema with no mapping file yet: cache, queue,
+# storage, secrets, cdn. A workload requiring one should be rejected at
+# submission with "no mapping for resource type", not fail midway through
+# provisioning.
+
+# container_registry: deliberately NOT a resource type a workload can require.
+# The image named in workload.container.image must already exist in the registry
+# before the workload deploys, so a registry created during that deployment could
+# never hold the image being deployed. The registry is provisioned once as shared
+# infrastructure (samples/provisioner/container-registry) and referenced here by
+# id; only the AcrPull grant is workload-scoped, in compute.yml.
+
+# Naming: generated names must fit the tightest Azure limit in play (Cosmos DB
+# account: 44 chars, lowercase). The workload schema currently allows
+# metadata.name up to 40 chars, which a prefix and an environment suffix push
+# past that. Either tighten the schema's pattern or have the executor
+# hash-truncate generated names.

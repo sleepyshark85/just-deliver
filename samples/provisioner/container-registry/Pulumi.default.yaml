@@ -1,0 +1,5 @@
+config:
+  container-registry:skuName: Basic
+  container-registry:adminUserEnabled: false
+  container-registry:anonymousPullEnabled: false
+  container-registry:publicNetworkAccess: Enabled

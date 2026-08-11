@@ -1,0 +1,58 @@
+---
+name: database
+title: Database Mapping
+description: >
+  Resolves `requires: - type: database` to a Cosmos DB account with a SQL API
+  database and container, plus the data-plane grant that lets the workload reach
+  it without a key.
+
+resource_type: database
+
+deployments:
+  - id: cosmos
+    definition: cosmos-db
+    parameters:
+      resourceGroupName: ${deployment.resource-group.resourceGroupName}
+      location: ${env.location}
+      accountName: cosmos-${workload.metadata.name}-${env.name}
+      databaseName: appdb
+      containerName: items
+      partitionKeyPath: /id
+    environments:
+      dev:
+        # One free-tier account per subscription, so only dev claims it. A second
+        # workload deploying to dev will fail here until this is per-subscription
+        # state rather than a per-environment constant.
+        enableFreeTier: true
+      staging:
+        enableFreeTier: false
+      production:
+        enableFreeTier: false
+
+  # Cosmos SQL API has its own data-plane role system, separate from Azure RBAC,
+  # so this cannot go through the generic role-assignment definition the way
+  # monitoring's App Insights grant does.
+  - id: cosmos-access
+    definition: cosmos-db-access
+    parameters:
+      resourceGroupName: ${deployment.resource-group.resourceGroupName}
+      accountId: ${deployment.cosmos.accountId}
+      accountName: ${deployment.cosmos.accountName}
+      principalId: ${deployment.app.webAppPrincipalId}
+
+outputs:
+  # What ${resources.database.<key>} resolves to in container variables. No
+  # connection string and no key: the app authenticates with its managed identity,
+  # so the endpoint is the only thing ever handed to the container.
+  endpoint: ${deployment.cosmos.documentEndpoint}
+  database: ${deployment.cosmos.databaseName}
+  container: ${deployment.cosmos.containerName}
+
+override_whitelist:
+  - databaseName
+  - containerName
+  - partitionKeyPath
+
+# NOTE: cosmos-db-access defaults roleAssignmentId to a fixed GUID, which holds
+# only while each workload gets its own account. Sharing an account across
+# workloads needs a generated per-assignment id.

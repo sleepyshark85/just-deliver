@@ -12,7 +12,7 @@ container:
     LOG_LEVEL: info
     # Only the endpoint is needed - the app authenticates with its managed
     # identity, so no key or connection string is injected here.
-    COSMOS_ENDPOINT: ${resource.database.endpoint}
+    COSMOS_ENDPOINT: ${resources.database.endpoint}
   ports:
     - port: 8080
       protocol: TCP

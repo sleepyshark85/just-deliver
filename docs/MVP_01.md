@@ -128,7 +128,7 @@ requires:
 | `metadata.team` | string | Yes | Owning team |
 | `metadata.environment` | string | Yes | `dev` in MVP; `staging`/`production` in later phases |
 | `container.image` | string | Yes | Fully qualified image reference including tag |
-| `container.variables` | map | No | Environment variables. May reference resource outputs with `${resource.<type>.<output>}` |
+| `container.variables` | map | No | Environment variables. May reference resource outputs with `${resources.<type>.<output>}` |
 | `container.ports` | array | No | Ports the container listens on |
 | `requires[].type` | string | Yes | Resource type the app needs. `database` in MVP. |
 

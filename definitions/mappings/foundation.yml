@@ -1,0 +1,25 @@
+---
+name: foundation
+title: Foundation Mapping
+description: >
+  The resource group every other resource for a workload lands in. Attached by
+  global policy, never requested by a team.
+
+resource_type: foundation
+
+deployments:
+  - id: resource-group
+    definition: resource-group
+    parameters:
+      resourceGroupName: rg-${workload.metadata.name}-${env.name}
+      location: ${env.location}
+
+outputs:
+  # NOT referenceable from a workload: references are restricted to types listed
+  # in `requires`, and foundation is policy-attached so it never appears there.
+  # Kept as the intended contract for when that restriction is relaxed.
+  name: ${deployment.resource-group.resourceGroupName}
+  location: ${deployment.resource-group.location}
+
+# Nothing here is overrideable: placement and naming are platform concerns.
+override_whitelist: []

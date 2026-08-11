@@ -1,0 +1,65 @@
+name: container-registry
+runtime: yaml
+description: >
+  Provisions an Azure Container Registry. Shared infrastructure, not a
+  per-workload resource - CI pushes images here before any workload that uses
+  them is deployed.
+
+configuration:
+  resourceGroupName:
+    type: String
+    description: Resource group the registry is created in
+
+  location:
+    type: String
+    default: southeastasia
+    description: Azure region the registry is created in
+
+  # Registry names are alphanumeric ONLY - no hyphens, unlike every other
+  # resource here - 5 to 50 chars, and globally unique across Azure.
+  registryName:
+    type: String
+    description: Name of the container registry (alphanumeric only, 5-50 chars)
+
+  # There is no free ACR tier. Basic is the cheapest at roughly $5/month.
+  skuName:
+    type: String
+    default: Basic
+    description: Registry SKU (Basic, Standard, Premium)
+
+  # Off deliberately: admin credentials are a shared username/password that
+  # cannot be scoped or rotated per consumer. Pull access is granted with the
+  # AcrPull role against a managed identity instead.
+  adminUserEnabled:
+    type: Boolean
+    default: false
+    description: Enable the built-in admin username/password
+
+  anonymousPullEnabled:
+    type: Boolean
+    default: false
+    description: Allow unauthenticated clients to pull images
+
+  publicNetworkAccess:
+    type: String
+    default: Enabled
+    description: Enabled or Disabled - controls public network access to the registry
+
+resources:
+  registry:
+    type: azure-native:containerregistry:Registry
+    properties:
+      resourceGroupName: ${resourceGroupName}
+      location: ${location}
+      registryName: ${registryName}
+      sku:
+        name: ${skuName}
+      adminUserEnabled: ${adminUserEnabled}
+      anonymousPullEnabled: ${anonymousPullEnabled}
+      publicNetworkAccess: ${publicNetworkAccess}
+
+outputs:
+  registryId: ${registry.id}
+  registryName: ${registry.name}
+  # The hostname images are tagged against, e.g. myregistry.azurecr.io
+  loginServer: ${registry.loginServer}

@@ -54,7 +54,7 @@ container:
   image: my-registry/my-service:1.2.3
   variables:
     LOG_LEVEL: info
-    DATABASE_HOST: ${resource.database.host}  # runtime substitution
+    DATABASE_HOST: ${resources.database.host}  # runtime substitution
   ports:
     - port: 8080
       protocol: TCP
@@ -638,7 +638,7 @@ As the platform evolves, you'll need to answer:
 2. **Can resource types depend on each other?** (e.g., "this workload needs a database AND a separate read replica")
 3. **How do you handle resource naming?** (auto-generated, team-specified, convention-based?)
 4. **How do you inject runtime config?** (environment variables, files, connection strings?)
-5. **How do teams reference resources in their code?** (e.g., `${resource.database.connection_string}`)
+5. **How do teams reference resources in their code?** (e.g., `${resources.database.connection_string}`)
 6. **What happens if provisioning fails partway through?** (rollback? manual cleanup?)
 7. **Can teams scale resources without re-deploying?** (e.g., change database SKU without redeploying app)
 

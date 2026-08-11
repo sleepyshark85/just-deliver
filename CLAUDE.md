@@ -13,4 +13,6 @@ This is an Internal Developer Platform (IDP) project. Read the following docs be
 - [SCORE Specification Evaluation](docs/investigation/score-evaluation.md)
 - [Missing Features & Design Gaps](docs/investigation/missing-features.md)
 - [Resource Provisioning & Workload Definition Strategy](docs/investigation/resource-provisioning-strategy.md)
+- [Platform Mapping Design](docs/architecture/MAPPING_DESIGN.md)
+- [MVP Phase 1 Open Issues](docs/MVP_01_OPEN_ISSUES.md)
 - [Pulumi Notes](docs/architecture/PULUMI_NOTES.md)

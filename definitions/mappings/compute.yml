@@ -1,0 +1,90 @@
+---
+name: compute
+title: Compute Mapping
+description: >
+  The runtime the workload itself runs on. Maps the compute resource type
+  (definitions/compute.yml) onto an Azure App Service plan and web app.
+
+resource_type: compute
+
+deployments:
+  - id: app
+    definition: app-service
+    # This deployment runs the workload's container, so container.variables resolve
+    # against it - which is what makes it depend on every resource type those
+    # variables reference. Exactly one deployment across all mappings may set this.
+    hosts_container: true
+    parameters:
+      resourceGroupName: ${deployment.resource-group.resourceGroupName}
+      location: ${env.location}
+      planName: plan-${workload.metadata.name}-${env.name}
+      appName: app-${workload.metadata.name}-${env.name}
+      # Platform default rather than a workload field - the strategy doc keeps
+      # health checks out of the container spec. Overrideable, since only the team
+      # knows whether their endpoint is /health, /healthz, or something else.
+      healthCheckPath: /health
+      # UNMAPPED: ${workload.container.image} has no parameter to bind to. See NOTE 1.
+    environments:
+      dev:
+        skuName: F1
+        skuTier: Free
+        skuSize: F1
+        skuFamily: F
+        skuCapacity: 1
+        alwaysOn: false
+        use32BitWorkerProcess: true
+      staging:
+        skuName: B1
+        skuTier: Basic
+        skuSize: B1
+        skuFamily: B
+        skuCapacity: 1
+        alwaysOn: true
+        use32BitWorkerProcess: false
+      production:
+        skuName: P1v3
+        skuTier: PremiumV3
+        skuSize: P1v3
+        skuFamily: Pv3
+        skuCapacity: 2
+        alwaysOn: true
+        use32BitWorkerProcess: false
+        zoneRedundant: true
+
+  # Lets the app pull ${workload.container.image} using its managed identity
+  # instead of registry admin credentials. Scoped to the shared registry, which is
+  # provisioned separately - see the container_registry note in _shared.yml.
+  - id: acr-pull
+    definition: role-assignment
+    parameters:
+      scope: ${env.container_registry_id}
+      role: acr-pull
+      principalId: ${deployment.app.webAppPrincipalId}
+      principalType: ServicePrincipal
+
+outputs:
+  # NOT referenceable from a workload: references are restricted to types listed in
+  # `requires`, and compute is implicit so it never appears there. Kept as the
+  # intended contract for when that restriction is relaxed.
+  host: ${deployment.app.webAppDefaultHostName}
+  principal_id: ${deployment.app.webAppPrincipalId}
+
+override_whitelist:
+  - healthCheckPath
+
+# NOTE 1: container.image is unmapped, so this mapping can describe a workload it
+# cannot actually deploy. The workload model is container-based and CI already
+# builds images, but app-service/Pulumi.yaml provisions a Windows .NET app
+# (netFrameworkVersion v4.0, use32BitWorkerProcess) with no image parameter.
+# Resolving it means either teaching that definition to run a container
+# (webAppKind: app,linux,container plus linuxFxVersion: DOCKER|<image>) or adding
+# a Container Apps definition and pointing this mapping at it instead.
+#
+# NOTE 2: definitions/compute.yml declares cpu, memory, replicas and max_replicas.
+# None of them have an App Service equivalent - App Service sells SKU tiers and
+# worker counts, not CPU millicores. Those parameters map cleanly onto Container
+# Apps, which is the same decision as NOTE 1.
+#
+# NOTE 3: compute is not a resource type a workload declares. It is implied by the
+# presence of `container`, and treated as an implicit requirement so the runtime
+# and its dependencies resolve through the same machinery as everything else.
