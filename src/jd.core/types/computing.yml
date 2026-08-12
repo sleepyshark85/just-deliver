@@ -1,0 +1,53 @@
+---
+name: computing
+title: Computing
+description: >
+  The runtime that executes the workload's container. Sizing, scaling rules and the concrete
+  service are the backend's decision - a team declares an image, how to reach it, and roughly
+  how much it needs, never a SKU.
+
+properties:
+  image:
+    type: string
+    required: true
+    description: Fully qualified image reference including tag.
+
+  variables:
+    type: map
+    description: >
+      Environment variables. Values may reference another resource's outputs with
+      ${resource.<name>.<output>}, resolved once that resource is provisioned.
+
+  ports:
+    type: list
+    description: Ports the container listens on. Each entry is { port, protocol }.
+
+  class:
+    type: enum
+    values: [standard, dedicated, high-availability]
+    default: standard
+    overridable: true
+    description: >
+      standard = cheapest thing that runs, no uptime guarantee, may cold start.
+      dedicated = always warm, sized for steady traffic.
+      high-availability = multiple instances across zones.
+
+  healthCheckPath:
+    type: string
+    default: /health
+    overridable: true
+    description: >
+      Path the platform probes to decide an instance is live. Overridable because only the
+      team knows whether their app answers on /health, /healthz or something else.
+
+outputs:
+  host:
+    type: string
+    description: Hostname the running workload answers on.
+
+  principalId:
+    type: string
+    description: >
+      Object id of the identity this runtime executes as. Also surfaced independently of any
+      runtime as the workload identity, so resources granting access do not have to reach
+      into this type's outputs.

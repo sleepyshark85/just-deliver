@@ -6,22 +6,26 @@ metadata:
   team: platform-team
   environment: dev
 
-container:
-  image: myregistry.azurecr.io/just-deliver-sample-app:1.0.0
-  variables:
-    LOG_LEVEL: info
-    # Only the endpoint is needed - the app authenticates with its managed
-    # identity, so no key or connection string is injected here.
-    COSMOS_ENDPOINT: ${resource.database.endpoint}
-  ports:
-    - port: 8080
-      protocol: TCP
+# Everything the workload needs, including its own runtime. Each entry is named, so a second
+# database or a second runtime is just another entry, and so references have something to
+# key on.
+resources:
+  - name: api
+    type: computing
+    image: myregistry.azurecr.io/just-deliver-sample-app:1.0.0
+    class: standard
+    variables:
+      LOG_LEVEL: info
+      # Only the endpoint is needed - the app authenticates with its managed identity, so no
+      # key or connection string is handed over.
+      COSMOS_ENDPOINT: ${resource.primary.endpoint}
+    ports:
+      - port: 8080
+        protocol: TCP
 
-# Declared by type only. The platform decides that "database" means a Cosmos DB
-# account with a database and container, and provisions the identity and role
-# assignment that let this workload reach it.
-#
-# Deliberately absent: monitoring. Log Analytics and Application Insights are
-# attached by the enforce-monitoring global policy, not requested by the team.
-requires:
-  - type: database
+  - name: primary
+    type: database
+    class: standard
+
+# Deliberately absent: observability. Log Analytics and Application Insights are attached to
+# every workload by policy, not requested by the team.

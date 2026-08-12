@@ -1,0 +1,37 @@
+---
+name: database
+title: Database
+description: >
+  Somewhere for the workload to keep data. Says nothing about engine, SKU, sizing, backup
+  policy or auth mechanism - a backend picks all of that from the class.
+
+properties:
+  class:
+    type: enum
+    values: [standard, high-availability, high-performance]
+    default: standard
+    overridable: true
+    description: >
+      The promise the platform makes about this database. A class rather than individual
+      knobs, so what a team asks for stays honourable by any backend: each decides for
+      itself what high-availability means for the engine it provisions.
+      standard = cheapest thing that works, no redundancy guarantee.
+      high-availability = survives the loss of a zone, point-in-time recovery.
+      high-performance = provisioned for throughput rather than cost.
+
+outputs:
+  endpoint:
+    type: string
+    description: Where the database is reachable. Format is engine-specific.
+
+  databaseName:
+    type: string
+    description: Name of the logical database created for this workload.
+
+  connectionString:
+    type: string
+    secret: true
+    description: >
+      Populated only by backends that use credential-based auth. Null where the workload
+      authenticates with its managed identity, which is the case for the Azure backend - a
+      workload reading this must tolerate null rather than assume it.

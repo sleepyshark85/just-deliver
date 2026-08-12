@@ -1,9 +1,20 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" Version="16.2.1" />
+  </ItemGroup>
+
+  <!-- Resource type contracts are data, not code, so they ship alongside the assembly.
+       Output folder is namespaced: a backend provider ships its own types/*.yml with the
+       same filenames, and a flat copy would have them overwrite each other. -->
+  <ItemGroup>
+    <Content Include="types\*.yml" Link="resource-types\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 
 </Project>

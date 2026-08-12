@@ -5,10 +5,12 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="c:/Users/TrungLe1/sources/just-deliver/src/jd.core/jd.core.csproj" />
+    <Project Path="src/jd.core.tests/jd.core.tests.csproj" />
     <Project Path="c:/Users/TrungLe1/sources/just-deliver/src/jd.definitionvalidator.tests/jd.definitionvalidator.tests.csproj" />
     <Project Path="c:/Users/TrungLe1/sources/just-deliver/src/jd.definitionvalidator/jd.definitionvalidator.csproj" />
   </Folder>
   <Folder Name="/src/backend-providers/">
     <Project Path="src/backend-providers/jd.bp.pulumi/jd.bp.pulumi.csproj" />
+    <Project Path="src/backend-providers/jd.bp.pulumi.tests/jd.bp.pulumi.tests.csproj" />
   </Folder>
 </Solution>

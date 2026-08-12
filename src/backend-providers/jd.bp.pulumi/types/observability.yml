@@ -1,0 +1,54 @@
+---
+type: observability
+title: Observability on Azure Monitor
+description: >
+  Realises the observability type as a Log Analytics workspace, a workspace-based Application
+  Insights component, and the grant that lets the workload publish telemetry through Entra ID.
+
+deployments:
+  - id: workspace
+    definition: azure-monitor
+    parameters:
+      resourceGroupName: ${deployment.resource-group.resourceGroupName}
+      location: ${env.location}
+      workspaceName: log-${workload.name}-${resource.name}
+      # PerGB2018 is the only provisionable SKU; Azure retired the legacy Free tier and now
+      # rejects workspace creation against it.
+      skuName: PerGB2018
+
+    parameter_sets:
+      class:
+        standard:
+          # 31 days is included at no extra cost.
+          retentionInDays: 31
+        audit:
+          # Two years is the interactive-retention ceiling; beyond that needs archive tiers,
+          # which this definition does not expose.
+          retentionInDays: 730
+
+  - id: component
+    definition: application-insights
+    parameters:
+      resourceGroupName: ${deployment.resource-group.resourceGroupName}
+      location: ${env.location}
+      appInsightsName: appi-${workload.name}-${resource.name}
+      workspaceResourceId: ${deployment.workspace.workspaceId}
+      applicationType: web
+      # Left off deliberately. Enabling it makes the ingestion endpoint reject
+      # instrumentation-key auth, and the browser/JavaScript SDK cannot present an Entra
+      # token - client-side telemetry would stop with nothing surfaced in the portal.
+      disableLocalAuth: false
+
+  # Lets the workload publish telemetry through Entra ID rather than an instrumentation key.
+  # Inert while disableLocalAuth is false, so granting it up front costs nothing.
+  - id: publisher
+    definition: role-assignment
+    parameters:
+      scope: ${deployment.component.appInsightsId}
+      role: monitoring-metrics-publisher
+      principalId: ${identity.principalId}
+      principalType: ServicePrincipal
+
+outputs:
+  connectionString: ${deployment.component.connectionString}
+  workspaceId: ${deployment.workspace.workspaceId}

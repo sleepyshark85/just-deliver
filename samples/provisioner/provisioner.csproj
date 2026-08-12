@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -16,6 +16,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\jd.core\jd.core.csproj" />
     <ProjectReference Include="..\..\src\backend-providers\jd.bp.pulumi\jd.bp.pulumi.csproj" />
+  </ItemGroup>
+
+  <!-- The workload is the sample's input, so it needs to sit beside the executable. -->
+  <ItemGroup>
+    <Content Include="workload.yaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

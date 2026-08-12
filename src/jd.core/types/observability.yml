@@ -1,0 +1,31 @@
+---
+name: observability
+title: Observability
+description: >
+  Where the workload's logs, metrics and traces go. Attached to every workload by policy
+  rather than requested, so it deliberately has almost no team-facing input: a team does not
+  get to decide whether it is observable, or for how long data is kept.
+
+properties:
+  class:
+    type: enum
+    values: [standard, audit]
+    default: standard
+    # Not overridable: retention is a compliance concern, and a team lowering it to save
+    # cost is the exact thing policy exists to stop.
+    description: >
+      standard = short retention, adequate for non-production.
+      audit = extended retention for audit and incident review.
+
+outputs:
+  connectionString:
+    type: string
+    secret: true
+    description: >
+      What a telemetry SDK needs to find the ingestion endpoint. Marked secret because on
+      Azure it embeds an instrumentation key that grants ingestion unless key-based auth is
+      explicitly disabled - an identifier that doubles as a credential.
+
+  workspaceId:
+    type: string
+    description: Identifier of the log store, for tooling that queries it directly.

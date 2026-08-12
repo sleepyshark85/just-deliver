@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -8,10 +8,17 @@
 
   <ItemGroup>
     <PackageReference Include="Pulumi.Automation" Version="3.110.0" />
+    <PackageReference Include="YamlDotNet" Version="16.2.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\jd.core\jd.core.csproj" />
+  </ItemGroup>
+
+  <!-- Type translations are data, not code, so they ship alongside the assembly. Output
+       folder is namespaced to avoid colliding with jd.core's identically named files. -->
+  <ItemGroup>
+    <Content Include="types\*.yml" Link="backend-types\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

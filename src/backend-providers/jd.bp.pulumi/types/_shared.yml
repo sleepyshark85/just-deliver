@@ -1,0 +1,54 @@
+---
+name: pulumi-shared
+description: >
+  Settings common to every Pulumi type translation, plus the deployments that must exist
+  before any of them. Not a translation itself - the backend loads this first.
+
+# Where the Pulumi definitions referenced by `definition:` live.
+# TODO: samples/provisioner is a samples folder doing production duty - see OPEN_ISSUES §1.
+definitions_root: samples/provisioner
+
+# Expression forms usable in any translation's `parameters` and `outputs`:
+#   ${property.<name>}          a property of the abstract resource instance
+#   ${resource.name}            the resource instance's own name
+#   ${workload.<key>}           name, team or environment from the workload
+#   ${env.<key>}                a value from the environments table below
+#   ${identity.principalId}     the workload identity
+#   ${deployment.<id>.<output>} an output of another deployment, in any translation
+# Anything without ${} is a literal.
+#
+# Deployment ids are global across this folder, so a duplicate would silently rebind a
+# reference rather than collide visibly. The loader must reject duplicates.
+
+environments:
+  dev:
+    location: southeastasia
+  staging:
+    location: southeastasia
+  production:
+    location: southeastasia
+
+# Built-in Azure role ids. The executor expands `role:` into the full
+# /subscriptions/{id}/providers/Microsoft.Authorization/roleDefinitions/{guid} path, taking
+# the subscription from the target scope.
+roles:
+  monitoring-metrics-publisher: 3913510d-42f4-4e42-8a64-420c390055eb
+  log-analytics-reader: 73c42c96-874c-492b-b04d-ab87d138a893
+  acr-pull: 7f951dda-4ed3-4680-a7ca-43fe172d538d
+
+# Resource types added to every workload whether or not it declares them. Platform policy
+# rather than a backend concern, so this belongs in a policy layer once one exists - it is
+# here for now because nothing else has a home for it. See OPEN_ISSUES §1.
+policy_attached:
+  - name: observability
+    type: observability
+
+# Deployed once per workload before any resource translation, because every Azure resource
+# needs somewhere to live. Deliberately here and not a core resource type: resource groups
+# are an Azure concept, and a team should never have to know they exist.
+foundation:
+  - id: resource-group
+    definition: resource-group
+    parameters:
+      resourceGroupName: rg-${workload.name}-${workload.environment}
+      location: ${env.location}

@@ -1,0 +1,67 @@
+---
+type: database
+title: Database on Azure Cosmos DB
+description: >
+  Realises the database type as a Cosmos DB SQL API account with a database and container,
+  plus the data-plane grant that lets the workload reach it without a key.
+
+deployments:
+  - id: account
+    definition: cosmos-db
+
+    # One parameter per entry. Names, placement and Cosmos-specific shape the abstract type
+    # deliberately says nothing about, so most of these are not property-derived.
+    parameters:
+      resourceGroupName: ${deployment.resource-group.resourceGroupName}
+      location: ${env.location}
+      # The resource instance name is here so a workload declaring two databases does not
+      # collide on account names.
+      accountName: cosmos-${workload.name}-${resource.name}
+      databaseName: ${resource.name}
+      containerName: items
+      partitionKeyPath: /id
+
+    # A set of parameters per entry, keyed by core property then by permitted value. Every
+    # value core allows must appear.
+    parameter_sets:
+      class:
+        standard:
+          # The free tier is why this stack costs nothing. One free-tier account per
+          # subscription, so a second workload asking for standard fails until that becomes
+          # per-subscription state rather than a constant. See OPEN_ISSUES §7.
+          enableFreeTier: true
+
+        # UNDIFFERENTIATED: cosmos-db/Pulumi.yaml exposes no throughput, zone-redundancy or
+        # backup parameters, so these differ from standard only by losing the free tier -
+        # more expensive without being more available, and the class promise is not kept.
+        # Needs enableMultipleWriteLocations, backupPolicy and a throughput setting added to
+        # that definition. See OPEN_ISSUES §3.
+        high-availability:
+          enableFreeTier: false
+        high-performance:
+          enableFreeTier: false
+
+  # Cosmos SQL API has its own data-plane role system, separate from Azure RBAC, so this
+  # cannot go through the generic role-assignment definition the way observability's grant
+  # does. Keeping it separate from `account` is also what keeps the graph acyclic: the
+  # account supplies the endpoint the app needs, the grant consumes the identity it produces.
+  - id: access
+    definition: cosmos-db-access
+    parameters:
+      resourceGroupName: ${deployment.resource-group.resourceGroupName}
+      accountId: ${deployment.account.accountId}
+      accountName: ${deployment.account.accountName}
+      principalId: ${identity.principalId}
+
+# Abstract output key -> the expression producing it.
+outputs:
+  endpoint: ${deployment.account.documentEndpoint}
+  databaseName: ${deployment.account.databaseName}
+
+# Declared rather than omitted, so the gap is visible and countable instead of looking like
+# an oversight.
+unmapped:
+  connectionString: >
+    An output rather than a property - the workload authenticates with its managed identity,
+    so there is no credential to hand over. Core declares it nullable for backends that do
+    use credential-based auth.

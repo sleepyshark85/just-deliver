@@ -1,0 +1,72 @@
+---
+type: computing
+title: Computing on Azure App Service
+description: >
+  Realises the computing type as an App Service plan and web app. The class picks the tier.
+
+deployments:
+  - id: app
+    definition: app-service
+
+    # One parameter per entry. ${property.x} in a template is how a core property maps 1-1.
+    parameters:
+      resourceGroupName: ${deployment.resource-group.resourceGroupName}
+      location: ${env.location}
+      planName: plan-${workload.name}-${resource.name}
+      appName: app-${workload.name}-${resource.name}
+      healthCheckPath: ${property.healthCheckPath}
+
+    # A set of parameters per entry: one value of one property decides the whole tier.
+    parameter_sets:
+      class:
+        standard:
+          # F1 is free but cannot do alwaysOn and needs a 32-bit worker. Adequate for the
+          # MVP's dev-only scope; a production-suitable `standard` needs either the policy
+          # layer or per-environment mapping back. See OPEN_ISSUES §1.
+          skuName: F1
+          skuTier: Free
+          skuSize: F1
+          skuFamily: F
+          skuCapacity: 1
+          alwaysOn: false
+          use32BitWorkerProcess: true
+        dedicated:
+          skuName: P1v3
+          skuTier: PremiumV3
+          skuSize: P1v3
+          skuFamily: Pv3
+          skuCapacity: 1
+          alwaysOn: true
+          use32BitWorkerProcess: false
+        high-availability:
+          skuName: P1v3
+          skuTier: PremiumV3
+          skuSize: P1v3
+          skuFamily: Pv3
+          skuCapacity: 2
+          alwaysOn: true
+          use32BitWorkerProcess: false
+          zoneRedundant: true
+
+  # NOT DECLARED: the AcrPull grant that would let the app pull its image with its managed
+  # identity rather than registry admin credentials. Needs a container-registry definition
+  # and a registry id in the environments table, neither of which is on this branch.
+
+outputs:
+  host: ${deployment.app.webAppDefaultHostName}
+  principalId: ${deployment.app.webAppPrincipalId}
+
+# The root blocker, see OPEN_ISSUES §2. Until these are mapped this translation provisions a
+# running site that does not run the workload's container - deployable and useless.
+unmapped:
+  image: >
+    app-service has no image parameter. It provisions a Windows .NET app
+    (netFrameworkVersion v4.0, use32BitWorkerProcess). Needs
+    webAppKind: app,linux,container plus linuxFxVersion built from the image, or a Container
+    Apps definition to point this translation at instead.
+  variables: >
+    app-service has no appSettings parameter, so environment variables - including every
+    ${resource.*} reference a workload writes - have nowhere to land.
+  ports: >
+    No equivalent. App Service infers the listening port from the container rather than
+    accepting a list.
