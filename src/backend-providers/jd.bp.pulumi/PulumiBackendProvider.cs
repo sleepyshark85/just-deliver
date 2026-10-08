@@ -1,10 +1,9 @@
+using System.Text.Json;
 using jd.core.bp;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Pulumi.Automation;
 using Pulumi.Automation.Events;
-using System.Linq;
-using System.Text.Json;
 
 namespace jd.bp.pulumi;
 

@@ -1,0 +1,9 @@
+{
+  "if": {
+    "allOf": [
+      { "field": "type", "equals": "Microsoft.DocumentDB/databaseAccounts" },
+      { "field": "Microsoft.DocumentDB/databaseAccounts/enableFreeTier", "notEquals": true }
+    ]
+  },
+  "then": { "effect": "deny" }
+}

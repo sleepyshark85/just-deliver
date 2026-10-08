@@ -1,0 +1,18 @@
+{
+  "if": {
+    "allOf": [
+      { "field": "type", "equals": "Microsoft.App/managedEnvironments" },
+      {
+        "count": {
+          "field": "Microsoft.App/managedEnvironments/workloadProfiles[*]",
+          "where": {
+            "field": "Microsoft.App/managedEnvironments/workloadProfiles[*].workloadProfileType",
+            "notEquals": "Consumption"
+          }
+        },
+        "greater": 0
+      }
+    ]
+  },
+  "then": { "effect": "deny" }
+}

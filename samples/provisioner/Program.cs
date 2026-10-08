@@ -2,7 +2,6 @@ using jd.bp.pulumi;
 using jd.core.bp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Linq;
 
 var baseDir = Directory.GetCurrentDirectory();
 var preview = args.Contains("--preview");

@@ -1,0 +1,7 @@
+{
+  "maxDailyQuotaGb": {
+    "type": "Float",
+    "metadata": { "displayName": "Max Log Analytics daily cap (GB)" },
+    "defaultValue": 0.15
+  }
+}

@@ -2,7 +2,7 @@ namespace jd.core.bp;
 
 public class DeploymentResult
 {
-    public Dictionary<string, ConfigEntry> Outputs { get; set; }
+    public required Dictionary<string, ConfigEntry> Outputs { get; set; }
 
     /// <summary>Count of resources per operation (e.g. "create": 2, "update": 1), from the update summary.</summary>
     public Dictionary<string, int> Summary { get; set; } = new();

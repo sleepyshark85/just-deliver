@@ -1,8 +1,7 @@
+using System.Text.Json;
 using jd.core.bp;
 using Pulumi.Automation;
 using Pulumi.Automation.Events;
-using System.Linq;
-using System.Text.Json;
 
 namespace jd.bp.pulumi;
 

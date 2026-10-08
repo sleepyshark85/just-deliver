@@ -1,12 +1,12 @@
 <Solution>
   <Folder Name="/samples/">
-    <Project Path="c:/Users/TrungLe1/sources/just-deliver/samples/provisioner/provisioner.csproj" />
-    <Project Path="c:/Users/TrungLe1/sources/just-deliver/samples/web/web.csproj" />
+    <Project Path="samples/provisioner/provisioner.csproj" />
+    <Project Path="samples/web/web.csproj" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="c:/Users/TrungLe1/sources/just-deliver/src/jd.core/jd.core.csproj" />
-    <Project Path="c:/Users/TrungLe1/sources/just-deliver/src/jd.definitionvalidator.tests/jd.definitionvalidator.tests.csproj" />
-    <Project Path="c:/Users/TrungLe1/sources/just-deliver/src/jd.definitionvalidator/jd.definitionvalidator.csproj" />
+    <Project Path="src/jd.core/jd.core.csproj" />
+    <Project Path="src/jd.definitionvalidator/jd.definitionvalidator.csproj" />
+    <Project Path="src/jd.definitionvalidator.tests/jd.definitionvalidator.tests.csproj" />
   </Folder>
   <Folder Name="/src/backend-providers/">
     <Project Path="src/backend-providers/jd.bp.pulumi/jd.bp.pulumi.csproj" />

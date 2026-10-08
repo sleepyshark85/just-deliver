@@ -1,5 +1,4 @@
 using Xunit;
-using jd.definitionvalidator;
 
 namespace jd.definitionvalidator.tests;
 
