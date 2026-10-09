@@ -191,7 +191,7 @@ public static class Cli
         services.AddLogging();
         services.RegisterPulumiBackend(options =>
         {
-            options.BackendUrl = environmentVariable(BackendUrlVariable) ?? options.BackendUrl;
+            options.BackendUrl = environmentVariable(BackendUrlVariable);
             options.ConfigPassPhrase = environmentVariable(PassphraseVariable);
             options.PulumiHome = environmentVariable("PULUMI_HOME");
             options.ScratchDirectory = environmentVariable("JD_SCRATCH_DIR") ?? options.ScratchDirectory;
