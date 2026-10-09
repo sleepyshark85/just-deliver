@@ -26,18 +26,20 @@ public static class Cli
           jd preview <workload.yaml> --env <environment.yaml> --catalog <dir> [--json]
           jd release create <manifest.yaml> --out <release-set.yaml>
           jd release show <release-set.yaml>
+          jd release deploy <release-set.yaml> --env <environment.yaml> --catalog <dir> [--preview]
           jd deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
           jd env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
           jd --help
 
         validate  checks a workload against its schema and rules.
         preview   validates the workload, then prints the resolved graph (--json: as stable JSON).
-        release   create writes an immutable release set (pinned workloads, deploy order) from a manifest; show prints one.
+        release   create writes an immutable release set (pinned workloads, deploy order) from a manifest; show prints one;
+                  deploy resolves every workload of a set, then provisions their infrastructure in deploy order, stopping at the first failure.
         deploy    provisions the infrastructure nodes in order (--preview: only shows the changes; nothing is created).
         env up    provisions an environment's substrate from its definition and writes the environment descriptor from the outputs.
                   --base: the descriptor of the layer below (the new values are added to it); --region defaults to JD_REGION;
                   --force: overwrite an existing --out.
-        Backend (deploy, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
+        Backend (deploy, release deploy, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
         Exit codes: 0 success, 1 validation, resolution or deployment errors, 2 usage errors.
 
         """;
@@ -70,7 +72,7 @@ public static class Cli
 
         if (args.FirstOrDefault() == "release")
         {
-            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, cancellationToken);
+            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, backend, environmentVariable, cancellationToken);
         }
 
         if (args.FirstOrDefault() == "env")
@@ -160,20 +162,35 @@ public static class Cli
     internal static IEnumerable<LoadError> CatalogErrors(CatalogLoadResult result, string catalogDirectory) =>
         result.Errors.Select(e => Path.Combine(catalogDirectory, e.File) is var full && File.Exists(full) ? e with { File = full } : e);
 
-    // Templates live in the catalog's templates directory; the graph must fit them before anything is created.
+    // Templates live in the catalog's templates directory; the graphs must fit them before anything is created.
+    // Null when they do not (the misfits are printed).
+    internal static async Task<TemplateLibrary?> CheckTemplatesAsync(string catalogDirectory, IEnumerable<ResolvedGraph> graphs, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var templates = await TemplateLibrary.LoadAsync(Path.Combine(catalogDirectory, CatalogDirectory.TemplatesDirectory), cancellationToken);
+        var misfits = graphs.SelectMany(templates.Check).ToList();
+        if (misfits.Count == 0)
+        {
+            return templates;
+        }
+
+        Print(misfits, stderr);
+        return null;
+    }
+
+    internal static Orchestrator CreateOrchestrator(
+        TemplateLibrary templates, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend, Func<string, string?> environmentVariable) =>
+        new(backend ?? CreatePulumiBackend(environmentVariable), templates, catalog, environment);
+
     internal static async Task<(int Code, RunReport? Run)> ProvisionAsync(
         string catalogDirectory, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend,
         Func<string, string?> environmentVariable, bool dryRun, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        var templates = await TemplateLibrary.LoadAsync(Path.Combine(catalogDirectory, CatalogDirectory.TemplatesDirectory), cancellationToken);
-        var misfits = templates.Check(graph);
-        if (misfits.Count > 0)
+        if (await CheckTemplatesAsync(catalogDirectory, [graph], stderr, cancellationToken) is not { } templates)
         {
-            Print(misfits, stderr);
             return (Invalid, null);
         }
 
-        var orchestrator = new Orchestrator(backend ?? CreatePulumiBackend(environmentVariable), templates, catalog, environment);
+        var orchestrator = CreateOrchestrator(templates, catalog, environment, backend, environmentVariable);
         void Show(NodeReport report) => stdout.Write(DeployFormatter.Format(report));
         var run = dryRun
             ? await orchestrator.PreviewAsync(graph, Show, cancellationToken)

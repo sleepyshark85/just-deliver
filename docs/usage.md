@@ -9,6 +9,7 @@ dotnet run --project src/jd.cli -- validate <workload.yaml>
 dotnet run --project src/jd.cli -- preview <workload.yaml> --env <environment.yaml> --catalog <dir> [--json]
 dotnet run --project src/jd.cli -- release create <manifest.yaml> --out <release-set.yaml>
 dotnet run --project src/jd.cli -- release show <release-set.yaml>
+dotnet run --project src/jd.cli -- release deploy <release-set.yaml> --env <environment.yaml> --catalog <dir> [--preview]
 dotnet run --project src/jd.cli -- deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
 dotnet run --project src/jd.cli -- env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
 dotnet run --project src/jd.cli -- --help
@@ -116,5 +117,21 @@ workloads:
 | `release create <manifest> --out <set>` | Validates every listed workload definition, requires each image to be pinned by digest (`@sha256:` and 64 hex digits; a tag is rejected), checks names and dependencies, works out the deploy order and writes the release set. Refuses to overwrite an existing file: sets are immutable, so a changed release gets a new file. Prints every problem as `file: location: message`. |
 | `release show <set>` | Re-verifies each embedded definition against its recorded SHA-256 and re-applies the create rules, then prints (derived from the definitions) the label, the deploy order and, per workload, team, definition SHA-256, image and dependencies. A modified set, or one that breaks a rule, is an error (exit 1). |
 
+| `release deploy <set> --env <environment> --catalog <dir> [--preview]` | Loads the set (re-verifying it like `show`), resolves **every** workload on the environment and checks every graph against the templates, and only then provisions the infrastructure nodes of each workload in the set's deploy order. Same resolver, template check and orchestrator as `jd deploy`, and the same backend variables (`PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE`). **Creates real Azure resources.** |
+
 Exit codes are the same as above (a manifest, set or `--out` path problem is 2; invalid content is 1).
-Resolving each workload and deploying a set is not part of these commands yet.
+
+### `jd release deploy`
+
+- Any error before the first node (a modified set, a workload that does not resolve, a graph the templates do not fit) is
+  reported with the set and the workload (`<set.yaml>#<workload>: location: message`), every workload's errors in one pass,
+  and nothing is created (exit 1).
+- Output per workload: a `workload <name>` line, then the `jd deploy` node lines (`deployed`, `unchanged`, `waiting for
+  runtime` for grants and anything else that needs the runtime). The last line summarises:
+  `release <label> on <environment>: <n> deployed, <n> unchanged, <n> failed, <n> not started (<names>).`
+  A workload counts as deployed when any of its nodes changed, otherwise unchanged.
+- The first node that fails stops the whole run (exit 1): the failure names the workload and node, workloads after it are
+  not started (listed in the summary), and what was already deployed stays. Running the command again resumes: deployed
+  nodes report `unchanged`. Rolling earlier workloads back is not done (open question E31).
+- `--preview` walks the same order and creates nothing; the summary says `previewed`.
+- Only infrastructure is deployed. The runtime, grants and deploy steps are later slices (S15, S16).

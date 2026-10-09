@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using jd.core.bp;
 using jd.resolver.release;
 
 namespace jd.cli;
@@ -12,8 +13,14 @@ internal static class ReleaseCli
     private const int UsageError = 2;
 
     // args are the arguments after "release".
-    public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(
+        string[] args, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, Func<string, string?> environmentVariable, CancellationToken cancellationToken)
     {
+        if (args.FirstOrDefault() == "deploy")
+        {
+            return await ReleaseDeployCli.RunAsync(args[1..], stdout, stderr, backend, environmentVariable, cancellationToken);
+        }
+
         var (command, input, output, problem) = Parse(args);
         if (problem is not null)
         {
@@ -72,7 +79,7 @@ internal static class ReleaseCli
         var command = args.FirstOrDefault();
         if (command is not ("create" or "show"))
         {
-            return (null, string.Empty, null, command is null ? "release needs a command: create or show." : $"unknown release command '{command}'.");
+            return (null, string.Empty, null, command is null ? "release needs a command: create, show or deploy." : $"unknown release command '{command}'.");
         }
 
         string? output = null;

@@ -43,3 +43,6 @@ public sealed record RunReport(IReadOnlyList<NodeReport> Nodes)
 {
     public bool Succeeded => Nodes.All(n => n.Outcome != NodeOutcome.Failed);
 }
+
+/// <summary>One workload's part of a release run.</summary>
+public sealed record WorkloadRun(string Workload, RunReport Run);
