@@ -196,19 +196,12 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         return new ConfigObject(properties);
     }
 
-    // Records the provenance of every leaf (anything but an object) under value, keyed by dotted path.
+    // Records the provenance of every leaf under value, keyed by dotted path.
     private static void Record(Dictionary<string, Provenance> provenance, string path, ConfigValue value, Provenance origin)
     {
-        if (value is ConfigObject obj)
+        foreach (var (leafPath, _) in ConfigLeaves.Of(path, value))
         {
-            foreach (var (key, child) in obj.Properties)
-            {
-                Record(provenance, path.Length == 0 ? key : path + PathSeparator + key, child, origin);
-            }
-        }
-        else
-        {
-            provenance[path] = origin;
+            provenance[leafPath] = origin;
         }
     }
 }

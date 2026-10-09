@@ -1,10 +1,10 @@
-using jd.definitionvalidator;
+using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expansion;
 using jd.resolver.graph;
 using jd.resolver.policies;
-using Newtonsoft.Json.Linq;
+using jd.resolver.workload;
 
 namespace jd.cli;
 
@@ -30,7 +30,11 @@ public static class Cli
 
         """;
 
-    private sealed record Options(string Command, string? Workload, string? Environment, string? Catalog, bool Json);
+    private abstract record Options(string Workload);
+
+    private sealed record ValidateOptions(string Workload) : Options(Workload);
+
+    private sealed record PreviewOptions(string Workload, string Environment, string Catalog, bool Json) : Options(Workload);
 
     public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default)
     {
@@ -48,48 +52,109 @@ public static class Cli
             return UsageError;
         }
 
-        var missing = new[] { options.Workload, options.Environment, options.Catalog }.Where(p => p is not null).FirstOrDefault(p => !File.Exists(p) && !Directory.Exists(p));
-        if (missing is not null)
+        var unreadable = Unreadable(options);
+        if (unreadable is not null)
         {
-            stderr.WriteLine($"jd: cannot read '{missing}': not found.");
+            stderr.WriteLine($"jd: cannot read '{unreadable.Value.Path}': {unreadable.Value.Reason}");
             return UsageError;
         }
 
-        var (workload, workloadErrors) = await LoadWorkloadAsync(options.Workload!, cancellationToken);
-        if (workload is null)
+        try
         {
-            workloadErrors.ForEach(stderr.WriteLine);
+            return await RunCommandAsync(options, stdout, stderr, cancellationToken);
+        }
+        catch (UnreadableInputException ex)
+        {
+            stderr.WriteLine($"jd: cannot read '{ex.Path}': {ex.Message}");
+            return UsageError;
+        }
+    }
+
+    private sealed class UnreadableInputException(string path, string reason) : Exception(reason)
+    {
+        public string Path { get; } = path;
+    }
+
+    // The inputs exist (checked above), so a failure here is a permission or read error.
+    private static async Task<T> ReadAsync<T>(string path, Func<Task<T>> read)
+    {
+        try
+        {
+            return await read();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new UnreadableInputException(path, ex.Message);
+        }
+    }
+
+    private static async Task<int> RunCommandAsync(Options options, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var loaded = await ReadAsync(options.Workload, () => WorkloadFile.LoadAsync(options.Workload, cancellationToken));
+        if (loaded.Workload is not { } workload)
+        {
+            Print(loaded.Errors, stderr);
             return Invalid;
         }
 
-        if (options.Command == "validate")
+        if (options is not PreviewOptions preview)
         {
             stdout.WriteLine($"{options.Workload}: valid.");
             return Success;
         }
 
-        var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog!, cancellationToken);
-        var environmentResult = await EnvironmentFile.LoadAsync(options.Environment!, cancellationToken);
+        var catalogResult = await ReadAsync(preview.Catalog, () => CatalogDirectory.LoadAsync(preview.Catalog, cancellationToken));
+        var environmentResult = await ReadAsync(preview.Environment, () => EnvironmentFile.LoadAsync(preview.Environment, cancellationToken));
         if (catalogResult.Catalog is not { } catalog || environmentResult.Descriptor is not { } environment)
         {
-            catalogResult.Errors.Concat(environmentResult.Errors).ToList().ForEach(e => stderr.WriteLine(e));
+            // Catalog errors name files relative to the catalog root; the person needs the path they can open.
+            Print(catalogResult.Errors.Select(e => e with { File = Path.Combine(preview.Catalog, e.File) }).Concat(environmentResult.Errors), stderr);
             return Invalid;
         }
 
-        var graph = new GraphBuilder(environment).Build(new PolicyApplier(catalog, environment).Apply(new Expander(catalog, environment).Expand(workload, options.Workload!)));
+        var graph = new GraphBuilder(environment).Build(new PolicyApplier(catalog, environment).Apply(new Expander(catalog, environment).Expand(workload, options.Workload)));
         if (graph.Errors.Count > 0)
         {
-            graph.Errors.ToList().ForEach(e => stderr.WriteLine(e));
+            Print(graph.Errors, stderr);
             return Invalid;
         }
 
-        stdout.Write(options.Json ? GraphJson.Serialize(graph) : PreviewFormatter.Format(graph));
+        stdout.Write(preview.Json ? GraphJson.Serialize(graph) : PreviewFormatter.Format(graph));
         return Success;
+    }
+
+    private static void Print(IEnumerable<LoadError> errors, TextWriter writer)
+    {
+        foreach (var error in errors)
+        {
+            writer.WriteLine(error);
+        }
+    }
+
+    // Each input must be what its role needs: the workload and environment are files, the catalog is a directory.
+    private static (string Path, string Reason)? Unreadable(Options options)
+    {
+        if (!File.Exists(options.Workload))
+        {
+            return (options.Workload, "not found or not a file.");
+        }
+
+        if (options is not PreviewOptions preview)
+        {
+            return null;
+        }
+
+        if (!File.Exists(preview.Environment))
+        {
+            return (preview.Environment, "not found or not a file.");
+        }
+
+        return Directory.Exists(preview.Catalog) ? null : (preview.Catalog, "not found or not a directory.");
     }
 
     private static (Options? Options, string Problem) Parse(string[] args)
     {
-        string? command = args.FirstOrDefault();
+        var command = args.FirstOrDefault();
         if (command is not ("validate" or "preview"))
         {
             return (null, command is null ? "no command given." : $"unknown command '{command}'.");
@@ -106,12 +171,12 @@ public static class Cli
                     json = true;
                     break;
                 case "--env" or "--catalog":
-                    if (++i == args.Length)
+                    if (i + 1 == args.Length)
                     {
-                        return (null, $"{args[i - 1]} needs a value.");
+                        return (null, $"{args[i]} needs a value.");
                     }
 
-                    if (args[i - 1] == "--env")
+                    if (args[i++] == "--env")
                     {
                         environment = args[i];
                     }
@@ -134,34 +199,15 @@ public static class Cli
             return (null, "expected exactly one workload file.");
         }
 
-        if (command == "preview" && (environment is null || catalog is null))
+        if (command == "validate")
         {
-            return (null, "preview needs --env and --catalog.");
+            return environment is null && catalog is null && !json
+                ? (new ValidateOptions(positional[0]), string.Empty)
+                : (null, "validate takes only a workload file.");
         }
 
-        if (command == "validate" && (environment is not null || catalog is not null || json))
-        {
-            return (null, "validate takes only a workload file.");
-        }
-
-        return (new Options(command, positional[0], environment, catalog, json), string.Empty);
-    }
-
-    // The same two steps for both commands: the resolver's graph relies on a workload that passed the schema and rules.
-    private static async Task<(JObject? Workload, List<string> Errors)> LoadWorkloadAsync(string path, CancellationToken cancellationToken)
-    {
-        var text = await File.ReadAllTextAsync(path, cancellationToken);
-        JToken document;
-        try
-        {
-            document = YamlSchemaValidator.ParseYaml(text);
-        }
-        catch (Exception ex)
-        {
-            return (null, [$"{path}: {YamlSchemaValidator.DescribeYamlError(ex, text)}"]);
-        }
-
-        var result = await new YamlSchemaValidator(WorkloadRules.Check).ValidateTokenAsync(await WorkloadSchema.ReadAsync(cancellationToken), document);
-        return result.IsValid && document is JObject workload ? (workload, []) : (null, result.Errors.Select(e => $"{path}: {e}").ToList());
+        return environment is null || catalog is null
+            ? (null, "preview needs --env and --catalog.")
+            : (new PreviewOptions(positional[0], environment, catalog, json), string.Empty);
     }
 }

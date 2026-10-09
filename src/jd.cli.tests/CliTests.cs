@@ -60,7 +60,20 @@ public sealed class CliTests : IDisposable
         var (code, _, stderr) = await RunAsync("validate", path);
 
         Assert.Equal(1, code);
+        Assert.Contains($"{path}: requires[0], requires[1]: ", stderr);
         Assert.Contains("used more than once", stderr);
+    }
+
+    [Fact]
+    public async Task A_nested_schema_error_is_one_line_with_file_and_location()
+    {
+        var path = WriteTemp("port.yaml", File.ReadAllText(Workload).Replace("port: 8080", "port: not-a-number"));
+
+        var (code, _, stderr) = await RunAsync("validate", path);
+
+        Assert.Equal(1, code);
+        var line = Assert.Single(stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+        Assert.StartsWith($"{path}: container.ports", line);
     }
 
     [Fact]
@@ -71,7 +84,7 @@ public sealed class CliTests : IDisposable
         var (code, _, stderr) = await RunAsync("validate", path);
 
         Assert.Equal(1, code);
-        Assert.Contains($"{path}: duplicate key 'a'", stderr);
+        Assert.Contains($"{path}: not valid YAML: duplicate key 'a'", stderr);
     }
 
     [Fact]
@@ -89,8 +102,10 @@ public sealed class CliTests : IDisposable
             Assert.Contains(((string)node["hash"]!)[..8], stdout);
         }
 
-        Assert.Contains("PolicyAdd: enforce-monitoring", stdout);
-        Assert.Contains("Mapping:", stdout);
+        // A policy-added field: the value, where it came from in the environment, and the policy that added it.
+        Assert.Contains("  workspaceResourceId = /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev (from env.logAnalytics.id)   [PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)]", stdout);
+        // A mapping field: its provenance names the file once.
+        Assert.Contains("  throughput = 400   [Mapping: mappings/cosmos-sql/standard.yaml]", stdout);
         Assert.Contains("= pending: ", stdout);
         Assert.Contains("depends on: ", stdout);
     }
@@ -130,7 +145,7 @@ public sealed class CliTests : IDisposable
 
         Assert.Equal(1, code);
         Assert.Empty(stdout);
-        Assert.Contains("mappings/oops.yaml", stderr);
+        Assert.Contains(Path.Combine(catalog, "mappings/oops.yaml"), stderr);
     }
 
     [Fact]
@@ -184,6 +199,78 @@ public sealed class CliTests : IDisposable
 
         Assert.Equal(2, code);
         Assert.Contains("missing-env.yaml", stderr);
+    }
+
+    [Fact]
+    public async Task A_directory_passed_as_the_workload_exits_2()
+    {
+        var (code, _, stderr) = await RunAsync("validate", _temp);
+
+        Assert.Equal(2, code);
+        Assert.Contains($"jd: cannot read '{_temp}': ", stderr);
+    }
+
+    [Fact]
+    public async Task A_missing_catalog_directory_exits_2()
+    {
+        var missing = Path.Combine(_temp, "no-such-catalog");
+
+        var (code, _, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", missing);
+
+        Assert.Equal(2, code);
+        Assert.Contains($"jd: cannot read '{missing}': ", stderr);
+    }
+
+    [Fact]
+    public async Task A_file_passed_as_the_catalog_exits_2()
+    {
+        var (code, _, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", Environment);
+
+        Assert.Equal(2, code);
+        Assert.Contains($"jd: cannot read '{Environment}': ", stderr);
+    }
+
+    [Fact]
+    public async Task A_directory_passed_as_the_environment_exits_2()
+    {
+        var (code, _, stderr) = await RunAsync("preview", Workload, "--env", _temp, "--catalog", Catalog);
+
+        Assert.Equal(2, code);
+        Assert.Contains($"jd: cannot read '{_temp}': ", stderr);
+    }
+
+    [Fact]
+    public async Task A_file_the_process_cannot_read_exits_2_with_the_path()
+    {
+        var path = WriteTemp("locked.yaml", "kind: Workload\n");
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        File.SetUnixFileMode(path, UnixFileMode.None);
+        if (CanRead(path))
+        {
+            return; // Running as a user that ignores file permissions (root).
+        }
+
+        var (code, _, stderr) = await RunAsync("validate", path);
+
+        Assert.Equal(2, code);
+        Assert.Contains($"jd: cannot read '{path}': ", stderr);
+    }
+
+    private static bool CanRead(string path)
+    {
+        try
+        {
+            File.ReadAllBytes(path);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     [Fact]

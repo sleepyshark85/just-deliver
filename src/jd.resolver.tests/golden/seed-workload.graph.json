@@ -69,10 +69,10 @@
         "roleDefinitionId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002"
       },
       "provenance": {
-        "accountId": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)",
-        "principalId": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)",
-        "roleAssignmentId": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)",
-        "roleDefinitionId": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)"
+        "accountId": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "principalId": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "roleAssignmentId": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "roleDefinitionId": "Mapping: mappings/cosmos-sql/standard.yaml"
       }
     },
     {
@@ -93,10 +93,10 @@
         "throughput": 400
       },
       "provenance": {
-        "accountName": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)",
-        "databaseName": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)",
-        "resourceGroupName": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)",
-        "throughput": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)"
+        "accountName": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "databaseName": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "resourceGroupName": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "throughput": "Mapping: mappings/cosmos-sql/standard.yaml"
       }
     },
     {
@@ -120,11 +120,11 @@
         "resourceGroupName": "rg-dev"
       },
       "provenance": {
-        "accountName": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)",
-        "containerName": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)",
-        "databaseName": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)",
-        "partitionKeyPath": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)",
-        "resourceGroupName": "Mapping: mappings/cosmos-sql/standard.yaml (mappings/cosmos-sql/standard.yaml)"
+        "accountName": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "containerName": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "databaseName": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "partitionKeyPath": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "resourceGroupName": "Mapping: mappings/cosmos-sql/standard.yaml"
       }
     }
   ],
