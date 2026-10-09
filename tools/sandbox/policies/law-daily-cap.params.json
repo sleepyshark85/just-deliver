@@ -1,4 +1,12 @@
 {
+  "minDailyQuotaGb": {
+    "type": "Float",
+    "metadata": {
+      "displayName": "Min Log Analytics daily cap (GB)",
+      "description": "Comparisons need operands of the same type, so the lower bound is a Float parameter rather than the integer literal 0 (which failed evaluation for every decimal cap). Rejects -1 (unlimited)."
+    },
+    "defaultValue": 0.01
+  },
   "maxDailyQuotaGb": {
     "type": "Float",
     "metadata": { "displayName": "Max Log Analytics daily cap (GB)" },

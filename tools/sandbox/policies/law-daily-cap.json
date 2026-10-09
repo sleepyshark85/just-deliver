@@ -5,7 +5,7 @@
       {
         "anyOf": [
           { "field": "Microsoft.OperationalInsights/workspaces/workspaceCapping.dailyQuotaGb", "exists": false },
-          { "field": "Microsoft.OperationalInsights/workspaces/workspaceCapping.dailyQuotaGb", "less": 0 },
+          { "field": "Microsoft.OperationalInsights/workspaces/workspaceCapping.dailyQuotaGb", "less": "[parameters('minDailyQuotaGb')]" },
           { "field": "Microsoft.OperationalInsights/workspaces/workspaceCapping.dailyQuotaGb", "greater": "[parameters('maxDailyQuotaGb')]" }
         ]
       }
