@@ -29,6 +29,8 @@ Internal Developer Platform for Azure. Start every session with [docs/README.md]
 6. **Merge:** on APPROVE with `tools/verify.sh` green, push the branch, open a PR to `main`, merge with
    `gh pr merge --squash --delete-branch`. CI must pass; while GitHub Actions is unavailable, run
    `tools/verify.sh` on the PR branch immediately before merging and say so in the PR.
+   Delete the branch only after `gh pr view --json state` reports `MERGED` — a failed merge must not
+   trigger cleanup (deleting the remote branch closes the PR).
    **Never push to `main` directly** — a pre-push hook rejects it (enable per clone: `git config core.hooksPath .githooks`).
 7. **Record:** update status.md — slice state, PR link, notes — before the next slice.
 8. **Session end:** update status.md "Now" and add a session-log entry, even mid-slice.

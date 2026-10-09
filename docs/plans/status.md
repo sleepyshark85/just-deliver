@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S04 — Expression evaluator
+- **Next slice:** S05 — Matching + expansion
 - **In progress:** —
 - **Blocked:** —
 
@@ -19,7 +19,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S01 | Workload schema v2 | done | PR #2 | 1 + suggestions | APPROVE first round; non-blocking test/doc gaps fixed before merge. `id` pattern widened vs ADR 0011 (hyphens, ≤16) — recorded under C13/C14 |
 | S02 | Catalog formats + loader | done | PR #3 | 2 | Round 1: 2 blocking (false cascading errors; resolver.md example contradicted seed). ~630 lines, over guideline, accepted. Follow-ups moved to carry-forward notes. |
 | S03 | Environment descriptor | done | PR #4 | 2 | Round 1: 1 blocking — NJsonSchema ignores `propertyNames`, so dotted keys could shadow nested values (D19 boundary); now enforced in code. `CatalogError` renamed `LoadError`. |
-| S04 | Expression evaluator | todo | | | |
+| S04 | Expression evaluator | done | PR #5 | 2 | Round 1: 1 blocking (uncommented `!`). Golden hash/guid values pinned. ~690 lines — 2nd size overrun despite 'stop and report' in the brief. |
 | S05 | Matching + expansion | todo | | | |
 | S06 | Policies + provenance | todo | | | |
 | S07 | Graph builder | todo | | | |
@@ -39,7 +39,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 
 Picked up by the slice named; remove once done.
 
-- **S04/S05 (parser):** duplicate-key error lacks key/line; test pinning the "no Catalog" suppression when a
+- **S05 (catalog loader):** validate naming `allowed` is a valid regex and includes hex digits (hash is appended after filtering); duplicate-key error lacks key/line; test pinning the "no Catalog" suppression when a
   file is unreadable; YAML parsed 3x per catalog file; move `CatalogParser.ToSchemaError` next to `LoadError`.
 - **S06:** catalog records hold mutable `JToken`s — clone on consumption.
 - **S09:** Azure role assignments need the full role-definition id; the `role-assignment` template must build
@@ -71,7 +71,8 @@ Newest first. One entry per session: what moved, decisions taken, anything the n
   worktree; the lead commits the status update on the slice branch before merging.
   Trial so far (Sonnet dev / Opus review): S01 approved first round; S02 and S03 each needed one fix
   round for real blocking issues the reviewer caught (S03: a security-relevant validator gap) — the
-  pairing is working as intended. Briefs should cap
+  pairing is working as intended. Weakness: Sonnet ignored the size cap twice (S02, S04); briefs now
+  require checking `git diff --stat main` before finishing. Escalate to the user if it recurs. Briefs should cap
   slice size more tightly (S02 overran).
 - **2026-10-08** — Repo baseline and team setup (S00). Docs reorganised; sandbox subscription
   prepared and guardrails verified; strict build, `tools/verify.sh`, commit hook, CI; developer
