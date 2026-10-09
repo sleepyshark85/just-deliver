@@ -11,7 +11,7 @@ tag=$(git rev-parse --short HEAD)
 
 gh auth token | docker login ghcr.io --username "$owner" --password-stdin >/dev/null
 
-docker build --platform linux/amd64 -f samples/sample-app/Dockerfile -t "${image}:${tag}" .
+docker build --platform linux/amd64 --provenance=false -f samples/sample-app/Dockerfile -t "${image}:${tag}" .
 docker push "${image}:${tag}" >/dev/null
 
 digest=$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${image}:${tag}" | grep "^${image}@" | head -n1)
