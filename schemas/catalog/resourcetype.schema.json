@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/catalog/resourcetype.schema.json",
+  "title": "just-deliver catalog resource type",
+  "description": "The contract development teams bind to. Names the interface the code binds to (cosmos-sql, postgres), never an abstraction such as 'database'. Unique by name across the catalog.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "name", "classes", "exports", "description"],
+  "properties": {
+    "kind": { "enum": ["ResourceType"] },
+    "name": {
+      "description": "Value teams write as 'type' in a workload requirement; same pattern as the workload schema's type.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$"
+    },
+    "classes": {
+      "description": "Operational shapes a workload may request with 'class'.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" }
+    },
+    "exports": {
+      "description": "The only valid names in ${resource.<id>.<name>}. Every mapping for this type must supply all of them (checked by the resolver, not by this schema).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "description": {
+      "description": "What the type gives a team.",
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

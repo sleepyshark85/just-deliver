@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/catalog/mapping.schema.json",
+  "title": "just-deliver catalog mapping",
+  "description": "Turns a matching requirement into graph nodes. Selected by matching criteria, never by conditionals. Expressions (${...}) are kept as raw strings by the loader and evaluated later.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "match", "nodes", "exports"],
+  "properties": {
+    "kind": { "enum": ["Mapping"] },
+    "match": {
+      "description": "Criteria this mapping applies to. The more criteria that match, the more specific the mapping.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "type": { "description": "A declared ResourceType name.", "type": "string" },
+        "class": { "type": "string" },
+        "tier": { "type": "string" },
+        "kind": { "type": "string" },
+        "runtime": { "type": "string" }
+      }
+    },
+    "nodes": {
+      "description": "Graph nodes by name; the name is how other expressions refer to the node.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/definitions/node" }
+    },
+    "exports": {
+      "description": "Export name -> expression producing it. Must cover the type's exports.",
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    }
+  },
+  "definitions": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template", "config"],
+      "properties": {
+        "template": { "description": "Template reference, relative to the catalog's templates directory.", "type": "string", "minLength": 1 },
+        "kind": { "description": "create (default) or grant. Grants are surfaced in the approval diff.", "enum": ["create", "grant"], "default": "create" },
+        "config": { "description": "Template configuration. Values are any YAML scalar or map, kept as written.", "type": "object" }
+      }
+    }
+  }
+}

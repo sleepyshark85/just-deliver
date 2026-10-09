@@ -1,0 +1,21 @@
+kind: Policy
+name: enforce-monitoring
+reason: Every workload reports to the environment workspace
+match: { kind: runtime }
+add:
+  appinsights:
+    template: azure/application-insights
+    config:
+      resourceGroupName: ${env.resourceGroup}
+      workspaceResourceId: ${env.logAnalytics.id}
+      appInsightsName: ${name('appi')}
+  appinsights-access:
+    kind: grant
+    template: azure/role-assignment
+    config:
+      scope: ${appinsights.id}
+      principalId: ${runtime.principalId}
+      roleDefinitionId: ${role.monitoring-metrics-publisher}
+      roleAssignmentId: ${guid(appinsights.id, runtime.principalId, 'metrics-publisher')}
+set:
+  runtime.appInsightsConnectionString: ${appinsights.connectionString}

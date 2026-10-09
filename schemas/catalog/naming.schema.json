@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/catalog/naming.schema.json",
+  "title": "just-deliver catalog naming rules",
+  "description": "How name(<kind>) builds a resource name. Files of this kind are merged; a resource kind may be ruled only once.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "rules"],
+  "properties": {
+    "kind": { "enum": ["Naming"] },
+    "rules": {
+      "description": "Resource kind (the argument of name()) -> rule.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pattern", "maxLength", "allowed"],
+        "properties": {
+          "pattern": {
+            "description": "Name template. Placeholders: {workload} workload name, {id} requirement id, {env} environment name, {hash} short deterministic hash used to keep the name within maxLength and unique.",
+            "type": "string",
+            "minLength": 1
+          },
+          "maxLength": { "description": "Longest legal name.", "type": "integer", "minimum": 1 },
+          "allowed": {
+            "description": "Regex character class of legal characters, for example [a-z0-9-].",
+            "type": "string",
+            "pattern": "^\\[.+\\]$"
+          }
+        }
+      }
+    }
+  }
+}
