@@ -1,3 +1,4 @@
+using jd.core.bp;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -15,12 +16,37 @@ public sealed class CliTests : IDisposable
 
     public void Dispose() => Directory.Delete(_temp, recursive: true);
 
-    private static async Task<(int Code, string Out, string Err)> RunAsync(params string[] args)
+    private static Task<(int Code, string Out, string Err)> RunAsync(params string[] args) => RunWithAsync(null, args);
+
+    private static async Task<(int Code, string Out, string Err)> RunWithAsync(IBackEndProvider? backend, params string[] args)
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, stdout, stderr);
+        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend);
         return (code, stdout.ToString(), stderr.ToString());
+    }
+
+    private sealed class RecordingBackend : IBackEndProvider
+    {
+        public List<string> Calls { get; } = [];
+        public string? FailOn { get; set; }
+
+        public Task<DeploymentResult> DeployAsync(DeploymentPackage package, CancellationToken cancellationToken)
+        {
+            Calls.Add("deploy " + package.StackName);
+            return package.StackName == FailOn
+                ? throw new InvalidOperationException("provider exploded")
+                : Task.FromResult(new DeploymentResult { Outputs = [], Summary = new() { ["Create"] = 1 }, Changes = [new ResourceChange { Urn = "urn", Type = "azure-native:t:T", Operation = "create" }] });
+        }
+
+        public Task<DeploymentResult> PreviewAsync(DeploymentPackage package, CancellationToken cancellationToken)
+        {
+            Calls.Add("preview " + package.StackName);
+            return Task.FromResult(new DeploymentResult { Outputs = [], Summary = new() { ["Create"] = 1 } });
+        }
+
+        public Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(string stackName, string deploymentContent, CancellationToken cancellationToken) =>
+            Task.FromResult<Dictionary<string, ConfigEntry>?>(null);
     }
 
     private string WriteTemp(string name, string content)
@@ -171,6 +197,71 @@ public sealed class CliTests : IDisposable
         Assert.Contains("no-such-type", stderr);
     }
 
+    [Fact]
+    public async Task Deploy_deploys_infrastructure_nodes_and_reports_the_rest_as_waiting_for_the_runtime()
+    {
+        var backend = new RecordingBackend();
+
+        var (code, stdout, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", Catalog);
+
+        Assert.Equal(0, code);
+        Assert.Empty(stderr);
+        Assert.Equal(["deploy just-deliver-sample-app.dev._workload.appinsights", "deploy just-deliver-sample-app.dev.cosmos-sql.container"], backend.Calls);
+        Assert.Contains("just-deliver-sample-app/dev/cosmos-sql/container: deployed (create 1, ", stdout);
+        Assert.Contains("  create azure-native:t:T", stdout);
+        Assert.Contains("just-deliver-sample-app/dev/cosmos-sql/access: waiting for runtime (no changes, ", stdout);
+    }
+
+    [Fact]
+    public async Task Deploy_with_preview_changes_nothing()
+    {
+        var backend = new RecordingBackend();
+
+        var (code, stdout, _) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", Catalog, "--preview");
+
+        Assert.Equal(0, code);
+        Assert.All(backend.Calls, call => Assert.StartsWith("preview ", call));
+        Assert.Contains("cosmos-sql/container: previewed (create 1, ", stdout);
+    }
+
+    [Fact]
+    public async Task A_failed_deploy_exits_1_naming_the_node()
+    {
+        var backend = new RecordingBackend { FailOn = "just-deliver-sample-app.dev._workload.appinsights" };
+
+        var (code, stdout, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", Catalog);
+
+        Assert.Equal(1, code);
+        Assert.Contains("appinsights: failed", stdout);
+        Assert.Contains("jd: stopped at just-deliver-sample-app/dev/@workload/appinsights: provider exploded", stderr);
+        Assert.Single(backend.Calls);
+    }
+
+    [Fact]
+    public async Task Deploy_refuses_a_graph_that_does_not_fit_the_templates_before_creating_anything()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        Directory.Delete(Path.Combine(catalog, "templates", "azure", "application-insights"), recursive: true);
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Contains("template 'azure/application-insights' is not in the template library", stderr);
+        Assert.Empty(backend.Calls);
+    }
+
+    private static void CopyDirectory(string from, string to)
+    {
+        foreach (var file in Directory.EnumerateFiles(from, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(to, Path.GetRelativePath(from, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+    }
+
     [Theory]
     [InlineData("frobnicate")]
     [InlineData("validate")]
@@ -178,6 +269,9 @@ public sealed class CliTests : IDisposable
     [InlineData("preview", "a.yaml")]
     [InlineData("preview", "a.yaml", "--env")]
     [InlineData("preview", "a.yaml", "--bogus")]
+    [InlineData("preview", "a.yaml", "--env", "e.yaml", "--catalog", "c", "--preview")]
+    [InlineData("deploy", "a.yaml")]
+    [InlineData("deploy", "a.yaml", "--env", "e.yaml", "--catalog", "c", "--json")]
     public async Task Usage_errors_exit_2_and_print_the_usage(params string[] args)
     {
         var (code, _, stderr) = await RunAsync(args);
@@ -293,5 +387,6 @@ public sealed class CliTests : IDisposable
         Assert.Equal(0, code);
         Assert.Contains("jd validate", stdout);
         Assert.Contains("jd preview", stdout);
+        Assert.Contains("jd deploy", stdout);
     }
 }

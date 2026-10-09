@@ -328,6 +328,7 @@ Adding a resource type = one type file + one template + one mapping + one golden
 
 `CatalogParser` + `CatalogDirectory` (parser over in-memory files, thin directory reader; reuse `YamlSchemaValidator`) · `Matcher` · `Expander` · `PolicyApplier` (policies, layering, provenance) ·
 `ExpressionEvaluator` · `Namer` · `GraphBuilder` (cycle detection, topological sort, phases).
+`Resolver.Resolve(workload, file, catalog, environment)` runs expand → policies → graph in one call (used by the CLI and the orchestrator). The orchestrator (`jd.orchestrator`) evaluates pending config again with deployed outputs: see [provisioning.md](provisioning.md#orchestrator).
 `TemplateLibrary` (in `jd.bp.pulumi`) checks the graph against the templates. `DeploymentPackage` carries the stack name (`StackName`) separately from the template (`DeploymentContent`).
 
 ## Alternatives considered

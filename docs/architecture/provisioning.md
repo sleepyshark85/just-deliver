@@ -159,8 +159,9 @@ hand-authors it. YAML runtime gotcha: numeric-looking strings such as `"1.2"` ar
   a longer name becomes its first 83 characters + `-` + the first 16 hex characters of the SHA-256 of the full
   name (`StackNames`): deterministic, 100 characters, distinct for different graph stacks. Callers always use the
   graph name, also with `GetOutputsAsync`. Names that Pulumi or the file system cannot take are rejected.
-- `GetOutputsAsync(package)` takes the same package as `DeployAsync` (so the project always matches), lists the
-  project's stacks and reads the matching stack's outputs from state: no refresh, no preview, no provider plugin.
+- `GetOutputsAsync(stackName, deploymentContent)` takes the stack name and template content `DeployAsync` was given
+  (so the project always matches; the config is not needed), lists the project's stacks and reads the matching stack's
+  outputs from state: no refresh, no preview, no provider plugin.
   It returns null when the stack is "not deployed": it does not exist, or it has no resources recorded
   (`PreviewAsync` creates an empty stack, so a preview alone does not make a node deployed). The orchestrator uses
   it to fill references to already-deployed nodes during preview; there are no fake or placeholder values in the
@@ -174,6 +175,30 @@ hand-authors it. YAML runtime gotcha: numeric-looking strings such as `"1.2"` ar
   outputs (`IsSecret`), and do not appear in clear text in state.
 - `CancellationToken` flows from every public provider method to the Automation API calls.
 
+### Orchestrator
+
+`jd.orchestrator` (application layer: depends on `jd.core` and `jd.resolver`, never on Pulumi) walks a `ResolvedGraph`
+in graph order through `IBackEndProvider`, one node at a time. Template content comes from `ITemplateStore`
+(implemented by `TemplateLibrary` over `<catalog>/templates`).
+
+- **Deploy.** Per infrastructure-phase node: evaluate the node's pending config again with the same
+  `ExpressionEvaluator` and a context whose known outputs are the outputs captured from the nodes deployed before it (the
+  workload name and team, the current id and the node names in scope are the node's scope, as in the first pass).
+  Every value must be resolved before the node is deployed; otherwise the walk stops and the error names node, field and
+  reference. Config becomes backend entries: strings as they are, numbers and booleans in invariant form (`0.15`,
+  `true`), objects and arrays as compact JSON (a Pulumi config value is always a string; templates read maps and lists
+  as JSON). A value built from a secret output is a secret. The walk stops at the first failure and reports what was deployed.
+- **After-runtime nodes** (phase `after-runtime`) are not deployed by this walk: they are reported "waiting for runtime".
+- **Preview.** Same order, nothing is created. A reference to a node this run has not deployed is filled from
+  `GetOutputsAsync` (state of an earlier deploy); if the node was never deployed the value is missing and the node is
+  reported "pending upstream" and not previewed (never a fake value). Template `fn::invoke`s still run during preview, so
+  previewing a new environment's substrate needs its upstream deployed first.
+- **Result.** Per node: outcome (`deployed`, `unchanged`, `previewed`, `pending upstream`, `waiting for runtime`,
+  `failed`), the provider's change summary and per-resource changes, and the time. A node is `unchanged` when its summary
+  has no operation other than `Same`; "re-run = zero changes" means every deployed node is `unchanged`.
+- **Configuration.** `jd deploy` reads `PULUMI_BACKEND_URL` (default `file://~`), `PULUMI_CONFIG_PASSPHRASE`
+  (default empty: local/dev only), `PULUMI_HOME` and `JD_SCRATCH_DIR` (default the system temp directory) in the composition root.
+
 ### Chaining stacks
 
 Provision stack A → read `UpResult.Outputs` → `SetConfigAsync` into stack B → provision B. Alternative:
@@ -181,7 +206,7 @@ Provision stack A → read `UpResult.Outputs` → `SetConfigAsync` into stack B 
 (`organization` is fixed on the local backend), read-only, no staleness. **Chosen: config-passing by the
 orchestrator**, because one orchestrator already sequences everything and holds the values;
 `StackReference` pays off only when stacks are provisioned independently. In preview, references to already-deployed
-nodes are filled from `GetOutputsAsync`; references to nodes not yet deployed stay pending (never fake values).
+nodes are filled from `GetOutputsAsync`; references to nodes not yet deployed stay pending (never fake values). See [Orchestrator](#orchestrator).
 
 ### Backend and state
 

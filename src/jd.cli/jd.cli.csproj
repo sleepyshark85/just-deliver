@@ -6,8 +6,11 @@
     <RootNamespace>jd.cli</RootNamespace>
   </PropertyGroup>
 
+  <!-- The composition root wires everything: the resolver, the orchestrator and the Pulumi backend. -->
   <ItemGroup>
     <ProjectReference Include="../jd.resolver/jd.resolver.csproj" />
+    <ProjectReference Include="../jd.orchestrator/jd.orchestrator.csproj" />
+    <ProjectReference Include="../backend-providers/jd.bp.pulumi/jd.bp.pulumi.csproj" />
   </ItemGroup>
 
 </Project>
