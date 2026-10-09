@@ -18,11 +18,12 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
     // Policy name order makes conflict reports and "same value" provenance independent of file order.
     private readonly IReadOnlyList<Policy> _policies = catalog.Policies.OrderBy(p => p.Name, StringComparer.Ordinal).ToList();
 
-    public PolicyResult Apply(ExpansionResult expansion, string workloadName, string workloadTeam)
+    public PolicyResult Apply(ExpansionResult expansion)
     {
-        var errors = new List<LoadError>();
+        // A requirement the expansion dropped is not in the result, so its errors must carry through.
+        var errors = new List<LoadError>(expansion.Errors);
         ExpressionEvaluator EvaluatorFor(string currentId, IEnumerable<string> nodeNames) => new(new ExpressionContext(
-            catalog.Roles, catalog.Naming, environment, workloadName, workloadTeam, currentId, nodeNames.ToHashSet(), new Dictionary<Reference, string>()));
+            catalog.Roles, catalog.Naming, environment, expansion.WorkloadName, expansion.WorkloadTeam, currentId, nodeNames.ToHashSet(), new Dictionary<Reference, string>()));
 
         var requirements = new List<ResolvedRequirement>();
         foreach (var requirement in expansion.Requirements)
@@ -33,16 +34,23 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(requirement.Mapping, requirement.Mapping, Layer.Mapping),
                     requirement.Type, requirement.Class, evaluator, $"{requirement.Id}/{n.Name}", errors))
                 .ToList();
-            requirements.Add(new ResolvedRequirement(requirement, nodes));
+            requirements.Add(new ResolvedRequirement(requirement.Id, requirement.Type, requirement.Class, requirement.Mapping, requirement.Exports, nodes));
         }
 
         var workloadNodes = new List<ResolvedNode>();
+        var addedBy = new Dictionary<string, Policy>();
         foreach (var policy in _policies.Where(IsWorkloadScope))
         {
             foreach (var (name, node) in policy.Add)
             {
+                if (!addedBy.TryAdd(name, policy))
+                {
+                    errors.Add(new LoadError(policy.Source, $"add.{name}", $"policies '{addedBy[name].Name}' ({addedBy[name].Source}) and '{policy.Name}' ({policy.Source}) both add a node named '{name}'."));
+                    continue;
+                }
+
                 var evaluator = EvaluatorFor(name, policy.Add.Keys);
-                var config = Expander.WalkConfig(node.Config, evaluator, policy.Source, $"add.{name}.config", errors);
+                var config = ConfigWalker.WalkConfig(node.Config, evaluator, policy.Source, $"add.{name}.config", errors);
                 workloadNodes.Add(ApplyNodePolicies(
                     name, node.Template, node.Kind, config, new Provenance(policy.Source, policy.Name, Layer.PolicyAdd), null, null, evaluator, name, errors));
             }
@@ -98,10 +106,21 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
     {
         var isDefault = layer == Layer.PolicyDefault;
         var field = isDefault ? "default" : "set";
-        var byPath = matching
-            .SelectMany(p => entries(p).Select(e => (Policy: p, Path: e.Key, Value: e.Value)))
-            .GroupBy(e => e.Path)
-            .OrderBy(g => g.Key, StringComparer.Ordinal);
+        var all = matching.SelectMany(p => entries(p).Select(e => (Policy: p, Path: e.Key, Value: e.Value))).ToList();
+
+        // A path that is a strict prefix of another policy's path would make one policy's value depend on application order.
+        var overlapping = new HashSet<string>();
+        foreach (var outer in all)
+        {
+            foreach (var inner in all.Where(i => i.Policy.Name != outer.Policy.Name && i.Path.StartsWith(outer.Path + PathSeparator, StringComparison.Ordinal)))
+            {
+                errors.Add(new LoadError(outer.Policy.Source, $"{field}.{outer.Path}",
+                    $"policies '{outer.Policy.Name}' ({outer.Policy.Source}) and '{inner.Policy.Name}' ({inner.Policy.Source}) give overlapping {field} fields '{outer.Path}' and '{inner.Path}' of node '{label}'."));
+                overlapping.UnionWith([outer.Path, inner.Path]);
+            }
+        }
+
+        var byPath = all.Where(e => !overlapping.Contains(e.Path)).GroupBy(e => e.Path).OrderBy(g => g.Key, StringComparer.Ordinal);
         foreach (var group in byPath)
         {
             var first = group.First();
@@ -118,7 +137,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
                 continue;
             }
 
-            if (Expander.Walk(first.Value, evaluator, first.Policy.Source, $"{field}.{first.Path}", errors) is not { } value)
+            if (ConfigWalker.Walk(first.Value, evaluator, first.Policy.Source, $"{field}.{first.Path}", errors) is not { } value)
             {
                 continue;
             }
@@ -144,7 +163,17 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
     private static bool IsPresent(ConfigObject config, string[] path)
     {
         ConfigValue current = config;
-        return path.All(segment => current is ConfigObject o && o.Properties.TryGetValue(segment, out current!));
+        foreach (var segment in path)
+        {
+            if (current is not ConfigObject obj || !obj.Properties.TryGetValue(segment, out var next))
+            {
+                return false;
+            }
+
+            current = next;
+        }
+
+        return true;
     }
 
     // Copy-on-write: returns the updated object, creating missing intermediate objects; null when a parent is not an object.

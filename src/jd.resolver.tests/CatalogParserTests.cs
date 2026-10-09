@@ -13,7 +13,7 @@ public class CatalogParserTests
         $"kind: Mapping\nmatch: {{ type: {type} }}\nnodes:\n  db:\n    template: t/db\n    config: {{ size: 1 }}\nexports:\n  endpoint: ${{db.endpoint}}\n";
 
     private static string PolicyFile(string name) =>
-        $"kind: Policy\nname: {name}\nreason: because\nmatch: {{ kind: runtime }}\nset: {{ a.b: 1 }}\n";
+        $"kind: Policy\nname: {name}\nreason: because\nmatch: {{ kind: runtime }}\nset: {{ runtime.b: 1 }}\n";
 
     private static Task<CatalogLoadResult> Parse(params (string Path, string Content)[] files) =>
         CatalogParser.ParseAsync(files.Select(f => new CatalogSource(f.Path, f.Content)));
@@ -41,7 +41,7 @@ public class CatalogParserTests
         Assert.Equal("${db.endpoint}", mapping.Exports["endpoint"]);
         var policy = Assert.Single(catalog.Policies);
         Assert.Equal(NodeKind.Grant, policy.Add["extra"].Kind);
-        Assert.True(policy.Set.ContainsKey("a.b"));
+        Assert.True(policy.Set.ContainsKey("runtime.b"));
         Assert.Equal(20, catalog.Naming["thing"].MaxLength);
         Assert.Equal("00000000-0000-0000-0000-000000000001", catalog.Roles["reader"]);
     }
@@ -150,6 +150,32 @@ public class CatalogParserTests
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { kind: runtime }\n"));
 
         Assert.Equal("p.yaml", Assert.Single(result.Errors).File);
+    }
+
+    [Theory]
+    [InlineData("{ kind: grant }", "set: { a: 1 }", "match.kind")]
+    [InlineData("{ runtime: container-app }", "set: { a: 1 }", "match.runtime")]
+    [InlineData("{ kind: runtime, type: sqldb }", "set: { runtime.a: 1 }", "match")]
+    [InlineData("{ kind: runtime, template: t/x }", "add:\n  n:\n    template: t/x\n    config: {}", "match")]
+    [InlineData("{ template: t/x }", "add:\n  n:\n    template: t/x\n    config: {}", "add")]
+    [InlineData("{ kind: runtime }", "set: { size: 1 }", "set.size")]
+    [InlineData("{ kind: runtime }", "default: { size: 1 }", "default.size")]
+    public async Task A_policy_that_fits_neither_scope_is_an_error(string match, string body, string location)
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {match}\n{body}\n"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("p.yaml", location), (error.File, error.Location));
+    }
+
+    [Theory]
+    [InlineData("{ template: t/x, tier: team }", "set: { a.b: 1 }\ndefault: { c: 2 }")]
+    [InlineData("{ kind: runtime, runtime: container-app, tier: team }", "set: { runtime.a: 1 }\ndefault: { runtime.b: 2 }\nadd:\n  n:\n    template: t/x\n    config: {}")]
+    public async Task A_policy_in_either_scope_loads(string match, string body)
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {match}\n{body}\n"));
+
+        Assert.Empty(result.Errors);
     }
 
     [Fact]

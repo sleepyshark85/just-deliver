@@ -29,15 +29,15 @@ public class PolicyApplierTests
     private static EnvironmentDescriptor Env(string tier = "team") =>
         new("dev", "region", tier, new Dictionary<string, string> { ["host"] = "h1" }, []);
 
-    private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string tier = "team")
+    private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string tier = "team", bool expectExpansionErrors = false)
     {
         var files = BaseFiles.Concat(policies).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
         var expansion = new Expander(loaded.Catalog!, Env(tier)).Expand(workload, "workload.yaml");
-        Assert.Empty(expansion.Errors);
-        return new PolicyApplier(loaded.Catalog!, Env(tier)).Apply(expansion, "shop", "crew");
+        Assert.Equal(expectExpansionErrors, expansion.Errors.Count > 0);
+        return new PolicyApplier(loaded.Catalog!, Env(tier)).Apply(expansion);
     }
 
     private static ResolvedNode Node(PolicyResult result, string name, int requirement = 0) =>
@@ -219,12 +219,11 @@ public class PolicyApplierTests
     }
 
     [Fact]
-    public async Task A_runtime_policy_never_applies_at_node_scope_and_a_tier_narrows_workload_scope()
+    public async Task A_runtime_policy_never_applies_to_node_config_and_a_tier_narrows_workload_scope()
     {
         var policies = new[]
         {
-            Policy("runtime-set", "{ kind: runtime, template: t/n }", "set: { size: 1 }\n"),
-            Policy("runtime-only", "{ runtime: container-app }", "set: { size: 2 }\n"),
+            Policy("runtime-set", "{ kind: runtime }", "set: { runtime.size: 1 }\n"),
             Policy("guarded-add", "{ kind: runtime, tier: protected }", "add:\n  extra:\n    template: t/x\n    config: {}\n"),
         };
 
@@ -232,8 +231,61 @@ public class PolicyApplierTests
         var guarded = await ApplyAsync(policies, tier: "protected");
 
         Assert.Equal(400, Number(Node(team, "n").Config["size"]));
+        Assert.All(team.Requirements.SelectMany(r => r.Nodes), n => Assert.False(n.Config.ContainsKey("runtime")));
         Assert.Empty(team.WorkloadNodes);
         Assert.Equal("extra", Assert.Single(guarded.WorkloadNodes).Name);
+    }
+
+    [Fact]
+    public async Task Expansion_errors_carry_into_the_policy_result()
+    {
+        var result = await ApplyAsync([], "  - type: sqldb\n  - type: unmapped\n", expectExpansionErrors: true);
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("workload.yaml", "requires[1]"), (error.File, error.Location));
+        Assert.Single(result.Requirements);
+    }
+
+    [Fact]
+    public async Task Two_policies_adding_a_node_with_the_same_name_is_an_error_naming_both_files()
+    {
+        var add = "add:\n  extra:\n    template: t/x\n    config: {}\n";
+
+        var result = await ApplyAsync([Policy("first", "{ kind: runtime }", add), Policy("second", "{ kind: runtime }", add)]);
+
+        var error = Assert.Single(result.Errors);
+        Assert.Contains("'first' (f5.yaml)", error.Message);
+        Assert.Contains("'second' (f6.yaml)", error.Message);
+        Assert.Contains("'extra'", error.Message);
+        Assert.Single(result.WorkloadNodes);
+    }
+
+    [Theory]
+    [InlineData("set")]
+    [InlineData("default")]
+    public async Task A_path_that_is_a_prefix_of_another_policys_path_is_a_conflict(string layer)
+    {
+        var result = await ApplyAsync(
+        [
+            Policy("outer", "{ template: t/n }", $"{layer}: {{ fresh: {{ a: 1 }} }}\n"),
+            Policy("inner", "{ template: t/n }", $"{layer}: {{ fresh.b: 2 }}\n"),
+        ]);
+
+        var error = Assert.Single(result.Errors);
+        Assert.Contains("'inner' (f6.yaml)", error.Message);
+        Assert.Contains("'outer' (f5.yaml)", error.Message);
+        Assert.Contains("'fresh' and 'fresh.b'", error.Message);
+        Assert.False(Node(result, "n").Config.ContainsKey("fresh"));
+    }
+
+    [Fact]
+    public async Task Setting_an_object_replaces_its_subtree_and_its_provenance()
+    {
+        var result = await ApplyAsync([Policy("pol", "{ template: t/n }", "set: { nested: { c: 3 } }\n")]);
+
+        var node = Node(result, "n");
+        Assert.Equal(["nested.c"], node.Provenance.Keys.Where(k => k.StartsWith("nested", StringComparison.Ordinal)));
+        Assert.Equal(Layer.PolicySet, node.Provenance["nested.c"].Layer);
     }
 
     [Fact]
@@ -255,7 +307,7 @@ public class PolicyApplierTests
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\nrequires:\n  - type: sqldb\n");
         var expansion = new Expander(catalog, Env()).Expand(workload, "workload.yaml");
 
-        var result = new PolicyApplier(catalog, Env()).Apply(expansion, "shop", "crew");
+        var result = new PolicyApplier(catalog, Env()).Apply(expansion);
 
         Assert.Equal("7", result.CatalogVersion);
         ((JValue)Assert.IsType<ConfigScalar>(At(Node(result, "n"), "nested.a")).Value).Value = 999;
@@ -307,7 +359,7 @@ public class PolicyApplierTests
         var expansion = new Expander(catalog, environment).Expand(workload, "workload.yaml");
         Assert.Empty(expansion.Errors);
 
-        var result = new PolicyApplier(catalog, environment).Apply(expansion, "shop", "crew");
+        var result = new PolicyApplier(catalog, environment).Apply(expansion);
 
         Assert.Empty(result.Errors);
         Assert.Equal(["appinsights", "appinsights-access"], result.WorkloadNodes.Select(n => n.Name));

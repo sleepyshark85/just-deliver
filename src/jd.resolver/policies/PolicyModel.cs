@@ -1,5 +1,6 @@
 using jd.resolver.catalog;
 using jd.resolver.expansion;
+using jd.resolver.expressions;
 
 namespace jd.resolver.policies;
 
@@ -23,7 +24,14 @@ public sealed record ResolvedNode(
     IReadOnlyDictionary<string, ConfigValue> Config,
     IReadOnlyDictionary<string, Provenance> Provenance);
 
-public sealed record ResolvedRequirement(ExpandedRequirement Expanded, IReadOnlyList<ResolvedNode> Nodes);
+// The expanded requirement without its pre-policy nodes: Nodes are the ones to use.
+public sealed record ResolvedRequirement(
+    string Id,
+    string Type,
+    string Class,
+    string Mapping,
+    IReadOnlyDictionary<string, EvalResult> Exports,
+    IReadOnlyList<ResolvedNode> Nodes);
 
 /// <summary>
 /// WorkloadNodes are the nodes added once per workload by workload-scope policies. The result is
