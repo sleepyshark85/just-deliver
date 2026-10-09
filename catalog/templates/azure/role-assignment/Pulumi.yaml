@@ -1,0 +1,39 @@
+name: role-assignment
+runtime: yaml
+description: >
+  Azure RBAC role assignment for a workload identity at a given scope. Takes the role's GUID and builds the
+  role-definition id in the current subscription. Not for Cosmos DB data-plane roles (cosmos-sql-role-assignment).
+
+configuration:
+  # Resource ID the role applies to
+  scope:
+    type: String
+  # GUID of the built-in or custom role definition
+  roleGuid:
+    type: String
+  # Principal ID of the identity to grant the role to
+  principalId:
+    type: String
+  # GUID identifying this role assignment, unique within the scope
+  roleAssignmentId:
+    type: String
+
+variables:
+  client:
+    fn::invoke:
+      function: azure-native:authorization:getClientConfig
+      arguments: {}
+
+resources:
+  roleAssignment:
+    type: azure-native:authorization:RoleAssignment
+    properties:
+      scope: ${scope}
+      roleAssignmentName: ${roleAssignmentId}
+      roleDefinitionId: /subscriptions/${client.subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/${roleGuid}
+      principalId: ${principalId}
+      # Grants go to workload identities, which are service principals.
+      principalType: ServicePrincipal
+
+outputs:
+  roleAssignmentId: ${roleAssignment.id}

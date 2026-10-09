@@ -1,0 +1,44 @@
+name: cosmos-sql-container
+runtime: yaml
+description: Provisions a container in a Cosmos DB SQL database; it shares the database's throughput
+
+configuration:
+  # Resource group of the account
+  resourceGroupName:
+    type: String
+  # Resource ID of the Cosmos DB account
+  accountId:
+    type: String
+  # Name of the Cosmos DB account
+  accountName:
+    type: String
+  # Name of the database that holds the container
+  databaseName:
+    type: String
+  # Name of the container
+  containerName:
+    type: String
+  # Partition key path of the container
+  partitionKeyPath:
+    type: String
+
+resources:
+  container:
+    type: azure-native:cosmosdb:SqlResourceSqlContainer
+    properties:
+      resourceGroupName: ${resourceGroupName}
+      accountName: ${accountName}
+      databaseName: ${databaseName}
+      containerName: ${containerName}
+      # No options: the container has no throughput of its own.
+      resource:
+        id: ${containerName}
+        partitionKey:
+          paths:
+            - ${partitionKeyPath}
+          kind: Hash
+
+outputs:
+  containerName: ${container.name}
+  # Scope id for Cosmos data-plane role assignments; it differs from the ARM resource id.
+  scope: ${accountId}/dbs/${databaseName}/colls/${containerName}

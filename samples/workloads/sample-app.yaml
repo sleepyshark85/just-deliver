@@ -16,9 +16,9 @@ container:
     - port: 8080
       protocol: TCP
 
-# Declared by type only. The platform decides that "cosmos-sql" means a Cosmos DB
-# account with a database and container, and provisions the identity and role
-# assignment that let this workload reach it.
+# Declared by type only. The platform decides that "cosmos-sql" means a container in the
+# environment's Cosmos DB database, and provisions the identity and role assignment that
+# let this workload reach that container.
 #
 # Deliberately absent: monitoring. Log Analytics and Application Insights are
 # attached by the enforce-monitoring global policy, not requested by the team.

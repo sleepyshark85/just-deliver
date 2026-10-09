@@ -1,0 +1,35 @@
+name: log-analytics
+runtime: yaml
+description: Provisions a Log Analytics workspace with a daily ingestion cap
+
+configuration:
+  # Resource group of the workspace
+  resourceGroupName:
+    type: String
+  # Azure region of the workspace
+  location:
+    type: String
+  # Name of the workspace
+  workspaceName:
+    type: String
+  # Daily ingestion cap in GB; ingestion stops for the day once reached
+  dailyQuotaGb:
+    type: Number
+
+resources:
+  workspace:
+    type: azure-native:operationalinsights:Workspace
+    properties:
+      resourceGroupName: ${resourceGroupName}
+      location: ${location}
+      workspaceName: ${workspaceName}
+      # PerGB2018 is the only SKU Azure still lets new workspaces use.
+      sku:
+        name: PerGB2018
+      workspaceCapping:
+        dailyQuotaGb: ${dailyQuotaGb}
+
+outputs:
+  workspaceId: ${workspace.id}
+  workspaceName: ${workspace.name}
+  workspaceCustomerId: ${workspace.customerId}

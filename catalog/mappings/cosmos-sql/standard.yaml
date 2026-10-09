@@ -1,20 +1,14 @@
 kind: Mapping
 match: { type: cosmos-sql, class: standard }
+# The account and the shared-throughput database are substrate (env.cosmos.*); a workload adds a container and a grant on it.
 nodes:
-  database:
-    template: azure/cosmos-sql-database
-    config:
-      resourceGroupName: ${env.resourceGroup}
-      accountName: ${env.cosmos.accountName}
-      databaseName: ${name('cosmos-database')}
-      # Free tier shares 1,000 RU/s across the subscription; each database stays at 400 or below.
-      throughput: 400
   container:
     template: azure/cosmos-sql-container
     config:
       resourceGroupName: ${env.resourceGroup}
+      accountId: ${env.cosmos.accountId}
       accountName: ${env.cosmos.accountName}
-      databaseName: ${database.databaseName}
+      databaseName: ${env.cosmos.databaseName}
       containerName: ${name('cosmos-container')}
       partitionKeyPath: /id
   access:
@@ -22,10 +16,11 @@ nodes:
     template: azure/cosmos-sql-role-assignment
     config:
       accountId: ${env.cosmos.accountId}
+      scope: ${container.scope}                   # this container only, not the account
       principalId: ${runtime.principalId}         # this reference alone orders it after the revision step
-      roleDefinitionId: ${env.cosmos.accountId}/sqlRoleDefinitions/${role.cosmos-data-contributor}
-      roleAssignmentId: ${guid(env.cosmos.accountId, runtime.principalId, 'data-contributor')}
+      roleGuid: ${role.cosmos-data-contributor}
+      roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
 exports:
   endpoint: ${env.cosmos.endpoint}
-  database: ${database.databaseName}
+  database: ${env.cosmos.databaseName}
   container: ${container.containerName}

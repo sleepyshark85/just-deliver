@@ -351,6 +351,7 @@ public class PolicyApplierTests
             {
                 ["resourceGroup"] = "rg",
                 ["cosmos.accountName"] = "acct",
+                ["cosmos.databaseName"] = "db",
                 ["cosmos.accountId"] = "/acct",
                 ["cosmos.endpoint"] = "https://acct",
                 ["logAnalytics.id"] = "/law",

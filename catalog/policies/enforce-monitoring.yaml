@@ -7,15 +7,16 @@ add:
     template: azure/application-insights
     config:
       resourceGroupName: ${env.resourceGroup}
+      location: ${env.region}
       workspaceResourceId: ${env.logAnalytics.id}
       appInsightsName: ${name('appi')}
   appinsights-access:
     kind: grant
     template: azure/role-assignment
     config:
-      scope: ${appinsights.id}
+      scope: ${appinsights.appInsightsId}
       principalId: ${runtime.principalId}
-      roleDefinitionId: ${role.monitoring-metrics-publisher}
-      roleAssignmentId: ${guid(appinsights.id, runtime.principalId, 'metrics-publisher')}
+      roleGuid: ${role.monitoring-metrics-publisher}
+      roleAssignmentId: ${guid(appinsights.appInsightsId, runtime.principalId, 'metrics-publisher')}
 set:
   runtime.appInsightsConnectionString: ${appinsights.connectionString}

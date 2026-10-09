@@ -1,3 +1,0 @@
-config:
-  azure-monitor:skuName: PerGB2018
-  azure-monitor:retentionInDays: 31

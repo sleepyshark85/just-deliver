@@ -3,7 +3,7 @@
 > Status: design reference — not yet reviewed as decisions. Proposed decisions live in [decisions/](../decisions/).
 
 What a team declares, and what it deliberately does not. Schema: [`workload.schema.json`](../../schemas/workload.schema.json);
-sample: [`workload.yaml`](../../samples/provisioner/workload.yaml); resolution: [provisioning.md](provisioning.md),
+sample: [`sample-app.yaml`](../../samples/workloads/sample-app.yaml); resolution: [provisioning.md](provisioning.md),
 [resolver.md](resolver.md); model: [0004](../decisions/0004-two-layer-definition-model.md).
 
 ## Principles

@@ -1,0 +1,53 @@
+name: container-apps-environment
+runtime: yaml
+description: Provisions a Container Apps environment (Consumption only) that logs to a Log Analytics workspace
+
+configuration:
+  # Resource group of the environment
+  resourceGroupName:
+    type: String
+  # Azure region of the environment
+  location:
+    type: String
+  # Name of the Container Apps environment
+  environmentName:
+    type: String
+  # Resource group of the Log Analytics workspace
+  workspaceResourceGroupName:
+    type: String
+  # Name of the Log Analytics workspace the environment logs to
+  workspaceName:
+    type: String
+
+variables:
+  workspace:
+    fn::invoke:
+      function: azure-native:operationalinsights:getWorkspace
+      arguments:
+        resourceGroupName: ${workspaceResourceGroupName}
+        workspaceName: ${workspaceName}
+  workspaceKeys:
+    fn::invoke:
+      function: azure-native:operationalinsights:getSharedKeys
+      arguments:
+        resourceGroupName: ${workspaceResourceGroupName}
+        workspaceName: ${workspaceName}
+
+resources:
+  environment:
+    type: azure-native:app:ManagedEnvironment
+    properties:
+      resourceGroupName: ${resourceGroupName}
+      location: ${location}
+      environmentName: ${environmentName}
+      # No workloadProfiles: the environment is Consumption only.
+      appLogsConfiguration:
+        destination: log-analytics
+        logAnalyticsConfiguration:
+          customerId: ${workspace.customerId}
+          sharedKey: ${workspaceKeys.primarySharedKey}
+
+outputs:
+  environmentId: ${environment.id}
+  environmentName: ${environment.name}
+  defaultDomain: ${environment.defaultDomain}

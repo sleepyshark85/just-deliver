@@ -4,6 +4,6 @@ region: southeastasia
 tier: team
 values:
   resourceGroup: rg-dev
-  cosmos: { accountName: cosmos-dev, accountId: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev, endpoint: "https://cosmos-dev.documents.azure.com:443/" }
+  cosmos: { accountName: cosmos-dev, databaseName: db-dev, databaseId: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev/sqlDatabases/db-dev, accountId: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev, endpoint: "https://cosmos-dev.documents.azure.com:443/" }
   logAnalytics: { id: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev }
 grantable: [cosmos.accountId]

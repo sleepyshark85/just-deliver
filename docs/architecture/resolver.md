@@ -22,20 +22,20 @@ resolve(workload, environment, catalog@version) → ResolvedGraph     pure, dete
 4. The resolver is a security boundary ([D19](../open-questions.md)): a definition must not be able
    to reach another workload's resources.
 
-## Current state (to be replaced)
+## Defects the design removed
 
-There is no resolver. `samples/provisioner/Program.cs` is a hand-wired script; `workload.yaml` is
-never read. Defects found in review that the design must remove:
+The first hand-wired provisioner (`samples/provisioner`, deleted in S09) had these defects; each is now removed by the
+design below. They stay listed as the requirements the design answers.
 
-| # | Defect | Location |
+| # | Defect | Answer |
 |---|---|---|
-| 1 | Stack name = template name (`cosmos-db`), so every workload would share one stack | `PulumiBackendProvider.PrepareStackAsync` |
-| 2 | Fixed role-assignment GUIDs collide when a second workload targets the same scope | `cosmos-db-access`, `role-assignment` defaults; `Program.cs` |
-| 3 | `${resource.database.endpoint}` matches nothing — template exports `documentEndpoint`; no type contract | `workload.yaml` vs `cosmos-db/Pulumi.yaml` |
-| 4 | `enableFreeTier: true` default — one free-tier account per subscription | `cosmos-db/Pulumi.yaml` |
-| 5 | Preview feeds `"<unknown-until-deployed>"` strings into downstream stacks | `GetChainedValue` |
-| 6 | Resource list, order, names, region, role GUIDs, output wiring and Azure-specific grant logic hard-coded | `Program.cs` |
-| 7 | Platform opinions (SKU `F1`, region, free tier) live in template defaults, duplicated in `Pulumi.default.yaml` | templates |
+| 1 | Stack name = template name (`cosmos-db`), so every workload would share one stack | One stack per node, named from the node id ([Output](#output-resolvedgraph)) |
+| 2 | Fixed role-assignment GUIDs collide when a second workload targets the same scope | `guid()` ids supplied by the resolver; templates carry none |
+| 3 | `${resource.database.endpoint}` matched nothing: the template exported `documentEndpoint`; no type contract | Type `exports` contract; template contract check ([Catalog CI](#catalog-ci--what-makes-it-maintainable)) |
+| 4 | `enableFreeTier: true` default: one free-tier account per subscription | Input without a default, set by the substrate |
+| 5 | Preview fed `"<unknown-until-deployed>"` strings into downstream stacks | Pending references, never fake values (S10) |
+| 6 | Resource list, order, names, region, role GUIDs, output wiring and grant logic hard-coded | Catalog data and the generic engine |
+| 7 | Platform opinions (SKU `F1`, region, free tier) in template defaults | Templates are mechanics only (below) |
 
 ## Catalog layout
 
@@ -87,7 +87,7 @@ the code binds to (`cosmos-sql`, `postgres`), never an abstraction like `databas
 ```yaml
 kind: ResourceType
 name: cosmos-sql
-description: A Cosmos DB database with one container, accessed through the SQL (NoSQL) API.
+description: A container in the environment's shared Cosmos DB database, accessed through the SQL (NoSQL) API.
 classes: [standard]
 exports: [endpoint, database, container]      # the only valid ${resource.<id>.*}
 ```
@@ -103,20 +103,13 @@ Selected by matching criteria, never by conditionals.
 kind: Mapping
 match: { type: cosmos-sql, class: standard }
 nodes:
-  database:
-    template: azure/cosmos-sql-database
-    config:
-      resourceGroupName: ${env.resourceGroup}
-      accountName: ${env.cosmos.accountName}
-      databaseName: ${name('cosmos-database')}
-      # Free tier shares 1,000 RU/s across the subscription; each database stays at 400 or below.
-      throughput: 400
   container:
     template: azure/cosmos-sql-container
     config:
       resourceGroupName: ${env.resourceGroup}
+      accountId: ${env.cosmos.accountId}
       accountName: ${env.cosmos.accountName}
-      databaseName: ${database.databaseName}
+      databaseName: ${env.cosmos.databaseName}
       containerName: ${name('cosmos-container')}
       partitionKeyPath: /id
   access:
@@ -124,16 +117,17 @@ nodes:
     template: azure/cosmos-sql-role-assignment
     config:
       accountId: ${env.cosmos.accountId}
+      scope: ${container.scope}                   # this container only, not the account
       principalId: ${runtime.principalId}         # this reference alone orders it after the revision step
-      roleDefinitionId: ${env.cosmos.accountId}/sqlRoleDefinitions/${role.cosmos-data-contributor}
-      roleAssignmentId: ${guid(env.cosmos.accountId, runtime.principalId, 'data-contributor')}
+      roleGuid: ${role.cosmos-data-contributor}
+      roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
 exports:
   endpoint: ${env.cosmos.endpoint}
-  database: ${database.databaseName}
+  database: ${env.cosmos.databaseName}
   container: ${container.containerName}
 ```
 
-The Cosmos account is a substrate resource (one free-tier account per subscription), so the mapping reads it from `${env.cosmos.…}` and creates only the workload's database and container plus the grant.
+The Cosmos account and one shared-throughput database (400 RU/s) per environment are substrate resources, so the mapping reads them from `${env.cosmos.…}` and creates only the workload's container (it has no throughput of its own) plus a grant scoped to that container. A grant node reads only grantable environment values, so the grant template derives everything else from `accountId`.
 
 ### Policy — IT Ops layer
 
@@ -162,12 +156,26 @@ match: { template: azure/cosmos-account, tier: protected }
 set: { enableAutomaticFailover: true }
 ```
 
-### Template — existing Pulumi YAML, mechanics only
+### Template — Pulumi YAML, mechanics only
 
-- No platform opinions in defaults (SKU, region, free tier move to mappings/policies).
-- No fixed GUIDs; the resolver supplies deterministic ones.
+Templates live in `catalog/templates/<provider>/<name>/Pulumi.yaml` (Pulumi YAML runtime, `azure-native` provider);
+a node's `template` is `<provider>/<name>`.
+
+- The template's own `configuration:` and `outputs:` blocks are its interface; no extra metadata. Every input is
+  declared; a node sets each one, since the seed templates carry **no defaults**.
+- No platform opinions: no SKUs, regions, free-tier flags, throughput or names. Mappings, policies and the
+  environment descriptor supply them. Literals that are mechanics stay (the only SKU Azure still allows, the
+  `ServicePrincipal` principal type for workload identities).
+- No fixed GUIDs; the resolver supplies deterministic ones. A role template takes the role GUID and builds the
+  full role-definition id itself (`roles.yaml` holds GUIDs only).
+- Resource-specific id formats live in the template, not in mappings: for example `cosmos-sql-container` outputs
+  `scope`, the data-plane scope id of the container.
 - `options: protect: true` per protection class ([ADR 0010](../decisions/0010-replacement-protection-classes.md)).
-- The template's own `configuration:` and `outputs:` blocks are its interface; no extra metadata.
+- Pulumi config values are strings; structured inputs (`Map<String>` tags) are passed as JSON.
+
+The seed library: substrate `resource-group`, `log-analytics` (daily cap), `container-apps-environment`
+(Consumption only), `cosmos-account`, `cosmos-sql-database` (shared throughput); workload `cosmos-sql-container`,
+`cosmos-sql-role-assignment`, `application-insights`, `role-assignment`.
 
 ### Runtime is a mapping too
 
@@ -187,7 +195,7 @@ region: southeastasia
 tier: team                # team | protected
 values:                   # substrate outputs, addressable as ${env.<path>}
   resourceGroup: rg-…
-  cosmos: { accountName: …, accountId: …, endpoint: … }
+  cosmos: { accountName: …, accountId: …, databaseName: …, databaseId: …, endpoint: … }
   logAnalytics: { id: … }
 grantable:                # paths under values that workloads may grant on
   - cosmos.accountId
@@ -204,7 +212,7 @@ grantable:                # paths under values that workloads may grant on
 ## Expressions
 
 Config values, exports and workload variables are strings that may mix text and `${…}` expressions
-(`${env.cosmos.accountId}/sqlRoleDefinitions/${role.cosmos-data-contributor}`). Non-string values are never
+(`${env.cosmos.accountId}/dbs/${env.cosmos.databaseName}`). Non-string values are never
 touched. There is no escaping and no operators. Evaluation is pure (`jd.resolver.expressions`): the caller supplies a
 context (catalog roles and naming, environment descriptor, workload name and team, the current id, the node names in
 scope, the outputs already known) and a file/location for error reports.
@@ -297,6 +305,12 @@ A cycle is an error naming the nodes in it (`a -> b -> a`); a node referencing i
 1. **Static checks:** every type has a mapping per environment tier; no ambiguous matches; every
    `${…}` resolves to a real template config key or output; required template config supplied;
    mapping exports equal the type's exports exactly; naming fits the longest legal workload name.
+   The template part is implemented offline by `TemplateLibrary.Check` in `jd.bp.pulumi` (templates are
+   Pulumi-specific, so the resolver stays backend-agnostic). It checks a `ResolvedGraph` against the template
+   directory: every node's template exists; every config key a node sets is declared in the template's
+   `configuration:`; every input without a default is set; every `${node.output}` reference (in node config and in
+   exports) names an output the referenced node's template declares. Errors carry node id, template and key. The
+   seed catalog and sample workload are checked in the test suite.
 2. **Golden tests:** sample workloads resolved and snapshotted; PR diffs show resolution changes.
 3. **Fleet dry-run:** resolve every registered workload against the PR's catalog and report which change.
 4. **`pulumi preview` in a sandbox** for changed templates.
@@ -308,7 +322,7 @@ Adding a resource type = one type file + one template + one mapping + one golden
 
 `CatalogParser` + `CatalogDirectory` (parser over in-memory files, thin directory reader; reuse `YamlSchemaValidator`) · `Matcher` · `Expander` · `PolicyApplier` (policies, layering, provenance) ·
 `ExpressionEvaluator` · `Namer` · `GraphBuilder` (cycle detection, topological sort, phases).
-`DeploymentPackage` needs a stack name separate from the template name.
+`TemplateLibrary` (in `jd.bp.pulumi`) checks the graph against the templates. `DeploymentPackage` needs a stack name separate from the template name.
 
 ## Alternatives considered
 

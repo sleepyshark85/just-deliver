@@ -1,6 +1,5 @@
 <Solution>
   <Folder Name="/samples/">
-    <Project Path="samples/provisioner/provisioner.csproj" />
     <Project Path="samples/web/web.csproj" />
   </Folder>
   <Folder Name="/src/">
@@ -14,5 +13,6 @@
   </Folder>
   <Folder Name="/src/backend-providers/">
     <Project Path="src/backend-providers/jd.bp.pulumi/jd.bp.pulumi.csproj" />
+    <Project Path="src/backend-providers/jd.bp.pulumi.tests/jd.bp.pulumi.tests.csproj" />
   </Folder>
 </Solution>
