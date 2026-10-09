@@ -23,72 +23,97 @@ internal class PulumiBackendProvider : IBackEndProvider
         _resourceChangeParser = resourceChangeParser;
     }
 
-    public async Task<DeploymentResult> DeployAsync(DeploymentPackage package)
-    {
-        var (stack, changes, onEvent) = await PrepareStackAsync(package);
-
-        var stackUpResult = await stack.UpAsync(new UpOptions
+    public Task<DeploymentResult> DeployAsync(DeploymentPackage package, CancellationToken cancellationToken) =>
+        InWorkDirectoryAsync(package.StackName, async workDir =>
         {
-            Logger = _logger,
-            OnEvent = onEvent,
+            var (stack, changes, onEvent) = await PrepareStackAsync(package, workDir, cancellationToken);
+
+            var stackUpResult = await stack.UpAsync(new UpOptions
+            {
+                Logger = _logger,
+                OnEvent = onEvent,
+            }, cancellationToken);
+
+            return new DeploymentResult()
+            {
+                Outputs = ToEntries(stackUpResult.Outputs),
+                Summary = stackUpResult.Summary.ResourceChanges?.ToDictionary(
+                    kvp => kvp.Key.ToString(),
+                    kvp => kvp.Value
+                ) ?? new Dictionary<string, int>(),
+                Changes = changes,
+            };
         });
 
-        return new DeploymentResult()
+    public Task<DeploymentResult> PreviewAsync(DeploymentPackage package, CancellationToken cancellationToken) =>
+        InWorkDirectoryAsync(package.StackName, async workDir =>
         {
-            Outputs = stackUpResult.Outputs.ToDictionary(
-                kvp => kvp.Key,
-                kvp => new ConfigEntry(FormatOutputValue(kvp.Value.Value), kvp.Value.IsSecret)
-            ),
-            Summary = stackUpResult.Summary.ResourceChanges?.ToDictionary(
-                kvp => kvp.Key.ToString(),
-                kvp => kvp.Value
-            ) ?? new Dictionary<string, int>(),
-            Changes = changes,
-        };
-    }
+            var (stack, changes, onEvent) = await PrepareStackAsync(package, workDir, cancellationToken);
 
-    public async Task<DeploymentResult> PreviewAsync(DeploymentPackage package)
-    {
-        var (stack, changes, onEvent) = await PrepareStackAsync(package);
+            var previewResult = await stack.PreviewAsync(new PreviewOptions
+            {
+                OnEvent = onEvent,
+            }, cancellationToken);
 
-        var previewResult = await stack.PreviewAsync(new PreviewOptions
-        {
-            OnEvent = onEvent,
+            return new DeploymentResult()
+            {
+                Outputs = new Dictionary<string, ConfigEntry>(),
+                Summary = previewResult.ChangeSummary?.ToDictionary(
+                    kvp => kvp.Key.ToString(),
+                    kvp => kvp.Value
+                ) ?? new Dictionary<string, int>(),
+                Changes = changes,
+            };
         });
 
-        return new DeploymentResult()
+    public Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(DeploymentPackage package, CancellationToken cancellationToken) =>
+        InWorkDirectoryAsync(package.StackName, async workDir =>
         {
-            Outputs = new Dictionary<string, ConfigEntry>(),
-            Summary = previewResult.ChangeSummary?.ToDictionary(
-                kvp => kvp.Key.ToString(),
-                kvp => kvp.Value
-            ) ?? new Dictionary<string, int>(),
-            Changes = changes,
-        };
-    }
+            // The backend scopes stacks by project; the template content gives the same project as DeployAsync.
+            await File.WriteAllTextAsync(Path.Combine(workDir, "Pulumi.yaml"), package.DeploymentContent, cancellationToken);
 
-    private async Task<(WorkspaceStack Stack, List<ResourceChange> Changes, Action<EngineEvent> OnEvent)> PrepareStackAsync(DeploymentPackage package)
+            var pulumiStack = StackNames.ToPulumi(package.StackName);
+            var workspace = await LocalWorkspace.CreateAsync(new LocalWorkspaceOptions
+            {
+                WorkDir = workDir,
+                EnvironmentVariables = _optionsMonitor.CurrentValue.GetEnvironmentVariables(),
+            }, cancellationToken);
+
+            var stacks = await workspace.ListStacksAsync(cancellationToken);
+            // A preview creates an empty stack; with no resources recorded it has never been deployed.
+            if (!stacks.Any(s => s.Name == pulumiStack && s.ResourceCount > 0))
+            {
+                return null;
+            }
+
+            var stack = await WorkspaceStack.SelectAsync(pulumiStack, workspace, cancellationToken);
+            return ToEntries(await stack.GetOutputsAsync(cancellationToken));
+        });
+
+    // Async so an invalid stack name fails the returned task instead of throwing at the call.
+    private async Task<T> InWorkDirectoryAsync<T>(string graphStack, Func<string, Task<T>> operation) =>
+        await WorkDirectory.RunAsync(_optionsMonitor.CurrentValue.ScratchDirectory, StackNames.ToPulumi(graphStack), operation);
+
+    private static Dictionary<string, ConfigEntry> ToEntries(IEnumerable<KeyValuePair<string, OutputValue>> outputs) =>
+        outputs.ToDictionary(kvp => kvp.Key, kvp => new ConfigEntry(FormatOutputValue(kvp.Value.Value), kvp.Value.IsSecret));
+
+    private async Task<(WorkspaceStack Stack, List<ResourceChange> Changes, Action<EngineEvent> OnEvent)> PrepareStackAsync(
+        DeploymentPackage package, string workDir, CancellationToken cancellationToken)
     {
-        var workDir = Path.Combine(_optionsMonitor.CurrentValue.ScratchDireisctory, "just-deliver", package.Name, package.Version);
-        Directory.CreateDirectory(workDir);
+        var stackName = StackNames.ToPulumi(package.StackName);
 
-        await File.WriteAllTextAsync(Path.Combine(workDir, "Pulumi.yaml"), package.DeploymentContent);
+        await File.WriteAllTextAsync(Path.Combine(workDir, "Pulumi.yaml"), package.DeploymentContent, cancellationToken);
 
-        if (!string.IsNullOrEmpty(package.DeploymentDefaultParametersContent))
-        {
-            await File.WriteAllTextAsync(Path.Combine(workDir, $"Pulumi.{package.Name}.yaml"), package.DeploymentDefaultParametersContent);
-        }
-
-        var stack = await LocalWorkspace.CreateOrSelectStackAsync(new LocalProgramArgs(package.Name, workDir)
+        var stack = await LocalWorkspace.CreateOrSelectStackAsync(new LocalProgramArgs(stackName, workDir)
         {
             EnvironmentVariables = _optionsMonitor.CurrentValue.GetEnvironmentVariables(),
-        });
+        }, cancellationToken);
 
         await stack.SetAllConfigAsync(package.DeploymentParameters.ToDictionary(
             kvp => kvp.Key,
             kvp => new ConfigValue(
                 kvp.Value.Value ?? throw new ArgumentException($"Parameter '{kvp.Key}' has no value.", nameof(package)),
-                kvp.Value.IsSecret)));
+                kvp.Value.IsSecret)), cancellationToken);
 
         var changes = new List<ResourceChange>();
         void OnEngineEvent(EngineEvent engineEvent)
@@ -101,11 +126,11 @@ internal class PulumiBackendProvider : IBackEndProvider
             }
         }
 
+        // Refresh events are not recorded as changes: they would report an operation on every resource.
         await stack.RefreshAsync(new RefreshOptions
         {
-            OnEvent = OnEngineEvent,
             OnStandardError = error => _logger.LogError(error),
-        });
+        }, cancellationToken);
 
         return (stack, changes, OnEngineEvent);
     }

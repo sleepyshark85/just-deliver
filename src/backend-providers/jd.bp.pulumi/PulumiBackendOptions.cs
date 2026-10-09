@@ -13,7 +13,7 @@ public class PulumiBackendOptions
     [EnvironmentVariable("PULUMI_HOME")]
     public string? PulumiHome { get; set; }
 
-    public string ScratchDireisctory { get; set; } = Path.GetTempPath();
+    public string ScratchDirectory { get; set; } = Path.GetTempPath();
 
     internal IDictionary<string, string?> GetEnvironmentVariables()
     {

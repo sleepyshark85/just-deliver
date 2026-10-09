@@ -328,7 +328,7 @@ Adding a resource type = one type file + one template + one mapping + one golden
 
 `CatalogParser` + `CatalogDirectory` (parser over in-memory files, thin directory reader; reuse `YamlSchemaValidator`) · `Matcher` · `Expander` · `PolicyApplier` (policies, layering, provenance) ·
 `ExpressionEvaluator` · `Namer` · `GraphBuilder` (cycle detection, topological sort, phases).
-`TemplateLibrary` (in `jd.bp.pulumi`) checks the graph against the templates. `DeploymentPackage` needs a stack name separate from the template name.
+`TemplateLibrary` (in `jd.bp.pulumi`) checks the graph against the templates. `DeploymentPackage` carries the stack name (`StackName`) separately from the template (`DeploymentContent`).
 
 ## Alternatives considered
 

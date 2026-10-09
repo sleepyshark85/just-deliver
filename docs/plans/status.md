@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S10 — Provider fixes
+- **Next slice:** S11 — Orchestrator (infra nodes) — first slice that creates Azure resources
 - **In progress:** —
 - **Blocked:** —
 
@@ -26,7 +26,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S07 | Graph builder | done | PR #11 | 2 | Round 1: 4 blocking (stack names invalid for Pulumi and collision-prone; time-zone-dependent date parsing broke hash determinism; untested pending-function grant path; `!`). Stacks now `id` with `/`→`.`, `@`→`_`; node names enforced in code. |
 | S08 | CLI skeleton | done | PR #12 | 2 + suggestions | Round 1: 2 blocking (directory/unreadable inputs crashed with raw exceptions; multi-line schema errors without file). Workload loading moved to `jd.resolver.workload`; preview shows `(from env.…)`. **M1 complete.** |
 | S09 | Template library | done | PR #13 | 2 | Round 1: 4 blocking (container names could collide across workloads → cross-workload grant; workspace shared key in clear state; adapter→resolver dependency not in standards — amended; `!`). Cosmos account now hard-capped (`totalThroughputLimit`). `samples/provisioner` removed. |
-| S10 | Provider fixes | todo | | | |
+| S10 | Provider fixes | done | PR #14 | 2 | Round 1: 3 blocking (outputs lookup could report a deployed stack as undeployed; preview made "not deployed" ambiguous; dead `Version`). Refresh events no longer counted as changes. Real offline Pulumi tests in the gate. |
 | S11 | Orchestrator (infra nodes) | todo | | | |
 | S12 | Substrate from data | todo | | | |
 | S13 | Release set (offline) | todo | | | |
@@ -53,7 +53,8 @@ Picked up by the slice named; remove once done.
   environment fails until its workspace exists — preview substrate in dependency order, or tolerate it.
 - **S11:** YamlDotNet is now 16.x (Pulumi.Automation pins it); Pulumi config values are strings — serialise
   structured values (maps) as JSON.
-- **S10:** Pulumi caps stack names at 100 characters; the adapter maps longer graph stacks to a hash-truncated name.
+- **S11:** `GetOutputsAsync` takes a whole `DeploymentPackage` but ignores its required `DeploymentParameters`; decide
+  the narrower signature when writing the orchestrator.
 - **Briefs:** cap production lines (~250) separately from tests; a cohesive slice's tests should not be trimmed to fit.
 - **S11:** per-workload resources (database, App Insights) currently target `${env.resourceGroup}` (substrate);
   give workloads their own tagged resource group so `tools/azure/cleanup.sh` can remove them.
