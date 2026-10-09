@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S03 — Environment descriptor
+- **Next slice:** S04 — Expression evaluator
 - **In progress:** —
 - **Blocked:** —
 
@@ -17,7 +17,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 |---|---|---|---|---|---|
 | S00 | Repo baseline + team setup | done | `main` | | Strict build, verify gate, hook, CI, agents, standards, sandbox |
 | S01 | Workload schema v2 | done | PR #2 | 1 + suggestions | APPROVE first round; non-blocking test/doc gaps fixed before merge. `id` pattern widened vs ADR 0011 (hyphens, ≤16) — recorded under C13/C14 |
-| S02 | Catalog formats + loader | done | PR #3 | 2 | Round 1: 2 blocking (false cascading errors; resolver.md example contradicted seed). ~630 lines, over guideline, accepted. Follow-ups for S04/S05: duplicate-key error lacks line/key; test pinning 'no Catalog' suppression when a file is unreadable; YAML parsed 3x per file; JToken mutability (clone in S06) |
+| S02 | Catalog formats + loader | done | PR #3 | 2 | Round 1: 2 blocking (false cascading errors; resolver.md example contradicted seed). ~630 lines, over guideline, accepted. Follow-ups moved to carry-forward notes. |
 | S03 | Environment descriptor | done | PR #4 | 2 | Round 1: 1 blocking — NJsonSchema ignores `propertyNames`, so dotted keys could shadow nested values (D19 boundary); now enforced in code. `CatalogError` renamed `LoadError`. |
 | S04 | Expression evaluator | todo | | | |
 | S05 | Matching + expansion | todo | | | |
