@@ -6,7 +6,7 @@ operational-qualification probe.
 
 | Endpoint | Behaviour |
 |---|---|
-| `GET /health` | 200 only if the app read its Cosmos container with its identity (5 s timeout). Otherwise 503 with a `reason`, e.g. `Cosmos DB denied access (403): the identity has no grant yet`. That is how a deploy tells "grants not yet propagated" from "working". |
+| `GET /health` | 200 only if the app read its Cosmos container with its identity (bounded by a 5 s timeout). Otherwise 503 with a `reason`, e.g. `Cosmos DB denied access (403): the identity has no grant yet`. That is how a deploy tells "grants not yet propagated" from "working". |
 | `POST /items` | Body `{"text": "..."}`; stores a document, returns 201 and its location. |
 | `GET /items/{id}` | Returns the document, or 404. |
 

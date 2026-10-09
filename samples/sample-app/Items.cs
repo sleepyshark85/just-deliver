@@ -21,12 +21,15 @@ public interface IItemStore
 /// <summary>
 /// Cosmos DB through <see cref="DefaultAzureCredential"/> only: no key, no connection string.
 /// Nothing is contacted until the first call, and a failure is never remembered: the client is dropped
-/// so the next request starts clean (ADR 0012: the grant arrives after the process starts).
+/// so the next request starts clean (ADR 0012: the grant arrives after the process starts). Calls time out after 5 s.
 /// </summary>
 public sealed class CosmosItemStore(string? endpoint, string? database, string? container) : IItemStore, IDisposable
 {
     // The container's partition key is /id (catalog/mappings/cosmos-sql); the probe reads a document that never exists.
     private const string ProbeId = "health-probe";
+
+    // The SDK can retry an unreachable endpoint for far longer than a probe may wait, so every call is bounded here.
+    private static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(5);
 
     private CosmosClient? _client;
     private Container? _container;
@@ -54,7 +57,7 @@ public sealed class CosmosItemStore(string? endpoint, string? database, string? 
     {
         try
         {
-            return await action(_container ??= Connect());
+            return await action(_container ??= Connect()).WaitAsync(CallTimeout);
         }
         catch (Exception e) when (e is not CosmosException { StatusCode: HttpStatusCode.NotFound })
         {

@@ -75,7 +75,7 @@ public static class SampleAppFactory
 
     private static string Reason(Exception e) => e switch
     {
-        OperationCanceledException => "timed out reaching Cosmos DB",
+        TimeoutException => "timed out reaching Cosmos DB",
         CosmosException c when c.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized =>
             $"Cosmos DB denied access ({(int)c.StatusCode}): the identity has no grant yet",
         CosmosException c => $"Cosmos DB returned {(int)c.StatusCode}",
