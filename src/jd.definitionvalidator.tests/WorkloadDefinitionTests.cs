@@ -164,4 +164,13 @@ metadata:
         Assert.Contains(result.Errors, e => e.Contains("type"));
         Assert.DoesNotContain(result.Errors, e => e.Contains("distinct"));
     }
+
+    [Fact]
+    public async Task RepeatedKey_IsRejected()
+    {
+        var result = await ValidateAsync(Header + "container:\n  image: registry.example/app:1.0.0\n  image: other:2\n");
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("image"));
+    }
 }

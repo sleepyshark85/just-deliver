@@ -12,6 +12,8 @@ public class YamlSchemaValidator
     // Quoted scalars still stay strings.
     private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder()
         .WithAttemptingUnquotedStringTypeDeserialization()
+        // A repeated key would otherwise silently keep the last value.
+        .WithDuplicateKeyChecking()
         .Build();
 
     private readonly Func<JToken, IReadOnlyList<string>>? _rules;

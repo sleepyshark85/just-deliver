@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using jd.definitionvalidator;
 using Newtonsoft.Json.Linq;
+using YamlDotNet.RepresentationModel;
 
 namespace jd.resolver.catalog;
 
@@ -26,32 +27,42 @@ public static partial class CatalogParser
     [GeneratedRegex(@"^\w+: #(?<path>\S*)")]
     private static partial Regex SchemaErrorRegex();
 
-    private sealed record Document(string Source, string Kind, JObject Body);
+    // Valid is false when the file failed its schema. Such a file still counts toward the cross-file checks
+    // that only need its kind or name, so one mistake is not reported a second time as a missing or undeclared item.
+    private sealed record Document(string Source, string Kind, JObject Body, bool Valid);
 
     public static async Task<CatalogLoadResult> ParseAsync(IEnumerable<CatalogSource> sources, CancellationToken cancellationToken = default)
     {
         var errors = new List<CatalogError>();
         var documents = new List<Document>();
+        var unreadable = 0;
         foreach (var source in sources.OrderBy(s => s.Path, StringComparer.Ordinal))
         {
             var document = await ReadDocumentAsync(source, errors, cancellationToken);
-            if (document is not null)
+            if (document is null)
+            {
+                unreadable++;
+            }
+            else
             {
                 documents.Add(document);
             }
         }
 
-        var catalogs = documents.Where(d => d.Kind == CatalogKind).ToList();
-        var types = documents.Where(d => d.Kind == ResourceTypeKind).Select(ToResourceType).ToList();
-        var mappings = documents.Where(d => d.Kind == MappingKind).Select(ToMapping).ToList();
-        var policies = documents.Where(d => d.Kind == PolicyKind).Select(ToPolicy).ToList();
-        var naming = Merge(documents.Where(d => d.Kind == NamingKind), "rules", ToNamingRule, errors);
-        var roles = Merge(documents.Where(d => d.Kind == RolesKind), "roles", role => (string?)role ?? string.Empty, errors);
+        var catalogs = OfKind(documents, CatalogKind);
+        var typeDocuments = OfKind(documents, ResourceTypeKind);
+        var policyDocuments = OfKind(documents, PolicyKind);
+        var types = typeDocuments.Where(d => d.Valid).Select(ToResourceType).ToList();
+        var mappings = OfKind(documents, MappingKind).Where(d => d.Valid).Select(ToMapping).ToList();
+        var policies = policyDocuments.Where(d => d.Valid).Select(ToPolicy).ToList();
+        var naming = Merge(OfKind(documents, NamingKind).Where(d => d.Valid), "rules", ToNamingRule, errors);
+        var roles = Merge(OfKind(documents, RolesKind).Where(d => d.Valid), "roles", role => (string?)role ?? string.Empty, errors);
 
-        CheckSingleCatalog(catalogs, errors);
-        CheckUnique(types, t => t.Source, t => t.Name, "ResourceType", errors);
-        CheckUnique(policies, p => p.Source, p => p.Name, "Policy", errors);
-        CheckMappingTypes(mappings, types, errors);
+        // A file whose kind could not be read might have been the missing Catalog, so do not claim it is missing.
+        CheckSingleCatalog(catalogs, unreadable == 0, errors);
+        CheckUnique(typeDocuments, "ResourceType", errors);
+        CheckUnique(policyDocuments, "Policy", errors);
+        CheckMappingTypes(mappings, typeDocuments, errors);
 
         if (errors.Count > 0)
         {
@@ -74,6 +85,14 @@ public static partial class CatalogParser
         JToken parsed;
         try
         {
+            var stream = new YamlStream();
+            stream.Load(new StringReader(source.Content));
+            if (stream.Documents.Count > 1)
+            {
+                errors.Add(new CatalogError(source.Path, string.Empty, "contains several YAML documents; use one YAML document per file."));
+                return null;
+            }
+
             parsed = YamlSchemaValidator.ParseYaml(source.Content);
         }
         catch (Exception ex)
@@ -103,13 +122,8 @@ public static partial class CatalogParser
 
         cancellationToken.ThrowIfCancellationRequested();
         var result = await Validator.ValidateContentAsync(await ReadSchemaAsync(kind, cancellationToken), source.Content);
-        if (!result.IsValid)
-        {
-            errors.AddRange(result.Errors.Select(e => ToSchemaError(source.Path, e)));
-            return null;
-        }
-
-        return new Document(source.Path, kind, body);
+        errors.AddRange(result.Errors.Select(e => ToSchemaError(source.Path, e)));
+        return new Document(source.Path, kind, body, result.IsValid);
     }
 
     private static CatalogError ToSchemaError(string file, string schemaError)
@@ -129,11 +143,13 @@ public static partial class CatalogParser
         return await reader.ReadToEndAsync(cancellationToken);
     }
 
-    // The checks below run on documents that passed their schema, so the shapes they read are guaranteed.
+    private static List<Document> OfKind(List<Document> documents, string kind) => documents.Where(d => d.Kind == kind).ToList();
 
-    private static void CheckSingleCatalog(List<Document> catalogs, List<CatalogError> errors)
+    // Valid documents have the shapes the schemas guarantee; invalid ones are only asked for what they may lack.
+
+    private static void CheckSingleCatalog(List<Document> catalogs, bool allFilesReadable, List<CatalogError> errors)
     {
-        if (catalogs.Count == 0)
+        if (catalogs.Count == 0 && allFilesReadable)
         {
             errors.Add(new CatalogError("(catalog)", string.Empty, $"no file of kind {CatalogKind}; exactly one is required."));
         }
@@ -144,20 +160,22 @@ public static partial class CatalogParser
         }
     }
 
-    private static void CheckUnique<T>(List<T> items, Func<T, string> source, Func<T, string> key, string kind, List<CatalogError> errors)
+    private static string? NameOf(Document d) => d.Body["name"] is { Type: JTokenType.String } name ? (string?)name : null;
+
+    private static void CheckUnique(List<Document> documents, string kind, List<CatalogError> errors)
     {
-        foreach (var group in items.GroupBy(key))
+        foreach (var group in documents.Where(d => NameOf(d) is not null).GroupBy(d => NameOf(d)))
         {
             foreach (var duplicate in group.Skip(1))
             {
-                errors.Add(new CatalogError(source(duplicate), "name", $"{kind} '{group.Key}' is already declared in {source(group.First())}."));
+                errors.Add(new CatalogError(duplicate.Source, "name", $"{kind} '{group.Key}' is already declared in {group.First().Source}."));
             }
         }
     }
 
-    private static void CheckMappingTypes(List<Mapping> mappings, List<ResourceType> types, List<CatalogError> errors)
+    private static void CheckMappingTypes(List<Mapping> mappings, List<Document> typeDocuments, List<CatalogError> errors)
     {
-        var declared = types.Select(t => t.Name).Distinct().Order().ToList();
+        var declared = typeDocuments.Select(NameOf).OfType<string>().Distinct().Order().ToList();
         foreach (var mapping in mappings)
         {
             if (mapping.Match.Criteria.TryGetValue("type", out var type) && !declared.Contains(type))
@@ -215,7 +233,7 @@ public static partial class CatalogParser
 
     private static NamingRule ToNamingRule(JToken rule) => new(Text(rule["pattern"]), (int?)rule["maxLength"] ?? 0, Text(rule["allowed"]));
 
-    private static Match ToMatch(JToken? match) => new(Map(match).ToDictionary(e => e.Key, e => Text(e.Value)));
+    private static MatchCriteria ToMatch(JToken? match) => new(Map(match).ToDictionary(e => e.Key, e => Text(e.Value)));
 
     private static Node ToNode(JToken node) => new(
         Text(node["template"]),

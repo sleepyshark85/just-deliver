@@ -30,11 +30,11 @@ public enum NodeKind
 public sealed record Node(string Template, NodeKind Kind, IReadOnlyDictionary<string, JToken> Config);
 
 /// <summary>Criteria key (type, class, tier, kind, runtime, and for policies template) to the value it must equal.</summary>
-public sealed record Match(IReadOnlyDictionary<string, string> Criteria);
+public sealed record MatchCriteria(IReadOnlyDictionary<string, string> Criteria);
 
 public sealed record Mapping(
     string Source,
-    Match Match,
+    MatchCriteria Match,
     IReadOnlyDictionary<string, Node> Nodes,
     IReadOnlyDictionary<string, string> Exports);
 
@@ -42,7 +42,7 @@ public sealed record Policy(
     string Source,
     string Name,
     string Reason,
-    Match Match,
+    MatchCriteria Match,
     IReadOnlyDictionary<string, JToken> Set,
     IReadOnlyDictionary<string, JToken> Default,
     IReadOnlyDictionary<string, Node> Add);

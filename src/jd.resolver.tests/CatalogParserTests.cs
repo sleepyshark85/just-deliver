@@ -149,6 +149,49 @@ public class CatalogParserTests
     }
 
     [Fact]
+    public async Task Multi_document_file_is_an_error()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile + "---\n" + CatalogFile));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("catalog.yaml", error.File);
+        Assert.Contains("one YAML document per file", error.Message);
+    }
+
+    [Fact]
+    public async Task Repeated_key_is_an_error()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile + "version: \"2\"\n"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("catalog.yaml", error.File);
+        Assert.Contains("uplicate key", error.Message);
+    }
+
+    [Fact]
+    public async Task Schema_invalid_catalog_file_still_counts_as_the_catalog()
+    {
+        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: 1\n"), ("types/a.yaml", TypeFile("alpha-db")));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("catalog.yaml", error.File);
+        Assert.Contains("schema violation", error.Message);
+    }
+
+    [Fact]
+    public async Task Schema_invalid_type_file_still_declares_its_name()
+    {
+        // The type fails its schema (no description) but its name is known, so the mapping is not blamed.
+        var result = await Parse(
+            ("catalog.yaml", CatalogFile),
+            ("types/a.yaml", "kind: ResourceType\nname: alpha-db\nclasses: [standard]\nexports: [endpoint]\n"),
+            ("maps/a.yaml", MappingFile("alpha-db")));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("types/a.yaml", error.File);
+    }
+
+    [Fact]
     public async Task Same_naming_rule_or_role_in_two_files_is_an_error()
     {
         const string role = "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n";
@@ -170,7 +213,6 @@ public class CatalogParserTests
             ("roles.yaml", "kind: Roles\nroles:\n  reader: not-a-guid\n"));
 
         var files = result.Errors.Select(e => e.File).ToHashSet();
-        Assert.Contains("(catalog)", files);
         Assert.Contains("types/b.yaml", files);
         Assert.Contains("maps/c.yaml", files);
         Assert.Contains("odd.yaml", files);

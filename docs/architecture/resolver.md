@@ -99,27 +99,41 @@ Team overrides are out of the MVP, so the format has no `overridable` block yet.
 Selected by matching criteria, never by conditionals.
 
 ```yaml
+# mappings/cosmos-sql/standard.yaml (the seed catalog)
 kind: Mapping
 match: { type: cosmos-sql, class: standard }
 nodes:
-  account:
-    template: azure/cosmos-account
+  database:
+    template: azure/cosmos-sql-database
     config:
       resourceGroupName: ${env.resourceGroup}
-      location: ${env.region}
-      accountName: ${name('cosmos-account')}
+      accountName: ${env.cosmos.accountName}
+      databaseName: ${name('cosmos-database')}
+      # Free tier shares 1,000 RU/s across the subscription; each database stays at 400 or below.
       throughput: 400
+  container:
+    template: azure/cosmos-sql-container
+    config:
+      resourceGroupName: ${env.resourceGroup}
+      accountName: ${env.cosmos.accountName}
+      databaseName: ${database.databaseName}
+      containerName: ${name('cosmos-container')}
+      partitionKeyPath: /id
   access:
     kind: grant                                   # surfaced in the approval diff
     template: azure/cosmos-sql-role-assignment
     config:
-      accountId: ${account.accountId}
+      accountId: ${env.cosmos.accountId}
       principalId: ${runtime.principalId}         # this reference alone orders it after the revision step
-      roleDefinitionId: ${account.accountId}/sqlRoleDefinitions/${role.cosmos-data-contributor}
-      roleAssignmentId: ${guid(account.accountId, runtime.principalId, 'data-contributor')}
+      roleDefinitionId: ${env.cosmos.accountId}/sqlRoleDefinitions/${role.cosmos-data-contributor}
+      roleAssignmentId: ${guid(env.cosmos.accountId, runtime.principalId, 'data-contributor')}
 exports:
-  endpoint: ${account.documentEndpoint}
+  endpoint: ${env.cosmos.endpoint}
+  database: ${database.databaseName}
+  container: ${container.containerName}
 ```
+
+The Cosmos account is a substrate resource (one free-tier account per subscription), so the mapping reads it from `${env.cosmos.…}` and creates only the workload's database and container plus the grant.
 
 ### Policy — IT Ops layer
 
