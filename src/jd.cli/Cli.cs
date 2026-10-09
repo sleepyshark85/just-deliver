@@ -27,13 +27,17 @@ public static class Cli
           jd release create <manifest.yaml> --out <release-set.yaml>
           jd release show <release-set.yaml>
           jd deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
+          jd env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
           jd --help
 
         validate  checks a workload against its schema and rules.
         preview   validates the workload, then prints the resolved graph (--json: as stable JSON).
         release   create writes an immutable release set (pinned workloads, deploy order) from a manifest; show prints one.
         deploy    provisions the infrastructure nodes in order (--preview: only shows the changes; nothing is created).
-                  Backend: PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
+        env up    provisions an environment's substrate from its definition and writes the environment descriptor from the outputs.
+                  --base: the descriptor of the layer below (the new values are added to it); --region defaults to JD_REGION;
+                  --force: overwrite an existing --out.
+        Backend (deploy, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
         Exit codes: 0 success, 1 validation, resolution or deployment errors, 2 usage errors.
 
         """;
@@ -67,6 +71,11 @@ public static class Cli
         if (args.FirstOrDefault() == "release")
         {
             return await ReleaseCli.RunAsync(args[1..], stdout, stderr, cancellationToken);
+        }
+
+        if (args.FirstOrDefault() == "env")
+        {
+            return await EnvCli.RunAsync(args[1..], stdout, stderr, backend, environmentVariable, cancellationToken);
         }
 
         var (options, problem) = Parse(args);
@@ -121,10 +130,7 @@ public static class Cli
         var environmentResult = await EnvironmentFile.LoadAsync(resolve.Environment, cancellationToken);
         if (catalogResult.Catalog is not { } catalog || environmentResult.Descriptor is not { } environment)
         {
-            // Catalog errors name files relative to the catalog root; the person needs the path they can open.
-            // An error about the catalog as a whole names no real file and is left as it is.
-            Print(catalogResult.Errors.Select(e => Path.Combine(resolve.Catalog, e.File) is var full && File.Exists(full) ? e with { File = full } : e)
-                .Concat(environmentResult.Errors), stderr);
+            Print(CatalogErrors(catalogResult, resolve.Catalog).Concat(environmentResult.Errors), stderr);
             return Invalid;
         }
 
@@ -144,36 +150,46 @@ public static class Cli
         return Success;
     }
 
-    // Templates live in the catalog's templates directory; the graph must fit them before anything is created.
     private static async Task<int> DeployAsync(
         DeployOptions options, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend,
-        Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken) =>
+        (await ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, options.DryRun, stdout, stderr, cancellationToken)).Code;
+
+    // Catalog errors name files relative to the catalog root; the person needs the path they can open.
+    // An error about the catalog as a whole names no real file and is left as it is.
+    internal static IEnumerable<LoadError> CatalogErrors(CatalogLoadResult result, string catalogDirectory) =>
+        result.Errors.Select(e => Path.Combine(catalogDirectory, e.File) is var full && File.Exists(full) ? e with { File = full } : e);
+
+    // Templates live in the catalog's templates directory; the graph must fit them before anything is created.
+    internal static async Task<(int Code, RunReport? Run)> ProvisionAsync(
+        string catalogDirectory, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend,
+        Func<string, string?> environmentVariable, bool dryRun, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        var templates = await TemplateLibrary.LoadAsync(Path.Combine(options.Catalog, CatalogDirectory.TemplatesDirectory), cancellationToken);
+        var templates = await TemplateLibrary.LoadAsync(Path.Combine(catalogDirectory, CatalogDirectory.TemplatesDirectory), cancellationToken);
         var misfits = templates.Check(graph);
         if (misfits.Count > 0)
         {
             Print(misfits, stderr);
-            return Invalid;
+            return (Invalid, null);
         }
 
         var orchestrator = new Orchestrator(backend ?? CreatePulumiBackend(environmentVariable), templates, catalog, environment);
         void Show(NodeReport report) => stdout.Write(DeployFormatter.Format(report));
-        var run = options.DryRun
+        var run = dryRun
             ? await orchestrator.PreviewAsync(graph, Show, cancellationToken)
             : await orchestrator.DeployAsync(graph, Show, cancellationToken);
         if (!run.Succeeded)
         {
             stderr.WriteLine($"jd: stopped at {run.Nodes[^1].NodeId}: {run.Nodes[^1].Message}");
-            return Invalid;
+            return (Invalid, run);
         }
 
-        return Success;
+        return (Success, run);
     }
 
     // State location and secrets passphrase must be set explicitly: a default would lose track of stacks between runs, or
     // encrypt with a passphrase nobody chose. An empty passphrase is a choice (local/dev); a passphrase file is another.
-    private static string? BackendSettingsProblem(Func<string, string?> environmentVariable)
+    internal static string? BackendSettingsProblem(Func<string, string?> environmentVariable)
     {
         if (environmentVariable(BackendUrlVariable) is null)
         {
@@ -199,7 +215,7 @@ public static class Cli
         return services.BuildServiceProvider().GetRequiredService<IBackEndProvider>();
     }
 
-    private static void Print(IEnumerable<LoadError> errors, TextWriter writer)
+    internal static void Print(IEnumerable<LoadError> errors, TextWriter writer)
     {
         foreach (var error in errors)
         {

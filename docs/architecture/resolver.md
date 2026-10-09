@@ -192,7 +192,7 @@ The seed library: substrate `resource-group`, `log-analytics` (daily cap), `cont
 
 An environment publishes what the resolver needs as one YAML document, validated by
 [`schemas/environment.schema.json`](../../schemas/environment.schema.json) (embedded in `jd.resolver`).
-It is written from substrate deployment outputs (slice S12); the resolver only reads it.
+It is written by `jd env up` from substrate deployment outputs ([provisioning.md](provisioning.md#substrate-jd-env-up)); the resolver only reads it.
 
 ```yaml
 kind: Environment
@@ -214,6 +214,27 @@ grantable:                # paths under values that workloads may grant on
   may contain `.` (a dot path must be unambiguous); every `grantable` path must be a value in `values`. The loader reports all errors with their location.
 - **Security:** `grantable` is the boundary the engine enforces for `grant` nodes
   ([D19](../open-questions.md)): a workload can only grant on the listed `env.*` resources.
+
+### Environment definition
+
+The descriptor is produced from an **environment definition**
+([`schemas/environment-definition.schema.json`](../../schemas/environment-definition.schema.json), `jd.resolver`):
+`kind: EnvironmentDefinition`, `name`, `tier`, `requires` (substrate types, with `id` and `class` as in a workload; effective ids
+unique), `values` (the descriptor's layout; each leaf an expression, normally `${resource.<id>.<export>}`) and `grantable`.
+`Resolver.ResolveSubstrate(definition, file, catalog, environment)` is the one entry point. The owner is the definition, with
+the name `@<name>` (a workload name cannot start with `@`) in node ids, stacks and `name()` hashes: ids `@dev/dev/substrate/group`,
+stacks `_dev.dev.substrate.group`, so a workload named like the environment, with a requirement `substrate`, shares nothing with the
+substrate and a workload deploy never touches it ([ADR 0006](../decisions/0006-infra-deployed-with-app.md)). `ExpansionResult.Owner` records the owner kind
+(`Workload` or `Environment`); an environment owner has no runtime, so workload-scope policies add nothing. In a substrate
+mapping `${workload.name}` therefore evaluates to `@<name>`; the `{workload}` naming placeholder drops the `@` through `allowed`. Its team is empty
+(`${workload.team}` is empty). The `environment` is `definition.Over(region, base)`: the definition's name and tier, the region given on the
+command line, and the **base descriptor's values and `grantable`**, so mappings read `${env.…}` of the layer below.
+
+`DescriptorComposer` turns the resolved graph and the node outputs into the descriptor text: each export is evaluated with its
+requirement's node outputs; each `values` leaf is evaluated with those as the known `resource.*` references (a leaf that stays
+pending, or names a node or an unknown export, is an error); the result is merged into the base's values (a key the base has is a
+collision error), `grantable` is the union, and the composed text must pass `EnvironmentParser`, so every rule above holds.
+`region` is the caller's; the descriptor's `name` and `tier` are the definition's.
 
 ## Expressions
 

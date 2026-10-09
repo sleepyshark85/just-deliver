@@ -1,0 +1,96 @@
+{
+  "catalogVersion": "0.1.0",
+  "environment": "dev",
+  "workload": "@dev",
+  "nodes": [
+    {
+      "id": "@dev/dev/substrate/database",
+      "scope": "substrate",
+      "name": "database",
+      "template": "azure/cosmos-sql-database",
+      "kind": "Create",
+      "stack": "_dev.dev.substrate.database",
+      "phase": "Infrastructure",
+      "hash": "283e2d4ecdf7cc70bc0fdd1af14e8522a7a92d0d57d961ac79595ea23a3dd90e",
+      "dependsOn": [],
+      "dependsOnRuntime": false,
+      "config": {
+        "accountName": "cosmos-shared",
+        "databaseName": "db-dev",
+        "resourceGroupName": "rg-shared",
+        "throughput": 400
+      },
+      "provenance": {
+        "accountName": "Mapping: mappings/env-substrate/standard.yaml",
+        "databaseName": "Mapping: mappings/env-substrate/standard.yaml",
+        "resourceGroupName": "Mapping: mappings/env-substrate/standard.yaml",
+        "throughput": "Mapping: mappings/env-substrate/standard.yaml"
+      }
+    },
+    {
+      "id": "@dev/dev/substrate/group",
+      "scope": "substrate",
+      "name": "group",
+      "template": "azure/resource-group",
+      "kind": "Create",
+      "stack": "_dev.dev.substrate.group",
+      "phase": "Infrastructure",
+      "hash": "f81edaab3db2ec9f056984c02350c6b40a37a92956991710d6c23ddc16dac5d2",
+      "dependsOn": [],
+      "dependsOnRuntime": false,
+      "config": {
+        "location": "region-1",
+        "resourceGroupName": "rg-dev-ef5892",
+        "tags": {
+          "project": "just-deliver-mvp",
+          "tier": "substrate"
+        }
+      },
+      "provenance": {
+        "location": "Mapping: mappings/env-substrate/standard.yaml",
+        "resourceGroupName": "Mapping: mappings/env-substrate/standard.yaml",
+        "tags.project": "Mapping: mappings/env-substrate/standard.yaml",
+        "tags.tier": "Mapping: mappings/env-substrate/standard.yaml"
+      }
+    },
+    {
+      "id": "@dev/dev/substrate/apps",
+      "scope": "substrate",
+      "name": "apps",
+      "template": "azure/container-apps-environment",
+      "kind": "Create",
+      "stack": "_dev.dev.substrate.apps",
+      "phase": "Infrastructure",
+      "hash": "5997f87d69bdfaeb5309cbf1b4c95d65fa41d59f287d942070edf732a77c0fa2",
+      "dependsOn": [
+        "@dev/dev/substrate/group"
+      ],
+      "dependsOnRuntime": false,
+      "config": {
+        "environmentName": "cae-dev-7dae27",
+        "location": "${group.location}",
+        "resourceGroupName": "${group.resourceGroupName}",
+        "workspaceCustomerId": "00000000-0000-0000-0000-000000000001",
+        "workspaceName": "law-shared",
+        "workspaceResourceGroupName": "rg-shared"
+      },
+      "provenance": {
+        "environmentName": "Mapping: mappings/env-substrate/standard.yaml",
+        "location": "Mapping: mappings/env-substrate/standard.yaml",
+        "resourceGroupName": "Mapping: mappings/env-substrate/standard.yaml",
+        "workspaceCustomerId": "Mapping: mappings/env-substrate/standard.yaml",
+        "workspaceName": "Mapping: mappings/env-substrate/standard.yaml",
+        "workspaceResourceGroupName": "Mapping: mappings/env-substrate/standard.yaml"
+      }
+    }
+  ],
+  "exports": {
+    "substrate": {
+      "containerAppsEnvironmentId": "${apps.environmentId}",
+      "databaseId": "${database.databaseId}",
+      "databaseName": "${database.databaseName}",
+      "defaultDomain": "${apps.defaultDomain}",
+      "resourceGroupName": "${group.resourceGroupName}"
+    }
+  }
+}

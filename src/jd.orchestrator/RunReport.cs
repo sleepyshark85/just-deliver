@@ -28,13 +28,15 @@ public enum NodeOutcome
 /// <param name="Changes">The provider's per-resource changes; empty when nothing was run.</param>
 /// <param name="Message">Why a node is pending, waiting or failed; empty otherwise.</param>
 /// <param name="Elapsed">How long the node took.</param>
+/// <param name="Outputs">The non-secret outputs the stack exported after a deploy; empty otherwise. Secrets stay inside the walk: reports get persisted.</param>
 public sealed record NodeReport(
     string NodeId,
     NodeOutcome Outcome,
     IReadOnlyDictionary<string, int> Summary,
     IReadOnlyList<ResourceChange> Changes,
     string Message,
-    TimeSpan Elapsed);
+    TimeSpan Elapsed,
+    IReadOnlyDictionary<string, ConfigEntry> Outputs);
 
 /// <summary>The nodes handled, in graph order. A failure ends the walk, so nodes after it are absent.</summary>
 public sealed record RunReport(IReadOnlyList<NodeReport> Nodes)

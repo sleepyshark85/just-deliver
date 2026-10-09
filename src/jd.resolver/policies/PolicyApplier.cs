@@ -8,7 +8,7 @@ namespace jd.resolver.policies;
 
 /// <summary>
 /// Applies the catalog's policies to expanded requirements and records where every config field came from. Pure; the
-/// catalog is never modified. One pass: nodes added by policies receive node-scope policies but never trigger more adds.
+/// catalog is never modified. An environment definition has no runtime, so workload-scope policies add nothing for it. One pass: nodes added by policies receive node-scope policies but never trigger more adds.
 /// Rules: docs/architecture/resolver.md (Engine rules, Policies).
 /// </summary>
 public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environment)
@@ -39,7 +39,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
 
         var workloadNodes = new List<ResolvedNode>();
         var addedBy = new Dictionary<string, Policy>();
-        foreach (var policy in _policies.Where(IsWorkloadScope))
+        foreach (var policy in _policies.Where(p => expansion.Owner == OwnerKind.Workload && IsWorkloadScope(p)))
         {
             foreach (var (name, node) in policy.Add)
             {

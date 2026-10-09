@@ -4,11 +4,13 @@
   <ItemGroup>
     <EmbeddedResource Include="../../schemas/catalog/*.schema.json" LogicalName="schemas/catalog/%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../schemas/environment.schema.json" LogicalName="schemas/environment.schema.json" />
+    <EmbeddedResource Include="../../schemas/environment-definition.schema.json" LogicalName="schemas/environment-definition.schema.json" />
     <EmbeddedResource Include="../../schemas/release-manifest.schema.json" LogicalName="schemas/release-manifest.schema.json" />
     <EmbeddedResource Include="../../schemas/release-set.schema.json" LogicalName="schemas/release-set.schema.json" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../jd.core/jd.core.csproj" />
     <ProjectReference Include="../jd.definitionvalidator/jd.definitionvalidator.csproj" />
   </ItemGroup>
 

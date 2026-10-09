@@ -1,0 +1,98 @@
+{
+  "catalogVersion": "0.1.0",
+  "environment": "shared",
+  "workload": "@shared",
+  "nodes": [
+    {
+      "id": "@shared/shared/substrate/group",
+      "scope": "substrate",
+      "name": "group",
+      "template": "azure/resource-group",
+      "kind": "Create",
+      "stack": "_shared.shared.substrate.group",
+      "phase": "Infrastructure",
+      "hash": "bc8aa56509941dd243bcc73f72f0aa0b957d207103f976e843b39383534a022c",
+      "dependsOn": [],
+      "dependsOnRuntime": false,
+      "config": {
+        "location": "region-1",
+        "resourceGroupName": "rg-shared-5d9b60",
+        "tags": {
+          "project": "just-deliver-mvp",
+          "tier": "substrate"
+        }
+      },
+      "provenance": {
+        "location": "Mapping: mappings/shared-substrate/standard.yaml",
+        "resourceGroupName": "Mapping: mappings/shared-substrate/standard.yaml",
+        "tags.project": "Mapping: mappings/shared-substrate/standard.yaml",
+        "tags.tier": "Mapping: mappings/shared-substrate/standard.yaml"
+      }
+    },
+    {
+      "id": "@shared/shared/substrate/cosmos",
+      "scope": "substrate",
+      "name": "cosmos",
+      "template": "azure/cosmos-account",
+      "kind": "Create",
+      "stack": "_shared.shared.substrate.cosmos",
+      "phase": "Infrastructure",
+      "hash": "46c17135e410a18efc6a289391db02509eabd4224ba518db2569a4fa1ffa8977",
+      "dependsOn": [
+        "@shared/shared/substrate/group"
+      ],
+      "dependsOnRuntime": false,
+      "config": {
+        "accountName": "cosmos-shared-39d0b1",
+        "enableFreeTier": true,
+        "location": "${group.location}",
+        "resourceGroupName": "${group.resourceGroupName}",
+        "totalThroughputLimit": 1000
+      },
+      "provenance": {
+        "accountName": "Mapping: mappings/shared-substrate/standard.yaml",
+        "enableFreeTier": "Mapping: mappings/shared-substrate/standard.yaml",
+        "location": "Mapping: mappings/shared-substrate/standard.yaml",
+        "resourceGroupName": "Mapping: mappings/shared-substrate/standard.yaml",
+        "totalThroughputLimit": "Mapping: mappings/shared-substrate/standard.yaml"
+      }
+    },
+    {
+      "id": "@shared/shared/substrate/workspace",
+      "scope": "substrate",
+      "name": "workspace",
+      "template": "azure/log-analytics",
+      "kind": "Create",
+      "stack": "_shared.shared.substrate.workspace",
+      "phase": "Infrastructure",
+      "hash": "5b72ad0880763ded2c1d782081d2e026733f6136073bb875c792de7f687e8243",
+      "dependsOn": [
+        "@shared/shared/substrate/group"
+      ],
+      "dependsOnRuntime": false,
+      "config": {
+        "dailyQuotaGb": 0.15,
+        "location": "${group.location}",
+        "resourceGroupName": "${group.resourceGroupName}",
+        "workspaceName": "law-shared-546c92"
+      },
+      "provenance": {
+        "dailyQuotaGb": "Mapping: mappings/shared-substrate/standard.yaml",
+        "location": "Mapping: mappings/shared-substrate/standard.yaml",
+        "resourceGroupName": "Mapping: mappings/shared-substrate/standard.yaml",
+        "workspaceName": "Mapping: mappings/shared-substrate/standard.yaml"
+      }
+    }
+  ],
+  "exports": {
+    "substrate": {
+      "cosmosAccountId": "${cosmos.accountId}",
+      "cosmosAccountName": "${cosmos.accountName}",
+      "cosmosEndpoint": "${cosmos.documentEndpoint}",
+      "resourceGroupName": "${group.resourceGroupName}",
+      "workspaceCustomerId": "${workspace.workspaceCustomerId}",
+      "workspaceId": "${workspace.workspaceId}",
+      "workspaceName": "${workspace.workspaceName}"
+    }
+  }
+}

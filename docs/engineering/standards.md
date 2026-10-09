@@ -75,6 +75,9 @@ the guardrails are a safety net, not the plan. Every resource a slice creates mu
 | Anything else | Must be free (role assignments, managed identities) or explicitly approved by the user first. |
 
 - Region comes from `JD_REGION`; never hard-code it.
+- Azure tests run as the sandbox team identity, never a personal login: they require `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`,
+  `ARM_TENANT_ID` and `ARM_SUBSCRIPTION_ID` in the environment (`source ~/.just-deliver/<subscription>.env`), fail clearly if any is missing,
+  and log `az` in to a per-test temporary `AZURE_CONFIG_DIR` (see `src/jd.cli.tests/AzureCli.cs`). Never fall back to the ambient `az` login.
 - Tag every resource group `project=just-deliver-mvp`; substrate groups also `tier=substrate`.
 - Tear down test resources when the slice's Azure test finishes: `tools/azure/cleanup.sh --yes`.
 - Never change policies, role definitions, app registrations or the sandbox setup. If a guardrail

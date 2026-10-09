@@ -12,16 +12,24 @@ namespace jd.resolver.expansion;
 /// </summary>
 public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 {
+    /// <summary>Owner-name prefix of environment definitions. A workload name cannot start with it, so substrate and workload ids, stacks and <c>name()</c> hashes never collide.</summary>
+    public const string EnvironmentOwnerPrefix = "@";
+
     /// <param name="workload">The parsed workload definition, already schema-validated.</param>
     /// <param name="workloadFile">Name reported in errors about the workload itself.</param>
-    public ExpansionResult Expand(JObject workload, string workloadFile)
+    public ExpansionResult Expand(JObject workload, string workloadFile) =>
+        Expand(OwnerKind.Workload, (string?)workload["metadata"]?["name"] ?? string.Empty, (string?)workload["metadata"]?["team"] ?? string.Empty, workload["requires"] as JArray ?? [], workloadFile);
+
+    /// <summary>Expands the substrate <paramref name="requires"/> (entries with <c>type</c>, optional <c>id</c> and <c>class</c>) of the environment definition <paramref name="name"/>; it has no team.</summary>
+    public ExpansionResult ExpandEnvironment(string name, JArray requires, string ownerFile) =>
+        Expand(OwnerKind.Environment, EnvironmentOwnerPrefix + name, string.Empty, requires, ownerFile);
+
+    private ExpansionResult Expand(OwnerKind kind, string name, string team, JArray requires, string ownerFile)
     {
-        var name = (string?)workload["metadata"]?["name"] ?? string.Empty;
-        var team = (string?)workload["metadata"]?["team"] ?? string.Empty;
         var requirements = new List<ExpandedRequirement>();
         var errors = new List<LoadError>();
         var index = 0;
-        foreach (var entry in workload["requires"] as JArray ?? [])
+        foreach (var entry in requires)
         {
             var type = (string?)entry["type"] ?? string.Empty;
             var requirement = new Requirement(
@@ -29,18 +37,18 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
                 type,
                 (string?)entry["class"] ?? Requirement.DefaultClass);
             var location = $"requires[{index++}]";
-            if (ExpandOne(requirement, name, team, workloadFile, location, errors) is { } expanded)
+            if (ExpandOne(requirement, name, team, ownerFile, location, errors) is { } expanded)
             {
                 requirements.Add(expanded);
             }
         }
 
-        return new ExpansionResult(name, team, requirements, errors);
+        return new ExpansionResult(kind, name, team, requirements, errors);
     }
 
-    private ExpandedRequirement? ExpandOne(Requirement requirement, string workloadName, string workloadTeam, string workloadFile, string location, List<LoadError> errors)
+    private ExpandedRequirement? ExpandOne(Requirement requirement, string workloadName, string workloadTeam, string ownerFile, string location, List<LoadError> errors)
     {
-        var mapping = MappingMatcher.Select(catalog.Mappings, requirement, environment.Tier, workloadFile, location, errors);
+        var mapping = MappingMatcher.Select(catalog.Mappings, requirement, environment.Tier, ownerFile, location, errors);
         if (mapping is null)
         {
             return null;

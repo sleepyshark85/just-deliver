@@ -1,0 +1,10 @@
+# The shared layer's descriptor as `jd env up` writes it; the base of the dev environment in the golden graph test.
+kind: Environment
+name: shared
+region: region-1
+tier: team
+values:
+  shared: { resourceGroup: rg-shared }
+  logAnalytics: { id: /subscriptions/s/resourceGroups/rg-shared/providers/Microsoft.OperationalInsights/workspaces/law-shared, name: law-shared, customerId: 00000000-0000-0000-0000-000000000001 }
+  cosmos: { accountId: /subscriptions/s/resourceGroups/rg-shared/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-shared, accountName: cosmos-shared, endpoint: "https://cosmos-shared.documents.azure.com:443/" }
+grantable: []

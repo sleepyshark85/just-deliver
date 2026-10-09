@@ -135,6 +135,16 @@ public class OrchestratorTests
     }
 
     [Fact]
+    public async Task The_report_carries_the_outputs_of_a_deploy_but_never_a_secret_one()
+    {
+        var report = await DeployAsync(new FakeBackend());
+
+        Assert.Equal(["id", "name"], report.Nodes[0].Outputs.Keys.Order());
+        Assert.Equal("id-shop.dev.thing.group", report.Nodes[0].Outputs["id"].Value);
+        Assert.Empty(report.Nodes[3].Outputs);
+    }
+
+    [Fact]
     public async Task Config_is_converted_to_strings_numbers_and_booleans_invariantly_and_structures_to_compact_json()
     {
         var backend = new FakeBackend();

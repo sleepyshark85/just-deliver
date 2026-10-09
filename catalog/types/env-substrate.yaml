@@ -1,0 +1,5 @@
+kind: ResourceType
+name: env-substrate
+description: One environment's layer on top of the shared substrate - a resource group, a Container Apps environment and a Cosmos DB database.
+classes: [standard]
+exports: [resourceGroupName, containerAppsEnvironmentId, defaultDomain, databaseId, databaseName]

@@ -10,6 +10,7 @@ dotnet run --project src/jd.cli -- preview <workload.yaml> --env <environment.ya
 dotnet run --project src/jd.cli -- release create <manifest.yaml> --out <release-set.yaml>
 dotnet run --project src/jd.cli -- release show <release-set.yaml>
 dotnet run --project src/jd.cli -- deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
+dotnet run --project src/jd.cli -- env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
 dotnet run --project src/jd.cli -- --help
 ```
 
@@ -42,6 +43,52 @@ and the Azure credentials in the environment (`source ~/.just-deliver/<subscript
   - Optional: `PULUMI_HOME` (plugin cache), `JD_SCRATCH_DIR` (working directories; default the system temp directory).
 
 Errors from any stage are printed to stderr with file and location; results go to stdout.
+
+### `jd env up`
+
+Provisions an environment's **substrate** from an environment definition and writes the environment descriptor
+([resolver.md](architecture/resolver.md#environment-descriptor)) from the real outputs, so no Azure id is typed by hand.
+It uses the same resolver and orchestrator as `jd deploy`, and the same backend variables
+(`PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE`) and Azure credentials. **It creates real Azure resources**: free tier only,
+see [standards §6](engineering/standards.md).
+
+```
+jd env up samples/environments/shared.yaml --catalog catalog --out shared.env.yaml
+jd env up samples/environments/dev.yaml    --catalog catalog --base shared.env.yaml --out dev.env.yaml
+```
+
+- Two layers, because Azure allows one free-tier Cosmos account per subscription: `shared` (once per subscription: resource
+  group, capped Log Analytics workspace, the Cosmos account) and one definition per environment on top (`dev`, later `stage`:
+  resource group, Container Apps environment bound to the shared workspace, a 400 RU/s database in the shared account).
+  Everything about them (SKUs, caps, throughput, names, tags) is catalog data: `catalog/mappings/shared-substrate`,
+  `catalog/mappings/env-substrate`, `catalog/naming.yaml`.
+- `--base` is the descriptor of the layer below. It is the `env` context while resolving (mappings read
+  `${env.cosmos.accountName}` and so on), and the written descriptor is its values plus the definition's. A key the base
+  already has is an error; `grantable` paths are added to the base's.
+- `--region` defaults to `JD_REGION`; one of them is required. The descriptor takes its name and tier from the definition.
+- `--out` must not exist unless `--force` is given; this is checked before anything is created.
+- Before anything is created the definition is resolved and the descriptor is composed with its values still pending: an
+  unknown requirement or export, a collision with the base, or a descriptor rule broken (reserved key, `grantable` path
+  that is not a value) is reported and nothing is deployed. After the deploy the descriptor is composed from the outputs,
+  validated by the descriptor loader and only then written. Secret or null outputs are never written; a value that needs
+  one is an error.
+- Running a command again reports every node `unchanged` and rewrites the same descriptor (with `--force`).
+- If a deploy fails nothing is written; running again resumes (deployed nodes are `unchanged`).
+
+An environment definition (`kind: EnvironmentDefinition`, [schema](../schemas/environment-definition.schema.json)):
+
+```yaml
+kind: EnvironmentDefinition
+name: dev                       # the environment's name
+tier: team                      # team | protected
+requires:                       # substrate, matched by catalog mappings exactly like a workload's requirements
+  - type: env-substrate
+    id: substrate
+values:                         # the descriptor layout; each leaf is an expression over the requirement's exports
+  resourceGroup: ${resource.substrate.resourceGroupName}
+  cosmos: { databaseName: ${resource.substrate.databaseName} }
+grantable: [cosmos.accountId]   # may name base values
+```
 
 | Exit code | Meaning |
 |---|---|

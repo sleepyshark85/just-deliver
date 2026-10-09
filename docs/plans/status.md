@@ -6,13 +6,8 @@
 ## Now
 
 - **Next slice:** S12a — `database` type (user decision), then S13b.
-- **In progress:** S12 — APPROVED (2 rounds), branch `mvp/s12-substrate` pushed (rebased on main). Before merging it needs
-  one `tools/verify.sh --azure` run **as the team identity** (stack names changed to `_<env>.…`), then PR + CI + merge.
-- **Blocked:** Azure runs wait for the user to (1) start Claude Code with the team identity in the environment —
-  `set -a; source ~/.just-deliver/ca89cbcc-e368-4e81-9e80-6686b4d9f3b9.env; set +a; claude` — and (2) `az logout` the
-  personal Owner session (use `AZURE_CONFIG_DIR=~/.azure-owner az login` for Owner tasks). Reason: S12's first Azure run
-  used the user's ambient Owner `az` login because agents cannot read `~/.just-deliver`; Azure tests now refuse to run
-  without the `ARM_*` team identity and log `az` in to a temporary config dir.
+- **In progress:** —
+- **Blocked:** —
 
 ## Slices
 
@@ -33,7 +28,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S09 | Template library | done | PR #13 | 2 | Round 1: 4 blocking (container names could collide across workloads → cross-workload grant; workspace shared key in clear state; adapter→resolver dependency not in standards — amended; `!`). Cosmos account now hard-capped (`totalThroughputLimit`). `samples/provisioner` removed. |
 | S10 | Provider fixes | done | PR #14 | 2 | Round 1: 3 blocking (outputs lookup could report a deployed stack as undeployed; preview made "not deployed" ambiguous; dead `Version`). Refresh events no longer counted as changes. Real offline Pulumi tests in the gate. |
 | S11 | Orchestrator (infra nodes) | done | PR #20 | 2 | First Azure slice. Round 1: 2 blocking (teardown failures hidden; silent empty passphrase); backend URL now required. Azure test found a bug in our own sandbox policy (int vs float compare) — fixed (PR #15), re-applied by the user; test green, nothing left behind. |
-| S12 | Substrate from data | in-review | `mvp/s12-substrate` | 2 | APPROVE. Round 1: 3 blocking (substrate/workload stack collision → owner kind with `@` env owner; secret-output filter untested and in the CLI; `!`). First Azure run green (free tier verified: free tier on, 1000 RU/s cap, 400 RU/s db, re-run unchanged, nothing left) but with the wrong identity — re-run needed. |
+| S12 | Substrate from data | done | PR #22 | 2 | Round 1: 3 blocking (substrate/workload stack collision → owner kind with `@` env owner; secret-output filter untested and in the CLI; `!`). Azure gate green as the team identity (CLI 64/64, 49 min incl. Cosmos teardown; free tier on, 1000 RU/s cap, 400 RU/s db, re-run unchanged, nothing left). |
 | S12a | `database` type (user decision) | todo | | | Rename `cosmos-sql` → `database`; platform mapping picks the engine; `engine` export. |
 | S13 | Release set (offline) | done | PR #18 | 2 | Round 1: 4 blocking — **release sources never committed** (old VS `.gitignore` rule `[Rr]elease/`; local gate passed because files existed on disk — caught by the reviewer's clean worktree); set fields could be tampered (now derived from verified definitions); BOM/invalid UTF-8; duplicated topological sort (shared now). |
 | S13b | Deploy a release set (infra) | todo | | | |
@@ -51,8 +46,6 @@ Picked up by the slice named; remove once done.
 
 - **Loader (minor):** scanner failures report only "Exception during deserialization (line N)"; append the inner
   exception message.
-- **S12:** the substrate passes `totalThroughputLimit: 1000` and `enableFreeTier: true`; its Azure test asserts the
-  deployed account's `capacity.totalThroughputLimit = 1000` and that both environment databases (400 RU/s each) fit.
 - **S10/S12:** template `fn::invoke`s (e.g. `getSharedKeys`) run during preview, so previewing a brand-new
   environment fails until its workspace exists — preview substrate in dependency order, or tolerate it.
 - **S15:** the runtime mapping sends `runtime.appInsightsConnectionString` to the app's `APPLICATIONINSIGHTS_CONNECTION_STRING`
@@ -75,6 +68,10 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-09 (team identity)** — Restarted with the `ARM_*` team identity; personal `az` session logged out. S12 Azure
+  gate re-run as the team identity: green, nothing left behind. Azure test runs take ~50 min, mostly Cosmos account
+  deletion (~20 min per account) — run them in the background. S12 merged.
 
 - **2026-10-09 (before restart)** — User decisions: workloads ask for `database`, the platform team's catalog mappings
   decide the engine (Cosmos today) → S12a; Kubernetes (cloud or on-prem) is possible later via a runtime adapter +

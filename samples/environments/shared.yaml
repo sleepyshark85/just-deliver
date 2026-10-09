@@ -1,0 +1,19 @@
+# Once per subscription: resource group, Log Analytics workspace (capped) and the one free-tier Cosmos DB account.
+#   jd env up samples/environments/shared.yaml --catalog catalog --out shared.env.yaml
+kind: EnvironmentDefinition
+name: shared
+tier: team
+requires:
+  - type: shared-substrate
+    id: substrate
+values:
+  shared:
+    resourceGroup: ${resource.substrate.resourceGroupName}
+  logAnalytics:
+    id: ${resource.substrate.workspaceId}
+    name: ${resource.substrate.workspaceName}
+    customerId: ${resource.substrate.workspaceCustomerId}
+  cosmos:
+    accountId: ${resource.substrate.cosmosAccountId}
+    accountName: ${resource.substrate.cosmosAccountName}
+    endpoint: ${resource.substrate.cosmosEndpoint}
