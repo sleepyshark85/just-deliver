@@ -88,10 +88,10 @@ public static class Cli
             return UsageError;
         }
 
-        var unreadable = Unreadable(options);
+        var unreadable = Arguments.Unreadable(options.Workload, (options as ResolveOptions)?.Environment, (options as ResolveOptions)?.Catalog);
         if (unreadable is not null)
         {
-            stderr.WriteLine($"jd: cannot read '{unreadable.Value.Path}': {unreadable.Value.Reason}");
+            stderr.WriteLine($"jd: {unreadable}");
             return UsageError;
         }
 
@@ -163,11 +163,11 @@ public static class Cli
         result.Errors.Select(e => Path.Combine(catalogDirectory, e.File) is var full && File.Exists(full) ? e with { File = full } : e);
 
     // Templates live in the catalog's templates directory; the graphs must fit them before anything is created.
-    // Null when they do not (the misfits are printed).
+    // Null when they do not (the misfits are printed once).
     internal static async Task<TemplateLibrary?> CheckTemplatesAsync(string catalogDirectory, IEnumerable<ResolvedGraph> graphs, TextWriter stderr, CancellationToken cancellationToken)
     {
         var templates = await TemplateLibrary.LoadAsync(Path.Combine(catalogDirectory, CatalogDirectory.TemplatesDirectory), cancellationToken);
-        var misfits = graphs.SelectMany(templates.Check).ToList();
+        var misfits = graphs.SelectMany(templates.Check).Distinct().ToList(); // unreadable templates are repeated by every graph's check
         if (misfits.Count == 0)
         {
             return templates;
@@ -240,27 +240,6 @@ public static class Cli
         }
     }
 
-    // Each input must be what its role needs: the workload and environment are files, the catalog is a directory.
-    private static (string Path, string Reason)? Unreadable(Options options)
-    {
-        if (!File.Exists(options.Workload))
-        {
-            return (options.Workload, "not found or not a file.");
-        }
-
-        if (options is not ResolveOptions resolve)
-        {
-            return null;
-        }
-
-        if (!File.Exists(resolve.Environment))
-        {
-            return (resolve.Environment, "not found or not a file.");
-        }
-
-        return Directory.Exists(resolve.Catalog) ? null : (resolve.Catalog, "not found or not a directory.");
-    }
-
     private static (Options? Options, string Problem) Parse(string[] args)
     {
         var command = args.FirstOrDefault();
@@ -269,43 +248,13 @@ public static class Cli
             return (null, command is null ? "no command given." : $"unknown command '{command}'.");
         }
 
-        string? environment = null, catalog = null;
-        bool json = false, dryRun = false;
-        var positional = new List<string>();
-        for (var i = 1; i < args.Length; i++)
+        var (scanned, problem) = Arguments.Scan(args, 1);
+        if (scanned is null)
         {
-            switch (args[i])
-            {
-                case "--json":
-                    json = true;
-                    break;
-                case "--preview":
-                    dryRun = true;
-                    break;
-                case "--env" or "--catalog":
-                    if (i + 1 == args.Length)
-                    {
-                        return (null, $"{args[i]} needs a value.");
-                    }
-
-                    if (args[i++] == "--env")
-                    {
-                        environment = args[i];
-                    }
-                    else
-                    {
-                        catalog = args[i];
-                    }
-
-                    break;
-                case var option when option.StartsWith("--", StringComparison.Ordinal):
-                    return (null, $"unknown option '{option}'.");
-                default:
-                    positional.Add(args[i]);
-                    break;
-            }
+            return (null, problem);
         }
 
+        var (positional, environment, catalog, json, dryRun) = scanned;
         if (positional.Count != 1)
         {
             return (null, "expected exactly one workload file.");

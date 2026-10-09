@@ -9,8 +9,8 @@ namespace jd.resolver.release;
 public static class ReleaseResolver
 {
     /// <summary>
-    /// The graphs in <see cref="ReleaseSet.Order"/>, or every error found (resolution continues past a failing workload, so one pass reports all).
-    /// Errors name <c>&lt;set file&gt;#&lt;workload&gt;</c>, the place the definition lives.
+    /// The graphs in <see cref="ReleaseSet.Order"/> and no errors, or no graphs and every error found (resolution continues past a
+    /// failing workload, so one pass reports all). Errors name <c>&lt;set file&gt;#&lt;workload&gt;</c>, the place the definition lives.
     /// </summary>
     public static async Task<(IReadOnlyList<ResolvedGraph> Graphs, IReadOnlyList<LoadError> Errors)> ResolveAsync(
         string setFile, ReleaseSet set, Catalog catalog, EnvironmentDescriptor environment, CancellationToken cancellationToken = default)
@@ -20,8 +20,8 @@ public static class ReleaseResolver
         foreach (var name in set.Order)
         {
             var source = $"{setFile}#{name}";
-            // The set was composed from these definitions, so they parse; the YAML parser does not take the byte order mark the hash covers.
-            var definition = set.Workloads.Single(w => w.Name == name).Definition.TrimStart('﻿');
+            // The YAML parser does not take the byte order mark that the set's hash covers (as in ReleaseBuilder.ComposeAsync).
+            var definition = set.Workloads.Single(w => w.Name == name).Definition.TrimStart('\uFEFF');
             var loaded = await WorkloadFile.ParseAsync(source, definition, cancellationToken);
             if (loaded.Workload is not { } workload)
             {
@@ -34,6 +34,6 @@ public static class ReleaseResolver
             graphs.Add(graph);
         }
 
-        return (graphs, errors);
+        return errors.Count > 0 ? ([], errors) : (graphs, errors);
     }
 }

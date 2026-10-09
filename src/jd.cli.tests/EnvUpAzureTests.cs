@@ -166,7 +166,11 @@ public sealed class EnvUpAzureTests : IDisposable
         var deploy = new[] { "deploy", releaseSet, "--env", devDescriptor, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog") };
         var (releaseCode, releaseOutput) = await ReleaseAsync(backend, deploy);
         Assert.True(releaseCode == 0, releaseOutput);
-        Assert.Equal(2, releaseOutput.Split('\n').Count(line => line.Contains("/database/access: waiting for runtime", StringComparison.Ordinal)));
+        // All four grants (a database role assignment and a metrics-publisher assignment per workload) wait for the runtime, which does not exist yet.
+        foreach (var grant in new[] { "/database/access", "/@workload/appinsights-access" })
+        {
+            Assert.Equal(2, releaseOutput.Split('\n').Count(line => line.Contains($"{grant}: waiting for runtime", StringComparison.Ordinal)));
+        }
 
         var containers = Az("cosmosdb", "sql", "container", "list", "--account-name", account, "--resource-group", sharedGroup, "--database-name", database, "--query", "[].name")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

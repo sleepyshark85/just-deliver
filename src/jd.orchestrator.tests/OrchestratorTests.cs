@@ -50,13 +50,13 @@ public class OrchestratorTests
     private const string DefaultRequires = "  - type: thing\n";
 
     // The orchestrator gets the catalog the graph was resolved with.
-    private static async Task<(ResolvedGraph Graph, Catalog Catalog)> ResolveAsync(string requires = DefaultRequires, string mapping = Mapping)
+    private static async Task<(ResolvedGraph Graph, Catalog Catalog)> ResolveAsync(string requires = DefaultRequires, string mapping = Mapping, string workloadName = "shop")
     {
         var files = new[] { "kind: Catalog\nversion: \"1\"\n", "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n", mapping }
             .Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
+        var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: {workloadName}, team: crew }}\nrequires:\n{requires}");
         var graph = Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, Env);
         Assert.Empty(graph.Errors);
         return (graph, loaded.Catalog!);
@@ -132,6 +132,52 @@ public class OrchestratorTests
         Assert.Equal("pre-id-shop.dev.thing.group-n-shop.dev.thing.group", app["label"].Value);
         Assert.Equal(new Dictionary<string, int> { ["Create"] = 1 }, report.Nodes[0].Summary);
         Assert.All(report.Nodes, n => Assert.True(n.Elapsed >= TimeSpan.Zero));
+    }
+
+    [Fact]
+    public async Task A_release_deploys_the_workloads_in_the_order_given()
+    {
+        var backend = new FakeBackend();
+        var (alpha, catalog) = await ResolveAsync(workloadName: "alpha");
+        var (beta, _) = await ResolveAsync(workloadName: "beta");
+        var started = new List<string>();
+
+        var runs = await new Orchestrator(backend, backend, catalog, Env).DeployReleaseAsync([beta, alpha], preview: false, started.Add, null, CancellationToken.None);
+
+        Assert.Equal(["beta", "alpha"], started);
+        Assert.Equal(["beta", "alpha"], runs.Select(r => r.Workload));
+        Assert.All(runs, r => Assert.True(r.Run.Succeeded));
+        Assert.Equal(["beta.dev.thing.group", "beta.dev.thing.app", "beta.dev.thing.app2", "alpha.dev.thing.group", "alpha.dev.thing.app", "alpha.dev.thing.app2"], backend.Calls.Select(c => c.Package.StackName));
+    }
+
+    [Fact]
+    public async Task A_release_stops_after_the_first_failing_workload_and_never_touches_the_next()
+    {
+        var backend = new FakeBackend { FailOn = "alpha.dev.thing.app" };
+        var (alpha, catalog) = await ResolveAsync(workloadName: "alpha");
+        var (beta, _) = await ResolveAsync(workloadName: "beta");
+        var started = new List<string>();
+
+        var runs = await new Orchestrator(backend, backend, catalog, Env).DeployReleaseAsync([alpha, beta], preview: false, started.Add, null, CancellationToken.None);
+
+        var run = Assert.Single(runs);
+        Assert.Equal("alpha", run.Workload);
+        Assert.False(run.Run.Succeeded);
+        Assert.Equal(["alpha"], started);
+        Assert.DoesNotContain(backend.Calls, c => c.Package.StackName.StartsWith("beta.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_release_preview_previews_every_workload_and_deploys_none()
+    {
+        var backend = new FakeBackend();
+        var (alpha, catalog) = await ResolveAsync(workloadName: "alpha");
+        var (beta, _) = await ResolveAsync(workloadName: "beta");
+
+        var runs = await new Orchestrator(backend, backend, catalog, Env).DeployReleaseAsync([alpha, beta], preview: true, null, null, CancellationToken.None);
+
+        Assert.Equal(["alpha", "beta"], runs.Select(r => r.Workload));
+        Assert.DoesNotContain(backend.Calls, c => c.Op == "deploy");
     }
 
     [Fact]

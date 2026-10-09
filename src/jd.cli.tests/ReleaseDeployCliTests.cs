@@ -96,6 +96,44 @@ public sealed class ReleaseDeployCliTests : IDisposable
     }
 
     [Fact]
+    public async Task A_template_misfit_in_the_second_workload_stops_the_whole_set_before_anything_is_created()
+    {
+        // The app asks for a type whose mapping names a template the library does not have; the worker is fine.
+        var catalog = Path.Combine(_temp, "catalog");
+        CliTests.CopyDirectory(Catalog, catalog);
+        await File.WriteAllTextAsync(Path.Combine(catalog, "types", "cache.yaml"), "kind: ResourceType\nname: cache\ndescription: d\nclasses: [standard]\nexports: [engine, endpoint, database, container]\n");
+        await File.WriteAllTextAsync(
+            Path.Combine(catalog, "mappings", "cache.yaml"),
+            "kind: Mapping\nmatch: { type: cache, class: standard }\nnodes:\n  n:\n    template: azure/no-such-template\n    config: {}\nexports:\n  engine: e\n  endpoint: e\n  database: e\n  container: e\n");
+        var set = await CreateSetAsync(app => app.Replace("- type: database", "- type: cache\n    id: database"));
+        var backend = new RecordingBackend();
+
+        var (code, stdout, stderr) = await RunAsync(backend, ["release", "deploy", set, "--env", Environment, "--catalog", catalog]);
+
+        Assert.Equal(1, code);
+        Assert.Empty(backend.Calls);
+        Assert.Empty(stdout);
+        Assert.Contains("template 'azure/no-such-template' is not in the template library", stderr);
+        Assert.Contains(App, stderr);
+    }
+
+    [Fact]
+    public async Task A_template_library_that_cannot_be_read_is_reported_once_for_the_whole_set()
+    {
+        var set = await CreateSetAsync();
+        var catalog = Path.Combine(_temp, "catalog");
+        CliTests.CopyDirectory(Catalog, catalog);
+        Directory.Delete(Path.Combine(catalog, "templates"), recursive: true);
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunAsync(backend, ["release", "deploy", set, "--env", Environment, "--catalog", catalog]);
+
+        Assert.Equal(1, code);
+        Assert.Empty(backend.Calls);
+        Assert.Equal(1, stderr.Split("template directory not found").Length - 1);
+    }
+
+    [Fact]
     public async Task Preview_walks_the_same_order_and_creates_nothing()
     {
         var set = await CreateSetAsync();
@@ -144,6 +182,7 @@ public sealed class ReleaseDeployCliTests : IDisposable
     [InlineData("release", "deploy", "s.yaml", "--env")]
     [InlineData("release", "deploy", "a.yaml", "b.yaml", "--env", "e.yaml", "--catalog", "c")]
     [InlineData("release", "deploy", "s.yaml", "--env", "e.yaml", "--catalog", "c", "--json")]
+    [InlineData("release", "deploy", "s.yaml", "--env", "e.yaml", "--catalog", "c", "--bogus")]
     public async Task Usage_errors_exit_2_and_print_the_usage(params string[] args)
     {
         var (code, _, stderr) = await RunAsync(new RecordingBackend(), args);

@@ -9,6 +9,8 @@ namespace jd.cli.tests;
 /// </summary>
 internal sealed class AzureCli : IDisposable
 {
+    private const string RunVariable = "JD_AZURE_TESTS";
+
     private static readonly string[] RequiredVariables = ["ARM_CLIENT_ID", "ARM_CLIENT_SECRET", "ARM_TENANT_ID", "ARM_SUBSCRIPTION_ID"];
 
     private readonly string _configDirectory;
@@ -21,9 +23,16 @@ internal sealed class AzureCli : IDisposable
 
     public string Subscription { get; }
 
-    /// <summary>Fails with a message naming the missing variables; there is no fallback to an ambient <c>az</c> login.</summary>
+    /// <summary>Fails unless started by <c>tools/verify.sh --azure</c>, and with a message naming the missing variables; there is no fallback to an ambient <c>az</c> login.</summary>
     public static AzureCli Login()
     {
+        // tools/verify.sh --azure sets this and serialises Azure runs (one free-tier Cosmos account per subscription); a plain
+        // 'dotnet test' with the ARM_* identity in the environment must not reach Azure.
+        if (System.Environment.GetEnvironmentVariable(RunVariable) != "1")
+        {
+            throw new InvalidOperationException($"The Azure tests create real resources and must be started with tools/verify.sh --azure (it sets {RunVariable}=1 and allows one run at a time).");
+        }
+
         var values = RequiredVariables.ToDictionary(name => name, name => System.Environment.GetEnvironmentVariable(name));
         var missing = values.Where(v => string.IsNullOrEmpty(v.Value)).Select(v => v.Key).ToList();
         if (missing.Count > 0)

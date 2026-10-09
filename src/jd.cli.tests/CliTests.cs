@@ -273,7 +273,7 @@ public sealed class CliTests : IDisposable
         Assert.Contains("template directory not found", stderr);
     }
 
-    private static void CopyDirectory(string from, string to)
+    internal static void CopyDirectory(string from, string to)
     {
         foreach (var file in Directory.EnumerateFiles(from, "*", SearchOption.AllDirectories))
         {

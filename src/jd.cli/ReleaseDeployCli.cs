@@ -31,7 +31,7 @@ internal static class ReleaseDeployCli
             return UsageError;
         }
 
-        problem = Unreadable(options) ?? (backend is null ? Cli.BackendSettingsProblem(environmentVariable) : null);
+        problem = Arguments.Unreadable(options.Set, options.Environment, options.Catalog) ?? (backend is null ? Cli.BackendSettingsProblem(environmentVariable) : null);
         if (problem is not null)
         {
             stderr.WriteLine($"jd: {problem}");
@@ -108,64 +108,26 @@ internal static class ReleaseDeployCli
             + (notStarted.Count == 0 ? "0 not started." : $"{notStarted.Count.ToString(CultureInfo.InvariantCulture)} not started ({string.Join(", ", notStarted)}).");
     }
 
-    private static string? Unreadable(Options options)
-    {
-        if (!File.Exists(options.Set))
-        {
-            return $"cannot read '{options.Set}': not found or not a file.";
-        }
-
-        if (!File.Exists(options.Environment))
-        {
-            return $"cannot read '{options.Environment}': not found or not a file.";
-        }
-
-        return Directory.Exists(options.Catalog) ? null : $"cannot read '{options.Catalog}': not found or not a directory.";
-    }
-
     private static (Options? Options, string Problem) Parse(string[] args)
     {
-        string? environment = null, catalog = null;
-        var dryRun = false;
-        var positional = new List<string>();
-        for (var i = 0; i < args.Length; i++)
+        var (scanned, problem) = Arguments.Scan(args, 0);
+        if (scanned is null)
         {
-            switch (args[i])
-            {
-                case "--preview":
-                    dryRun = true;
-                    break;
-                case "--env" or "--catalog":
-                    if (i + 1 == args.Length)
-                    {
-                        return (null, $"{args[i]} needs a value.");
-                    }
-
-                    if (args[i++] == "--env")
-                    {
-                        environment = args[i];
-                    }
-                    else
-                    {
-                        catalog = args[i];
-                    }
-
-                    break;
-                case var option when option.StartsWith("--", StringComparison.Ordinal):
-                    return (null, $"unknown option '{option}'.");
-                default:
-                    positional.Add(args[i]);
-                    break;
-            }
+            return (null, problem);
         }
 
-        if (positional.Count != 1)
+        if (scanned.Json)
+        {
+            return (null, "release deploy has no --json option.");
+        }
+
+        if (scanned.Positional.Count != 1)
         {
             return (null, "expected exactly one release set.");
         }
 
-        return environment is null || catalog is null
+        return scanned.Environment is null || scanned.Catalog is null
             ? (null, "release deploy needs --env and --catalog.")
-            : (new Options(positional[0], environment, catalog, dryRun), string.Empty);
+            : (new Options(scanned.Positional[0], scanned.Environment, scanned.Catalog, scanned.DryRun), string.Empty);
     }
 }
