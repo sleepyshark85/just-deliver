@@ -178,6 +178,39 @@ public class CatalogParserTests
         Assert.Empty(result.Errors);
     }
 
+    [Theory]
+    [InlineData("set:\n  a:\n    b: 1\n  a.b: 2", "set.a")]
+    [InlineData("default: { x.y: 1, x.y.z: 2 }", "default.x.y")]
+    public async Task A_policy_whose_own_paths_overlap_is_an_error(string body, string location)
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {{ template: t/x }}\n{body}\n"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("p.yaml", location), (error.File, error.Location));
+        Assert.Contains("overlaps", error.Message);
+    }
+
+    [Fact]
+    public async Task A_bare_runtime_path_is_rejected()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { kind: runtime }\nset: { runtime: 1 }\n"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("p.yaml", "set.runtime"), (error.File, error.Location));
+    }
+
+    [Fact]
+    public async Task A_mapping_must_match_a_type_or_a_kind()
+    {
+        const string body = "nodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: x\n";
+        var neither = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ class: standard }}\n{body}"));
+        var runtime = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ kind: runtime, runtime: container-app }}\n{body}"));
+
+        var error = Assert.Single(neither.Errors);
+        Assert.Equal(("m.yaml", "match"), (error.File, error.Location));
+        Assert.Empty(runtime.Errors);
+    }
+
     [Fact]
     public async Task Invalid_yaml_is_an_error()
     {

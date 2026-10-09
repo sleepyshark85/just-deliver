@@ -60,6 +60,7 @@ public static class CatalogParser
         CheckUnique(typeDocuments, "ResourceType", errors);
         CheckUnique(policyDocuments, "Policy", errors);
         CheckMappingTypes(mappings, typeDocuments, errors);
+        CheckMappingMatches(mappings, errors);
         CheckPolicyScopes(policies, errors);
         CheckExportsContract(mappings, types, errors);
 
@@ -157,6 +158,18 @@ public static class CatalogParser
             var kind = criteria.GetValueOrDefault(MatchCriteria.KindKey);
             void Fail(string location, string message) => errors.Add(new LoadError(policy.Source, location, message));
 
+            // Inside one policy, a path and one of its sub-paths would make the result depend on application order.
+            foreach (var (field, entries) in new[] { ("set", policy.Set), ("default", policy.Default) })
+            {
+                foreach (var outer in entries.Keys.Order(StringComparer.Ordinal))
+                {
+                    foreach (var inner in entries.Keys.Order(StringComparer.Ordinal).Where(k => k.StartsWith(outer + ".", StringComparison.Ordinal)))
+                    {
+                        Fail($"{field}.{outer}", $"overlaps '{inner}' in the same policy; give one of them.");
+                    }
+                }
+            }
+
             if (kind is not null && kind != MatchCriteria.RuntimeKind)
             {
                 Fail("match.kind", $"'{kind}' is not a policy scope; the only 'kind' a policy can match is '{MatchCriteria.RuntimeKind}'.");
@@ -189,6 +202,15 @@ public static class CatalogParser
                     }
                 }
             }
+        }
+    }
+
+    // A mapping with neither would match every type and skip the exports contract check.
+    private static void CheckMappingMatches(List<Mapping> mappings, List<LoadError> errors)
+    {
+        foreach (var mapping in mappings.Where(m => !m.Match.Criteria.ContainsKey(MatchCriteria.TypeKey) && !m.Match.Criteria.ContainsKey(MatchCriteria.KindKey)))
+        {
+            errors.Add(new LoadError(mapping.Source, "match", $"must have '{MatchCriteria.TypeKey}' (a requirement mapping) or '{MatchCriteria.KindKey}' (a runtime mapping)."));
         }
     }
 
