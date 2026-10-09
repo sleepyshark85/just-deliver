@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- The workload format is part of the code, so its schema ships inside the assembly. -->
+  <ItemGroup>
+    <EmbeddedResource Include="../../schemas/workload.schema.json" LogicalName="schemas/workload.schema.json" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="YamlDotNet" />

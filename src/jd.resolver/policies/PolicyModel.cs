@@ -14,7 +14,11 @@ public enum Layer
 }
 
 /// <summary>Where a config field's value came from: the catalog file and its rule (the mapping file, or the policy name).</summary>
-public sealed record Provenance(string Source, string Rule, Layer Layer);
+public sealed record Provenance(string Source, string Rule, Layer Layer)
+{
+    /// <summary>The one-line form used by the graph JSON and the preview listing; the file is left out when it is the rule itself (mappings).</summary>
+    public string Describe() => Source == Rule ? $"{Layer}: {Rule}" : $"{Layer}: {Rule} ({Source})";
+}
 
 // Provenance: one entry per leaf config field, keyed by dotted path (consistencyPolicy.level); an array is one leaf.
 public sealed record ResolvedNode(

@@ -4,6 +4,8 @@
     <Project Path="samples/web/web.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/jd.cli/jd.cli.csproj" />
+    <Project Path="src/jd.cli.tests/jd.cli.tests.csproj" />
     <Project Path="src/jd.core/jd.core.csproj" />
     <Project Path="src/jd.definitionvalidator/jd.definitionvalidator.csproj" />
     <Project Path="src/jd.definitionvalidator.tests/jd.definitionvalidator.tests.csproj" />
