@@ -128,7 +128,7 @@ internal static class EnvCli
             return (null, args.Length == 0 ? "env needs a command: up." : $"unknown env command '{args[0]}'.");
         }
 
-        string? catalog = null, output = null, baseDescriptor = null, region = null;
+        var values = new Dictionary<string, string>();
         var force = false;
         var positional = new List<string>();
         for (var i = 1; i < args.Length; i++)
@@ -144,8 +144,8 @@ internal static class EnvCli
                         return (null, $"{args[i]} needs a value.");
                     }
 
-                    var value = args[i + 1];
-                    _ = args[i++] switch { "--catalog" => catalog = value, "--out" => output = value, "--base" => baseDescriptor = value, _ => region = value };
+                    values[args[i]] = args[i + 1];
+                    i++;
                     break;
                 case var option when option.StartsWith("--", StringComparison.Ordinal):
                     return (null, $"unknown option '{option}'.");
@@ -160,8 +160,8 @@ internal static class EnvCli
             return (null, "expected exactly one definition file.");
         }
 
-        return catalog is null || output is null
-            ? (null, "env up needs --catalog and --out.")
-            : (new Options(positional[0], catalog, output, baseDescriptor, region, force), string.Empty);
+        return values.TryGetValue("--catalog", out var catalog) && values.TryGetValue("--out", out var output)
+            ? (new Options(positional[0], catalog, output, values.GetValueOrDefault("--base"), values.GetValueOrDefault("--region"), force), string.Empty)
+            : (null, "env up needs --catalog and --out.");
     }
 }

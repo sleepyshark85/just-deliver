@@ -201,6 +201,23 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   state location would lose track of stacks between runs. Optional: `PULUMI_HOME`, `JD_SCRATCH_DIR`. The orchestrator
   refuses a graph whose catalog version or environment differs from the catalog and environment it was given.
 
+### Substrate (`jd env up`)
+
+An environment's substrate is provisioned by the same path as a workload's infrastructure: `Resolver.ResolveSubstrate` resolves an
+**environment definition** (substrate requirements, matched by catalog mappings like workload requirements; the definition's name
+stands for the workload and it has no runtime, so workload-scope policies add nothing) and the orchestrator deploys the graph.
+There is no second resolution or deploy path. Because Azure allows one free-tier Cosmos account per subscription there are two
+layers: `shared` (once per subscription: resource group, Log Analytics workspace with a daily cap, the Cosmos account with free
+tier and `totalThroughputLimit: 1000`) and one definition per environment on top of the shared descriptor (`--base`): resource
+group, Container Apps environment (Consumption) on the shared workspace, and a Cosmos SQL database with 400 RU/s shared throughput
+in the shared account. Two environments use 800 of the 1,000 free RU/s. These values live in the catalog mappings, not in code.
+
+After the deploy, `DescriptorComposer` evaluates the definition's `values` (each an expression over `${resource.<id>.<export>}`):
+an export is evaluated with its requirement's node outputs (`NodeReport.Outputs`, secrets and nulls excluded), which makes
+`${resource.…}` resolve. The values are merged into the base descriptor's (new keys only), and the result is validated with the
+descriptor loader before it is written. The same composition runs once **before** the deploy with the values still pending, so
+every error that does not need an output is found while nothing exists yet.
+
 ### Chaining stacks
 
 Provision stack A → read `UpResult.Outputs` → `SetConfigAsync` into stack B → provision B. Alternative:

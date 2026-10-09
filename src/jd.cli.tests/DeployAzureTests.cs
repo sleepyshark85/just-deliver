@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using jd.bp.pulumi;
 using jd.core.bp;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,7 +40,7 @@ public sealed class DeployAzureTests : IDisposable
     {
         var subscription = System.Environment.GetEnvironmentVariable("ARM_SUBSCRIPTION_ID")
             ?? throw new InvalidOperationException($"ARM_SUBSCRIPTION_ID is not set, so resource group {ResourceGroup} could not be checked or deleted.");
-        var exists = Az($"group exists --name {ResourceGroup} --subscription {subscription}");
+        var exists = AzureCli.Run($"group exists --name {ResourceGroup} --subscription {subscription}");
         if (exists.Code == 0 && exists.Output.Trim() == "false")
         {
             return;
@@ -52,22 +51,11 @@ public sealed class DeployAzureTests : IDisposable
             throw new InvalidOperationException($"Could not check resource group {ResourceGroup}: {exists.Error}");
         }
 
-        var delete = Az($"group delete --name {ResourceGroup} --subscription {subscription} --yes");
+        var delete = AzureCli.Run($"group delete --name {ResourceGroup} --subscription {subscription} --yes");
         if (delete.Code != 0)
         {
             throw new InvalidOperationException($"Could not delete resource group {ResourceGroup}; run tools/azure/cleanup.sh --yes. {delete.Error}");
         }
-    }
-
-    // Both streams are read while the process runs, so a full pipe cannot block it.
-    private static (int Code, string Output, string Error) Az(string arguments)
-    {
-        using var process = Process.Start(new ProcessStartInfo("az", arguments) { RedirectStandardOutput = true, RedirectStandardError = true })
-            ?? throw new InvalidOperationException("could not start az");
-        var error = process.StandardError.ReadToEndAsync();
-        var output = process.StandardOutput.ReadToEnd();
-        process.WaitForExit();
-        return (process.ExitCode, output, error.GetAwaiter().GetResult());
     }
 
     private string Write(string relative, string content)
