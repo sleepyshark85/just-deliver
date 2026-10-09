@@ -102,7 +102,9 @@ public class YamlSchemaValidator
             throw new YamlException(next.Start, next.End, MultipleDocumentsMessage);
         }
 
-        return JToken.Parse(JsonConvert.SerializeObject(yamlObject));
+        // Dates stay strings: parsed as DateTime they would be rendered in the machine's time zone, so results would differ by machine.
+        using var reader = new JsonTextReader(new StringReader(JsonConvert.SerializeObject(yamlObject))) { DateParseHandling = DateParseHandling.None };
+        return JToken.Load(reader);
     }
 
     /// <param name="rules">

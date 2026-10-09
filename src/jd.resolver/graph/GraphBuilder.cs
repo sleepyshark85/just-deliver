@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using jd.resolver.catalog;
@@ -25,25 +26,11 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
     public ResolvedGraph Build(PolicyResult policy)
     {
         var errors = new List<LoadError>(policy.Errors);
-        var exports = policy.Requirements.ToDictionary(r => r.Id, r => r.Exports);
-        ResolvedGraph Result(IEnumerable<GraphNode> nodes) =>
-            new(policy.CatalogVersion, environment.Name, policy.WorkloadName, nodes.ToList(), exports, errors);
-
+        var exports = policy.Requirements.OrderBy(r => r.Id, StringComparer.Ordinal).ToDictionary(r => r.Id, r => r.Exports);
         var entries = policy.Requirements.SelectMany(r => r.Nodes.Select(n => (Scope: r.Id, Node: n)))
             .Concat(policy.WorkloadNodes.Select(n => (Scope: WorkloadScope, Node: n)))
             .Select(e => (e.Scope, e.Node, Id: $"{policy.WorkloadName}/{environment.Name}/{e.Scope}/{e.Node.Name}"))
             .ToList();
-
-        // '/' to '-' can map two ids onto one stack (requirement 'a-b' node 'c' and requirement 'a' node 'b-c'); stacks must be unique.
-        foreach (var group in entries.GroupBy(e => Stack(e.Id)).Where(g => g.Count() > 1))
-        {
-            errors.Add(new LoadError("(graph)", group.Key, $"nodes {string.Join(", ", group.Select(e => $"'{e.Id}'"))} would share the stack '{group.Key}'; rename a requirement id or node."));
-        }
-
-        if (errors.Count > policy.Errors.Count)
-        {
-            return Result([]);
-        }
 
         var drafts = entries
             .Select(e => Analyse(e.Scope, e.Node, e.Id, entries.Where(x => x.Scope == e.Scope).ToDictionary(x => x.Node.Name, x => x.Id), errors))
@@ -58,10 +45,12 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
                 draft.Node.Config, draft.Node.Provenance, Hash(draft.Node), draft.DependsOn, draft.DependsOnRuntime));
         }
 
-        return Result(nodes);
+        return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, nodes, exports, errors);
     }
 
-    private static string Stack(string id) => id.Replace('/', '-');
+    // Pulumi stack names allow [A-Za-z0-9_.-]. Ids contain no '.' or '_' (names are kebab, scopes are requirement ids or
+    // '@workload'), so this is one-to-one and stacks are unique by construction.
+    private static string Stack(string id) => id.Replace('/', '.').Replace('@', '_');
 
     // Finds a node's dependencies from its pending references and applies the security check to its environment reads.
     private Draft Analyse(string scope, ResolvedNode node, string id, Dictionary<string, string> idsInScope, List<LoadError> errors)
@@ -97,7 +86,8 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
                 }
                 else
                 {
-                    Fail($"field '{field}' references node '{reference.Target}', which is not in scope.");
+                    // The evaluator rejects names outside the scope it was given, which is this node's scope.
+                    throw new UnreachableException($"node '{id}' references '{reference.Target}', which the evaluator should have rejected.");
                 }
             }
         }
@@ -122,7 +112,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
         var order = new List<string>();
         while (ready.Count > 0)
         {
-            var id = ready.Min!;
+            var id = ready.Min ?? throw new UnreachableException("the loop runs only while ready is not empty");
             ready.Remove(id);
             order.Add(id);
             foreach (var dependent in drafts.Values.Where(d => d.DependsOn.Contains(id)))

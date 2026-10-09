@@ -22,6 +22,8 @@ public static class CatalogParser
 
     private static readonly YamlSchemaValidator Validator = new();
 
+    private static readonly Regex NodeNamePattern = new("^[a-z]([a-z0-9-]*[a-z0-9])?$", RegexOptions.CultureInvariant);
+
     // Valid is false when the file failed its schema. Such a file still counts toward the cross-file checks
     // that only need its kind or name, so one mistake is not reported a second time as a missing or undeclared item.
     private sealed record Document(string Source, string Kind, JObject Body, bool Valid);
@@ -62,6 +64,8 @@ public static class CatalogParser
         CheckMappingTypes(mappings, typeDocuments, errors);
         CheckMappingMatches(mappings, errors);
         CheckPolicyScopes(policies, errors);
+        CheckPolicyPaths(policies, errors);
+        CheckNodeNames(mappings, policies, errors);
         CheckExportsContract(mappings, types, errors);
 
         if (errors.Count > 0)
@@ -149,6 +153,39 @@ public static class CatalogParser
         }
     }
 
+    // Inside one policy, a path and one of its sub-paths would make the result depend on application order.
+    private static void CheckPolicyPaths(List<Policy> policies, List<LoadError> errors)
+    {
+        foreach (var policy in policies)
+        {
+            foreach (var (field, entries) in new[] { ("set", policy.Set), ("default", policy.Default) })
+            {
+                foreach (var outer in entries.Keys.Order(StringComparer.Ordinal))
+                {
+                    foreach (var inner in entries.Keys.Order(StringComparer.Ordinal).Where(k => k.StartsWith(outer + ".", StringComparison.Ordinal)))
+                    {
+                        errors.Add(new LoadError(policy.Source, $"{field}.{outer}", $"overlaps '{inner}' in the same policy; give one of them."));
+                    }
+                }
+            }
+        }
+    }
+
+    // Node names become parts of graph node ids and backend stack names, so they are lowercase kebab. Enforced here, not in the
+    // schema: the schema validator ignores the propertyNames keyword.
+    private static void CheckNodeNames(List<Mapping> mappings, List<Policy> policies, List<LoadError> errors)
+    {
+        var named = mappings.Select(m => (m.Source, Field: "nodes", Names: m.Nodes.Keys))
+            .Concat(policies.Select(p => (p.Source, Field: "add", Names: p.Add.Keys)));
+        foreach (var (source, field, names) in named)
+        {
+            foreach (var name in names.Where(n => !NodeNamePattern.IsMatch(n)))
+            {
+                errors.Add(new LoadError(source, $"{field}.{name}", $"'{name}' is not a valid node name; use lowercase letters, digits and hyphens, starting with a letter and not ending in a hyphen."));
+            }
+        }
+    }
+
     // Every policy must apply to node scope or workload scope (resolver.md, Policy scope); one that fits neither would silently do nothing.
     private static void CheckPolicyScopes(List<Policy> policies, List<LoadError> errors)
     {
@@ -158,17 +195,6 @@ public static class CatalogParser
             var kind = criteria.GetValueOrDefault(MatchCriteria.KindKey);
             void Fail(string location, string message) => errors.Add(new LoadError(policy.Source, location, message));
 
-            // Inside one policy, a path and one of its sub-paths would make the result depend on application order.
-            foreach (var (field, entries) in new[] { ("set", policy.Set), ("default", policy.Default) })
-            {
-                foreach (var outer in entries.Keys.Order(StringComparer.Ordinal))
-                {
-                    foreach (var inner in entries.Keys.Order(StringComparer.Ordinal).Where(k => k.StartsWith(outer + ".", StringComparison.Ordinal)))
-                    {
-                        Fail($"{field}.{outer}", $"overlaps '{inner}' in the same policy; give one of them.");
-                    }
-                }
-            }
 
             if (kind is not null && kind != MatchCriteria.RuntimeKind)
             {

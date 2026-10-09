@@ -199,6 +199,33 @@ public class CatalogParserTests
         Assert.Equal(("p.yaml", "set.runtime"), (error.File, error.Location));
     }
 
+    [Theory]
+    [InlineData("Db")]
+    [InlineData("my_node")]
+    [InlineData("a-")]
+    [InlineData("1a")]
+    [InlineData("a.b")]
+    [InlineData("a@b")]
+    public async Task Node_names_in_mappings_and_policy_adds_must_be_lowercase_kebab(string name)
+    {
+        var mapping = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ kind: runtime }}\nnodes:\n  \"{name}\":\n    template: t/x\n    config: {{}}\nexports: {{}}\n"));
+        var policy = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {{ kind: runtime }}\nadd:\n  \"{name}\":\n    template: t/x\n    config: {{}}\n"));
+
+        var mappingError = Assert.Single(mapping.Errors);
+        Assert.Equal(("m.yaml", $"nodes.{name}"), (mappingError.File, mappingError.Location));
+        Assert.Contains("not a valid node name", mappingError.Message);
+        var policyError = Assert.Single(policy.Errors);
+        Assert.Equal(("p.yaml", $"add.{name}"), (policyError.File, policyError.Location));
+    }
+
+    [Fact]
+    public async Task Kebab_node_names_load()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime }\nnodes:\n  a:\n    template: t/x\n    config: {}\n  app-insights-2:\n    template: t/x\n    config: {}\nexports: {}\n"));
+
+        Assert.Empty(result.Errors);
+    }
+
     [Fact]
     public async Task A_mapping_must_match_a_type_or_a_kind()
     {

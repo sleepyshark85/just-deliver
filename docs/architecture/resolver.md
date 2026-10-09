@@ -264,7 +264,7 @@ Every invalid expression in a string is reported (file, location, message) and t
 
 `GraphBuilder` turns the policy result into the graph (`jd.resolver.graph`). Pure and deterministic: the same inputs
 give a byte-identical graph. It carries the catalog version, environment name, workload name, the nodes, and each
-requirement's exports (by requirement id, `Resolved` or `Pending`). Its `Errors` are the policy step's errors plus
+requirement's exports (by requirement id in ordinal order, `Resolved` or `Pending`). Its `Errors` are the policy step's errors plus
 graph errors; the graph is usable only when `Errors` is empty.
 
 Per node:
@@ -272,13 +272,13 @@ Per node:
 | Field | Meaning |
 |---|---|
 | id | `<workload>/<env>/<scope>/<node>`. Scope is the requirement's effective id, or `@workload` for nodes added by workload-scope policies (requirement ids cannot contain `@`). |
-| stack | The id with `/` replaced by `-`: one backend stack per node, so workloads never share a stack. All parts are lowercase kebab, but `a-b`/`c` and `a`/`b-c` would give the same name, so two ids mapping to one stack is an error. |
+| stack | The id with `/` replaced by `.` and `@` by `_` (Pulumi stack names allow `[A-Za-z0-9_.-]`), for example `shop.dev.orders.database` and `shop.dev._workload.appinsights`: one backend stack per node, so workloads never share a stack. Unique by construction: ids contain no `.` or `_`, and `_workload` cannot be a requirement id. Node names (mapping `nodes:` keys and policy `add:` keys) must match `^[a-z]([a-z0-9-]*[a-z0-9])?$`; the catalog loader enforces it in code, since the schema validator ignores `propertyNames`. Length limits of the backend are the adapter's concern. |
 | scope, name, template, kind | As expanded (`kind`: `create` or `grant`). |
 | config, provenance | Values (`Resolved` or `Pending`) and where each leaf came from. |
 | depends-on | Ids of nodes in the same scope referenced by a pending `${node.output}`, sorted. |
 | runtime dependency | `true` when the config references `runtime.*`. The runtime node arrives with the runtime mapping (S15); until then this is a reserved dependency, not a node. |
 | phase | `infrastructure` or `after-runtime`, derived (see [Engine rules](#engine-rules-generic-code-written-once)). |
-| hash | Lowercase hex SHA-256 of the UTF-8 compact JSON `{"template":…,"kind":"create"\|"grant","config":…}`, where config is the canonical form below. |
+| hash | Lowercase hex SHA-256 of the UTF-8 bytes of the JSON object `{"template":…,"kind":"create"\|"grant","config":…}` in that key order, written by Newtonsoft `JToken.ToString(Formatting.None)` with default string escaping; config is the canonical form below. YAML date-like values stay strings, so the hash does not depend on the machine's time zone. |
 
 **Canonical config** (`ConfigJson`): objects with keys in ordinal order, arrays in order, non-string scalars as
 written, a resolved string as its value, a pending string as its original text. Changing this form changes every

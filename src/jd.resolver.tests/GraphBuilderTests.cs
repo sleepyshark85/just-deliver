@@ -53,30 +53,32 @@ public class GraphBuilderTests
     {
         var graph = await BuildAsync(
             N("n", "k: 1"),
-            "  - type: sqldb\n    id: orders\n  - type: sqldb\n    id: users\n",
+            "  - type: sqldb\n    id: users\n  - type: sqldb\n    id: orders\n",
             "kind: Policy\nname: pol\nreason: r\nmatch: { kind: runtime }\nadd:\n  extra:\n    template: t/extra\n    config: {}\n");
 
         Assert.Empty(graph.Errors);
         Assert.Equal(["7", "dev", "shop"], [graph.CatalogVersion, graph.Environment, graph.Workload]);
         var orders = Node(graph, "orders", "n");
-        Assert.Equal(("orders", "n", "shop-dev-orders-n"), (orders.Scope, orders.Name, orders.Stack));
-        Assert.Equal("shop-dev-users-n", Node(graph, "users", "n").Stack);
+        Assert.Equal(("orders", "n", "shop.dev.orders.n"), (orders.Scope, orders.Name, orders.Stack));
+        Assert.Equal("shop.dev.users.n", Node(graph, "users", "n").Stack);
         var extra = Node(graph, "@workload", "extra");
-        Assert.Equal(("@workload", "shop-dev-@workload-extra"), (extra.Scope, extra.Stack));
+        Assert.Equal(("@workload", "shop.dev._workload.extra"), (extra.Scope, extra.Stack));
         Assert.Equal(3, graph.Nodes.Select(n => n.Stack).Distinct().Count());
-        Assert.Equal(["orders", "users"], graph.Exports.Keys.Order());
+        Assert.Equal(["orders", "users"], graph.Exports.Keys);
         Assert.Equal("x", Assert.IsType<Resolved>(graph.Exports["orders"]["endpoint"]).Value);
     }
 
     [Fact]
-    public async Task Ids_that_would_share_a_stack_are_an_error()
+    public async Task Stacks_are_valid_backend_names_and_distinct_even_for_look_alike_ids()
     {
-        var graph = await BuildAsync(N("c", "k: 1") + N("b-c", "k: 1"), "  - type: sqldb\n    id: a-b\n  - type: sqldb\n    id: a\n");
+        var graph = await BuildAsync(
+            N("c", "k: 1") + N("b-c", "k: 1"),
+            "  - type: sqldb\n    id: a-b\n  - type: sqldb\n    id: a\n",
+            "kind: Policy\nname: pol\nreason: r\nmatch: { kind: runtime }\nadd:\n  extra:\n    template: t/extra\n    config: {}\n");
 
-        var error = Assert.Single(graph.Errors);
-        Assert.Contains("share the stack 'shop-dev-a-b-c'", error.Message);
-        Assert.Contains("'shop/dev/a-b/c'", error.Message);
-        Assert.Contains("'shop/dev/a/b-c'", error.Message);
+        Assert.Empty(graph.Errors);
+        Assert.All(graph.Nodes, n => Assert.Matches("^[a-z0-9._-]+$", n.Stack));
+        Assert.Equal(5, graph.Nodes.Select(n => n.Stack).Distinct().Count());
     }
 
     [Fact]
@@ -157,10 +159,22 @@ public class GraphBuilderTests
         Assert.NotEqual(baseline, Hash(await BuildAsync(N("n", "a: 1, b: x", kind: "grant"))));
     }
 
+    [Fact]
+    public async Task Date_like_config_strings_are_kept_as_written_so_the_hash_does_not_depend_on_the_time_zone()
+    {
+        var graph = await BuildAsync(N("n", "since: 2024-05-01T10:00:00+07:00"));
+
+        var node = Node(graph, "sqldb", "n");
+        Assert.Equal("2024-05-01T10:00:00+07:00", (string?)ConfigJson.ToToken(node.Config["since"]));
+        const string canonical = """{"template":"t/n","kind":"create","config":{"since":"2024-05-01T10:00:00+07:00"}}""";
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))), node.Hash);
+    }
+
     [Theory]
     [InlineData("v: '${env.host}'", "v")]
     [InlineData("nested: { v: 'a-${env.host}' }", "nested.v")]
     [InlineData("v: \"${guid(env.host, 'x')}\"", "v")]
+    [InlineData("v: \"${guid(env.host, runtime.principalId)}\"", "v")]
     public async Task A_grant_using_an_environment_path_that_is_not_grantable_is_an_error(string config, string field)
     {
         var graph = await BuildAsync(N("g", config, kind: "grant"));

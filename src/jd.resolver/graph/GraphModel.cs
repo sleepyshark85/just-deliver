@@ -16,7 +16,8 @@ public enum Phase
 }
 
 // Id is <workload>/<env>/<scope>/<node>; scope is the requirement's effective id, or GraphBuilder.WorkloadScope.
-// Stack is the id with '/' replaced by '-': one backend stack per node.
+// Stack is the id with '/' replaced by '.' and '@' by '_' (Pulumi stack names allow [A-Za-z0-9_.-]): one backend stack
+// per node, unique because ids contain neither '.' nor '_'.
 // Hash is lowercase hex SHA-256 of the node's template, kind and canonical config (ConfigJson).
 // DependsOn holds the ids of the nodes whose outputs this node references, sorted. DependsOnRuntime means it references
 // runtime.*; the runtime node itself arrives with the runtime mapping.
