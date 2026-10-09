@@ -64,6 +64,7 @@ Dependencies point inward. Inner layers know nothing about Pulumi, Azure or the 
   `AzureCli.Login` throws unless `JD_AZURE_TESTS=1`, which the script sets, so a plain `dotnet test` (even with the `ARM_*` identity
   in the environment) never reaches Azure. The script also holds an exclusive lock (`${XDG_RUNTIME_DIR:-/tmp}/just-deliver-azure.lock`)
   and fails fast when another Azure run is in progress: the subscription has one free-tier Cosmos account, so two runs would collide.
+  The lock is per host and per user; a run from another machine (or a future CI job) on the same subscription is not covered.
   Agents run the default gate (`tools/verify.sh`) and leave `--azure` to the lead unless told otherwise.
 
 ## 6. Azure and the free tier

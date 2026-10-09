@@ -123,9 +123,9 @@ Exit codes are the same as above (a manifest, set or `--out` path problem is 2; 
 
 ### `jd release deploy`
 
-- Any error before the first node (a modified set, a workload that does not resolve, a graph the templates do not fit) is
-  reported with the set and the workload (`<set.yaml>#<workload>: location: message`), every workload's errors in one pass,
-  and nothing is created (exit 1).
+- Any error before the first node stops the run and nothing is created (exit 1). A workload that does not resolve is
+  reported with the set and the workload (`<set.yaml>#<workload>: location: message`), every workload's errors in one pass;
+  a graph the templates do not fit names the node (`<workload>/<env>/<scope>/<name>`) or the template file.
 - Output per workload: a `workload <name>` line, then the `jd deploy` node lines (`deployed`, `unchanged`, `waiting for
   runtime` for grants and anything else that needs the runtime). The last line summarises:
   `release <label> on <environment>: <n> deployed, <n> unchanged, <n> failed, <n> not started (<names>).`
