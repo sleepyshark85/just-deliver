@@ -205,19 +205,30 @@ public class RuntimeVariablesTests
         var error = Assert.Single(graph.Errors);
         Assert.Contains("'alpha'", error.Message);
         Assert.Contains("'zeta'", error.Message);
-        Assert.Contains("'variables.X'", error.Message);
+        Assert.Contains("'runtime.variables.X'", error.Message);
+        Assert.Equal("set.runtime.variables.X", error.Location);
     }
 
     [Theory]
-    [InlineData("set: { runtime.variables: x }\n", "set.variables")]
-    [InlineData("default: { runtime.variables: x }\n", "default.variables")]
+    [InlineData("set: { runtime.variables: x }\n", "set.runtime.variables")]
+    [InlineData("default: { runtime.variables: x }\n", "default.runtime.variables")]
     public async Task A_policy_cannot_give_the_whole_variables_field_but_its_keys_are_fine(string body, string location)
     {
         var graph = await ResolveAsync("    A: a\n", [WorkloadPolicy("whole", body)]);
 
         var error = Assert.Single(graph.Errors);
         Assert.Equal(location, error.Location);
-        Assert.Contains("give its keys ('variables.<NAME>')", error.Message);
+        Assert.Contains("give its keys", error.Message);
+    }
+
+    [Fact]
+    public async Task A_policy_cannot_give_a_path_below_a_variable()
+    {
+        var graph = await ResolveAsync("    A: a\n", [WorkloadPolicy("deep", "set: { runtime.variables.NEW.deep: x }\n")]);
+
+        var error = Assert.Single(graph.Errors);
+        Assert.Equal("set.runtime.variables.NEW.deep", error.Location);
+        Assert.Contains("a single value", error.Message);
     }
 
     [Fact]
@@ -226,7 +237,46 @@ public class RuntimeVariablesTests
         var graph = await ResolveAsync(string.Empty, mapping: Mapping(", vars: { fn::entries: workload.variables }"));
 
         var error = Assert.Single(graph.Errors);
-        Assert.Contains("fn::entries (source 'workload.variables') is not valid here", error.Message);
+        Assert.Contains("fn::entries is not valid here", error.Message);
+    }
+
+    [Theory]
+    [InlineData("requirement mapping")]
+    [InlineData("policy add")]
+    [InlineData("policy set")]
+    public async Task A_literal_map_as_the_source_of_entries_is_an_error_anywhere(string where)
+    {
+        const string literal = "{ fn::entries: { A: x } }";
+        var graph = where switch
+        {
+            "requirement mapping" => await ResolveAsync(string.Empty, mapping: Mapping($", vars: {literal}")),
+            "policy add" => await ResolveAsync(string.Empty, [WorkloadPolicy("pol", $"add:\n  extra:\n    template: t/x\n    config: {{ vars: {literal} }}\n")]),
+            _ => await ResolveAsync(string.Empty, [WorkloadPolicy("pol", $"set: {{ runtime.label: {literal} }}\n")]),
+        };
+
+        var error = Assert.Single(graph.Errors);
+        Assert.Contains("fn::entries is not valid here", error.Message);
+    }
+
+    [Fact]
+    public async Task A_variable_named_like_the_form_is_an_ordinary_variable()
+    {
+        var graph = await ResolveAsync("    \"fn::entries\": x\n");
+
+        Assert.Empty(graph.Errors);
+        Assert.Equal("x", Value(Variables(Runtime(graph)).Properties["fn::entries"]));
+    }
+
+    [Fact]
+    public async Task A_grant_node_in_the_runtime_mapping_cannot_read_a_static_export_or_the_workload_variables()
+    {
+        string Mapping(string config) => $"kind: Mapping\nmatch: {{ kind: runtime }}\nnodes:\n  runtime:\n    template: t/runtime\n    config: {{ k: 1 }}\n  granter:\n    kind: grant\n    template: t/grant\n    config: {{ {config} }}\n";
+
+        var export = await ResolveAsync(string.Empty, runtimeMapping: Mapping("v: '${resource.sqldb.endpoint}'"));
+        var entries = await ResolveAsync("    A: a\n", runtimeMapping: Mapping("vars: { fn::entries: workload.variables }"));
+
+        Assert.Contains("a grant cannot read an export", Assert.Single(export.Errors).Message);
+        Assert.Contains("fn::entries is not valid here", Assert.Single(entries.Errors).Message);
     }
 
     [Fact]
@@ -250,8 +300,7 @@ public class RuntimeVariablesTests
         var graph = await ResolveAsync(string.Empty, runtimeMapping: RuntimeMapping.Replace("fn::entries: workload.variables", "fn::entries: workload.nope", StringComparison.Ordinal));
 
         var error = Assert.Single(graph.Errors);
-        Assert.Contains("fn::entries (source 'workload.nope') is not valid here", error.Message);
-        Assert.Contains("workload.nope", error.Message);
+        Assert.Contains("fn::entries is not valid here", error.Message);
         Assert.Contains("workload.variables", error.Message);
     }
 

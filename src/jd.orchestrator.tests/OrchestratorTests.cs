@@ -425,6 +425,7 @@ public class OrchestratorTests
             template: t/wiring
             config:
               settled: ${name('thing')}
+              label: ${name('thing')}-${resource.thing.out}
               variables:
                 fn::entries: workload.variables
         """;
@@ -475,11 +476,15 @@ public class OrchestratorTests
 
         await DeployWiringAsync(backend, "    A: lit\n");
 
-        // 'settled' has no reference, so the resolver fixes it with the node's own name; the second pass must not disagree.
+        // 'settled' has no reference, so the resolver fixes it with the node's own name; 'label' waits for an output, so the
+        // second pass evaluates name() again, and must use the same name.
         var (graph, _) = await ResolveAsync(mapping: ExportingMapping, runtimeMapping: WiringRuntimeMapping, container: "container:\n  image: reg/app:1\n");
-        var resolved = Assert.IsType<Resolved>(Assert.IsType<ConfigText>(graph.Nodes.Single(n => n.Name == "wiring").Config["settled"]).Result);
-        Assert.Equal("shop-wiring", resolved.Value);
-        Assert.Equal("shop-wiring", backend.Calls.Single(c => c.Package.StackName == "shop.dev._workload.wiring").Package.DeploymentParameters["settled"].Value);
+        var wiring = graph.Nodes.Single(n => n.Name == "wiring");
+        Assert.Equal("shop-wiring", Assert.IsType<Resolved>(Assert.IsType<ConfigText>(wiring.Config["settled"]).Result).Value);
+        Assert.IsType<Pending>(Assert.IsType<ConfigText>(wiring.Config["label"]).Result);
+        var deployed = backend.Calls.Single(c => c.Package.StackName == "shop.dev._workload.wiring").Package.DeploymentParameters;
+        Assert.Equal("shop-wiring", deployed["settled"].Value);
+        Assert.Equal("shop-wiring-pre-id-shop.dev.thing.group", deployed["label"].Value);
     }
 
     [Fact]

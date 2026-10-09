@@ -73,7 +73,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         // Mapping problems are reported against the mapping file; the prefix says which requirement exposed them.
         var found = new List<LoadError>();
         var evaluator = EvaluatorFor(owner, requirement.Id, mapping.Nodes.Keys);
-        var nodes = EvaluateNodes(mapping, _ => evaluator, null, string.Empty, found);
+        var nodes = EvaluateNodes(mapping, null, string.Empty, found, (_, _) => evaluator);
         var exports = EvaluateExports(mapping, evaluator, found);
         if (found.Count > 0)
         {
@@ -104,7 +104,8 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         }
 
         var found = new List<LoadError>();
-        var nodes = EvaluateNodes(mapping, name => EvaluatorFor(owner, name, mapping.Nodes.Keys, known), owner.Variables, ownerFile, found);
+        // A grant gets neither: a static export would be substituted here, out of the graph builder's sight, and workload input must not reach a grant.
+        var nodes = EvaluateNodes(mapping, owner.Variables, ownerFile, found, (name, kind) => EvaluatorFor(owner, name, mapping.Nodes.Keys, kind == NodeKind.Grant ? null : known));
         if (found.Count > 0)
         {
             errors.AddRange(found.Select(e => e with { Message = $"for the runtime: {e.Message}" }));
@@ -114,17 +115,16 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         return new ExpandedRuntime(mapping.Source, nodes, mapping.Probe, ownerFile);
     }
 
-    // variables are the workload's, set only for the runtime mapping: they are the source of its fn::entries forms.
+    // variables are the workload's, given only for the runtime mapping (and never to a grant): they are what its fn::entries form stands for.
     private static List<ExpandedNode> EvaluateNodes(
-        Mapping mapping, Func<string, ExpressionEvaluator> evaluatorFor, JObject? variables, string workloadFile, List<LoadError> found)
+        Mapping mapping, JObject? variables, string workloadFile, List<LoadError> found, Func<string, NodeKind, ExpressionEvaluator> evaluatorFor)
     {
         var nodes = new List<ExpandedNode>();
         foreach (var (nodeName, node) in mapping.Nodes)
         {
-            var config = node.Config.ToDictionary(c => c.Key, c => variables is null ? c.Value : WithEntriesSource(c.Value, variables));
             var problems = new List<LoadError>();
             nodes.Add(new ExpandedNode(nodeName, node.Template, node.Kind,
-                ConfigWalker.WalkConfig(config, evaluatorFor(nodeName), mapping.Source, $"nodes.{nodeName}.config", problems).Properties));
+                ConfigWalker.WalkConfig(node.Config, evaluatorFor(nodeName, node.Kind), mapping.Source, $"nodes.{nodeName}.config", problems, node.Kind == NodeKind.Grant ? null : variables).Properties));
             found.AddRange(problems.Select(e => InWorkload(e, workloadFile)));
         }
 
@@ -138,16 +138,6 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         var at = error.Location.IndexOf(marker, StringComparison.Ordinal);
         return at < 0 || workloadFile.Length == 0 ? error : error with { File = workloadFile, Location = "container.variables." + error.Location[(at + marker.Length)..] };
     }
-
-    // The source of an fn::entries form is the workload's variables; the walker then evaluates them like any other map.
-    private static JToken WithEntriesSource(JToken token, JObject variables) => token switch
-    {
-        JObject obj => new JObject(obj.Properties().Select(p => new JProperty(
-            p.Name,
-            p is { Name: ConfigWalker.EntriesKey, Value: JValue { Type: JTokenType.String } source } && (string?)source == ConfigWalker.EntriesSource ? variables.DeepClone() : WithEntriesSource(p.Value, variables)))),
-        JArray array => new JArray(array.Select(item => WithEntriesSource(item, variables))),
-        _ => token,
-    };
 
     private static Dictionary<string, EvalResult> EvaluateExports(Mapping mapping, ExpressionEvaluator evaluator, List<LoadError> found)
     {
