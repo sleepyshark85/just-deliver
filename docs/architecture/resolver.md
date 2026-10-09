@@ -225,7 +225,8 @@ unique), `values` (the descriptor's layout; each leaf an expression, normally `$
 the name `@<name>` (a workload name cannot start with `@`) in node ids, stacks and `name()` hashes: ids `@dev/dev/substrate/group`,
 stacks `_dev.dev.substrate.group`, so a workload named like the environment, with a requirement `substrate`, shares nothing with the
 substrate and a workload deploy never touches it ([ADR 0006](../decisions/0006-infra-deployed-with-app.md)). `ExpansionResult.Owner` records the owner kind
-(`Workload` or `Environment`); an environment owner has no runtime, so workload-scope policies add nothing. Its team is empty
+(`Workload` or `Environment`); an environment owner has no runtime, so workload-scope policies add nothing. In a substrate
+mapping `${workload.name}` therefore evaluates to `@<name>`; the `{workload}` naming placeholder drops the `@` through `allowed`. Its team is empty
 (`${workload.team}` is empty). The `environment` is `definition.Over(region, base)`: the definition's name and tier, the region given on the
 command line, and the **base descriptor's values and `grantable`**, so mappings read `${env.…}` of the layer below.
 

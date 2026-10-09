@@ -48,8 +48,8 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
         return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, nodes, exports, errors);
     }
 
-    // Pulumi stack names allow [A-Za-z0-9_.-]. Ids contain no '.' or '_' (names are kebab, scopes are requirement ids or
-    // '@workload'), so this is one-to-one and stacks are unique by construction.
+    // Pulumi stack names allow [A-Za-z0-9_.-]. Ids contain no '.' or '_' (names are kebab; the owner and the scope may start
+    // with '@'), so this is one-to-one and stacks are unique by construction.
     private static string Stack(string id) => id.Replace('/', '.').Replace('@', '_');
 
     // Finds a node's dependencies from its pending references and applies the security check to its environment reads.
