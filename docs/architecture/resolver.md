@@ -174,6 +174,9 @@ a node's `template` is `<provider>/<name>`.
   `scope`, the data-plane scope id of the container.
 - `options: protect: true` per protection class ([ADR 0010](../decisions/0010-replacement-protection-classes.md)).
 - Pulumi config values are strings; structured inputs (`Map<String>` tags) are passed as JSON.
+- Pulumi YAML has no loop, no map-to-list function and no `fromJSON`, so a template cannot reshape a map into the list a
+  resource wants. List-shaped inputs are built by the engine and declared as lists: `container-app` takes `variables` as
+  `List<Map<String>>`, items `{name, value}`, the shape of the container's `env`.
 - Templates declare inputs under `configuration:`, which current Pulumi reports as deprecated in favour of `config:`.
   They stay on `configuration:` because project-level `config:` cannot declare the `number` type the Log Analytics
   daily cap needs. When that changes, rename the block in each template and change the block name `TemplateLibrary`
@@ -185,7 +188,9 @@ a node's `template` is `<provider>/<name>`.
 
 The seed library: substrate `resource-group`, `log-analytics` (daily cap), `container-apps-environment`
 (Consumption only), `cosmos-account` (with a throughput hard cap), `cosmos-sql-database` (shared throughput); workload `cosmos-sql-container`,
-`cosmos-sql-role-assignment`, `application-insights`, `role-assignment`.
+`cosmos-sql-role-assignment`, `application-insights`, `role-assignment`, and the runtime template `container-app` (a Container App
+revision on Consumption with a system-assigned identity, `Multiple` active revisions and ingress on `targetPort`; size, replicas,
+image and variables are inputs; all traffic goes to the latest revision until the release flow adds traffic control).
 
 ### Runtime is a mapping too
 

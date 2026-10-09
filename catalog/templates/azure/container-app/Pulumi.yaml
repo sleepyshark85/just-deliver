@@ -1,0 +1,81 @@
+name: container-app
+runtime: yaml
+description: Provisions a Container App in a Container Apps environment, with a system-assigned identity and multiple active revisions
+
+configuration:
+  # Resource group of the container app
+  resourceGroupName:
+    type: String
+  # Azure region of the container app (that of the environment)
+  location:
+    type: String
+  # Resource ID of the Container Apps environment (output environmentId of container-apps-environment)
+  containerAppsEnvironmentId:
+    type: String
+  # Name of the container app; also the name of its container
+  containerAppName:
+    type: String
+  # Container image, public or by digest
+  image:
+    type: String
+  # Port the container listens on; ingress forwards to it
+  targetPort:
+    type: Integer
+  # Whether ingress is reachable from the internet (true) or only inside the environment (false)
+  externalIngress:
+    type: Boolean
+  # vCPU of the container
+  cpu:
+    type: Number
+  # Memory of the container, for example 0.5Gi
+  memory:
+    type: String
+  # Fewest replicas; 0 lets the app scale to zero
+  minReplicas:
+    type: Integer
+  # Most replicas
+  maxReplicas:
+    type: Integer
+  # Environment variables of the container: a list of {name, value} items, the shape of the container's env
+  # (Pulumi YAML cannot turn a name-to-value map into it, so the engine builds the list)
+  variables:
+    type: List<Map<String>>
+
+resources:
+  containerApp:
+    type: azure-native:app:ContainerApp
+    properties:
+      resourceGroupName: ${resourceGroupName}
+      location: ${location}
+      containerAppName: ${containerAppName}
+      managedEnvironmentId: ${containerAppsEnvironmentId}
+      # Consumption: no workloadProfileName.
+      identity:
+        type: SystemAssigned
+      configuration:
+        activeRevisionsMode: Multiple
+        ingress:
+          external: ${externalIngress}
+          targetPort: ${targetPort}
+          # All traffic to the latest revision for now; dark revisions and traffic control come with the release flow.
+          traffic:
+            - latestRevision: true
+              weight: 100
+      template:
+        containers:
+          - name: ${containerAppName}
+            image: ${image}
+            resources:
+              cpu: ${cpu}
+              memory: ${memory}
+            env: ${variables}
+        scale:
+          minReplicas: ${minReplicas}
+          maxReplicas: ${maxReplicas}
+
+outputs:
+  containerAppId: ${containerApp.id}
+  principalId: ${containerApp.identity.principalId}
+  latestRevisionName: ${containerApp.latestRevisionName}
+  latestRevisionFqdn: ${containerApp.latestRevisionFqdn}
+  fqdn: ${containerApp.configuration.ingress.fqdn}

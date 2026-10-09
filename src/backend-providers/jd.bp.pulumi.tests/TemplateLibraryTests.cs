@@ -61,6 +61,22 @@ public partial class TemplateLibraryTests
         }
     }
 
+    [Fact]
+    public async Task The_container_app_template_declares_its_inputs_and_outputs()
+    {
+        var library = await TemplateLibrary.LoadAsync(Templates);
+        string[] inputs = ["resourceGroupName", "location", "containerAppsEnvironmentId", "containerAppName", "image", "targetPort", "externalIngress", "cpu", "memory", "minReplicas", "maxReplicas", "variables"];
+        string[] outputs = ["containerAppId", "principalId", "latestRevisionName", "latestRevisionFqdn", "fqdn"];
+        var app = Node("app", "azure/container-app", inputs.ToDictionary(i => i, i => (ConfigValue)Text("x")));
+        // One consumer per output: a reference to an output the template does not declare is an error.
+        var consumers = outputs.Select(o => Node("c-" + o, "azure/resource-group", new() { ["resourceGroupName"] = Ref("app", o), ["location"] = Text("x"), ["tags"] = Text("x") }));
+        var incomplete = Node("incomplete", "azure/container-app", inputs.Skip(1).ToDictionary(i => i, i => (ConfigValue)Text("x")));
+
+        Assert.Empty(library.Check(Graph([app, .. consumers])));
+        var error = Assert.Single(library.Check(Graph([incomplete])));
+        Assert.Equal(("w/dev/s/incomplete", "resourceGroupName"), (error.File, error.Location));
+    }
+
     [GeneratedRegex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")]
     private static partial Regex Guid();
 
