@@ -21,7 +21,11 @@
       "Bash(az ad:*)",
       "Bash(tools/sandbox/sandbox.sh:*)",
       "Bash(./tools/sandbox/sandbox.sh:*)",
-      "Read(~/.just-deliver/**)"
+      "Read(~/.just-deliver/**)",
+      "Bash(git push origin main:*)",
+      "Bash(git push origin HEAD:main:*)",
+      "Bash(git push -u origin main:*)",
+      "Bash(git config core.hooksPath:*)"
     ]
   },
   "hooks": {
