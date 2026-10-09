@@ -1,5 +1,5 @@
 kind: Mapping
-match: { type: cosmos-sql, class: standard }
+match: { type: database, class: standard }
 # The account and the shared-throughput database are substrate (env.cosmos.*); a workload adds a container and a grant on it.
 nodes:
   container:
@@ -19,6 +19,7 @@ nodes:
       roleGuid: ${role.cosmos-data-contributor}
       roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
 exports:
+  engine: cosmos-sql                              # a literal from data: what the code is talking to
   endpoint: ${env.cosmos.endpoint}
   database: ${env.cosmos.databaseName}
   container: ${container.containerName}

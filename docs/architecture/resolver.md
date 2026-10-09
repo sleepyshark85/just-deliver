@@ -42,8 +42,8 @@ design below. They stay listed as the requirements the design answers.
 ```
 catalog/
   catalog.yaml                               # catalog version — recorded on every deployment
-  types/cosmos-sql.yaml                      # contract teams bind to
-  mappings/cosmos-sql/standard.yaml          # type + class → nodes
+  types/database.yaml                        # contract teams bind to
+  mappings/database/standard.yaml            # type + class → nodes
   policies/enforce-monitoring.yaml           # IT Ops layer
   templates/azure/cosmos-account/Pulumi.yaml # mechanics only
   naming.yaml                                # name rules per resource kind
@@ -81,15 +81,18 @@ every error (file and location inside it) in one pass.
 
 ### Type — the contract teams bind to
 
-Source of the workload schema's `type` enum (generated, not hand-maintained). Names the interface
-the code binds to (`cosmos-sql`, `postgres`), never an abstraction like `database` (C52 rule).
+Source of the workload schema's `type` enum (generated, not hand-maintained). The name is what the
+workload asks for (`database`, `cache`); the platform's mapping picks the engine, and an `engine` export
+tells the code which one it got (user decision recorded under C52; supersedes the earlier "type names
+the interface" rule). Changing the engine behind a type for an existing workload must later route to
+approval (F54).
 
 ```yaml
 kind: ResourceType
-name: cosmos-sql
-description: A container in the environment's shared Cosmos DB database, accessed through the SQL (NoSQL) API.
+name: database
+description: A database for the workload. The platform's mapping decides the engine (today a container in the environment's shared Cosmos DB, SQL API); the `engine` export tells the code which one it got.
 classes: [standard]
-exports: [endpoint, database, container]      # the only valid ${resource.<id>.*}
+exports: [engine, endpoint, database, container]   # the only valid ${resource.<id>.*}
 ```
 
 Team overrides are out of the MVP, so the format has no `overridable` block yet.
@@ -99,9 +102,9 @@ Team overrides are out of the MVP, so the format has no `overridable` block yet.
 Selected by matching criteria, never by conditionals.
 
 ```yaml
-# mappings/cosmos-sql/standard.yaml (the seed catalog)
+# mappings/database/standard.yaml (the seed catalog)
 kind: Mapping
-match: { type: cosmos-sql, class: standard }
+match: { type: database, class: standard }
 nodes:
   container:
     template: azure/cosmos-sql-container
@@ -120,6 +123,7 @@ nodes:
       roleGuid: ${role.cosmos-data-contributor}
       roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
 exports:
+  engine: cosmos-sql                              # a literal from data: what the code is talking to
   endpoint: ${env.cosmos.endpoint}
   database: ${env.cosmos.databaseName}
   container: ${container.containerName}

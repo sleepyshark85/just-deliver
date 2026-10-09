@@ -12,18 +12,18 @@ container:
     # The app authenticates with its managed identity, so only addresses are
     # injected here - never a key or connection string. The App Insights
     # connection string is not listed either: enforce-monitoring attaches it.
-    COSMOS_ENDPOINT: ${resource.cosmos-sql.endpoint}
-    COSMOS_DATABASE: ${resource.cosmos-sql.database}
-    COSMOS_CONTAINER: ${resource.cosmos-sql.container}
+    COSMOS_ENDPOINT: ${resource.database.endpoint}
+    COSMOS_DATABASE: ${resource.database.database}
+    COSMOS_CONTAINER: ${resource.database.container}
   ports:
     - port: 8080
       protocol: TCP
 
-# Declared by type only. The platform decides that "cosmos-sql" means a container in the
+# Declared by type only. The platform's mapping decides that "database" means a container in the
 # environment's Cosmos DB database, and provisions the identity and role assignment that
 # let this workload reach that container.
 #
 # Deliberately absent: monitoring. Log Analytics and Application Insights are
 # attached by the enforce-monitoring global policy, not requested by the team.
 requires:
-  - type: cosmos-sql
+  - type: database

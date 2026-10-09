@@ -213,7 +213,8 @@ public class ExpanderTests
         Assert.Equal(["access", "container"], requirement.Nodes.Select(n => n.Name).Order(StringComparer.Ordinal));
         var access = requirement.Nodes.Single(n => n.Name == "access");
         Assert.Equal(NodeKind.Grant, access.Kind);
-        Assert.Equal(["container", "database", "endpoint"], requirement.Exports.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(["container", "database", "endpoint", "engine"], requirement.Exports.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(new Resolved("cosmos-sql"), requirement.Exports["engine"]);
         Assert.IsType<Pending>(Assert.IsType<ConfigText>(access.Config["principalId"]).Result);
     }
 

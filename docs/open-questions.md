@@ -105,7 +105,8 @@ How `requires: [{type, id, class}]` plus environment, mappings and policies beco
 **Pitfalls**
 - **Overrides applied after policies** — present in the current design ([architecture/workload-definition.md](architecture/workload-definition.md)): a whitelisted override beats a compliance policy.
 - **Shallow merge, no provenance** — two policies touching one field conflict silently. Provenance per field (`{value, source, rule}`), not per stage.
-- **Over-abstraction** — `type: database` breaks when it resolves to an engine the team's driver doesn't expect. Rule: **the type names the interface the code binds to; the class names the operational shape the code cannot see.** So `type: postgres`, `class: dedicated`: abstract SKU, HA, backup, size; never the wire protocol. Affects the current schema types `database`, `cache`, `queue`.
+- **Over-abstraction** — `type: database` breaks when it resolves to an engine the team's driver doesn't expect. The earlier rule was: the type names the interface the code binds to, the class the operational shape the code cannot see (`type: postgres`, `class: dedicated`).
+  **User decision (S12a), overriding that rule:** workloads ask for `database`; the platform team's mapping decides the engine (Cosmos DB SQL API today). To keep the code honest the type exports an `engine` value (`cosmos-sql`, from the mapping's data) that the workload can read. Consequence still open: changing the engine behind a type for an existing workload is a data-moving, breaking change and must later route to approval (F54). C52 is not resolved by this.
 - **Position-based identity** — deriving names from index in `requires` destroys resources on reorder. Identity is `(workload, id, type)` (ADR 0011).
 - **Unversioned mappings** — a deployment must record the mapping version that resolved it, alongside the definition SHA (ADR 0007), or the chain isn't reproducible.
 
@@ -296,7 +297,7 @@ Residual open points: `timeout` ceiling in protected environments; verifying PIT
   2. **Add `id` and `class` to `requires` items** (C12, C13) — *applied (S01)*: `id` optional, defaults to type name, unique within workload (checked in code), pattern `^[a-z][a-z0-9-]{1,14}[a-z0-9]$`.
   3. **Add a `hooks` block** (E28, E33): `preDeploy`, `verify`, `postDeploy`, each with `command`, optional `image` (defaults to workload image for `preDeploy`), `timeout` default 10 minutes, optional tier restriction, `destructive` on `preDeploy`.
   4. *Possible:* tighten the `metadata.name` pattern, since C14's naming budget does not close.
-- C52's "type names the interface" rule may change the current `database` / `cache` / `queue` types.
+- C52's "type names the interface" rule was overridden by a user decision (S12a): `database` stays a type, the mapping picks the engine, and an `engine` export tells the code.
 
 ---
 

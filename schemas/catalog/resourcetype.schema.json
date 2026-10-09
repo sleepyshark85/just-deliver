@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/catalog/resourcetype.schema.json",
   "title": "just-deliver catalog resource type",
-  "description": "The contract development teams bind to. Names the interface the code binds to (cosmos-sql, postgres), never an abstraction such as 'database'. Unique by name across the catalog.",
+  "description": "The contract development teams bind to: the name is what the workload asks for (for example 'database'); the platform's mapping picks the engine, and an 'engine' export tells the code which one it got. Unique by name across the catalog.",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "name", "classes", "exports", "description"],

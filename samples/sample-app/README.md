@@ -17,11 +17,11 @@ failure and caches no failure: after any error the Cosmos client is dropped and 
 ## Configuration
 
 Environment variables only. The workload definition ([sample-app.yaml](../workloads/sample-app.yaml)) supplies the first
-three from the `cosmos-sql` exports; the platform's `enforce-monitoring` policy supplies the last.
+three from the `database` exports; the platform's `enforce-monitoring` policy supplies the last.
 
 | Variable | Meaning |
 |---|---|
-| `COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `COSMOS_CONTAINER` | Where the data lives. The container's partition key must be `/id` (see the `cosmos-sql` mapping). |
+| `COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `COSMOS_CONTAINER` | Where the data lives. The container's partition key must be `/id` (see the `database` mapping). |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | When set, telemetry goes to Azure Monitor; when absent, nothing is exported. |
 
 ## Run locally

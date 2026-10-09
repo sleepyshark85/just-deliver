@@ -89,7 +89,7 @@ public sealed class CliTests : IDisposable
     [Fact]
     public async Task Validate_prints_workload_rule_errors()
     {
-        var path = WriteTemp("dup.yaml", File.ReadAllText(Workload) + "  - type: cosmos-sql\n");
+        var path = WriteTemp("dup.yaml", File.ReadAllText(Workload) + "  - type: database\n");
 
         var (code, _, stderr) = await RunAsync("validate", path);
 
@@ -139,7 +139,7 @@ public sealed class CliTests : IDisposable
         // A policy-added field: the value, where it came from in the environment, and the policy that added it.
         Assert.Contains("  workspaceResourceId = /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev (from env.logAnalytics.id)   [PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)]", stdout);
         // A mapping field: its provenance names the file once.
-        Assert.Contains("  partitionKeyPath = /id   [Mapping: mappings/cosmos-sql/standard.yaml]", stdout);
+        Assert.Contains("  partitionKeyPath = /id   [Mapping: mappings/database/standard.yaml]", stdout);
         Assert.Contains("= pending: ", stdout);
         Assert.Contains("depends on: ", stdout);
     }
@@ -196,7 +196,7 @@ public sealed class CliTests : IDisposable
     [Fact]
     public async Task Preview_prints_expansion_errors_with_the_workload_file()
     {
-        var path = WriteTemp("unknown-type.yaml", File.ReadAllText(Workload).Replace("type: cosmos-sql", "type: no-such-type"));
+        var path = WriteTemp("unknown-type.yaml", File.ReadAllText(Workload).Replace("type: database", "type: no-such-type"));
 
         var (code, _, stderr) = await RunAsync("preview", path, "--env", Environment, "--catalog", Catalog);
 
@@ -214,10 +214,10 @@ public sealed class CliTests : IDisposable
 
         Assert.Equal(0, code);
         Assert.Empty(stderr);
-        Assert.Equal(["deploy just-deliver-sample-app.dev._workload.appinsights", "deploy just-deliver-sample-app.dev.cosmos-sql.container"], backend.Calls);
-        Assert.Contains("just-deliver-sample-app/dev/cosmos-sql/container: deployed (create 1, ", stdout);
+        Assert.Equal(["deploy just-deliver-sample-app.dev._workload.appinsights", "deploy just-deliver-sample-app.dev.database.container"], backend.Calls);
+        Assert.Contains("just-deliver-sample-app/dev/database/container: deployed (create 1, ", stdout);
         Assert.Contains("  create azure-native:t:T", stdout);
-        Assert.Contains("just-deliver-sample-app/dev/cosmos-sql/access: waiting for runtime (no changes, ", stdout);
+        Assert.Contains("just-deliver-sample-app/dev/database/access: waiting for runtime (no changes, ", stdout);
     }
 
     [Fact]
@@ -229,7 +229,7 @@ public sealed class CliTests : IDisposable
 
         Assert.Equal(0, code);
         Assert.All(backend.Calls, call => Assert.StartsWith("preview ", call));
-        Assert.Contains("cosmos-sql/container: previewed (create 1, ", stdout);
+        Assert.Contains("database/container: previewed (create 1, ", stdout);
     }
 
     [Fact]

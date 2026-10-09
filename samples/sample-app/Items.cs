@@ -70,7 +70,7 @@ public sealed class SharedConnection<T>(Func<T> create) : IDisposable where T : 
 /// </summary>
 public sealed class CosmosItemStore : IItemStore, IDisposable
 {
-    // The container's partition key is /id (catalog/mappings/cosmos-sql); the probe reads a document that never exists.
+    // The container's partition key is /id (catalog/mappings/database); the probe reads a document that never exists.
     private const string ProbeId = "health-probe";
 
     // The SDK can retry an unreachable endpoint for far longer than a probe may wait, so every call is bounded here.

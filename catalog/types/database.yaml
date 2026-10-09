@@ -1,0 +1,5 @@
+kind: ResourceType
+name: database
+description: A database for the workload. The platform's mapping decides the engine (today a container in the environment's shared Cosmos DB, SQL API); the `engine` export tells the code which one it got.
+classes: [standard]
+exports: [engine, endpoint, database, container]
