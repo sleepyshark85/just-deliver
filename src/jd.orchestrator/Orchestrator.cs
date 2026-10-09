@@ -3,6 +3,7 @@ using jd.core.bp;
 using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
+using jd.resolver.expansion;
 using jd.resolver.expressions;
 using jd.resolver.graph;
 
@@ -98,8 +99,10 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
                 }
 
                 var errors = new List<LoadError>();
-                var exported = ExportValues.Evaluate(
-                    graph, catalog, environment, _outputs.ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, ConfigEntry>)o.Value), includeSecrets: true, node.Id, errors);
+                // Only a node that reads an export (the runtime node) needs them, so an unrelated node never fails on another scope's export.
+                var exported = node.Config.Values.Any(ReadsExport)
+                    ? ExportValues.Evaluate(graph, catalog, environment, _outputs.ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, ConfigEntry>)o.Value), includeSecrets: true, node.Id, errors)
+                    : ExportValues.None;
                 var filler = new ConfigFiller(new ExpressionEvaluator(ContextFor(node, exported)), node.Id, SecretOutputs(node, exported));
                 var parameters = filler.Fill(node.Config);
                 errors.AddRange(filler.Errors);
@@ -163,6 +166,14 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
                 graph.WorkloadImage,
                 graph.WorkloadPort);
         }
+
+        private static bool ReadsExport(ConfigValue value) => value switch
+        {
+            ConfigText { Result: Pending pending } => pending.References.Any(r => r.Kind == ReferenceKind.Resource),
+            ConfigObject obj => obj.Properties.Values.Any(ReadsExport),
+            ConfigArray array => array.Items.Any(ReadsExport),
+            _ => false,
+        };
 
         // The ids of the deployed nodes this node may read by name: its own scope's, and the runtime.
         private IEnumerable<string> ReadableUpstream(GraphNode node) =>

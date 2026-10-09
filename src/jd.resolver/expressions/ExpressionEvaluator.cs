@@ -39,14 +39,29 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     [GeneratedRegex(@"^[a-z][a-z0-9]*$")]
     private static partial Regex FunctionNamePattern();
 
-    [GeneratedRegex(@"'[^']*'")]
-    private static partial Regex LiteralPattern();
+    /// <summary>
+    /// Whether an expression in <paramref name="text"/> reads a <c>resource.</c> path, as a bare path or a function argument. It scans
+    /// with the evaluator's own rules (where an expression ends, how arguments split, what a path is), so the two cannot disagree;
+    /// text the evaluator rejects is left to it.
+    /// </summary>
+    public static bool ReadsResource(string text)
+    {
+        var pos = 0;
+        while (text.IndexOf("${", pos, StringComparison.Ordinal) is var start and >= 0 && FindClosingBrace(text, start + 2) is var end and >= 0)
+        {
+            var expression = text[(start + 2)..end].Trim();
+            var open = expression.IndexOf('(');
+            var arguments = open < 0 ? [expression] : expression.EndsWith(')') ? SplitArguments(expression[(open + 1)..^1]) : [];
+            if (arguments.Any(a => PathPattern().IsMatch(a) && a.StartsWith(ResourceNamespace + ".", StringComparison.Ordinal)))
+            {
+                return true;
+            }
 
-    [GeneratedRegex(@"\$\{[^}]*(?<![\w.-])resource\.")]
-    private static partial Regex ResourcePathPattern();
+            pos = end + 1;
+        }
 
-    /// <summary>Whether <paramref name="text"/> has an expression that reads a <c>resource.</c> path, in a function argument too; quoted literals do not count.</summary>
-    public static bool ReadsResource(string text) => ResourcePathPattern().IsMatch(LiteralPattern().Replace(text, "''"));
+        return false;
+    }
 
     // Text is null while the value waits on References. EnvPaths are the env.<path> values read to produce it.
     private sealed record Value(string? Text, IReadOnlySet<Reference> References, IReadOnlySet<string> EnvPaths);

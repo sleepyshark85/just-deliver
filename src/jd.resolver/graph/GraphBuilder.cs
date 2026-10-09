@@ -26,6 +26,17 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
     public ResolvedGraph Build(PolicyResult policy)
     {
         var errors = new List<LoadError>(policy.Errors);
+
+        // An export is evaluated in its requirement's scope, where another requirement's exports are out of reach. The catalog loader
+        // rejects it; a graph built from anything else is still refused here, at the mapping's export.
+        foreach (var requirement in policy.Requirements)
+        {
+            foreach (var (name, result) in requirement.Exports.Where(e => e.Value is Pending { References: var refs } && refs.Any(r => r.Kind == ReferenceKind.Resource)))
+            {
+                errors.Add(new LoadError(requirement.Mapping, $"exports.{name}", $"requirement '{requirement.Id}': an export cannot reference ${{resource.<id>.<export>}}."));
+            }
+        }
+
         var exports = policy.Requirements.OrderBy(r => r.Id, StringComparer.Ordinal).ToDictionary(r => r.Id, r => r.Exports);
         var entries = policy.Requirements.SelectMany(r => r.Nodes.Select(n => (Scope: r.Id, Node: n)))
             .Concat(policy.RuntimeNodes.Concat(policy.WorkloadNodes).Select(n => (Scope: WorkloadScope, Node: n)))
@@ -65,7 +76,8 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
         {
             // A workload variable is reported against the workload's definition, where its author wrote it.
             var origin = node.Provenance.GetValueOrDefault(field);
-            var location = origin?.Layer == Layer.Workload ? origin.Rule + field[field.IndexOf('.')..] : field;
+            // A workload entry's provenance key is <field>.<NAME> (the config walk makes it so), hence the dot.
+            var location = origin?.Layer == Layer.Workload && field.IndexOf('.') is var dot and > 0 ? origin.Rule + field[dot..] : field;
             void Fail(string message) => errors.Add(new LoadError(origin?.Source ?? id, location, $"node '{id}': {message}"));
 
             if (node.Kind == NodeKind.Grant)
@@ -94,9 +106,16 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
                         continue;
                     }
 
-                    foreach (var inner in (export as Pending)?.References ?? (IEnumerable<Reference>)[])
+                    foreach (var inner in (export as Pending)?.References.Where(r => r.Kind == ReferenceKind.Node) ?? [])
                     {
-                        AddDependency(inner, reference.Target, field, Fail);
+                        if (inner.Target == ExpressionEvaluator.RuntimeNode)
+                        {
+                            Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which waits on the runtime; the runtime cannot read an export that waits on the runtime.");
+                        }
+                        else
+                        {
+                            AddDependency(inner, reference.Target, field, Fail);
+                        }
                     }
                 }
                 else

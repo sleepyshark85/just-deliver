@@ -39,6 +39,7 @@ public class RuntimeVariablesTests
         exports:
           endpoint: ${env.host}
           dyn: ${n.out}
+          rt: ${runtime.principalId}
         """;
 
     private static async Task<ResolvedGraph> ResolveAsync(string variables, string[]? policies = null, string runtimeMapping = RuntimeMapping, string mapping = "")
@@ -46,7 +47,7 @@ public class RuntimeVariablesTests
         var files = new[]
             {
                 "kind: Catalog\nversion: \"1\"\n",
-                "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard]\nexports: [endpoint, dyn]\n",
+                "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard]\nexports: [endpoint, dyn, rt]\n",
                 "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
                 mapping.Length > 0 ? mapping : Mapping(),
                 runtimeMapping,
@@ -186,14 +187,45 @@ public class RuntimeVariablesTests
         var files = new[]
         {
             "kind: Catalog\nversion: \"1\"\n",
-            "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard]\nexports: [endpoint, dyn, lit]\n",
-            "kind: Mapping\nmatch: { type: sqldb }\nnodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.host, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n",
+            "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard]\nexports: [endpoint, dyn, lit, quoted, apostrophes, fine]\n",
+            "kind: Mapping\nmatch: { type: sqldb }\nnodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.host, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n"
+                + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.host} isn't\"\n",
         };
 
         var loaded = await CatalogParser.ParseAsync(files.Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
 
-        Assert.Equal([("f2.yaml", "exports.dyn"), ("f2.yaml", "exports.endpoint")], loaded.Errors.Select(e => (e.File, e.Location)).Order());
+        Assert.Equal(
+            [("f2.yaml", "exports.apostrophes"), ("f2.yaml", "exports.dyn"), ("f2.yaml", "exports.endpoint"), ("f2.yaml", "exports.quoted")],
+            loaded.Errors.Select(e => (e.File, e.Location)).Order());
         Assert.All(loaded.Errors, e => Assert.Contains("an export cannot reference ${resource.<id>.<export>}", e.Message));
+    }
+
+    [Fact]
+    public void The_graph_builder_refuses_an_export_that_references_a_resource_instead_of_throwing()
+    {
+        // The loader stops this catalog, so the policy result is built by hand.
+        var export = new Pending("${resource.other.x}", new HashSet<Reference> { new(ReferenceKind.Resource, "other", "x") });
+        var variable = new ConfigText(new Pending("${resource.db.endpoint}", new HashSet<Reference> { new(ReferenceKind.Resource, "db", "endpoint") }), new HashSet<string>());
+        var runtime = new ResolvedNode("runtime", "t/runtime", NodeKind.Create, new Dictionary<string, ConfigValue> { ["v"] = variable }, new Dictionary<string, Provenance>());
+        var policy = new PolicyResult(
+            "1", "shop", "crew", null, null,
+            [new ResolvedRequirement("db", "sqldb", "standard", "m.yaml", new Dictionary<string, EvalResult> { ["endpoint"] = export }, [])],
+            [runtime], [], []);
+
+        var graph = new GraphBuilder(Env).Build(policy);
+
+        var error = Assert.Single(graph.Errors);
+        Assert.Equal(("m.yaml", "exports.endpoint"), (error.File, error.Location));
+    }
+
+    [Fact]
+    public async Task A_variable_cannot_read_an_export_that_waits_on_the_runtime()
+    {
+        var graph = await ResolveAsync("    BAD: ${resource.sqldb.rt}\n");
+
+        var error = Assert.Single(graph.Errors);
+        Assert.Equal(("workload.yaml", "container.variables.BAD"), (error.File, error.Location));
+        Assert.Contains("the runtime cannot read an export that waits on the runtime", error.Message);
     }
 
     [Fact]

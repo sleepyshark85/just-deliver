@@ -12,6 +12,9 @@ namespace jd.resolver.graph;
 /// </summary>
 public sealed record ExportValues(IReadOnlyDictionary<Reference, string> Values, IReadOnlySet<Reference> Secrets)
 {
+    /// <summary>No export is known.</summary>
+    public static ExportValues None { get; } = new(new Dictionary<Reference, string>(), new HashSet<Reference>());
+
     // outputs: by node id. includeSecrets: whether a secret output counts as known (the descriptor drops them: a secret must never reach it).
     // file: reported in errors about an export.
     public static ExportValues Evaluate(

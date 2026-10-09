@@ -464,6 +464,19 @@ public class OrchestratorTests
     }
 
     [Fact]
+    public async Task A_node_that_reads_no_export_does_not_fail_on_an_export_it_cannot_evaluate()
+    {
+        var (graph, catalog) = await ResolveAsync();
+        var broken = new Pending("${env.nope}-${group.id}", new HashSet<Reference> { new(ReferenceKind.Node, "group", "id") });
+        var withBrokenExport = graph with { Exports = new Dictionary<string, IReadOnlyDictionary<string, EvalResult>> { ["thing"] = new Dictionary<string, EvalResult> { ["out"] = broken } } };
+        var backend = new FakeBackend();
+
+        var report = await new Orchestrator(backend, backend, catalog, Env).DeployAsync(withBrokenExport, null, CancellationToken.None);
+
+        Assert.True(report.Succeeded);
+    }
+
+    [Fact]
     public async Task Each_scope_gives_the_runtime_its_own_value_for_a_node_name_they_share()
     {
         var backend = new FakeBackend();
