@@ -6,8 +6,12 @@
 ## Now
 
 - **Next slice:** S11 — Orchestrator (infra nodes) — first slice that creates Azure resources
-- **In progress:** —
-- **Blocked:** —
+- **In progress:** S11 — approved by review, rebased on `main` (branch `mvp/s11-orchestrator`, local worktree
+  `.claude/worktrees/agent-a31843c7a36d7bcd8`); only its Azure test remains.
+- **Blocked:** S11's Azure test — the sandbox daily-cap policy bug (fixed in PR #15) must be re-applied by the user:
+  `tools/sandbox/sandbox.sh apply --subscription ca89cbcc-e368-4e81-9e80-6686b4d9f3b9 --email sleepyshark.85@gmail.com`.
+  Then run `tools/verify.sh --azure` on the S11 branch, merge, and continue with S12. Also before S15: the user makes
+  the `just-deliver-sample-app` GHCR package public.
 
 ## Slices
 
@@ -27,7 +31,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S08 | CLI skeleton | done | PR #12 | 2 + suggestions | Round 1: 2 blocking (directory/unreadable inputs crashed with raw exceptions; multi-line schema errors without file). Workload loading moved to `jd.resolver.workload`; preview shows `(from env.…)`. **M1 complete.** |
 | S09 | Template library | done | PR #13 | 2 | Round 1: 4 blocking (container names could collide across workloads → cross-workload grant; workspace shared key in clear state; adapter→resolver dependency not in standards — amended; `!`). Cosmos account now hard-capped (`totalThroughputLimit`). `samples/provisioner` removed. |
 | S10 | Provider fixes | done | PR #14 | 2 | Round 1: 3 blocking (outputs lookup could report a deployed stack as undeployed; preview made "not deployed" ambiguous; dead `Version`). Refresh events no longer counted as changes. Real offline Pulumi tests in the gate. |
-| S11 | Orchestrator (infra nodes) | todo | | | |
+| S11 | Orchestrator (infra nodes) | in-review | `mvp/s11-orchestrator` | 2 | APPROVE after round 2 (teardown failures hidden; silent empty passphrase; backend URL now required). Azure test blocked by the sandbox policy bug until re-applied. |
 | S12 | Substrate from data | todo | | | |
 | S13 | Release set (offline) | done | PR #18 | 2 | Round 1: 4 blocking — **release sources never committed** (old VS `.gitignore` rule `[Rr]elease/`; local gate passed because files existed on disk — caught by the reviewer's clean worktree); set fields could be tampered (now derived from verified definitions); BOM/invalid UTF-8; duplicated topological sort (shared now). |
 | S13b | Deploy a release set (infra) | todo | | | |
