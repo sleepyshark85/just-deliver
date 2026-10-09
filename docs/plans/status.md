@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S05 — Matching + expansion
+- **Next slice:** S05 — Matching + expansion (not started; paused at the user's request after S04a)
 - **In progress:** —
 - **Blocked:** —
 
@@ -20,6 +20,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S02 | Catalog formats + loader | done | PR #3 | 2 | Round 1: 2 blocking (false cascading errors; resolver.md example contradicted seed). ~630 lines, over guideline, accepted. Follow-ups moved to carry-forward notes. |
 | S03 | Environment descriptor | done | PR #4 | 2 | Round 1: 1 blocking — NJsonSchema ignores `propertyNames`, so dotted keys could shadow nested values (D19 boundary); now enforced in code. `CatalogError` renamed `LoadError`. |
 | S04 | Expression evaluator | done | PR #5 | 2 | Round 1: 1 blocking (uncommented `!`). Golden hash/guid values pinned. ~690 lines — 2nd size overrun despite 'stop and report' in the brief. |
+| S04a | Catalog loader hardening | done | PR #6 | 2 | Review follow-ups from S02–S04. Round 1: 1 blocking — new duplicate-key enrichment crashed on scanner errors (regression); fixed with tests. |
 | S05 | Matching + expansion | todo | | | |
 | S06 | Policies + provenance | todo | | | |
 | S07 | Graph builder | todo | | | |
@@ -39,8 +40,8 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 
 Picked up by the slice named; remove once done.
 
-- **S05 (catalog loader):** validate naming `allowed` is a valid regex and includes hex digits (hash is appended after filtering); duplicate-key error lacks key/line; test pinning the "no Catalog" suppression when a
-  file is unreadable; YAML parsed 3x per catalog file; move `CatalogParser.ToSchemaError` next to `LoadError`.
+- **Loader (minor):** scanner failures report only "Exception during deserialization (line N)"; append the inner
+  exception message.
 - **S06:** catalog records hold mutable `JToken`s — clone on consumption.
 - **S09:** Azure role assignments need the full role-definition id; the `role-assignment` template must build
   it from the role GUID (`roles.yaml` holds GUIDs only).
@@ -61,6 +62,12 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-09 (later)** — S02, S03, S04 and S04a merged (PRs #3–#6). Each needed exactly one fix round for
+  real issues (false cascading errors, an ignored schema keyword weakening `grantable`, uncommented `!`, a
+  YAML-error crash regression). Golden values pin name-hash and guid outputs. Paused before S05 at the
+  user's request. Process: lead deletes branches only after a confirmed MERGED state (PR #4 was briefly
+  closed by cleanup after a failed merge; recovered).
 
 - **2026-10-09** — Models switched to Sonnet 5.5 (developer) / Opus 5.5 (reviewer) on trial; ask the
   user to re-choose if PR quality is poor. Baseline pushed to GitHub. S01 done (PR #2).
