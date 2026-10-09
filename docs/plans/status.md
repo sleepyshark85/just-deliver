@@ -31,7 +31,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S12 | Substrate from data | todo | | | |
 | S13 | Release set (offline) | todo | | | |
 | S13b | Deploy a release set (infra) | todo | | | |
-| S14 | Sample app | todo | | | |
+| S14 | Sample app | done | PR #16 | 2 | Done ahead of S11–S13 (independent). Round 1: 2 blocking (`/health` false-healthy on a missing container; unsynchronised shared Cosmos client → leaks/flapping). Image `ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385…` — **package must be made public by the user**. |
 | S15 | Runtime mapping + container-app | todo | | | |
 | S16 | Deploy steps | todo | | | |
 | S17 | Release record + qualification | todo | | | |
@@ -51,6 +51,8 @@ Picked up by the slice named; remove once done.
   deployed account's `capacity.totalThroughputLimit = 1000` and that both environment databases (400 RU/s each) fit.
 - **S10/S12:** template `fn::invoke`s (e.g. `getSharedKeys`) run during preview, so previewing a brand-new
   environment fails until its workspace exists — preview substrate in dependency order, or tolerate it.
+- **S15:** the runtime mapping sends `runtime.appInsightsConnectionString` to the app's `APPLICATIONINSIGHTS_CONNECTION_STRING`
+  (Azure Monitor SDK's own name, not in the workload's variables). The app assumes partition key `/id`.
 - **S11:** YamlDotNet is now 16.x (Pulumi.Automation pins it); Pulumi config values are strings — serialise
   structured values (maps) as JSON.
 - **S11:** `GetOutputsAsync` takes a whole `DeploymentPackage` but ignores its required `DeploymentParameters`; decide
