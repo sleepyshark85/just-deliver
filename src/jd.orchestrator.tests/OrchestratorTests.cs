@@ -34,6 +34,10 @@ public class OrchestratorTests
               groupId: ${group.id}
               label: pre-${group.id}-${group.name}
               key: ${group.key}
+          app2:
+            template: t/app2
+            config:
+              groupName: ${group.name}
           rt:
             template: t/rt
             config:
@@ -43,16 +47,31 @@ public class OrchestratorTests
           out: x
         """;
 
-    private static async Task<ResolvedGraph> ResolveAsync(string requires = "  - type: thing\n")
+    private const string DefaultRequires = "  - type: thing\n";
+
+    // The orchestrator gets the catalog the graph was resolved with.
+    private static async Task<(ResolvedGraph Graph, Catalog Catalog)> ResolveAsync(string requires = DefaultRequires, string mapping = Mapping)
     {
-        var files = new[] { "kind: Catalog\nversion: \"1\"\n", "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n", Mapping }
+        var files = new[] { "kind: Catalog\nversion: \"1\"\n", "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n", mapping }
             .Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
         var graph = Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, Env);
         Assert.Empty(graph.Errors);
-        return graph;
+        return (graph, loaded.Catalog!);
+    }
+
+    private static async Task<RunReport> DeployAsync(FakeBackend backend, string requires = DefaultRequires, Action<NodeReport>? progress = null, string mapping = Mapping)
+    {
+        var (graph, catalog) = await ResolveAsync(requires, mapping);
+        return await new Orchestrator(backend, backend, catalog, Env).DeployAsync(graph, progress, CancellationToken.None);
+    }
+
+    private static async Task<RunReport> PreviewAsync(FakeBackend backend)
+    {
+        var (graph, catalog) = await ResolveAsync();
+        return await new Orchestrator(backend, backend, catalog, Env).PreviewAsync(graph, null, CancellationToken.None);
     }
 
     private sealed class FakeBackend : IBackEndProvider, ITemplateStore
@@ -96,19 +115,17 @@ public class OrchestratorTests
         }
     }
 
-    private static Orchestrator Create(FakeBackend backend) => new(backend, backend, new Catalog("1", [], [], [], new Dictionary<string, NamingRule>(), new Dictionary<string, string>()), Env);
-
     [Fact]
     public async Task Deploy_walks_infrastructure_nodes_in_order_passing_outputs_on()
     {
         var backend = new FakeBackend();
 
-        var report = await Create(backend).DeployAsync(await ResolveAsync(), null, CancellationToken.None);
+        var report = await DeployAsync(backend);
 
         Assert.True(report.Succeeded);
-        Assert.Equal(["shop/dev/thing/group", "shop/dev/thing/app", "shop/dev/thing/rt"], report.Nodes.Select(n => n.NodeId));
-        Assert.Equal([NodeOutcome.Deployed, NodeOutcome.Deployed, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
-        Assert.Equal(["shop.dev.thing.group", "shop.dev.thing.app"], backend.Calls.Select(c => c.Package.StackName));
+        Assert.Equal(["shop/dev/thing/group", "shop/dev/thing/app", "shop/dev/thing/app2", "shop/dev/thing/rt"], report.Nodes.Select(n => n.NodeId));
+        Assert.Equal([NodeOutcome.Deployed, NodeOutcome.Deployed, NodeOutcome.Deployed, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
+        Assert.Equal(["shop.dev.thing.group", "shop.dev.thing.app", "shop.dev.thing.app2"], backend.Calls.Select(c => c.Package.StackName));
         Assert.Equal("template:t/app", backend.Calls[1].Package.DeploymentContent);
         var app = backend.Calls[1].Package.DeploymentParameters;
         Assert.Equal("id-shop.dev.thing.group", app["groupId"].Value);
@@ -121,12 +138,11 @@ public class OrchestratorTests
     public async Task Config_is_converted_to_strings_numbers_and_booleans_invariantly_and_structures_to_compact_json()
     {
         var backend = new FakeBackend();
-        var graph = await ResolveAsync();
         var previous = CultureInfo.CurrentCulture;
         try
         {
             CultureInfo.CurrentCulture = new CultureInfo("de-DE");
-            await Create(backend).DeployAsync(graph, null, CancellationToken.None);
+            await DeployAsync(backend);
         }
         finally
         {
@@ -146,7 +162,7 @@ public class OrchestratorTests
     {
         var backend = new FakeBackend();
 
-        await Create(backend).DeployAsync(await ResolveAsync(), null, CancellationToken.None);
+        await DeployAsync(backend);
 
         var app = backend.Calls[1].Package.DeploymentParameters;
         Assert.True(app["key"].IsSecret);
@@ -158,9 +174,9 @@ public class OrchestratorTests
     {
         var backend = new FakeBackend { Summary = new() { ["Same"] = 2 } };
 
-        var report = await Create(backend).DeployAsync(await ResolveAsync(), null, CancellationToken.None);
+        var report = await DeployAsync(backend);
 
-        Assert.Equal([NodeOutcome.Unchanged, NodeOutcome.Unchanged, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
+        Assert.Equal([NodeOutcome.Unchanged, NodeOutcome.Unchanged, NodeOutcome.Unchanged, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
     }
 
     [Fact]
@@ -168,7 +184,7 @@ public class OrchestratorTests
     {
         var backend = new FakeBackend { OmitIdOutput = true };
 
-        var report = await Create(backend).DeployAsync(await ResolveAsync(), null, CancellationToken.None);
+        var report = await DeployAsync(backend);
 
         Assert.False(report.Succeeded);
         var failed = report.Nodes[^1];
@@ -183,7 +199,7 @@ public class OrchestratorTests
     {
         var backend = new FakeBackend { FailOn = "shop.dev.thing.group" };
 
-        var report = await Create(backend).DeployAsync(await ResolveAsync(), null, CancellationToken.None);
+        var report = await DeployAsync(backend);
 
         var only = Assert.Single(report.Nodes);
         Assert.Equal(NodeOutcome.Failed, only.Outcome);
@@ -197,7 +213,7 @@ public class OrchestratorTests
     {
         var backend = new FakeBackend();
 
-        await Create(backend).DeployAsync(await ResolveAsync("  - type: thing\n    id: one\n  - type: thing\n    id: two\n"), null, CancellationToken.None);
+        await DeployAsync(backend, "  - type: thing\n    id: one\n  - type: thing\n    id: two\n");
 
         var apps = backend.Calls.Where(c => c.Package.StackName.EndsWith(".app", StringComparison.Ordinal)).ToDictionary(c => c.Package.StackName, c => c.Package.DeploymentParameters["groupId"].Value);
         Assert.Equal("id-shop.dev.one.group", apps["shop.dev.one.app"]);
@@ -209,9 +225,9 @@ public class OrchestratorTests
     {
         var seen = new List<string>();
 
-        await Create(new FakeBackend()).DeployAsync(await ResolveAsync(), r => seen.Add(r.NodeId), CancellationToken.None);
+        await DeployAsync(new FakeBackend(), progress: r => seen.Add(r.NodeId));
 
-        Assert.Equal(3, seen.Count);
+        Assert.Equal(4, seen.Count);
     }
 
     [Fact]
@@ -220,9 +236,9 @@ public class OrchestratorTests
         var backend = new FakeBackend();
         backend.State["shop.dev.thing.group"] = new() { ["id"] = new("id-from-state"), ["name"] = new("name-from-state"), ["key"] = new("k", isSecret: true) };
 
-        var report = await Create(backend).PreviewAsync(await ResolveAsync(), null, CancellationToken.None);
+        var report = await PreviewAsync(backend);
 
-        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.Previewed, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
+        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.Previewed, NodeOutcome.Previewed, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
         Assert.DoesNotContain(backend.Calls, c => c.Op == "deploy");
         var app = backend.Calls.Single(c => c.Op == "preview" && c.Package.StackName == "shop.dev.thing.app").Package.DeploymentParameters;
         Assert.Equal("id-from-state", app["groupId"].Value);
@@ -234,9 +250,9 @@ public class OrchestratorTests
     {
         var backend = new FakeBackend();
 
-        var report = await Create(backend).PreviewAsync(await ResolveAsync(), null, CancellationToken.None);
+        var report = await PreviewAsync(backend);
 
-        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.PendingUpstream, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
+        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.PendingUpstream, NodeOutcome.PendingUpstream, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
         Assert.True(report.Succeeded);
         Assert.Contains("field 'groupId' references group.id", report.Nodes[1].Message);
         Assert.Equal(["shop.dev.thing.group"], backend.Calls.Where(c => c.Op == "preview").Select(c => c.Package.StackName));
@@ -247,11 +263,46 @@ public class OrchestratorTests
     {
         var backend = new FakeBackend();
 
-        var deployed = await Create(backend).DeployAsync(await ResolveAsync(), null, CancellationToken.None);
-        var previewed = await Create(backend).PreviewAsync(await ResolveAsync(), null, CancellationToken.None);
+        var deployed = await DeployAsync(backend);
+        var previewed = await PreviewAsync(backend);
 
         Assert.DoesNotContain(backend.Calls, c => c.Package.StackName.EndsWith(".rt", StringComparison.Ordinal));
         Assert.Equal(NodeOutcome.WaitingForRuntime, deployed.Nodes[^1].Outcome);
         Assert.Equal(NodeOutcome.WaitingForRuntime, previewed.Nodes[^1].Outcome);
+    }
+
+    [Fact]
+    public async Task Preview_reads_each_upstream_node_from_state_once()
+    {
+        var backend = new FakeBackend();
+
+        await PreviewAsync(backend); // app and app2 both depend on group, which is not deployed
+
+        Assert.Single(backend.Calls, c => c.Op == "read");
+    }
+
+    [Fact]
+    public async Task A_graph_resolved_with_another_catalog_or_environment_is_refused()
+    {
+        var (graph, catalog) = await ResolveAsync();
+        var backend = new FakeBackend();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => new Orchestrator(backend, backend, catalog with { Version = "2" }, Env).DeployAsync(graph, null, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => new Orchestrator(backend, backend, catalog, Env with { Name = "prod" }).PreviewAsync(graph, null, CancellationToken.None));
+        Assert.Empty(backend.Calls);
+    }
+
+    [Fact]
+    public async Task A_null_config_value_fails_naming_node_and_field_and_is_never_sent_as_text()
+    {
+        var backend = new FakeBackend();
+        var mapping = "kind: Mapping\nmatch: { type: thing }\nnodes:\n  n:\n    template: t/n\n    config: { a: { b: ~ } }\nexports:\n  out: x\n";
+
+        var report = await DeployAsync(backend, mapping: mapping);
+
+        var failed = Assert.Single(report.Nodes);
+        Assert.Equal(NodeOutcome.Failed, failed.Outcome);
+        Assert.Contains("node 'shop/dev/thing/n': field 'a.b' is null", failed.Message);
+        Assert.Empty(backend.Calls);
     }
 }

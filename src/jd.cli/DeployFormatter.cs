@@ -11,10 +11,10 @@ public static class DeployFormatter
     public static string Format(NodeReport report)
     {
         var text = new StringBuilder();
-        var changes = report.Summary.Where(s => s.Value > 0 && !string.Equals(s.Key, DeploymentResult.NoChangeOperation, StringComparison.OrdinalIgnoreCase)).OrderBy(s => s.Key, StringComparer.Ordinal).ToList();
+        var changes = DeploymentResult.ChangedOperations(report.Summary).OrderBy(s => s.Key, StringComparer.Ordinal).ToList();
         var summary = changes.Count == 0 ? "no changes" : string.Join(", ", changes.Select(c => $"{c.Key.ToLowerInvariant()} {c.Value.ToString(CultureInfo.InvariantCulture)}"));
         text.AppendLine($"{report.NodeId}: {Describe(report.Outcome)} ({summary}, {report.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture)}s)");
-        foreach (var change in report.Changes.Where(c => !string.Equals(c.Operation, DeploymentResult.NoChangeOperation, StringComparison.OrdinalIgnoreCase)))
+        foreach (var change in report.Changes.Where(c => DeploymentResult.IsChange(c.Operation)))
         {
             text.AppendLine($"  {change.Operation.ToLowerInvariant()} {change.Type}");
         }

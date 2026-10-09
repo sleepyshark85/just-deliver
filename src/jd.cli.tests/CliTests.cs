@@ -26,6 +26,14 @@ public sealed class CliTests : IDisposable
         return (code, stdout.ToString(), stderr.ToString());
     }
 
+    private static async Task<(int Code, string Out, string Err)> RunWithEnvironmentAsync(Dictionary<string, string> variables, params string[] args)
+    {
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, null, name => variables.GetValueOrDefault(name));
+        return (code, stdout.ToString(), stderr.ToString());
+    }
+
     private sealed class RecordingBackend : IBackEndProvider
     {
         public List<string> Calls { get; } = [];
@@ -250,6 +258,42 @@ public sealed class CliTests : IDisposable
         Assert.Equal(1, code);
         Assert.Contains("template 'azure/application-insights' is not in the template library", stderr);
         Assert.Empty(backend.Calls);
+    }
+
+    [Fact]
+    public async Task Deploy_without_a_backend_url_exits_2_and_explains()
+    {
+        var (code, _, stderr) = await RunWithEnvironmentAsync(new() { ["PULUMI_CONFIG_PASSPHRASE"] = string.Empty }, "deploy", Workload, "--env", Environment, "--catalog", Catalog);
+
+        Assert.Equal(2, code);
+        Assert.Contains("jd: PULUMI_BACKEND_URL is not set", stderr);
+        Assert.Contains("file://<directory>", stderr);
+    }
+
+    [Fact]
+    public async Task Deploy_without_a_passphrase_exits_2_and_explains()
+    {
+        var (code, _, stderr) = await RunWithEnvironmentAsync(new() { ["PULUMI_BACKEND_URL"] = "file://x" }, "deploy", Workload, "--env", Environment, "--catalog", Catalog);
+
+        Assert.Equal(2, code);
+        Assert.Contains("jd: PULUMI_CONFIG_PASSPHRASE is not set", stderr);
+        Assert.Contains("PULUMI_CONFIG_PASSPHRASE_FILE", stderr);
+    }
+
+    [Theory]
+    [InlineData("PULUMI_CONFIG_PASSPHRASE", "")]
+    [InlineData("PULUMI_CONFIG_PASSPHRASE_FILE", "/some/file")]
+    public async Task An_empty_passphrase_or_a_passphrase_file_is_accepted(string name, string value)
+    {
+        // A catalog without the templates stops the run (exit 1) after the settings check and before any backend is created.
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        Directory.Delete(Path.Combine(catalog, "templates"), recursive: true);
+
+        var (code, _, stderr) = await RunWithEnvironmentAsync(new() { ["PULUMI_BACKEND_URL"] = "file://x", [name] = value }, "deploy", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Contains("template directory not found", stderr);
     }
 
     private static void CopyDirectory(string from, string to)

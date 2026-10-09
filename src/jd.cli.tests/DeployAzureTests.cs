@@ -22,13 +22,52 @@ public sealed class DeployAzureTests : IDisposable
 
     public void Dispose()
     {
-        // The group is created by a deploy that may have failed half-way; deleting a group that does not exist is not an error.
-        using var delete = Process.Start(new ProcessStartInfo("az", $"group delete --name {ResourceGroup} --yes") { RedirectStandardOutput = true, RedirectStandardError = true });
-        delete?.WaitForExit();
-        if (Directory.Exists(_root))
+        try
         {
-            Directory.Delete(_root, recursive: true);
+            DeleteResourceGroup();
         }
+        finally
+        {
+            if (Directory.Exists(_root))
+            {
+                Directory.Delete(_root, recursive: true);
+            }
+        }
+    }
+
+    // A failed teardown fails the test: leaving a resource group behind must never go unnoticed. A deploy that failed before it
+    // created the group leaves nothing to delete, which "az group exists" reports.
+    private void DeleteResourceGroup()
+    {
+        var subscription = System.Environment.GetEnvironmentVariable("ARM_SUBSCRIPTION_ID")
+            ?? throw new InvalidOperationException($"ARM_SUBSCRIPTION_ID is not set, so resource group {ResourceGroup} could not be checked or deleted.");
+        var exists = Az($"group exists --name {ResourceGroup} --subscription {subscription}");
+        if (exists.Code == 0 && exists.Output.Trim() == "false")
+        {
+            return;
+        }
+
+        if (exists.Code != 0)
+        {
+            throw new InvalidOperationException($"Could not check resource group {ResourceGroup}: {exists.Error}");
+        }
+
+        var delete = Az($"group delete --name {ResourceGroup} --subscription {subscription} --yes");
+        if (delete.Code != 0)
+        {
+            throw new InvalidOperationException($"Could not delete resource group {ResourceGroup}; run tools/azure/cleanup.sh --yes. {delete.Error}");
+        }
+    }
+
+    // Both streams are read while the process runs, so a full pipe cannot block it.
+    private static (int Code, string Output, string Error) Az(string arguments)
+    {
+        using var process = Process.Start(new ProcessStartInfo("az", arguments) { RedirectStandardOutput = true, RedirectStandardError = true })
+            ?? throw new InvalidOperationException("could not start az");
+        var error = process.StandardError.ReadToEndAsync();
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        return (process.ExitCode, output, error.GetAwaiter().GetResult());
     }
 
     private string Write(string relative, string content)

@@ -33,7 +33,7 @@ public static class Cli
         preview   validates the workload, then prints the resolved graph (--json: as stable JSON).
         release   create writes an immutable release set (pinned workloads, deploy order) from a manifest; show prints one.
         deploy    provisions the infrastructure nodes in order (--preview: only shows the changes; nothing is created).
-                  Backend: PULUMI_BACKEND_URL, PULUMI_CONFIG_PASSPHRASE, PULUMI_HOME; scratch directory: JD_SCRATCH_DIR.
+                  Backend: PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
         Exit codes: 0 success, 1 validation, resolution or deployment errors, 2 usage errors.
 
         """;
@@ -48,9 +48,16 @@ public static class Cli
 
     private sealed record DeployOptions(string Workload, string Environment, string Catalog, bool DryRun) : ResolveOptions(Workload, Environment, Catalog);
 
-    // backend is the one <c>deploy</c> uses; when null, the Pulumi backend configured from the environment variables (a test seam).
-    public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, IBackEndProvider? backend = null)
+    private const string BackendUrlVariable = "PULUMI_BACKEND_URL";
+    private const string PassphraseVariable = "PULUMI_CONFIG_PASSPHRASE";
+    private const string PassphraseFileVariable = "PULUMI_CONFIG_PASSPHRASE_FILE";
+
+    // backend is the one deploy uses; when null, the Pulumi backend configured from the process environment variables.
+    // environmentVariable reads them (null: the process environment). Both are test seams.
+    public static async Task<int> RunAsync(
+        string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, IBackEndProvider? backend = null, Func<string, string?>? environmentVariable = null)
     {
+        environmentVariable ??= System.Environment.GetEnvironmentVariable;
         if (args.Contains("--help") || args.Contains("-h"))
         {
             stdout.Write(Usage);
@@ -77,9 +84,15 @@ public static class Cli
             return UsageError;
         }
 
+        if (options is DeployOptions && backend is null && BackendSettingsProblem(environmentVariable) is { } missing)
+        {
+            stderr.WriteLine($"jd: {missing}");
+            return UsageError;
+        }
+
         try
         {
-            return await RunCommandAsync(options, backend, stdout, stderr, cancellationToken);
+            return await RunCommandAsync(options, backend, environmentVariable, stdout, stderr, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -89,7 +102,7 @@ public static class Cli
         }
     }
 
-    private static async Task<int> RunCommandAsync(Options options, IBackEndProvider? backend, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    private static async Task<int> RunCommandAsync(Options options, IBackEndProvider? backend, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var loaded = await WorkloadFile.LoadAsync(options.Workload, cancellationToken);
         if (loaded.Workload is not { } workload)
@@ -124,7 +137,7 @@ public static class Cli
 
         if (resolve is DeployOptions deploy)
         {
-            return await DeployAsync(deploy, graph, catalog, environment, backend, stdout, stderr, cancellationToken);
+            return await DeployAsync(deploy, graph, catalog, environment, backend, environmentVariable, stdout, stderr, cancellationToken);
         }
 
         stdout.Write(resolve is PreviewOptions { Json: true } ? GraphJson.Serialize(graph) : PreviewFormatter.Format(graph));
@@ -134,7 +147,7 @@ public static class Cli
     // Templates live in the catalog's templates directory; the graph must fit them before anything is created.
     private static async Task<int> DeployAsync(
         DeployOptions options, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend,
-        TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var templates = await TemplateLibrary.LoadAsync(Path.Combine(options.Catalog, CatalogDirectory.TemplatesDirectory), cancellationToken);
         var misfits = templates.Check(graph);
@@ -144,7 +157,7 @@ public static class Cli
             return Invalid;
         }
 
-        var orchestrator = new Orchestrator(backend ?? CreatePulumiBackend(), templates, catalog, environment);
+        var orchestrator = new Orchestrator(backend ?? CreatePulumiBackend(environmentVariable), templates, catalog, environment);
         void Show(NodeReport report) => stdout.Write(DeployFormatter.Format(report));
         var run = options.DryRun
             ? await orchestrator.PreviewAsync(graph, Show, cancellationToken)
@@ -158,17 +171,30 @@ public static class Cli
         return Success;
     }
 
-    // Backend settings come from the process environment, once, here.
-    private static IBackEndProvider CreatePulumiBackend()
+    // State location and secrets passphrase must be set explicitly: a default would lose track of stacks between runs, or
+    // encrypt with a passphrase nobody chose. An empty passphrase is a choice (local/dev); a passphrase file is another.
+    private static string? BackendSettingsProblem(Func<string, string?> environmentVariable)
+    {
+        if (environmentVariable(BackendUrlVariable) is null)
+        {
+            return $"{BackendUrlVariable} is not set. Set it to where Pulumi keeps state, for example file://<directory> or an Azure blob URL; without it stacks would be lost between runs.";
+        }
+
+        return environmentVariable(PassphraseVariable) is null && environmentVariable(PassphraseFileVariable) is null
+            ? $"{PassphraseVariable} is not set. Set it (empty is acceptable for local/dev only), or set {PassphraseFileVariable}."
+            : null;
+    }
+
+    private static IBackEndProvider CreatePulumiBackend(Func<string, string?> environmentVariable)
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.RegisterPulumiBackend(options =>
         {
-            options.BackendUrl = System.Environment.GetEnvironmentVariable("PULUMI_BACKEND_URL") ?? options.BackendUrl;
-            options.ConfigPassPhrase = System.Environment.GetEnvironmentVariable("PULUMI_CONFIG_PASSPHRASE") ?? options.ConfigPassPhrase;
-            options.PulumiHome = System.Environment.GetEnvironmentVariable("PULUMI_HOME");
-            options.ScratchDirectory = System.Environment.GetEnvironmentVariable("JD_SCRATCH_DIR") ?? options.ScratchDirectory;
+            options.BackendUrl = environmentVariable(BackendUrlVariable) ?? options.BackendUrl;
+            options.ConfigPassPhrase = environmentVariable(PassphraseVariable);
+            options.PulumiHome = environmentVariable("PULUMI_HOME");
+            options.ScratchDirectory = environmentVariable("JD_SCRATCH_DIR") ?? options.ScratchDirectory;
         });
         return services.BuildServiceProvider().GetRequiredService<IBackEndProvider>();
     }

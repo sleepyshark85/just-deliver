@@ -7,8 +7,9 @@ public class PulumiBackendOptions
     [EnvironmentVariable("PULUMI_BACKEND_URL")]
     public string BackendUrl { get; set; } = "file://~";
 
+    /// <summary>Not exported when null, so a PULUMI_CONFIG_PASSPHRASE_FILE in the process environment still applies.</summary>
     [EnvironmentVariable("PULUMI_CONFIG_PASSPHRASE")]
-    public string ConfigPassPhrase { get; set; } = string.Empty;
+    public string? ConfigPassPhrase { get; set; }
 
     [EnvironmentVariable("PULUMI_HOME")]
     public string? PulumiHome { get; set; }

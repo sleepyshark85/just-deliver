@@ -196,8 +196,10 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
 - **Result.** Per node: outcome (`deployed`, `unchanged`, `previewed`, `pending upstream`, `waiting for runtime`,
   `failed`), the provider's change summary and per-resource changes, and the time. A node is `unchanged` when its summary
   has no operation other than `Same`; "re-run = zero changes" means every deployed node is `unchanged`.
-- **Configuration.** `jd deploy` reads `PULUMI_BACKEND_URL` (default `file://~`), `PULUMI_CONFIG_PASSPHRASE`
-  (default empty: local/dev only), `PULUMI_HOME` and `JD_SCRATCH_DIR` (default the system temp directory) in the composition root.
+- **Configuration.** `jd deploy` reads `PULUMI_BACKEND_URL` and `PULUMI_CONFIG_PASSPHRASE` (or `PULUMI_CONFIG_PASSPHRASE_FILE`)
+  in the composition root and refuses to run when they are unset (an empty passphrase is allowed: local/dev only); a default
+  state location would lose track of stacks between runs. Optional: `PULUMI_HOME`, `JD_SCRATCH_DIR`. The orchestrator
+  refuses a graph whose catalog version or environment differs from the catalog and environment it was given.
 
 ### Chaining stacks
 

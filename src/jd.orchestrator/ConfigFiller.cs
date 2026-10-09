@@ -45,6 +45,9 @@ internal sealed class ConfigFiller(ExpressionEvaluator evaluator, string nodeId,
     {
         switch (value)
         {
+            case ConfigScalar { Value.Type: JTokenType.Null }:
+                _errors.Add(new LoadError(nodeId, path, $"node '{nodeId}': field '{path}' is null; a config value must have a value."));
+                return null;
             case ConfigScalar scalar:
                 return scalar.Value;
             case ConfigText { Result: Resolved resolved }:

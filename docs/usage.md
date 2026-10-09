@@ -32,8 +32,14 @@ and the Azure credentials in the environment (`source ~/.just-deliver/<subscript
 - The first failure stops the run (exit 1) and names the node and reason; nodes already deployed stay deployed. Running
   the command again resumes: deployed nodes report `unchanged`.
 - `--preview` shows what would change and creates nothing; nodes whose upstream outputs are not in state yet are `pending upstream`.
-- Environment variables: `PULUMI_BACKEND_URL` (default `file://~`), `PULUMI_CONFIG_PASSPHRASE` (secrets encryption; empty
-  is acceptable for local/dev only), `PULUMI_HOME` (plugin cache), `JD_SCRATCH_DIR` (working directories; default the system temp directory).
+- Environment variables. Two are **required**; if either is missing `jd deploy` exits 2 and says what to set:
+  - `PULUMI_BACKEND_URL`: where Pulumi keeps state, for example `file:///home/me/jd-state` or an Azure blob URL. There is no
+    default, because a silent default location loses track of the stacks between runs. The sandbox credentials file does
+    not set it: export it yourself, and use the same value every time.
+  - `PULUMI_CONFIG_PASSPHRASE`: encrypts secrets in state. Set it explicitly; an empty value is accepted (the sandbox
+    credentials file sets it empty; acceptable for local/dev only). `PULUMI_CONFIG_PASSPHRASE_FILE` instead of the
+    variable also satisfies the check.
+  - Optional: `PULUMI_HOME` (plugin cache), `JD_SCRATCH_DIR` (working directories; default the system temp directory).
 
 Errors from any stage are printed to stderr with file and location; results go to stdout.
 

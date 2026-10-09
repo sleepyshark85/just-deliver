@@ -30,9 +30,17 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
     {
         private readonly Dictionary<string, GraphNode> _byId = graph.Nodes.ToDictionary(n => n.Id);
         private readonly Dictionary<string, Dictionary<string, ConfigEntry>> _outputs = [];
+        private readonly HashSet<string> _readFromState = [];
 
         public async Task<RunReport> RunAsync(CancellationToken cancellationToken)
         {
+            // Pending config is evaluated against this catalog and environment; a graph resolved from others would deploy wrong values.
+            if (graph.CatalogVersion != catalog.Version || graph.Environment != environment.Name)
+            {
+                throw new ArgumentException(
+                    $"the graph was resolved with catalog '{graph.CatalogVersion}' and environment '{graph.Environment}', but the orchestrator has catalog '{catalog.Version}' and environment '{environment.Name}'.");
+            }
+
             var reports = new List<NodeReport>();
             foreach (var node in graph.Nodes)
             {
@@ -94,8 +102,9 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
             }
         }
 
-        // Same rules as the first pass: the node's scope is its requirement (or the node itself at workload scope), and the
-        // nodes in scope are those of that scope. Only the known outputs differ.
+        // The current id is the node's requirement (the node itself at workload scope), as in the first pass. Node names in scope
+        // are all nodes of the node's scope; the first pass allowed only the adding policy's nodes at workload scope, but it already
+        // rejected any other name, so the wider set cannot change a result here. Only the known outputs differ.
         private ExpressionContext ContextFor(GraphNode node)
         {
             var known = new Dictionary<Reference, string>();
@@ -130,7 +139,8 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
         // Preview deploys nothing, so what an upstream node exports is read from state, if it was deployed before.
         private async Task ReadDeployedOutputsAsync(GraphNode node, CancellationToken cancellationToken)
         {
-            foreach (var upstream in node.DependsOn.Where(id => !_outputs.ContainsKey(id)).Select(id => _byId[id]))
+            // Each upstream node is read once, also when it turned out not to be deployed.
+            foreach (var upstream in node.DependsOn.Where(id => !_outputs.ContainsKey(id) && _readFromState.Add(id)).Select(id => _byId[id]))
             {
                 var read = await provider.GetOutputsAsync(upstream.Stack, templates.GetContent(upstream.Template), cancellationToken);
                 if (read is not null)
