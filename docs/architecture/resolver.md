@@ -208,6 +208,7 @@ nodes:
     template: azure/container-app
     config:
       resourceGroupName: ${env.resourceGroup}
+      location: ${env.region}
       containerAppsEnvironmentId: ${env.containerAppsEnvironment.id}
       containerAppName: ${name('ca')}
       image: ${workload.image}
@@ -292,7 +293,7 @@ path       := segment { '.' segment }          # segment: letters, digits, '_' a
 | `env.<path>` | `EnvironmentDescriptor.TryGet`; an unknown path is an error |
 | `role.<name>` | role GUID from the catalog `Roles`; unknown is an error |
 | `workload.name`, `workload.team` | the workload being resolved |
-| `workload.image`, `workload.port` | `container.image`, and the first of `container.ports`; a workload with no ports makes `workload.port` an error naming the workload. Meant for runtime mappings: the orchestrator's second pass has neither, so a requirement node that mixes them with a pending reference fails at deploy with the same error |
+| `workload.image`, `workload.port` | `container.image`, and the first of `container.ports`; a workload with no ports makes `workload.port` an error naming the workload. Like every expression result it is text (`"8080"`): Pulumi config values are strings, and the template's `Integer` input parses it. Meant for runtime mappings: the orchestrator's second pass has neither, so a requirement node that mixes them with a pending reference fails at deploy with the same error |
 | `resource.<id>.<export>` | **pending** reference to a requirement's export |
 | `runtime.<output>` | **pending** reference to the runtime node (an edge to it); an environment definition has no runtime, so there it is an error |
 | `<node>.<output>` | **pending** reference to an output of a node in scope; unknown node is an error |
