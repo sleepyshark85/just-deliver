@@ -1,5 +1,4 @@
 using jd.definitionvalidator;
-using jd.resolver.catalog;
 using Newtonsoft.Json.Linq;
 
 namespace jd.resolver.environment;
@@ -23,13 +22,13 @@ public static class EnvironmentParser
         }
         catch (Exception ex)
         {
-            return new EnvironmentLoadResult(null, [new LoadError(source, string.Empty, $"not valid YAML: {ex.Message}")]);
+            return new EnvironmentLoadResult(null, [new LoadError(source, string.Empty, $"not valid YAML: {YamlSchemaValidator.DescribeYamlError(ex, content)}")]);
         }
 
-        var result = await Validator.ValidateContentAsync(await EmbeddedSchema.ReadAsync(SchemaName, cancellationToken), content);
+        var result = await Validator.ValidateTokenAsync(await EmbeddedSchema.ReadAsync(SchemaName, cancellationToken), parsed);
         if (!result.IsValid || parsed is not JObject body)
         {
-            return new EnvironmentLoadResult(null, result.Errors.Select(e => CatalogParser.ToSchemaError(source, e)).ToList());
+            return new EnvironmentLoadResult(null, result.Errors.Select(e => LoadError.FromSchema(source, e)).ToList());
         }
 
         // The schema guarantees these exist and have these shapes.

@@ -165,7 +165,40 @@ public class CatalogParserTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal("catalog.yaml", error.File);
-        Assert.Contains("uplicate key", error.Message);
+
+        Assert.Contains("duplicate key 'version' at line 3", error.Message);
+    }
+
+    [Fact]
+    public async Task Missing_catalog_is_reported_beside_an_unknown_kind()
+    {
+        var result = await Parse(("odd.yaml", "kind: Widget\n"));
+
+        Assert.Contains(result.Errors, e => e.File == "odd.yaml" && e.Message.Contains("unknown kind"));
+        Assert.Contains(result.Errors, e => e.Message.Contains("exactly one is required"));
+    }
+
+    [Fact]
+    public async Task Missing_catalog_is_not_reported_when_a_file_is_unreadable()
+    {
+        var result = await Parse(("broken.yaml", "kind: [unclosed\n"));
+
+        Assert.DoesNotContain(result.Errors, e => e.Message.Contains("exactly one is required"));
+    }
+
+    [Theory]
+    [InlineData("[z-a]", "not a valid regex")]
+    [InlineData("[a-z-]", "rejects 0123456789")]
+    [InlineData("[a-z0-9]]", "rejects")]
+    public async Task Naming_allowed_must_be_a_class_that_accepts_the_hash_digits(string allowed, string message)
+    {
+        var naming = $"kind: Naming\nrules:\n  thing:\n    pattern: \"{{id}}\"\n    maxLength: 20\n    allowed: \"{allowed}\"\n";
+        var result = await Parse(("catalog.yaml", CatalogFile), ("naming.yaml", naming));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("naming.yaml", error.File);
+        Assert.Equal("rules.thing.allowed", error.Location);
+        Assert.Contains(message, error.Message);
     }
 
     [Fact]

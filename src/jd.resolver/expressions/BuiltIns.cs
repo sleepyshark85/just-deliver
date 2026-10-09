@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -15,6 +16,8 @@ public static partial class BuiltIns
 
     private const int HashLength = 6;
 
+    private static readonly ConcurrentDictionary<string, Regex> AllowedClasses = new();
+
     [GeneratedRegex(@"\{(workload|id|env|hash)\}")]
     private static partial Regex Placeholder();
 
@@ -27,16 +30,8 @@ public static partial class BuiltIns
             return null;
         }
 
-        Regex allowed;
-        try
-        {
-            allowed = new Regex(rule.Allowed);
-        }
-        catch (ArgumentException e)
-        {
-            fail($"naming rule '{kind}' has an invalid 'allowed' character class '{rule.Allowed}': {e.Message}");
-            return null;
-        }
+        // The catalog loader has checked that the class is a valid regex that allows the hash digits.
+        var allowed = AllowedClasses.GetOrAdd(rule.Allowed, pattern => new Regex(pattern));
 
         var values = new Dictionary<string, string>
         {

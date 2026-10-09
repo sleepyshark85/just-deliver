@@ -1,7 +1,6 @@
 using System.Text.RegularExpressions;
 using jd.definitionvalidator;
 using Newtonsoft.Json.Linq;
-using YamlDotNet.RepresentationModel;
 
 namespace jd.resolver.catalog;
 
@@ -10,7 +9,7 @@ namespace jd.resolver.catalog;
 /// <see cref="CatalogDirectory"/>'s job. Every problem in every file is collected, so a catalog can be
 /// fixed in one pass.
 /// </summary>
-public static partial class CatalogParser
+public static class CatalogParser
 {
     private const string CatalogKind = "Catalog";
     private const string ResourceTypeKind = "ResourceType";
@@ -22,10 +21,6 @@ public static partial class CatalogParser
     private static readonly string[] Kinds = [CatalogKind, ResourceTypeKind, MappingKind, PolicyKind, NamingKind, RolesKind];
 
     private static readonly YamlSchemaValidator Validator = new();
-
-    // Schema errors read "<Kind>: #/<dotted.path>" (nested ones follow in braces); the first path is the location.
-    [GeneratedRegex(@"^\w+: #(?<path>\S*)")]
-    private static partial Regex SchemaErrorRegex();
 
     // Valid is false when the file failed its schema. Such a file still counts toward the cross-file checks
     // that only need its kind or name, so one mistake is not reported a second time as a missing or undeclared item.
@@ -55,7 +50,9 @@ public static partial class CatalogParser
         var types = typeDocuments.Where(d => d.Valid).Select(ToResourceType).ToList();
         var mappings = OfKind(documents, MappingKind).Where(d => d.Valid).Select(ToMapping).ToList();
         var policies = policyDocuments.Where(d => d.Valid).Select(ToPolicy).ToList();
-        var naming = Merge(OfKind(documents, NamingKind).Where(d => d.Valid), "rules", ToNamingRule, errors);
+        var namingDocuments = OfKind(documents, NamingKind).Where(d => d.Valid).ToList();
+        var naming = Merge(namingDocuments, "rules", ToNamingRule, errors);
+        CheckNamingAllowed(namingDocuments, errors);
         var roles = Merge(OfKind(documents, RolesKind).Where(d => d.Valid), "roles", role => (string?)role ?? string.Empty, errors);
 
         // A file whose kind could not be read might have been the missing Catalog, so do not claim it is missing.
@@ -85,19 +82,11 @@ public static partial class CatalogParser
         JToken parsed;
         try
         {
-            var stream = new YamlStream();
-            stream.Load(new StringReader(source.Content));
-            if (stream.Documents.Count > 1)
-            {
-                errors.Add(new LoadError(source.Path, string.Empty, "contains several YAML documents; use one YAML document per file."));
-                return null;
-            }
-
             parsed = YamlSchemaValidator.ParseYaml(source.Content);
         }
         catch (Exception ex)
         {
-            errors.Add(new LoadError(source.Path, string.Empty, $"not valid YAML: {ex.Message}"));
+            errors.Add(new LoadError(source.Path, string.Empty, $"not valid YAML: {YamlSchemaValidator.DescribeYamlError(ex, source.Content)}"));
             return null;
         }
 
@@ -116,22 +105,15 @@ public static partial class CatalogParser
         var kind = (string?)kindToken ?? string.Empty;
         if (!Kinds.Contains(kind))
         {
+            // Readable, just not ours: it is not a missing Catalog, and no kind-specific check applies to it.
             errors.Add(new LoadError(source.Path, "kind", $"unknown kind '{kind}'; expected one of {string.Join(", ", Kinds)}."));
-            return null;
+            return new Document(source.Path, kind, body, false);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var result = await Validator.ValidateContentAsync(await EmbeddedSchema.ReadAsync($"schemas/catalog/{kind.ToLowerInvariant()}.schema.json", cancellationToken), source.Content);
-        errors.AddRange(result.Errors.Select(e => ToSchemaError(source.Path, e)));
+        var result = await Validator.ValidateTokenAsync(await EmbeddedSchema.ReadAsync($"schemas/catalog/{kind.ToLowerInvariant()}.schema.json", cancellationToken), body);
+        errors.AddRange(result.Errors.Select(e => LoadError.FromSchema(source.Path, e)));
         return new Document(source.Path, kind, body, result.IsValid);
-    }
-
-    internal static LoadError ToSchemaError(string file, string schemaError)
-    {
-        var path = SchemaErrorRegex().Match(schemaError).Groups["path"].Value;
-        var location = path.Trim('/');
-        var detail = string.Join(' ', schemaError.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
-        return new LoadError(file, location, $"schema violation: {detail}");
     }
 
     private static List<Document> OfKind(List<Document> documents, string kind) => documents.Where(d => d.Kind == kind).ToList();
@@ -173,6 +155,34 @@ public static partial class CatalogParser
             {
                 var known = declared.Count == 0 ? "none" : string.Join(", ", declared);
                 errors.Add(new LoadError(mapping.Source, "match.type", $"'{type}' is not a declared ResourceType (declared: {known})."));
+            }
+        }
+    }
+
+    // A truncated name ends in a lowercase hex hash that is appended after filtering, so every rule must allow those digits.
+    private const string HashDigits = "0123456789abcdef";
+
+    private static void CheckNamingAllowed(List<Document> documents, List<LoadError> errors)
+    {
+        foreach (var document in documents)
+        {
+            foreach (var (kind, rule) in Map(document.Body["rules"]))
+            {
+                var location = $"rules.{kind}.allowed";
+                var allowed = Text(rule["allowed"]);
+                try
+                {
+                    var regex = new Regex(allowed);
+                    var rejected = HashDigits.Where(c => !regex.IsMatch(c.ToString())).ToList();
+                    if (rejected.Count > 0)
+                    {
+                        errors.Add(new LoadError(document.Source, location, $"'{allowed}' must allow every hash digit 0-9a-f; it rejects {string.Concat(rejected)}."));
+                    }
+                }
+                catch (ArgumentException e)
+                {
+                    errors.Add(new LoadError(document.Source, location, $"'{allowed}' is not a valid regex character class: {e.Message}"));
+                }
             }
         }
     }
