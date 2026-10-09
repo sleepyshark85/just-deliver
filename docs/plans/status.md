@@ -68,6 +68,10 @@ Picked up by the slice named; remove once done.
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
 
+- **2026-10-09 (user direction)** — Pulumi stays (no Bicep backend); App Service possible later, Container
+  Apps now; environments have one owner (team or platform), a team may own several, stage/production are
+  platform-owned shared. Recorded in ADRs 0002, 0013, 0008 (status unchanged, folded in on review).
+
 - **2026-10-09 (Viedoc)** — Investigated a real regulated customer (Viedoc / Project Daybreak):
   `docs/use-cases/viedoc-daybreak.md`. Raw sources stay local (gitignored). Added open questions C53, E52,
   E53, F54, F55, F56, B57, H58. MVP revised: release sets (S13, S13b), qualification record (S17), second

@@ -102,8 +102,8 @@ multi-repository work items; keeping dev and integration current (no owner); Con
 | 8 | **Build contract**: artifacts, migrations, DB hash, test report, SBOM per package | ◐ upload = definition + image ([0007](../decisions/0007-definition-upload-snapshot.md)) | A workload version declares its evidence (test report, SBOM, migrations); readiness checks conformance. Release-set format reserves the fields. Post-MVP |
 | 9 | **DB migrations** with history, hash verification, expand–contract, dev reconcile | ◐ [0015](../decisions/0015-database-migrations.md) (preDeploy job, app image) | Add DB-hash verification as qualification evidence; dev reconcile. Post-MVP |
 | 10 | **~200 secrets and config declared**, no manual gate | ◐ identity-first; D22/D23 open | Secret *names* declared in the definition, values held in Key Vault and set through a controlled path; config from definition variables. Post-MVP |
-| 11 | **IaC in Bicep**, drift detection, infra pinned with receipts | ◐ Pulumi proposed ([0002](../decisions/0002-pulumi-automation-api.md), [0003](../decisions/0003-pulumi-yaml-template-library.md)); drift rider in 0006 | **Conflict:** their tech leads chose Bicep. The resolver is engine-agnostic, so a Bicep backend (Azure Deployment Stacks) can be a second provider. **Decision for the user** |
-| 12 | **Runtimes**: App Service with slots, Windows VMs (Worker, being migrated), some Container Apps | ◐ Container Apps only ([0013](../decisions/0013-container-apps-runtime.md)) | **Conflict:** an App Service runtime is needed to serve them; VMs are leaving anyway. E27's runtime port is the seam. **Decision for the user** |
+| 11 | **IaC in Bicep**, drift detection, infra pinned with receipts | ◐ Pulumi ([0002](../decisions/0002-pulumi-automation-api.md), [0003](../decisions/0003-pulumi-yaml-template-library.md)); drift rider in 0006 | **Decided 2026-10-09: we use Pulumi.** Drift detection and pinned infrastructure come from our model; Bicep is not supported |
+| 12 | **Runtimes**: App Service with slots, Windows VMs (Worker, being migrated), some Container Apps | ◐ Container Apps only ([0013](../decisions/0013-container-apps-runtime.md)) | **Decided 2026-10-09:** App Service can come later as a second runtime implementation; Container Apps for now. VMs are leaving anyway |
 | 13 | **Multi-region rollout**: training then production per region, regions in parallel, China a separate cloud; deploy and release decoupled | ✗ one region per environment | Environment *instances* per region; rollout order as data; deploy-dark-then-switch already decouples deploy from release. New E53. Post-MVP |
 | 14 | **Orchestration**: one trigger, wait for completion, restart only what failed | ✅ durable step loop by design (E29, [flow](../architecture/workload_deployment_flow.html)) | This is their open T82. MVP proves the loop in-process |
 | 15 | **Deployed-state record**; the next release reads it | ✅ resolved graph + deployment record per environment | MVP S17 |
@@ -137,10 +137,9 @@ qualification evidence on every deploy, and promotion between two environments b
 ## 6. Consequences for our design
 
 - **New open questions** C53, E52, E53, F54, F55, F56, B57 and H58 are added to [open-questions.md](../open-questions.md).
-- **Decisions to bring to the user** (ADR review): Bicep backend alongside or instead of Pulumi (0002/0003);
-  App Service runtime beside Container Apps (0013); the deployment set as the unit of release (0006/0007).
-- **ADR 0008/0009 (team-owned environments) do not describe Viedoc's shared stage and production.** The
-  platform must also serve platform-owned shared environments that host many teams' workloads. C12's tiers
-  already allow this; the ADRs should say so on review.
+- **User direction, 2026-10-09:** (1) Pulumi stays — no Bicep backend. (2) App Service may be added later
+  as a second runtime; Container Apps for now. (3) Every environment has one owner, a team or the platform;
+  a team may own several; stage and production are platform-owned shared environments. Recorded in ADRs
+  0002, 0013 and 0008. Still open for ADR review: the deployment set as the unit of release (0006/0007, C53).
 - **[MVP](../plans/mvp.md) changes:** release set, workload-level ordering, qualification record,
   approvals and promotion between two environments, phase timings.
