@@ -5,9 +5,13 @@
 
 ## Now
 
-- **Next slice:** S15c — variables and `runtime.*` policies (brief drafted: design note first).
-- **In progress:** —
-- **Blocked:** —
+- **Next slice:** — (waiting on the user: S15c blocked, model trial decision).
+- **In progress:** S15c — branch `mvp/s15c-runtime-variables` (ff9401f), 3 rounds without APPROVE → **blocked**.
+- **Blocked:** S15c — escalated to the user 2026-10-10. Round 3 open findings: (1) the orchestrator stores dependency
+  outputs by bare node name, so with cross-scope edges a same-named node in another scope overwrites a value; (2) an
+  export containing `${resource.…}` crashes resolution (UnreachableException) instead of a LoadError; (3) `fn::entries`
+  accepted at any depth but handled only at top level. Suggestion: reject non-string values under an entries field.
+  User to decide: model trial (developer model) and whether to narrow the design (lead proposal in the session log).
 
 ## Slices
 
@@ -35,7 +39,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S14 | Sample app | done | PR #16 | 2 | Done ahead of S11–S13 (independent). Round 1: 2 blocking (`/health` false-healthy on a missing container; unsynchronised shared Cosmos client → leaks/flapping). Image `ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385…` — public (anonymous pull verified 2026-10-09). |
 | S15a | `container-app` template | done | PR #25 | 1 | Split from S15. Developer stopped at the risk as briefed: Pulumi YAML cannot turn a map into a list, so the template takes `variables` as `List<Map<String>>` (`{name, value}`) and the engine converts (S15c). APPROVE first round. Azure gate green (CLI 84/84, real Container App: Multiple, SystemAssigned, min 0). |
 | S15b | Runtime mapping + `runtime` node | done | PR #26 | 1 | APPROVE first round. Runtime mapping from data, reserved `runtime` node at `@workload`, phase `Runtime` (not deployed until S16), grants now edge to it, probe as data. Review hazards (image/port missing in the second pass; runtime-mapping node current id; `runtime.*` refs unchecked by TemplateLibrary) moved into S15c Part 0. Azure gate: all green except `DeployAzureTests`, which failed under memory pressure (an unrelated 8.8 GB process + a parallel review run) and passed alone (2 min, nothing left) — treated as load-related, cause unconfirmed. |
-| S15c | Variables + `runtime.*` policies | todo | | | `${resource.*}` in workload variables, map→list for the template, enforce-monitoring sets the App Insights connection string. |
+| S15c | Variables + `runtime.*` policies | blocked | `mvp/s15c-runtime-variables` | 3 | Design note approved first. Round 1: 2 blocking (variables accepted the whole expression language — contract is `${resource.*}` only; grants could read exports, bypassing the grantable check). Round 2: 2 blocking (grant bypass via statically substituted exports; `fn::entries` accepted with any source anywhere). Round 3: 3 blocking (see Now). All security/correctness edge cases of the new cross-scope export mechanism; production +335/−121, over the cap. Escalated. |
 | S16 | Deploy steps | todo | | | |
 | S17 | Release record + qualification | todo | | | |
 | S18 | Second environment + approvals | todo | | | |
@@ -79,6 +83,14 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-10 (S15c blocked)** — S15c hit 3 review rounds without APPROVE; each round the Opus reviewer found new
+  edge cases (probe-confirmed) in the cross-scope export mechanism the Sonnet developer built. Model-trial trigger met
+  (a slice needing 3 rounds; two rounds broader than the contract). Lead proposal to the user: narrow the design —
+  only the `runtime` node may read `${resource.*}`; mapping exports may not contain `${resource.*}` (load error);
+  `fn::entries` only as a top-level field and only string values beneath it; the orchestrator keys known outputs by
+  scope — and run the fix round (and S16+) with a different developer model. Host note: an unrelated `gremlins`
+  mutation-testing job uses ~8.8 GB of 16 GB; run review and Azure gates one at a time.
 
 - **2026-10-09 (team identity)** — Restarted with the `ARM_*` team identity; personal `az` session logged out. S12 Azure
   gate re-run as the team identity: green, nothing left behind. Azure test runs take ~50 min, mostly Cosmos account
