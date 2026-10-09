@@ -1,16 +1,17 @@
 name: resource-group
 runtime: yaml
-description: Provisions an Azure Resource Group
+description: Provisions an Azure resource group
 
 configuration:
+  # Name of the resource group
   resourceGroupName:
     type: String
-    description: Name of the resource group to create
-
+  # Azure region of the resource group
   location:
     type: String
-    default: southeastasia
-    description: Azure region the resource group is created in
+  # Tags applied to the resource group
+  tags:
+    type: Map<String>
 
 resources:
   resourceGroup:
@@ -18,6 +19,7 @@ resources:
     properties:
       resourceGroupName: ${resourceGroupName}
       location: ${location}
+      tags: ${tags}
 
 outputs:
   resourceGroupName: ${resourceGroup.name}

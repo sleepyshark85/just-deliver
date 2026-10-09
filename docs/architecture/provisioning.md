@@ -32,9 +32,9 @@ A mapping is the "blessed" configuration for a resource type. Illustrative value
 | `cache` | `azure-redis` | sku `Basic`, eviction_policy `allkeys-lru`, persistence false, monitoring true |
 | `queue` | `azure-service-bus` | sku `Standard`, max_message_size 256 KB, default_ttl 14 days, monitoring true |
 
-The only mapping implemented today resolves `database` to **Cosmos DB** (SQL API account + database
-`appdb` + container `items`, partition key `/id`, free tier, Session consistency) — see
-`samples/provisioner/cosmos-db`. Engine choice per type is still open (see [mvp.md](../plans/mvp.md#needs-decision)).
+The only mapping implemented today resolves `cosmos-sql` to a **Cosmos DB** SQL container (partition key `/id`) in
+the environment's shared database, with a container-scoped grant — see `catalog/mappings/cosmos-sql` and
+`catalog/templates/azure`. Engine choice per type is still open (see [mvp.md](../plans/mvp.md#needs-decision)).
 
 **Environment-specific values** (illustrative, `database`):
 
@@ -150,7 +150,7 @@ inter-resource dependencies such as a read replica (C52 graph); naming (C14); ru
 (same as `pulumi config set`), and persist after the process exits. There is no separate runtime-override
 layer — at `UpAsync()` the file already holds what the code wrote. Config is always driven from code; nobody
 hand-authors it. YAML runtime gotcha: numeric-looking strings such as `"1.2"` are coerced to numbers by
-`${}` substitution (hence `minTlsVersion` is hardcoded in the app-service template).
+`${}` substitution (so a version such as `1.2` is better written as a literal in the template).
 
 ### Chaining stacks
 
@@ -192,9 +192,9 @@ runner).
 
 ### Current implementation vs this design
 
-| Design | Code today (`src/backend-providers/jd.bp.pulumi`, `samples/provisioner`) |
+| Design | Code today (`src/backend-providers/jd.bp.pulumi`, `catalog/templates`) |
 |---|---|
-| Templates at `templates/<provider>/<resource-type>/Pulumi.yaml` | `samples/provisioner/<resource-type>/Pulumi.yaml`, optional `Pulumi.default.yaml` copied to `Pulumi.<stack>.yaml` |
+| Templates at `templates/<provider>/<resource-type>/Pulumi.yaml` | `catalog/templates/<provider>/<resource-type>/Pulumi.yaml`; no per-template default config (the orchestrator sets every input) |
 | Stack name = workload name | Stack name = `DeploymentPackage.Name` (e.g. `resource-group`, `appinsights-metrics-publisher`) — collides across workloads |
 | Fresh temp dir, cleaned up | `<ScratchDirectory>/just-deliver/<name>/<version>`, not cleaned up |
 | — | Every `DeployAsync`/`PreviewAsync` runs `RefreshAsync` first; per-property changes captured from engine events into `DeploymentResult.Changes` |

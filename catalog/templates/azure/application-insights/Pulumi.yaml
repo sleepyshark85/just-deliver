@@ -1,0 +1,33 @@
+name: application-insights
+runtime: yaml
+description: Provisions a workspace-based Application Insights component
+
+configuration:
+  # Resource group of the component
+  resourceGroupName:
+    type: String
+  # Azure region of the component
+  location:
+    type: String
+  # Name of the component
+  appInsightsName:
+    type: String
+  # Resource ID of the Log Analytics workspace the component sends data to
+  workspaceResourceId:
+    type: String
+
+resources:
+  component:
+    type: azure-native:applicationinsights:Component
+    properties:
+      resourceGroupName: ${resourceGroupName}
+      resourceName: ${appInsightsName}
+      location: ${location}
+      kind: web
+      applicationType: web
+      workspaceResourceId: ${workspaceResourceId}
+
+outputs:
+  appInsightsId: ${component.id}
+  appInsightsName: ${component.name}
+  connectionString: ${component.connectionString}

@@ -105,7 +105,7 @@ public sealed class CliTests : IDisposable
         // A policy-added field: the value, where it came from in the environment, and the policy that added it.
         Assert.Contains("  workspaceResourceId = /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev (from env.logAnalytics.id)   [PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)]", stdout);
         // A mapping field: its provenance names the file once.
-        Assert.Contains("  throughput = 400   [Mapping: mappings/cosmos-sql/standard.yaml]", stdout);
+        Assert.Contains("  partitionKeyPath = /id   [Mapping: mappings/cosmos-sql/standard.yaml]", stdout);
         Assert.Contains("= pending: ", stdout);
         Assert.Contains("depends on: ", stdout);
     }

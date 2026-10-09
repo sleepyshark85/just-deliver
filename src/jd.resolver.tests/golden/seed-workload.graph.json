@@ -11,16 +11,18 @@
       "kind": "Create",
       "stack": "just-deliver-sample-app.dev._workload.appinsights",
       "phase": "Infrastructure",
-      "hash": "7e6cb326453ac9e834883c35611a242af15dc8424dd76d8db26fd7d4bbd26a81",
+      "hash": "91b949bc7db071da87b6911110c9f8506280e8e8d615d50d07becf8e48b1960d",
       "dependsOn": [],
       "dependsOnRuntime": false,
       "config": {
         "appInsightsName": "appi-just-deliver-sample-app-dev-1c8d23",
+        "location": "southeastasia",
         "resourceGroupName": "rg-dev",
         "workspaceResourceId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev"
       },
       "provenance": {
         "appInsightsName": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
+        "location": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
         "resourceGroupName": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
         "workspaceResourceId": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)"
       }
@@ -33,70 +35,22 @@
       "kind": "Grant",
       "stack": "just-deliver-sample-app.dev._workload.appinsights-access",
       "phase": "AfterRuntime",
-      "hash": "a55293991c597e2a30ddd5a556584ea23f7e480e4c9868f3c40f0dfa2e81f93b",
+      "hash": "e1c8d629f9a7c7ebfea72317026a9975c9ccab5d46afdee03963dbb200637570",
       "dependsOn": [
         "just-deliver-sample-app/dev/@workload/appinsights"
       ],
       "dependsOnRuntime": true,
       "config": {
         "principalId": "${runtime.principalId}",
-        "roleAssignmentId": "${guid(appinsights.id, runtime.principalId, 'metrics-publisher')}",
-        "roleDefinitionId": "3913510d-42f4-4e42-8a64-420c390055eb",
-        "scope": "${appinsights.id}"
+        "roleAssignmentId": "${guid(appinsights.appInsightsId, runtime.principalId, 'metrics-publisher')}",
+        "roleGuid": "3913510d-42f4-4e42-8a64-420c390055eb",
+        "scope": "${appinsights.appInsightsId}"
       },
       "provenance": {
         "principalId": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
         "roleAssignmentId": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
-        "roleDefinitionId": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
+        "roleGuid": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
         "scope": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)"
-      }
-    },
-    {
-      "id": "just-deliver-sample-app/dev/cosmos-sql/access",
-      "scope": "cosmos-sql",
-      "name": "access",
-      "template": "azure/cosmos-sql-role-assignment",
-      "kind": "Grant",
-      "stack": "just-deliver-sample-app.dev.cosmos-sql.access",
-      "phase": "AfterRuntime",
-      "hash": "361cebe6b0af3ba1c1b5133ca85330a344712c5356fb878adc8715d4b3d8f747",
-      "dependsOn": [],
-      "dependsOnRuntime": true,
-      "config": {
-        "accountId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev",
-        "principalId": "${runtime.principalId}",
-        "roleAssignmentId": "${guid(env.cosmos.accountId, runtime.principalId, 'data-contributor')}",
-        "roleDefinitionId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002"
-      },
-      "provenance": {
-        "accountId": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "principalId": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "roleAssignmentId": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "roleDefinitionId": "Mapping: mappings/cosmos-sql/standard.yaml"
-      }
-    },
-    {
-      "id": "just-deliver-sample-app/dev/cosmos-sql/database",
-      "scope": "cosmos-sql",
-      "name": "database",
-      "template": "azure/cosmos-sql-database",
-      "kind": "Create",
-      "stack": "just-deliver-sample-app.dev.cosmos-sql.database",
-      "phase": "Infrastructure",
-      "hash": "801ef0ac8d969dbea9ca1b55ad9606b702cb9b4740f3467abb6fc89c092905c7",
-      "dependsOn": [],
-      "dependsOnRuntime": false,
-      "config": {
-        "accountName": "cosmos-dev",
-        "databaseName": "just-deliver-sample-app-cosmos-sql-dev",
-        "resourceGroupName": "rg-dev",
-        "throughput": 400
-      },
-      "provenance": {
-        "accountName": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "databaseName": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "resourceGroupName": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "throughput": "Mapping: mappings/cosmos-sql/standard.yaml"
       }
     },
     {
@@ -107,31 +61,55 @@
       "kind": "Create",
       "stack": "just-deliver-sample-app.dev.cosmos-sql.container",
       "phase": "Infrastructure",
-      "hash": "8e88bdaa60e085c8a41223a690d37122a2fd9430ff362aec1008af52f21f8d8a",
-      "dependsOn": [
-        "just-deliver-sample-app/dev/cosmos-sql/database"
-      ],
+      "hash": "be91b38a16b89b968dbbbb12efd3ed8610e3a023bc3f4b4364f40d642a57b154",
+      "dependsOn": [],
       "dependsOnRuntime": false,
       "config": {
-        "accountName": "cosmos-dev",
-        "containerName": "cosmos-sql",
-        "databaseName": "${database.databaseName}",
-        "partitionKeyPath": "/id",
-        "resourceGroupName": "rg-dev"
+        "accountId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev",
+        "containerName": "just-deliver-sample-app-cosmos-sql-609b25",
+        "databaseName": "db-dev",
+        "partitionKeyPath": "/id"
       },
       "provenance": {
-        "accountName": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "accountId": "Mapping: mappings/cosmos-sql/standard.yaml",
         "containerName": "Mapping: mappings/cosmos-sql/standard.yaml",
         "databaseName": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "partitionKeyPath": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "resourceGroupName": "Mapping: mappings/cosmos-sql/standard.yaml"
+        "partitionKeyPath": "Mapping: mappings/cosmos-sql/standard.yaml"
+      }
+    },
+    {
+      "id": "just-deliver-sample-app/dev/cosmos-sql/access",
+      "scope": "cosmos-sql",
+      "name": "access",
+      "template": "azure/cosmos-sql-role-assignment",
+      "kind": "Grant",
+      "stack": "just-deliver-sample-app.dev.cosmos-sql.access",
+      "phase": "AfterRuntime",
+      "hash": "26e30b16b6baf8ffdb9d8d6b651162443298e5a6d4e2ebcc49bea1453d8faa0e",
+      "dependsOn": [
+        "just-deliver-sample-app/dev/cosmos-sql/container"
+      ],
+      "dependsOnRuntime": true,
+      "config": {
+        "accountId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev",
+        "principalId": "${runtime.principalId}",
+        "roleAssignmentId": "${guid(container.scope, runtime.principalId, 'data-contributor')}",
+        "roleGuid": "00000000-0000-0000-0000-000000000002",
+        "scope": "${container.scope}"
+      },
+      "provenance": {
+        "accountId": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "principalId": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "roleAssignmentId": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "roleGuid": "Mapping: mappings/cosmos-sql/standard.yaml",
+        "scope": "Mapping: mappings/cosmos-sql/standard.yaml"
       }
     }
   ],
   "exports": {
     "cosmos-sql": {
       "container": "${container.containerName}",
-      "database": "${database.databaseName}",
+      "database": "db-dev",
       "endpoint": "https://cosmos-dev.documents.azure.com:443/"
     }
   }

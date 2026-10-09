@@ -1,0 +1,43 @@
+name: cosmos-sql-role-assignment
+runtime: yaml
+description: >
+  Grants a principal a Cosmos DB data-plane role (SQL API) at a given scope. Takes the account's resource id
+  alone, so a grant needs no other value from the environment.
+
+configuration:
+  # Resource ID of the Cosmos DB account
+  accountId:
+    type: String
+  # Scope of the grant, for example the account or one container
+  scope:
+    type: String
+  # GUID of the Cosmos DB SQL role definition
+  roleGuid:
+    type: String
+  # Principal ID of the identity to grant the role to
+  principalId:
+    type: String
+  # GUID identifying this role assignment, unique within the account
+  roleAssignmentId:
+    type: String
+
+variables:
+  # /subscriptions/<id>/resourceGroups/<group>/providers/Microsoft.DocumentDB/databaseAccounts/<account>
+  idParts:
+    fn::split:
+      - "/"
+      - ${accountId}
+
+resources:
+  roleAssignment:
+    type: azure-native:cosmosdb:SqlResourceSqlRoleAssignment
+    properties:
+      resourceGroupName: ${idParts[4]}
+      accountName: ${idParts[8]}
+      roleAssignmentId: ${roleAssignmentId}
+      roleDefinitionId: ${accountId}/sqlRoleDefinitions/${roleGuid}
+      principalId: ${principalId}
+      scope: ${scope}
+
+outputs:
+  roleAssignmentId: ${roleAssignment.id}

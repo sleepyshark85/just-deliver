@@ -200,6 +200,7 @@ public class ExpanderTests
             {
                 ["resourceGroup"] = "rg",
                 ["cosmos.accountName"] = "acct",
+                ["cosmos.databaseName"] = "db",
                 ["cosmos.accountId"] = "/acct",
                 ["cosmos.endpoint"] = "https://acct",
             },
@@ -209,7 +210,7 @@ public class ExpanderTests
 
         Assert.Empty(result.Errors);
         var requirement = Assert.Single(result.Requirements);
-        Assert.Equal(["access", "container", "database"], requirement.Nodes.Select(n => n.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(["access", "container"], requirement.Nodes.Select(n => n.Name).Order(StringComparer.Ordinal));
         var access = requirement.Nodes.Single(n => n.Name == "access");
         Assert.Equal(NodeKind.Grant, access.Kind);
         Assert.Equal(["container", "database", "endpoint"], requirement.Exports.Keys.Order(StringComparer.Ordinal));

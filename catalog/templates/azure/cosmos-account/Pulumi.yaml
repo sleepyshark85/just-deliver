@@ -1,0 +1,43 @@
+name: cosmos-account
+runtime: yaml
+description: Provisions a Cosmos DB account for the SQL (NoSQL) API, provisioned throughput only
+
+configuration:
+  # Resource group of the account
+  resourceGroupName:
+    type: String
+  # Azure region of the account
+  location:
+    type: String
+  # Name of the account (globally unique)
+  accountName:
+    type: String
+  # Apply the free tier discount; Azure allows one free-tier account per subscription
+  enableFreeTier:
+    type: Boolean
+  # Hard cap on provisioned RU/s across the account, enforced by Azure (backstop for the free tier)
+  totalThroughputLimit:
+    type: Integer
+
+resources:
+  account:
+    type: azure-native:cosmosdb:DatabaseAccount
+    properties:
+      resourceGroupName: ${resourceGroupName}
+      location: ${location}
+      accountName: ${accountName}
+      kind: GlobalDocumentDB
+      databaseAccountOfferType: Standard
+      enableFreeTier: ${enableFreeTier}
+      capacity:
+        totalThroughputLimit: ${totalThroughputLimit}
+      consistencyPolicy:
+        defaultConsistencyLevel: Session
+      locations:
+        - locationName: ${location}
+          failoverPriority: 0
+
+outputs:
+  accountId: ${account.id}
+  accountName: ${account.name}
+  documentEndpoint: ${account.documentEndpoint}

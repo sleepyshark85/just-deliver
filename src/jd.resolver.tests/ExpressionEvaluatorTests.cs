@@ -25,6 +25,7 @@ public class ExpressionEvaluatorTests
         {
             ["resourceGroup"] = "rg-test",
             ["cosmos.accountName"] = "acct",
+            ["cosmos.databaseName"] = "db",
             ["cosmos.accountId"] = "/acct/id",
             ["cosmos.endpoint"] = "https://acct.example",
             ["logAnalytics.id"] = "/law/id",
@@ -249,9 +250,22 @@ public class ExpressionEvaluatorTests
 
         Assert.Empty(errors);
         Assert.All(results, r => Assert.NotNull(r));
-        Assert.Contains(new Resolved("shop-db-dev"), results);
-        Assert.Contains(new Resolved("/acct/id/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002"), results);
-        Assert.Contains(results, r => r is Pending p && p.Original.StartsWith("${guid(env.cosmos.accountId, runtime.principalId", StringComparison.Ordinal));
+        Assert.Contains(results, r => r is Resolved v && v.Value.StartsWith("shop-db-", StringComparison.Ordinal));
+        Assert.Contains(new Resolved("00000000-0000-0000-0000-000000000002"), results);
+        Assert.Contains(results, r => r is Pending p && p.Original.StartsWith("${guid(container.scope, runtime.principalId", StringComparison.Ordinal));
         Assert.Contains(results, r => r is Pending p && p.References.Contains(new Reference(ReferenceKind.Resource, "cosmos-sql", "endpoint")));
+    }
+
+    [Fact]
+    public async Task Seed_container_names_stay_distinct_when_workload_and_id_run_together()
+    {
+        // All workloads of an environment share one Cosmos database, so a clash would let one workload's grant reach another's container (D19).
+        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
+        var context = (string workload, string id) => Context(workload: workload, id: id, naming: catalog.Naming);
+
+        var first = Resolve("${name('cosmos-container')}", context("shop-orders", "store"));
+        var second = Resolve("${name('cosmos-container')}", context("shop", "orders-store"));
+
+        Assert.NotEqual(first, second);
     }
 }

@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\jd.core\jd.core.csproj" />
+    <!-- The contract check reads the resolver's output (ResolvedGraph); the resolver stays free of Pulumi. -->
+    <ProjectReference Include="..\..\jd.resolver\jd.resolver.csproj" />
   </ItemGroup>
 
 </Project>
