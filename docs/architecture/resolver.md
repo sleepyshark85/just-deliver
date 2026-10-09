@@ -211,7 +211,8 @@ scope, the outputs already known) and a file/location for error reports.
 
 ```
 expression := path | function '(' [ argument { ',' argument } ] ')'
-argument   := path | "'" literal "'"          # a literal has no quote inside it
+function   := [a-z][a-z0-9]*
+argument   := path | "'" literal "'"          # a literal has no quote inside it; valid only as an argument
 path       := segment { '.' segment }          # segment: letters, digits, '_' and '-'
 ```
 

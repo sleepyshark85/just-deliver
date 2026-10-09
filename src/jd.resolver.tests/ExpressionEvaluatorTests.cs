@@ -1,3 +1,4 @@
+using jd.definitionvalidator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expressions;
@@ -7,17 +8,6 @@ namespace jd.resolver.tests;
 
 public class ExpressionEvaluatorTests
 {
-    private const string EnvYaml = """
-        kind: Environment
-        name: dev
-        region: testregion
-        tier: team
-        values:
-          resourceGroup: rg-test
-          cosmos: { accountName: acct, accountId: /acct/id, endpoint: "https://acct.example" }
-          logAnalytics: { id: /law/id }
-        """;
-
     private static readonly Dictionary<string, NamingRule> Naming = new()
     {
         ["short"] = new("{workload}-{id}-{env}", 255, "[a-z0-9-]"),
@@ -27,7 +17,19 @@ public class ExpressionEvaluatorTests
 
     private static readonly Dictionary<string, string> Roles = new() { ["reader"] = "00000000-0000-0000-0000-000000000001" };
 
-    private static EnvironmentDescriptor Env { get; } = EnvironmentParser.ParseAsync("env.yaml", EnvYaml).Result.Descriptor!;
+    private static readonly EnvironmentDescriptor Env = new(
+        "dev",
+        "testregion",
+        "team",
+        new Dictionary<string, string>
+        {
+            ["resourceGroup"] = "rg-test",
+            ["cosmos.accountName"] = "acct",
+            ["cosmos.accountId"] = "/acct/id",
+            ["cosmos.endpoint"] = "https://acct.example",
+            ["logAnalytics.id"] = "/law/id",
+        },
+        []);
 
     private static ExpressionContext Context(
         string workload = "shop",
@@ -147,6 +149,7 @@ public class ExpressionEvaluatorTests
     [InlineData("${guid()}", "takes at least 1 argument(s) but got 0")]
     [InlineData("${a b}", "neither a dotted path nor a single-quoted literal")]
     [InlineData("${name('short'}", "not a valid function call")]
+    [InlineData("${'abc'}", "literals are only valid as function arguments")]
     [InlineData("${env.name", "unterminated expression")]
     public void Invalid_expressions_are_errors_with_location(string text, string message) => Assert.Contains(message, Fails(text).Message);
 
@@ -171,9 +174,8 @@ public class ExpressionEvaluatorTests
     {
         var name = Resolve("${name('tiny')}", Context(workload: "verylongworkload"));
 
-        Assert.Equal(12, name.Length);
-        Assert.StartsWith("verylo", name);
-        Assert.Matches("^[0-9a-f]{6}$", name[6..]);
+        // Hash: first 6 hex characters of SHA-256("verylongworkload|dev|db|tiny"), computed independently of the C# code.
+        Assert.Equal("verylo084fc9", name);
     }
 
     [Fact]
@@ -182,7 +184,8 @@ public class ExpressionEvaluatorTests
         var a = Resolve("${name('hashed')}");
 
         Assert.Equal(a, Resolve("${name('hashed')}"));
-        Assert.Matches("^x-[0-9a-f]{6}$", a);
+        // Hash: first 6 hex characters of SHA-256("shop|dev|db|hashed"); pins the input order.
+        Assert.Equal("x-9889ea", a);
         Assert.NotEqual(a, Resolve("${name('hashed')}", Context(workload: "other")));
         Assert.NotEqual(a, Resolve("${name('hashed')}", Context(id: "other")));
     }
@@ -217,7 +220,8 @@ public class ExpressionEvaluatorTests
         var a = Resolve("${guid(env.cosmos.accountId, 'x')}");
 
         Assert.Equal(a, Resolve("${guid(env.cosmos.accountId, 'x')}"));
-        Assert.Equal(BuiltIns.Uuid5(BuiltIns.GuidNamespace, "/acct/id|x").ToString(), a);
+        // Pinned: UUIDv5 of "/acct/id|x" in the documented namespace, computed independently of the C# code.
+        Assert.Equal("a81fb372-e883-5703-9b28-092d973ce2a0", a);
         Assert.NotEqual(a, Resolve("${guid(env.cosmos.accountId, 'y')}"));
     }
 
@@ -235,13 +239,15 @@ public class ExpressionEvaluatorTests
     public async Task Seed_catalog_and_workload_strings_evaluate()
     {
         var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
+        var workload = YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
+        var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
         var mapping = Assert.Single(catalog.Mappings);
         var policy = Assert.Single(catalog.Policies);
         var nodeNames = mapping.Nodes.Keys.Concat(policy.Add.Keys).ToHashSet();
         var strings = mapping.Nodes.Values.Concat(policy.Add.Values).SelectMany(n => n.Config.Values)
             .Concat(policy.Set.Values).Select(t => t.ToString())
             .Concat(mapping.Exports.Values)
-            .Append("${resource.cosmos-sql.endpoint}") // samples/provisioner/workload.yaml
+            .Append(sampleEndpoint)
             .ToList();
 
         var evaluator = new ExpressionEvaluator(new ExpressionContext(catalog.Roles, catalog.Naming, Env, "shop", "team-a", "db", nodeNames, new Dictionary<Reference, string>()));

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -107,6 +108,12 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
 
     private Value? EvaluateExpression(string expression, Action<string> fail)
     {
+        if (expression.StartsWith('\''))
+        {
+            fail($"{expression} is a literal; literals are only valid as function arguments, so write the text outside ${{…}}.");
+            return null;
+        }
+
         var open = expression.IndexOf('(');
         return open < 0 ? EvaluateArgument(expression, fail) : EvaluateCall(expression, open, fail);
     }
@@ -135,19 +142,19 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
         }
 
         // Evaluate every argument so all errors are reported, not just the first.
-        var values = arguments.Select(a => EvaluateArgument(a, fail)).ToList();
-        if (values.Any(v => v is null))
+        var values = arguments.Select(a => EvaluateArgument(a, fail)).OfType<Value>().ToList();
+        if (values.Count < arguments.Count)
         {
             return null;
         }
 
-        var pending = values.Where(v => v!.Text is null).SelectMany(v => v!.References).ToHashSet();
+        var pending = values.Where(v => v.Text is null).SelectMany(v => v.References).ToHashSet();
         if (pending.Count > 0)
         {
             return new Value(null, pending);
         }
 
-        var texts = values.Select(v => v!.Text!).ToList();
+        var texts = values.Select(v => v.Text ?? throw new UnreachableException("pending arguments are handled above")).ToList();
         var result = function == BuiltIns.NameFunction ? BuiltIns.Name(context, texts[0], fail) : BuiltIns.Guid(texts);
         return result is null ? null : Known(result);
     }
