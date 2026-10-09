@@ -201,6 +201,47 @@ grantable:                # paths under values that workloads may grant on
 - **Security:** `grantable` is the boundary the engine enforces for `grant` nodes
   ([D19](../open-questions.md)): a workload can only grant on the listed `env.*` resources.
 
+## Expressions
+
+Config values, exports and workload variables are strings that may mix text and `${…}` expressions
+(`${env.cosmos.accountId}/sqlRoleDefinitions/${role.cosmos-data-contributor}`). Non-string values are never
+touched. There is no escaping and no operators. Evaluation is pure (`jd.resolver.expressions`): the caller supplies a
+context (catalog roles and naming, environment descriptor, workload name and team, the current id, the node names in
+scope, the outputs already known) and a file/location for error reports.
+
+```
+expression := path | function '(' [ argument { ',' argument } ] ')'
+function   := [a-z][a-z0-9]*
+argument   := path | "'" literal "'"          # a literal has no quote inside it; valid only as an argument
+path       := segment { '.' segment }          # segment: letters, digits, '_' and '-'
+```
+
+| Path | Meaning |
+|---|---|
+| `env.<path>` | `EnvironmentDescriptor.TryGet`; an unknown path is an error |
+| `role.<name>` | role GUID from the catalog `Roles`; unknown is an error |
+| `workload.name`, `workload.team` | the workload being resolved |
+| `resource.<id>.<export>` | **pending** reference to a requirement's export |
+| `runtime.<output>` | **pending** reference to the runtime node |
+| `<node>.<output>` | **pending** reference to an output of a node in scope; unknown node is an error |
+
+**Two phases.** An expression evaluates to `Resolved(value)`, or to `Pending(original, references)` when it needs
+values that exist only at deploy time. `references` is the set of `(node, output)` or `(resource id, export)` pairs
+it waits on; the graph builder turns them into edges. A reference the context already knows resolves at once, so
+the orchestrator re-runs the same evaluator with the stack outputs it has collected, and `Pending` becomes
+`Resolved`. A string is pending when any expression in it is; a function is pending when any argument is.
+Every invalid expression in a string is reported (file, location, message) and the string yields no result.
+
+**Built-ins** (the only functions; an unknown function or wrong arity is an error):
+
+- `name('<kind>')` applies the `Naming` rule for the kind: substitute `{workload}`, `{id}` (the requirement's
+  effective id, or the node name for nodes not tied to a requirement), `{env}` and `{hash}`; lowercase; drop
+  characters not matching `allowed`; if longer than `maxLength`, keep the first `maxLength - 6` characters and append
+  the hash. `{hash}` is the first 6 lowercase hex characters of SHA-256 over `workload|env|id|kind`. An unknown kind
+  is an error.
+- `guid(arg, …)` is a UUIDv5 (RFC 4122) of the arguments joined with `|`, in the fixed namespace
+  `8d6c1f0e-5b3a-4c7e-9a21-7e4f0b2d6c35`. Changing the namespace changes every generated id.
+
 ## Engine rules (generic code, written once)
 
 | Rule | Behaviour |
@@ -208,9 +249,9 @@ grantable:                # paths under values that workloads may grant on
 | Matching | Specificity = number of matched criteria. A tie is an error, never file order. |
 | Layering | Template default < mapping < team override (only `overridable` fields, validated; post-MVP) < policy `set`. `default` only fills gaps. Fixes the old algorithm applying overrides after policies. |
 | Provenance | Every config field carries `{value, source file, rule, catalog version}`. |
-| References | Static values resolve immediately. `${node.output}` stays a typed reference and becomes a graph edge. |
+| References | Static values resolve immediately. `${node.output}` stays a pending reference ([Expressions](#expressions)) and becomes a graph edge. |
 | Phases | Derived from edges, not a hard-coded list: anything referencing `runtime.*` lands after the revision step. |
-| Built-ins | `name(kind)` applies `naming.yaml` (pattern, max length, charset, hash suffix — [C14](../open-questions.md)). `guid(...)` is UUIDv5, deterministic and re-run safe. Role GUIDs come from `roles.yaml`. Nothing else. |
+| Built-ins | `name(kind)` and `guid(...)` as defined in [Expressions](#expressions) ([C14](../open-questions.md)). Role GUIDs come from `roles.yaml`. Nothing else. |
 | Security | References may target only the workload's own nodes and `env.*` resources the [environment descriptor](#environment-descriptor) lists as grantable. Cross-workload references are rejected by the engine. |
 
 ## Output: ResolvedGraph
