@@ -13,15 +13,15 @@
     </PackageReference>
   </ItemGroup>
 
-  <!-- The seed catalog is the fixture, so the tests break when it drifts from the formats. -->
+  <!-- The seed catalog, sample workload and the resolver's golden files are the fixtures. -->
   <ItemGroup>
     <Content Include="../../catalog/**/*.yaml" Link="catalog/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../samples/provisioner/workload.yaml" Link="samples/workload.yaml" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="golden/*.json;golden/*.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../jd.resolver.tests/golden/seed-environment.yaml;../jd.resolver.tests/golden/seed-workload.graph.json" Link="golden/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../jd.resolver/jd.resolver.csproj" />
+    <ProjectReference Include="../jd.cli/jd.cli.csproj" />
   </ItemGroup>
 
 </Project>

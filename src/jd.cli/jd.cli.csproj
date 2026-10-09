@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>jd</AssemblyName>
+    <RootNamespace>jd.cli</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../jd.resolver/jd.resolver.csproj" />
+  </ItemGroup>
+
+</Project>
