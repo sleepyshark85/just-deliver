@@ -69,7 +69,7 @@ loader; the expression evaluator interprets them later.
 |---|---|---|
 | `Catalog` | `version` | exactly one |
 | `ResourceType` | `name`, `classes`, `exports`, `description` | `name` unique |
-| `Mapping` | `match`, `nodes`, `exports` | `match.type`, when present, names a declared type |
+| `Mapping` | `match`, `nodes`, `exports` | `match.type`, when present, names a declared type; `exports` keys equal the type's `exports` |
 | `Policy` | `name`, `reason`, `match`, and at least one of `set` / `default` / `add` | `name` unique |
 | `Naming` | `rules` (resource kind → `pattern`, `maxLength`, `allowed`) | files merge; a rule is defined once; `allowed` must be a valid regex character class that accepts every hex digit `0-9a-f` |
 | `Roles` | `roles` (name → role-definition GUID) | files merge; a role is defined once |
@@ -246,7 +246,9 @@ Every invalid expression in a string is reported (file, location, message) and t
 
 | Rule | Behaviour |
 |---|---|
-| Matching | Specificity = number of matched criteria. A tie is an error, never file order. |
+| Matching | A mapping matches when every `match` key equals the requirement's value. A requirement provides only `type`, `class` (default `standard`) and `tier` (from the environment); a mapping using any other key (`kind`, `runtime`) never matches a requirement. Specificity = number of `match` keys. A tie at the top is an error naming the tied files, never file order; no match is an error naming the requirement's type, class and tier. |
+| Type contract | A mapping's `exports` keys must equal its type's `exports` exactly; the catalog loader rejects a mismatch (missing or extra) at the mapping file, location `exports`. |
+| Expansion | Each node of the selected mapping becomes an expanded node (name, template, kind, config); config strings and mapping `exports` are evaluated with the effective requirement id as the current id and the mapping's node names in scope, other scalars pass through, objects and arrays recurse, and catalog tokens are cloned. Result per requirement: id, type, class, mapping file, nodes, exports (`Resolved` or `Pending`). Errors from all requirements are collected; a requirement with an error is left out of the result. |
 | Layering | Template default < mapping < team override (only `overridable` fields, validated; post-MVP) < policy `set`. `default` only fills gaps. Fixes the old algorithm applying overrides after policies. |
 | Provenance | Every config field carries `{value, source file, rule, catalog version}`. |
 | References | Static values resolve immediately. `${node.output}` stays a pending reference ([Expressions](#expressions)) and becomes a graph edge. |
@@ -269,7 +271,7 @@ content digest, config (values and typed references, with provenance), protectio
 
 1. **Static checks:** every type has a mapping per environment tier; no ambiguous matches; every
    `${…}` resolves to a real template config key or output; required template config supplied;
-   exports cover the type contract; naming fits the longest legal workload name.
+   mapping exports equal the type's exports exactly; naming fits the longest legal workload name.
 2. **Golden tests:** sample workloads resolved and snapshotted; PR diffs show resolution changes.
 3. **Fleet dry-run:** resolve every registered workload against the PR's catalog and report which change.
 4. **`pulumi preview` in a sandbox** for changed templates.

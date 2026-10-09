@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S05 — Matching + expansion
+- **Next slice:** S06 — Policies + provenance
 - **In progress:** —
 - **Blocked:** —
 
@@ -21,7 +21,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S03 | Environment descriptor | done | PR #4 | 2 | Round 1: 1 blocking — NJsonSchema ignores `propertyNames`, so dotted keys could shadow nested values (D19 boundary); now enforced in code. `CatalogError` renamed `LoadError`. |
 | S04 | Expression evaluator | done | PR #5 | 2 | Round 1: 1 blocking (uncommented `!`). Golden hash/guid values pinned. ~690 lines — 2nd size overrun despite 'stop and report' in the brief. |
 | S04a | Catalog loader hardening | done | PR #6 | 2 | Review follow-ups from S02–S04. Round 1: 1 blocking — new duplicate-key enrichment crashed on scanner errors (regression); fixed with tests. |
-| S05 | Matching + expansion | todo | | | |
+| S05 | Matching + expansion | done | PR #9 | 1 + suggestions | APPROVE first round. ~456 lines (≈223 prod) — developer stopped at the cap and reported, as asked; lead accepted. |
 | S06 | Policies + provenance | todo | | | |
 | S07 | Graph builder | todo | | | |
 | S08 | CLI skeleton | todo | | | |
@@ -45,7 +45,10 @@ Picked up by the slice named; remove once done.
 
 - **Loader (minor):** scanner failures report only "Exception during deserialization (line N)"; append the inner
   exception message.
-- **S06:** catalog records hold mutable `JToken`s — clone on consumption.
+- **S06:** catalog records hold mutable `JToken`s — clone on consumption (S05's expander already deep-clones).
+- **S06/S07:** the schema allows a requirement mapping with no `type` in `match`; it then matches every type and
+  skips the exports contract check. Reject it, or check the contract against the requirement's type on selection.
+- **Briefs:** cap production lines (~250) separately from tests; a cohesive slice's tests should not be trimmed to fit.
 - **S09:** the Viedoc revision moves the Cosmos database into the substrate (one 400 RU/s shared database per
   environment); the `cosmos-sql` mapping creates a container and a container-scoped grant instead of a database.
 - **S09:** Azure role assignments need the full role-definition id; the `role-assignment` template must build

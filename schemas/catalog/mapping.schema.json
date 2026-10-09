@@ -28,7 +28,7 @@
       "additionalProperties": { "$ref": "#/definitions/node" }
     },
     "exports": {
-      "description": "Export name -> expression producing it. Must cover the type's exports.",
+      "description": "Export name -> expression producing it. Must equal the type's exports exactly.",
       "type": "object",
       "additionalProperties": { "type": "string", "minLength": 1 }
     }

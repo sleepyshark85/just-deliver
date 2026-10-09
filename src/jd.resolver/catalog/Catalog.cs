@@ -30,7 +30,13 @@ public enum NodeKind
 public sealed record Node(string Template, NodeKind Kind, IReadOnlyDictionary<string, JToken> Config);
 
 /// <summary>Criteria key (type, class, tier, kind, runtime, and for policies template) to the value it must equal.</summary>
-public sealed record MatchCriteria(IReadOnlyDictionary<string, string> Criteria);
+public sealed record MatchCriteria(IReadOnlyDictionary<string, string> Criteria)
+{
+    // The keys a requirement provides to a mapping match; part of the mapping format.
+    public const string TypeKey = "type";
+    public const string ClassKey = "class";
+    public const string TierKey = "tier";
+}
 
 public sealed record Mapping(
     string Source,

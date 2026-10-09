@@ -106,6 +106,20 @@ public class CatalogParserTests
         Assert.Contains("'same' is already declared in p/a.yaml", error.Message);
     }
 
+    [Theory]
+    [InlineData("  endpoint: ${db.endpoint}\n  extra: ${db.extra}\n", "not in the type: extra")]
+    [InlineData("  other: ${db.endpoint}\n", "missing endpoint")]
+    public async Task Mapping_exports_must_equal_the_type_exports(string exports, string expected)
+    {
+        var mapping = "kind: Mapping\nmatch: { type: alpha-db }\nnodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n" + exports;
+        var result = await Parse(("catalog.yaml", CatalogFile), ("types/a.yaml", TypeFile("alpha-db")), ("maps/a.yaml", mapping));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("maps/a.yaml", error.File);
+        Assert.Equal("exports", error.Location);
+        Assert.Contains(expected, error.Message);
+    }
+
     [Fact]
     public async Task Mapping_for_an_undeclared_type_is_an_error()
     {
