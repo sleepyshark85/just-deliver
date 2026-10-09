@@ -80,6 +80,9 @@ public sealed class PulumiProviderTests : IDisposable
         },
     };
 
+    private Task<Dictionary<string, ConfigEntry>?> Outputs(DeploymentPackage package, CancellationToken cancellationToken) =>
+        _provider.GetOutputsAsync(package.StackName, package.DeploymentContent, cancellationToken);
+
     private string ScratchStackDirectory(string stack) => Path.Combine(_root, "scratch", "just-deliver", stack);
 
     [Fact]
@@ -87,18 +90,18 @@ public sealed class PulumiProviderTests : IDisposable
     {
         var ct = CancellationToken.None;
 
-        Assert.Null(await _provider.GetOutputsAsync(Package(), ct));
+        Assert.Null(await Outputs(Package(), ct));
 
         var preview = await _provider.PreviewAsync(Package(), ct);
         Assert.Empty(preview.Outputs);
         Assert.True(preview.Summary.GetValueOrDefault("Create") > 0);
-        Assert.Null(await _provider.GetOutputsAsync(Package(), ct)); // the preview created an empty stack: still not deployed
+        Assert.Null(await Outputs(Package(), ct)); // the preview created an empty stack: still not deployed
 
         var deployed = await _provider.DeployAsync(Package(), ct);
         Assert.Equal("hello", deployed.Outputs["greeting"].Value);
         Assert.False(deployed.Outputs["greeting"].IsSecret);
 
-        var read = await _provider.GetOutputsAsync(Package(), ct);
+        var read = await Outputs(Package(), ct);
         Assert.NotNull(read);
         Assert.Equal("hello", read["greeting"].Value);
 
@@ -114,7 +117,7 @@ public sealed class PulumiProviderTests : IDisposable
         var ct = CancellationToken.None;
 
         var deployed = await _provider.DeployAsync(Package(), ct);
-        var read = await _provider.GetOutputsAsync(Package(), ct);
+        var read = await Outputs(Package(), ct);
 
         Assert.True(deployed.Outputs["password"].IsSecret);
         Assert.Equal("s3cret-value", deployed.Outputs["password"].Value);
@@ -137,8 +140,8 @@ public sealed class PulumiProviderTests : IDisposable
         await _provider.DeployAsync(Package("one", "shop.dev.a.echo"), ct);
         await _provider.DeployAsync(Package("two", "shop.dev.b.echo"), ct);
 
-        Assert.Equal("one", (await _provider.GetOutputsAsync(Package(stack: "shop.dev.a.echo"), ct))!["greeting"].Value);
-        Assert.Equal("two", (await _provider.GetOutputsAsync(Package(stack: "shop.dev.b.echo"), ct))!["greeting"].Value);
+        Assert.Equal("one", (await Outputs(Package(stack: "shop.dev.a.echo"), ct))!["greeting"].Value);
+        Assert.Equal("two", (await Outputs(Package(stack: "shop.dev.b.echo"), ct))!["greeting"].Value);
     }
 
     [Fact]
@@ -149,7 +152,7 @@ public sealed class PulumiProviderTests : IDisposable
 
         await _provider.DeployAsync(Package(stack: longStack), ct);
 
-        Assert.Equal("hello", (await _provider.GetOutputsAsync(Package(stack: longStack), ct))!["greeting"].Value);
+        Assert.Equal("hello", (await Outputs(Package(stack: longStack), ct))!["greeting"].Value);
     }
 
     [Fact]
@@ -165,7 +168,7 @@ public sealed class PulumiProviderTests : IDisposable
         await Assert.ThrowsAnyAsync<Exception>(() => _provider.PreviewAsync(broken, ct));
         Assert.False(Directory.Exists(ScratchStackDirectory(Stack)));
 
-        await _provider.GetOutputsAsync(Package(), ct);
+        await Outputs(Package(), ct);
         Assert.False(Directory.Exists(ScratchStackDirectory(Stack)));
     }
 
@@ -177,7 +180,7 @@ public sealed class PulumiProviderTests : IDisposable
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _provider.DeployAsync(Package(), cts.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _provider.PreviewAsync(Package(), cts.Token));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _provider.GetOutputsAsync(Package(), cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Outputs(Package(), cts.Token));
 
         Assert.False(Directory.Exists(ScratchStackDirectory(Stack)));
     }

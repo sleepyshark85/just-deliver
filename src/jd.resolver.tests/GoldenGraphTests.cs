@@ -2,9 +2,7 @@ using System.Runtime.CompilerServices;
 using jd.definitionvalidator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
-using jd.resolver.expansion;
 using jd.resolver.graph;
-using jd.resolver.policies;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -21,7 +19,7 @@ public class GoldenGraphTests
         var environment = (await EnvironmentFile.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", "seed-environment.yaml"))).Descriptor!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
 
-        var graph = new GraphBuilder(environment).Build(new PolicyApplier(catalog, environment).Apply(new Expander(catalog, environment).Expand(workload, "workload.yaml")));
+        var graph = Resolver.Resolve(workload, "workload.yaml", catalog, environment);
 
         Assert.Empty(graph.Errors);
         var actual = GraphJson.Serialize(graph);

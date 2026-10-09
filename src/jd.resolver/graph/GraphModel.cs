@@ -43,6 +43,7 @@ public sealed record ResolvedGraph(
     string CatalogVersion,
     string Environment,
     string Workload,
+    string WorkloadTeam,
     IReadOnlyList<GraphNode> Nodes,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, EvalResult>> Exports,
     IReadOnlyList<LoadError> Errors);

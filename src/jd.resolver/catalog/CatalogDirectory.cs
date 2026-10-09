@@ -3,8 +3,8 @@ namespace jd.resolver.catalog;
 /// <summary>Reads a catalog directory from disk and hands its files to <see cref="CatalogParser"/>.</summary>
 public static class CatalogDirectory
 {
-    // Templates are Pulumi YAML, not catalog documents; they are not loaded here.
-    private const string TemplatesDirectory = "templates";
+    /// <summary>Templates are Pulumi YAML, not catalog documents; they are not loaded here. Part of the catalog layout.</summary>
+    public const string TemplatesDirectory = "templates";
 
     public static async Task<CatalogLoadResult> LoadAsync(string root, CancellationToken cancellationToken = default)
     {

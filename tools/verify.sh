@@ -22,9 +22,10 @@ step "Tests (${FILTER:-all})"
 dotnet test "$SLN" --no-build -nologo -v q ${FILTER:+--filter "$FILTER"}
 
 step "Architecture boundaries"
-# Inner projects hold domain and resolution logic: they must not depend on Pulumi, Azure SDKs or the backend providers.
+# Inner projects hold domain, resolution and orchestration logic: they must not depend on Pulumi, Azure SDKs or the backend providers.
 inner=(src/jd.core/jd.core.csproj)
 [[ -f src/jd.resolver/jd.resolver.csproj ]] && inner+=(src/jd.resolver/jd.resolver.csproj)
+[[ -f src/jd.orchestrator/jd.orchestrator.csproj ]] && inner+=(src/jd.orchestrator/jd.orchestrator.csproj)
 for p in "${inner[@]}"; do
   if grep -E -q 'Include="(Pulumi|Azure)[^"]*"|backend-providers' "$p"; then
     fail "$p must not reference Pulumi, Azure SDKs or backend providers (see docs/engineering/standards.md)"

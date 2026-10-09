@@ -45,7 +45,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
                 draft.Node.Config, draft.Node.Provenance, Hash(draft.Node), draft.DependsOn, draft.DependsOnRuntime));
         }
 
-        return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, nodes, exports, errors);
+        return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, nodes, exports, errors);
     }
 
     // Pulumi stack names allow [A-Za-z0-9_.-]. Ids contain no '.' or '_' (names are kebab, scopes are requirement ids or

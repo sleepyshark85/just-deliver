@@ -9,8 +9,8 @@ public interface IBackEndProvider
 
     /// <summary>
     /// The outputs of an already-deployed stack, read from state without refresh or preview (cheap).
-    /// Null when the stack has not been deployed (it does not exist, or only a preview created it). Takes the same
-    /// package as <see cref="DeployAsync"/> so the stack is looked up in the same project; its parameters are not used.
+    /// Null when the stack has not been deployed (it does not exist, or only a preview created it). Takes the stack
+    /// name and template content <see cref="DeployAsync"/> was given, so the stack is looked up in the same project.
     /// </summary>
-    Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(DeploymentPackage package, CancellationToken cancellationToken);
+    Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(string stackName, string deploymentContent, CancellationToken cancellationToken);
 }

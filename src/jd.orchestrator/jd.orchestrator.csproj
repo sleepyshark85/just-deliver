@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Application layer: walks a ResolvedGraph through IBackEndProvider. Knows nothing about Pulumi or Azure (standards §3). -->
+  <ItemGroup>
+    <ProjectReference Include="../jd.core/jd.core.csproj" />
+    <ProjectReference Include="../jd.resolver/jd.resolver.csproj" />
+  </ItemGroup>
+
+</Project>
