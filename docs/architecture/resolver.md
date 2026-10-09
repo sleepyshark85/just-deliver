@@ -50,12 +50,34 @@ catalog/
   roles.yaml                                 # role name → GUID
 ```
 
+The directory layout is organisational only. The loader takes every `*.yaml` under the catalog root
+(except `templates/`, which holds Pulumi YAML) as **one YAML document per file** (no `---`
+multi-document files) and finds out what it is from the required top-level `kind`: `Catalog`,
+`ResourceType`, `Mapping`, `Policy`, `Naming` or `Roles`. An unknown or missing `kind` is an error.
+
 The catalog is versioned as one unit; a deployment records the catalog version next to the
 definition SHA ([ADR 0007](../decisions/0007-definition-upload-snapshot.md)).
 
 ## Catalog file kinds
 
-Each kind has a JSON Schema, so editors and CI validate it.
+Each kind has a JSON Schema in [`schemas/catalog/`](../../schemas/catalog/) (`<kind>.schema.json`),
+so editors and CI validate it; the schemas are also embedded in `jd.resolver`, which validates every
+file against its kind's schema. `${…}` expressions and config values are kept as written by the
+loader; the expression evaluator interprets them later.
+
+| Kind | Required fields | Cardinality |
+|---|---|---|
+| `Catalog` | `version` | exactly one |
+| `ResourceType` | `name`, `classes`, `exports`, `description` | `name` unique |
+| `Mapping` | `match`, `nodes`, `exports` | `match.type`, when present, names a declared type |
+| `Policy` | `name`, `reason`, `match`, and at least one of `set` / `default` / `add` | `name` unique |
+| `Naming` | `rules` (resource kind → `pattern`, `maxLength`, `allowed`) | files merge; a rule is defined once |
+| `Roles` | `roles` (name → role-definition GUID) | files merge; a role is defined once |
+
+A node is `{ template, kind?: create | grant, config }`; `kind` defaults to `create`. Mapping `match`
+keys are `type`, `class`, `tier`, `kind`, `runtime`; a policy may also match on `template`.
+Naming `pattern` placeholders are `{workload}`, `{id}`, `{env}` and `{hash}`. The loader collects
+every error (file and location inside it) in one pass.
 
 ### Type — the contract teams bind to
 
@@ -65,11 +87,12 @@ the code binds to (`cosmos-sql`, `postgres`), never an abstraction like `databas
 ```yaml
 kind: ResourceType
 name: cosmos-sql
+description: A Cosmos DB database with one container, accessed through the SQL (NoSQL) API.
 classes: [standard]
 exports: [endpoint, database, container]      # the only valid ${resource.<id>.*}
-overridable:
-  throughput: { type: integer, min: 400, max: 4000, target: account.throughput }
 ```
+
+Team overrides are out of the MVP, so the format has no `overridable` block yet.
 
 ### Mapping — requirement → graph nodes
 
@@ -100,9 +123,10 @@ exports:
 
 ### Policy — IT Ops layer
 
-Can `set` fields (wins over everything), fill `default`s, or `add` nodes.
+Can `set` fields (wins over everything), fill `default`s, or `add` nodes. One policy per file:
 
 ```yaml
+# policies/enforce-monitoring.yaml
 kind: Policy
 name: enforce-monitoring
 reason: Every workload reports to the environment workspace
@@ -113,7 +137,10 @@ add:
     config: { workspaceResourceId: ${env.logAnalytics.id}, appInsightsName: ${name('appi')} }
 set:
   runtime.appInsightsConnectionString: ${appinsights.connectionString}
----
+```
+
+```yaml
+# policies/protected-cosmos-failover.yaml
 kind: Policy
 name: protected-cosmos-failover
 reason: Protected tiers need automatic failover
@@ -138,7 +165,7 @@ set: { enableAutomaticFailover: true }
 | Rule | Behaviour |
 |---|---|
 | Matching | Specificity = number of matched criteria. A tie is an error, never file order. |
-| Layering | Template default < mapping < team override (only `overridable` fields, validated) < policy `set`. `default` only fills gaps. Fixes the old algorithm applying overrides after policies. |
+| Layering | Template default < mapping < team override (only `overridable` fields, validated; post-MVP) < policy `set`. `default` only fills gaps. Fixes the old algorithm applying overrides after policies. |
 | Provenance | Every config field carries `{value, source file, rule, catalog version}`. |
 | References | Static values resolve immediately. `${node.output}` stays a typed reference and becomes a graph edge. |
 | Phases | Derived from edges, not a hard-coded list: anything referencing `runtime.*` lands after the revision step. |
@@ -170,7 +197,7 @@ Adding a resource type = one type file + one template + one mapping + one golden
 
 ## Engine components (C#, backend-agnostic, ~1–1.5k LOC)
 
-`CatalogLoader` (reuses `YamlSchemaValidator`) · `Matcher` · `Expander` · `Merger` (provenance) ·
+`CatalogParser` + `CatalogDirectory` (parser over in-memory files, thin directory reader; reuse `YamlSchemaValidator`) · `Matcher` · `Expander` · `Merger` (provenance) ·
 `ExpressionEvaluator` · `Namer` · `GraphBuilder` (cycle detection, topological sort, phases).
 `DeploymentPackage` needs a stack name separate from the template name.
 
