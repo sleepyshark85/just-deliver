@@ -22,6 +22,7 @@ provisions and deploys it, IT Ops moves from executor to gatekeeper.
    - [workload-definition.md](architecture/workload-definition.md) — what teams declare
    - [provisioning.md](architecture/provisioning.md) — mappings, policies, Pulumi operation
    - [resolver.md](architecture/resolver.md) — proposed resolver design (C52)
+   - [release.md](architecture/release.md) — the release manifest and release set: pinned workloads in deploy order (C53)
    - [usage.md](usage.md) — using the `jd` CLI: commands and exit codes
    - [workload_deployment_flow.html](architecture/workload_deployment_flow.html) — deployment flow diagram ([overview svg](architecture/workload_deployment_flow-overview.svg), [steps svg](architecture/workload_deployment_flow-steps.svg))
    - [landing-zone.md](architecture/landing-zone.md) — landing zone ownership and definition

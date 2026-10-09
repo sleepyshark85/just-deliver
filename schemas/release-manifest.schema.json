@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/release-manifest.schema.json",
+  "title": "just-deliver release manifest",
+  "description": "What a team authors to cut a release: one label and the workload definitions that belong to it, with the order they must deploy in. `jd release create` turns it into an immutable release set. Ordering is a release concern, so dependsOn lives here and not in the workload definitions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "label", "workloads"],
+  "properties": {
+    "kind": { "enum": ["ReleaseManifest"] },
+    "label": {
+      "description": "Release label, semantic-version shaped.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z0-9.]+)?$"
+    },
+    "workloads": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["definition"],
+        "properties": {
+          "definition": {
+            "description": "Path of the workload definition, relative to this manifest.",
+            "type": "string",
+            "minLength": 1
+          },
+          "dependsOn": {
+            "description": "Names (metadata.name) of workloads in this manifest that must be deployed first. Ordering only: it grants no access to their resources.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

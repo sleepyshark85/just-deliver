@@ -21,7 +21,12 @@ public static class WorkloadFile
             return new WorkloadLoadResult(null, [new LoadError(path, string.Empty, "workload definition not found.")]);
         }
 
-        var text = await File.ReadAllTextAsync(path, cancellationToken);
+        return await ParseAsync(path, await File.ReadAllTextAsync(path, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>Validates workload text; <paramref name="path"/> only names the source in errors. Pure: the release set validates the definitions it embeds through here.</summary>
+    public static async Task<WorkloadLoadResult> ParseAsync(string path, string text, CancellationToken cancellationToken = default)
+    {
         JToken parsed;
         try
         {

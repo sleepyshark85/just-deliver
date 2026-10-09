@@ -18,14 +18,17 @@ public static class Cli
     private const int Invalid = 1;
     private const int UsageError = 2;
 
-    private const string Usage = """
+    internal const string Usage = """
         Usage:
           jd validate <workload.yaml>
           jd preview <workload.yaml> --env <environment.yaml> --catalog <dir> [--json]
+          jd release create <manifest.yaml> --out <release-set.yaml>
+          jd release show <release-set.yaml>
           jd --help
 
         validate  checks a workload against its schema and rules.
         preview   validates the workload, then prints the resolved graph (--json: as stable JSON).
+        release   create writes an immutable release set (pinned workloads, deploy order) from a manifest; show prints one.
         Exit codes: 0 success, 1 validation or resolution errors, 2 usage errors.
 
         """;
@@ -42,6 +45,11 @@ public static class Cli
         {
             stdout.Write(Usage);
             return Success;
+        }
+
+        if (args.FirstOrDefault() == "release")
+        {
+            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, cancellationToken);
         }
 
         var (options, problem) = Parse(args);

@@ -29,7 +29,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S10 | Provider fixes | done | PR #14 | 2 | Round 1: 3 blocking (outputs lookup could report a deployed stack as undeployed; preview made "not deployed" ambiguous; dead `Version`). Refresh events no longer counted as changes. Real offline Pulumi tests in the gate. |
 | S11 | Orchestrator (infra nodes) | todo | | | |
 | S12 | Substrate from data | todo | | | |
-| S13 | Release set (offline) | todo | | | |
+| S13 | Release set (offline) | done | PR #18 | 2 | Round 1: 4 blocking — **release sources never committed** (old VS `.gitignore` rule `[Rr]elease/`; local gate passed because files existed on disk — caught by the reviewer's clean worktree); set fields could be tampered (now derived from verified definitions); BOM/invalid UTF-8; duplicated topological sort (shared now). |
 | S13b | Deploy a release set (infra) | todo | | | |
 | S14 | Sample app | done | PR #16 | 2 | Done ahead of S11–S13 (independent). Round 1: 2 blocking (`/health` false-healthy on a missing container; unsynchronised shared Cosmos client → leaks/flapping). Image `ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385…` — **package must be made public by the user**. |
 | S15 | Runtime mapping + container-app | todo | | | |

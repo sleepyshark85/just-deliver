@@ -1,0 +1,59 @@
+kind: ReleaseSet
+label: 1.0.0
+createdAt: 2026-01-02T03:04:05Z
+workloads:
+- definitionSha256: 919b6f24192b7590d78e91daca0d3e686fa0d649e0a983b751c97a523f3c1304
+  dependsOn:
+  - just-deliver-sample-worker
+  definition: |
+    apiVersion: just-deliver/v1
+    kind: Workload
+
+    metadata:
+      name: just-deliver-sample-app
+      team: platform-team
+
+    container:
+      image: ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9
+      variables:
+        LOG_LEVEL: info
+        # The app authenticates with its managed identity, so only addresses are
+        # injected here - never a key or connection string. The App Insights
+        # connection string is not listed either: enforce-monitoring attaches it.
+        COSMOS_ENDPOINT: ${resource.cosmos-sql.endpoint}
+        COSMOS_DATABASE: ${resource.cosmos-sql.database}
+        COSMOS_CONTAINER: ${resource.cosmos-sql.container}
+      ports:
+        - port: 8080
+          protocol: TCP
+
+    # Declared by type only. The platform decides that "cosmos-sql" means a container in the
+    # environment's Cosmos DB database, and provisions the identity and role assignment that
+    # let this workload reach that container.
+    #
+    # Deliberately absent: monitoring. Log Analytics and Application Insights are
+    # attached by the enforce-monitoring global policy, not requested by the team.
+    requires:
+      - type: cosmos-sql
+- definitionSha256: 23a6f540e2ac9416197272e63cb1eb095bb16cf8663a28c5889046cd7dc9fb1d
+  dependsOn: []
+  definition: |
+    apiVersion: just-deliver/v1
+    kind: Workload
+
+    metadata:
+      name: just-deliver-sample-worker
+      team: platform-team
+
+    # A second workload for the sample release: it reuses the sample app's pinned image (the
+    # image S14 published) under its own name and gets its own cosmos-sql container.
+    container:
+      image: ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9
+      variables:
+        LOG_LEVEL: info
+        COSMOS_ENDPOINT: ${resource.cosmos-sql.endpoint}
+        COSMOS_DATABASE: ${resource.cosmos-sql.database}
+        COSMOS_CONTAINER: ${resource.cosmos-sql.container}
+
+    requires:
+      - type: cosmos-sql

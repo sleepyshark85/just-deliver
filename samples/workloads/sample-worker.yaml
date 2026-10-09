@@ -1,0 +1,19 @@
+apiVersion: just-deliver/v1
+kind: Workload
+
+metadata:
+  name: just-deliver-sample-worker
+  team: platform-team
+
+# A second workload for the sample release: it reuses the sample app's pinned image (the
+# image S14 published) under its own name and gets its own cosmos-sql container.
+container:
+  image: ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9
+  variables:
+    LOG_LEVEL: info
+    COSMOS_ENDPOINT: ${resource.cosmos-sql.endpoint}
+    COSMOS_DATABASE: ${resource.cosmos-sql.database}
+    COSMOS_CONTAINER: ${resource.cosmos-sql.container}
+
+requires:
+  - type: cosmos-sql

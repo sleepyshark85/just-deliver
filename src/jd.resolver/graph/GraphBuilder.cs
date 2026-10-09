@@ -37,7 +37,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
             .ToDictionary(d => d.Id);
         var phases = new Dictionary<string, Phase>();
         var nodes = new List<GraphNode>();
-        foreach (var draft in TopologicalOrder(drafts, errors).Select(id => drafts[id]))
+        foreach (var draft in OrderNodes(drafts, errors).Select(id => drafts[id]))
         {
             phases[draft.Id] = draft.DependsOnRuntime || draft.DependsOn.Any(d => phases[d] == Phase.AfterRuntime) ? Phase.AfterRuntime : Phase.Infrastructure;
             nodes.Add(new GraphNode(
@@ -104,39 +104,11 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
         _ => [],
     };
 
-    // Kahn's algorithm taking the smallest ready id each time, so the order never depends on input order.
-    private static List<string> TopologicalOrder(Dictionary<string, Draft> drafts, List<LoadError> errors)
+    private static List<string> OrderNodes(Dictionary<string, Draft> drafts, List<LoadError> errors)
     {
-        var waiting = drafts.ToDictionary(d => d.Key, d => d.Value.DependsOn.Count);
-        var ready = new SortedSet<string>(waiting.Where(w => w.Value == 0).Select(w => w.Key), StringComparer.Ordinal);
-        var order = new List<string>();
-        while (ready.Count > 0)
+        var (order, cycle) = TopologicalOrder.Sort(drafts.ToDictionary(d => d.Key, d => (IReadOnlyCollection<string>)d.Value.DependsOn));
+        if (cycle is not null)
         {
-            var id = ready.Min ?? throw new UnreachableException("the loop runs only while ready is not empty");
-            ready.Remove(id);
-            order.Add(id);
-            foreach (var dependent in drafts.Values.Where(d => d.DependsOn.Contains(id)))
-            {
-                if (--waiting[dependent.Id] == 0)
-                {
-                    ready.Add(dependent.Id);
-                }
-            }
-        }
-
-        if (order.Count < drafts.Count)
-        {
-            // Each unordered node waits on another unordered one, so following dependencies must revisit a node: a cycle.
-            var stuck = drafts.Keys.Except(order).ToHashSet();
-            var path = new List<string>();
-            var current = stuck.Order(StringComparer.Ordinal).First();
-            while (!path.Contains(current))
-            {
-                path.Add(current);
-                current = drafts[current].DependsOn.First(stuck.Contains);
-            }
-
-            var cycle = path.Skip(path.IndexOf(current)).Append(current);
             errors.Add(new LoadError("(graph)", string.Empty, $"dependency cycle: {string.Join(" -> ", cycle)}."));
         }
 
