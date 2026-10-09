@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S12a — `database` type (user decision), then S13b.
+- **Next slice:** S13b — deploy a release set (infra).
 - **In progress:** —
 - **Blocked:** —
 
@@ -29,7 +29,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S10 | Provider fixes | done | PR #14 | 2 | Round 1: 3 blocking (outputs lookup could report a deployed stack as undeployed; preview made "not deployed" ambiguous; dead `Version`). Refresh events no longer counted as changes. Real offline Pulumi tests in the gate. |
 | S11 | Orchestrator (infra nodes) | done | PR #20 | 2 | First Azure slice. Round 1: 2 blocking (teardown failures hidden; silent empty passphrase); backend URL now required. Azure test found a bug in our own sandbox policy (int vs float compare) — fixed (PR #15), re-applied by the user; test green, nothing left behind. |
 | S12 | Substrate from data | done | PR #22 | 2 | Round 1: 3 blocking (substrate/workload stack collision → owner kind with `@` env owner; secret-output filter untested and in the CLI; `!`). Azure gate green as the team identity (CLI 64/64, 49 min incl. Cosmos teardown; free tier on, 1000 RU/s cap, 400 RU/s db, re-run unchanged, nothing left). |
-| S12a | `database` type (user decision) | todo | | | Rename `cosmos-sql` → `database`; platform mapping picks the engine; `engine` export. |
+| S12a | `database` type (user decision) | done | PR #23 | 1 | APPROVE first round, 0 production C# lines (catalog, schema, samples, goldens, docs). Default requirement id is now `database`, so container and stack names changed (`…-database-623014`) — harmless now (nothing live), but a type/engine change on a deployed workload recreates its container (F54). |
 | S13 | Release set (offline) | done | PR #18 | 2 | Round 1: 4 blocking — **release sources never committed** (old VS `.gitignore` rule `[Rr]elease/`; local gate passed because files existed on disk — caught by the reviewer's clean worktree); set fields could be tampered (now derived from verified definitions); BOM/invalid UTF-8; duplicated topological sort (shared now). |
 | S13b | Deploy a release set (infra) | todo | | | |
 | S14 | Sample app | done | PR #16 | 2 | Done ahead of S11–S13 (independent). Round 1: 2 blocking (`/health` false-healthy on a missing container; unsynchronised shared Cosmos client → leaks/flapping). Image `ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385…` — **package must be made public by the user**. |
@@ -51,6 +51,7 @@ Picked up by the slice named; remove once done.
 - **S15:** the runtime mapping sends `runtime.appInsightsConnectionString` to the app's `APPLICATIONINSIGHTS_CONNECTION_STRING`
   (Azure Monitor SDK's own name, not in the workload's variables). The app assumes partition key `/id`.
 - **Briefs:** cap production lines (~250) separately from tests; a cohesive slice's tests should not be trimmed to fit.
+- **S15:** add a test workload variable reading `${resource.database.engine}` to show the engine export reaching the app (S12a review suggestion).
 - **Teardown:** per-workload Cosmos containers live in the substrate account; MVP test teardown removes everything
   with `tools/azure/cleanup.sh --yes --all` at the end (no per-workload resource groups — decided in S11's brief).
 - **Validator:** NJsonSchema silently ignores some keywords (`propertyNames` confirmed). Don't rely on a schema
@@ -71,7 +72,8 @@ Newest first. One entry per session: what moved, decisions taken, anything the n
 
 - **2026-10-09 (team identity)** — Restarted with the `ARM_*` team identity; personal `az` session logged out. S12 Azure
   gate re-run as the team identity: green, nothing left behind. Azure test runs take ~50 min, mostly Cosmos account
-  deletion (~20 min per account) — run them in the background. S12 merged.
+  deletion (~20 min per account) — run them in the background. S12 merged (PR #22); S12a merged (PR #23), approved
+  first round. Force-push is blocked for the lead: catch a slice branch up with `git merge main`, not rebase.
 
 - **2026-10-09 (before restart)** — User decisions: workloads ask for `database`, the platform team's catalog mappings
   decide the engine (Cosmos today) → S12a; Kubernetes (cloud or on-prem) is possible later via a runtime adapter +
