@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/samples/">
-    <Project Path="samples/web/web.csproj" />
+    <Project Path="samples/sample-app.tests/sample-app.tests.csproj" />
+    <Project Path="samples/sample-app/sample-app.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/jd.cli/jd.cli.csproj" />

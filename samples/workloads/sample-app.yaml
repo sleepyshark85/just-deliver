@@ -9,9 +9,12 @@ container:
   image: myregistry.azurecr.io/just-deliver-sample-app:1.0.0
   variables:
     LOG_LEVEL: info
-    # Only the endpoint is needed - the app authenticates with its managed
-    # identity, so no key or connection string is injected here.
+    # The app authenticates with its managed identity, so only addresses are
+    # injected here - never a key or connection string. The App Insights
+    # connection string is not listed either: enforce-monitoring attaches it.
     COSMOS_ENDPOINT: ${resource.cosmos-sql.endpoint}
+    COSMOS_DATABASE: ${resource.cosmos-sql.database}
+    COSMOS_CONTAINER: ${resource.cosmos-sql.container}
   ports:
     - port: 8080
       protocol: TCP
