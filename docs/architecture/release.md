@@ -35,18 +35,17 @@ kind: ReleaseSet
 label: 1.0.0
 createdAt: 2026-01-02T03:04:05Z   # UTC, to the second
 workloads:
-  - name: just-deliver-sample-app
-    team: platform-team
-    definitionSha256: 919b...      # lowercase hex SHA-256 over the exact bytes of the definition file
-    image: ghcr.io/...@sha256:...  # pinned by digest
+  - definitionSha256: 919b...      # lowercase hex SHA-256 over the exact bytes of the definition file
     dependsOn: [just-deliver-sample-worker]
     definition: |                  # the definition as received: the set is self-contained
       apiVersion: just-deliver/v1
       ...
-order: [just-deliver-sample-worker, just-deliver-sample-app]
 ```
 
-A committed example is the golden file `src/jd.resolver.tests/golden/sample.release-set.yaml`.
+Only what cannot be derived is stored: the definitions, their hashes and `dependsOn`. A workload's name, team and
+image come from its definition, and the deploy order from the dependencies, by the same code that created the set
+(`ReleaseBuilder.ComposeAsync`). `jd release show` prints the derived values. A committed example is the golden file
+`src/jd.resolver.tests/golden/sample.release-set.yaml`.
 
 ## Rules
 
@@ -64,11 +63,18 @@ Name and dependency checks run only when every definition loaded, since an unrea
 
 - `createdAt` is the only non-deterministic field; everything else follows from the manifest and the files it lists.
 - The writer never overwrites a file. A changed release is a new set (and a new label).
-- The embedded definition keeps the exact text, including line endings (CRLF is written as an escaped quoted string
-  because a block scalar would turn it into LF). Loading a set recomputes each SHA-256 over the embedded text and
-  fails on a mismatch: editing a set by hand is an error, not a silent change.
-- The recorded `name`, `team` and `image` are copies of what the definition says; the hash covers the definition,
-  not these copies, and loading does not cross-check them yet.
+- Loading checks each embedded definition against its recorded SHA-256, then runs every create-time rule on the
+  verified definitions and `dependsOn` (valid definition, digest pin, unique names, known dependencies, no cycle) and
+  derives name, team, image and order. The in-memory set is built only from that, so no stored field can disagree
+  with a definition, and hand-editing any field of a set either fails the hash or fails a rule.
+- The hash inside the file is a consistency check: someone who edits a definition and its hash together produces a
+  set that still loads. The external anchor is the release record kept per environment (S17), which holds the
+  hashes the platform actually received.
+- Encoding: definitions must be UTF-8 (anything else is "not valid UTF-8" at that file). The SHA-256 covers the raw
+  bytes, including a UTF-8 byte order mark if there is one; the YAML parser gets the text without it.
+- The embedded text keeps line endings exactly (CRLF, and text starting with white space or a byte order mark, are
+  written as an escaped quoted string because a block scalar would change them); other definitions are readable
+  literal blocks.
 
 ## Not here yet
 

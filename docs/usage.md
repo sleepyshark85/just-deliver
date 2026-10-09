@@ -43,7 +43,7 @@ workloads:
 | Command | What it does |
 |---|---|
 | `release create <manifest> --out <set>` | Validates every listed workload definition, requires each image to be pinned by digest (`@sha256:` and 64 hex digits; a tag is rejected), checks names and dependencies, works out the deploy order and writes the release set. Refuses to overwrite an existing file: sets are immutable, so a changed release gets a new file. Prints every problem as `file: location: message`. |
-| `release show <set>` | Re-verifies each embedded definition against its recorded SHA-256, then prints the label, the deploy order and, per workload, team, definition SHA-256, image and dependencies. A modified set is an error (exit 1). |
+| `release show <set>` | Re-verifies each embedded definition against its recorded SHA-256 and re-applies the create rules, then prints (derived from the definitions) the label, the deploy order and, per workload, team, definition SHA-256, image and dependencies. A modified set, or one that breaks a rule, is an error (exit 1). |
 
 Exit codes are the same as above (a manifest, set or `--out` path problem is 2; invalid content is 1).
 Resolving each workload and deploying a set is not part of these commands yet.

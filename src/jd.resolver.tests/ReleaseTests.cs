@@ -136,7 +136,7 @@ public sealed class ReleaseTests : IDisposable
 
         var error = Assert.Single(await ErrorsAsync(manifest));
 
-        Assert.Equal($"{manifest}: workloads[0].dependsOn[0]: 'ghost' is not a workload in this manifest.", error);
+        Assert.Equal($"{manifest}: workloads[0].dependsOn[0]: 'ghost' is not a workload in this release.", error);
     }
 
     [Fact]
@@ -218,6 +218,74 @@ public sealed class ReleaseTests : IDisposable
         Assert.All(errors, e => Assert.Contains("the release set was modified", e));
         Assert.StartsWith($"{path}: workloads[0].definition: ", errors[0]);
         Assert.StartsWith($"{path}: workloads[1].definition: ", errors[1]);
+    }
+
+    private async Task<(string Path, string Text, ReleaseSet Set)> WriteSetAsync()
+    {
+        var set = await BuildAsync(WriteManifest(("web-app", []), ("web-db", [])));
+        var path = Path.Combine(_temp, "set.yaml");
+        await ReleaseSetFile.WriteAsync(set, path);
+        return (path, await File.ReadAllTextAsync(path), set);
+    }
+
+    [Fact]
+    public async Task Loading_a_set_whose_dependsOn_was_edited_into_a_cycle_fails()
+    {
+        var (path, text, _) = await WriteSetAsync();
+        // The definitions still match their hashes; web-app now waits for web-db and web-db for web-app.
+        var first = text.IndexOf("dependsOn: []", StringComparison.Ordinal);
+        var edited = string.Concat(text.AsSpan(0, first), "dependsOn: [web-db]", text.AsSpan(first + "dependsOn: []".Length)).Replace("dependsOn: []", "dependsOn: [web-app]");
+        await File.WriteAllTextAsync(path, edited);
+
+        var error = Assert.Single((await ReleaseSetFile.LoadAsync(path)).Errors);
+
+        Assert.Equal($"{path}: workloads: dependency cycle: web-app -> web-db -> web-app (each depends on the next).", error.ToString());
+    }
+
+    [Fact]
+    public async Task Loading_a_rehashed_definition_still_applies_the_create_rules()
+    {
+        var set = await BuildAsync(WriteManifest(("web-app", [])));
+        var path = Path.Combine(_temp, "set.yaml");
+        await ReleaseSetFile.WriteAsync(set, path);
+        var text = await File.ReadAllTextAsync(path);
+        const string Pin = "@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9";
+        var rehash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Definition("web-app").Replace(Pin, ":latest"))));
+        await File.WriteAllTextAsync(path, text.Replace(Pin, ":latest").Replace(set.Workloads[0].DefinitionSha256, rehash));
+
+        var errors = (await ReleaseSetFile.LoadAsync(path)).Errors.Select(e => e.ToString()).ToList();
+
+        Assert.Contains(errors, e => e.StartsWith($"{path}: workloads[0].definition.container.image: ", StringComparison.Ordinal) && e.Contains("not pinned by digest"));
+    }
+
+    [Fact]
+    public async Task A_definition_that_is_not_utf8_is_rejected_at_that_file()
+    {
+        var manifest = WriteManifest(("web-app", []));
+        var file = Path.Combine(_temp, "web-app.yaml");
+        await File.WriteAllBytesAsync(file, [.. Encoding.UTF8.GetBytes(Definition("web-app") + "\n# "), 0xFF, 0xFE]);
+
+        var error = Assert.Single(await ErrorsAsync(manifest));
+
+        Assert.Equal($"{file}: not valid UTF-8.", error);
+    }
+
+    [Fact]
+    public async Task A_byte_order_mark_is_hashed_but_not_parsed_and_survives_the_round_trip()
+    {
+        var manifest = WriteManifest(("web-app", []));
+        var bytes = new byte[] { 0xEF, 0xBB, 0xBF }.Concat(Encoding.UTF8.GetBytes(Definition("web-app") + "\n")).ToArray();
+        await File.WriteAllBytesAsync(Path.Combine(_temp, "web-app.yaml"), bytes);
+
+        var set = await BuildAsync(manifest);
+        var path = Path.Combine(_temp, "set.yaml");
+        await ReleaseSetFile.WriteAsync(set, path);
+        var loaded = await ReleaseSetFile.LoadAsync(path);
+
+        Assert.Equal("web-app", set.Workloads[0].Name);
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(bytes)), set.Workloads[0].DefinitionSha256);
+        Assert.Empty(loaded.Errors);
+        Assert.Equal(Key(set), Key(loaded.Set!));
     }
 
     [Fact]

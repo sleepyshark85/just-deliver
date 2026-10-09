@@ -55,6 +55,7 @@ internal static class ReleaseCli
                 return Success;
             }
 
+            // Parse only accepts create with --out, so the output path is set here.
             await ReleaseSetFile.WriteAsync(set, output!, cancellationToken);
             stdout.WriteLine($"{output}: release {set.Label} with {set.Workloads.Count} workload(s), deploy order {string.Join(", ", set.Order)}.");
             return Success;

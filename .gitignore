@@ -1,10 +1,6 @@
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-# The sample release manifest lives in samples/releases.
-!samples/releases/
 x64/
 x86/
 [Ww][Ii][Nn]32/

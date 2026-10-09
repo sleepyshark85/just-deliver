@@ -2,10 +2,7 @@ kind: ReleaseSet
 label: 1.0.0
 createdAt: 2026-01-02T03:04:05Z
 workloads:
-- name: just-deliver-sample-app
-  team: platform-team
-  definitionSha256: 919b6f24192b7590d78e91daca0d3e686fa0d649e0a983b751c97a523f3c1304
-  image: ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9
+- definitionSha256: 919b6f24192b7590d78e91daca0d3e686fa0d649e0a983b751c97a523f3c1304
   dependsOn:
   - just-deliver-sample-worker
   definition: |
@@ -38,10 +35,7 @@ workloads:
     # attached by the enforce-monitoring global policy, not requested by the team.
     requires:
       - type: cosmos-sql
-- name: just-deliver-sample-worker
-  team: platform-team
-  definitionSha256: 23a6f540e2ac9416197272e63cb1eb095bb16cf8663a28c5889046cd7dc9fb1d
-  image: ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9
+- definitionSha256: 23a6f540e2ac9416197272e63cb1eb095bb16cf8663a28c5889046cd7dc9fb1d
   dependsOn: []
   definition: |
     apiVersion: just-deliver/v1
@@ -63,6 +57,3 @@ workloads:
 
     requires:
       - type: cosmos-sql
-order:
-- just-deliver-sample-worker
-- just-deliver-sample-app
