@@ -149,6 +149,17 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
+    public async Task A_catalog_wide_error_is_not_given_a_file_path()
+    {
+        var emptyCatalog = Directory.CreateDirectory(Path.Combine(_temp, "empty")).FullName;
+
+        var (code, _, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", emptyCatalog);
+
+        Assert.Equal(1, code);
+        Assert.StartsWith("(catalog): ", stderr);
+    }
+
+    [Fact]
     public async Task Preview_prints_expansion_errors_with_the_workload_file()
     {
         var path = WriteTemp("unknown-type.yaml", File.ReadAllText(Workload).Replace("type: cosmos-sql", "type: no-such-type"));
@@ -257,7 +268,8 @@ public sealed class CliTests : IDisposable
         var (code, _, stderr) = await RunAsync("validate", path);
 
         Assert.Equal(2, code);
-        Assert.Contains($"jd: cannot read '{path}': ", stderr);
+        Assert.StartsWith("jd: ", stderr);
+        Assert.Contains(path, stderr);
     }
 
     private static bool CanRead(string path)

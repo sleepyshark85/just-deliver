@@ -63,34 +63,17 @@ public static class Cli
         {
             return await RunCommandAsync(options, stdout, stderr, cancellationToken);
         }
-        catch (UnreadableInputException ex)
-        {
-            stderr.WriteLine($"jd: cannot read '{ex.Path}': {ex.Message}");
-            return UsageError;
-        }
-    }
-
-    private sealed class UnreadableInputException(string path, string reason) : Exception(reason)
-    {
-        public string Path { get; } = path;
-    }
-
-    // The inputs exist (checked above), so a failure here is a permission or read error.
-    private static async Task<T> ReadAsync<T>(string path, Func<Task<T>> read)
-    {
-        try
-        {
-            return await read();
-        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new UnreadableInputException(path, ex.Message);
+            // The inputs exist (checked above), so this is a permission or read failure; .NET's message names the file.
+            stderr.WriteLine($"jd: {ex.Message}");
+            return UsageError;
         }
     }
 
     private static async Task<int> RunCommandAsync(Options options, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        var loaded = await ReadAsync(options.Workload, () => WorkloadFile.LoadAsync(options.Workload, cancellationToken));
+        var loaded = await WorkloadFile.LoadAsync(options.Workload, cancellationToken);
         if (loaded.Workload is not { } workload)
         {
             Print(loaded.Errors, stderr);
@@ -103,12 +86,14 @@ public static class Cli
             return Success;
         }
 
-        var catalogResult = await ReadAsync(preview.Catalog, () => CatalogDirectory.LoadAsync(preview.Catalog, cancellationToken));
-        var environmentResult = await ReadAsync(preview.Environment, () => EnvironmentFile.LoadAsync(preview.Environment, cancellationToken));
+        var catalogResult = await CatalogDirectory.LoadAsync(preview.Catalog, cancellationToken);
+        var environmentResult = await EnvironmentFile.LoadAsync(preview.Environment, cancellationToken);
         if (catalogResult.Catalog is not { } catalog || environmentResult.Descriptor is not { } environment)
         {
             // Catalog errors name files relative to the catalog root; the person needs the path they can open.
-            Print(catalogResult.Errors.Select(e => e with { File = Path.Combine(preview.Catalog, e.File) }).Concat(environmentResult.Errors), stderr);
+            // An error about the catalog as a whole names no real file and is left as it is.
+            Print(catalogResult.Errors.Select(e => Path.Combine(preview.Catalog, e.File) is var full && File.Exists(full) ? e with { File = full } : e)
+                .Concat(environmentResult.Errors), stderr);
             return Invalid;
         }
 

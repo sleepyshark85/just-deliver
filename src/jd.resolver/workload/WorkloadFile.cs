@@ -35,6 +35,7 @@ public static class WorkloadFile
         var result = await Validator.ValidateTokenAsync(await WorkloadSchema.ReadAsync(cancellationToken), parsed);
         if (!result.IsValid || parsed is not JObject workload)
         {
+            // The schema's root "type": "object" means a schema-valid document is an object, so this branch always carries errors.
             return new WorkloadLoadResult(null, result.Errors.Select(e => LoadError.FromSchema(path, e)).ToList());
         }
 
