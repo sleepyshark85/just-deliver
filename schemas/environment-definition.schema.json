@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/environment-definition.schema.json",
+  "title": "just-deliver environment definition",
+  "description": "What `jd env up` provisions for an environment: substrate requirements (matched by catalog mappings exactly like workload requirements) and the layout of the environment descriptor written from their outputs. Rules the schema cannot express: effective requirement ids are unique, and the rules of environment.schema.json hold for the composed descriptor (checked before anything is created).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "name", "tier", "requires", "values"],
+  "properties": {
+    "kind": { "enum": ["EnvironmentDefinition"] },
+    "name": {
+      "description": "Environment name; same pattern as the descriptor's.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+    },
+    "tier": { "enum": ["team", "protected"] },
+    "requires": {
+      "description": "Substrate the environment needs, declared by type like a workload's requirements.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
+          "id": { "description": "Referenced as ${resource.<id>.<export>}; defaults to the type.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
+          "class": { "type": "string", "default": "standard", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" }
+        }
+      }
+    },
+    "values": {
+      "description": "The descriptor's values layout: nested mappings whose leaves are expressions, normally ${resource.<id>.<export>}. They are merged into the base descriptor's values; a key already there is an error.",
+      "type": "object",
+      "additionalProperties": { "anyOf": [{ "type": "string" }, { "$ref": "#/properties/values" }] }
+    },
+    "grantable": {
+      "description": "Dot paths under the composed values (base included) that workloads may grant on; added to the base descriptor's.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

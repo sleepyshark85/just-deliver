@@ -235,7 +235,7 @@ public class ExpressionEvaluatorTests
         Assert.NotNull(catalog);
         var workload = YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
-        var mapping = Assert.Single(catalog.Mappings);
+        var mapping = Assert.Single(catalog.Mappings, m => m.Match.Criteria["type"] == "cosmos-sql");
         var policy = Assert.Single(catalog.Policies);
         var nodeNames = mapping.Nodes.Keys.Concat(policy.Add.Keys).ToHashSet();
         var strings = mapping.Nodes.Values.Concat(policy.Add.Values).SelectMany(n => n.Config.Values)

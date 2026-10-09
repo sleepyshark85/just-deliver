@@ -151,6 +151,6 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
         }
 
         private static NodeReport Report(GraphNode node, NodeOutcome outcome, string message, DeploymentResult? result = null) =>
-            new(node.Id, outcome, result?.Summary ?? [], result?.Changes ?? [], message, TimeSpan.Zero);
+            new(node.Id, outcome, result?.Summary ?? [], result?.Changes ?? [], message, TimeSpan.Zero, result?.Outputs ?? []);
     }
 }

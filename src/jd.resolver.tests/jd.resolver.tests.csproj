@@ -19,6 +19,7 @@
     <Content Include="../../samples/workloads/sample-app.yaml" Link="samples/workload.yaml" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../samples/workloads/*.yaml" Link="samples/workloads/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../samples/releases/*.yaml" Link="samples/releases/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../samples/environments/*.yaml" Link="samples/environments/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="golden/*.json;golden/*.yaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

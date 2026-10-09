@@ -1,0 +1,5 @@
+kind: ResourceType
+name: shared-substrate
+description: The once-per-subscription layer every environment builds on - a Log Analytics workspace and the one free-tier Cosmos DB account.
+classes: [standard]
+exports: [resourceGroupName, workspaceId, workspaceName, workspaceCustomerId, cosmosAccountId, cosmosAccountName, cosmosEndpoint]

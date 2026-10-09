@@ -11,3 +11,24 @@ rules:
     pattern: "appi-{workload}-{env}-{hash}"
     maxLength: 260
     allowed: "[a-z0-9-]"
+  # Substrate: the environment name is in every name; the hash keeps globally unique ones (Cosmos accounts) apart from other deployments.
+  rg:
+    pattern: "rg-{env}-{hash}"
+    maxLength: 90
+    allowed: "[a-z0-9-]"
+  law:
+    pattern: "law-{env}-{hash}"
+    maxLength: 63
+    allowed: "[a-z0-9-]"
+  cosmos:
+    pattern: "cosmos-{env}-{hash}"
+    maxLength: 44
+    allowed: "[a-z0-9-]"
+  cae:
+    pattern: "cae-{env}-{hash}"
+    maxLength: 32
+    allowed: "[a-z0-9-]"
+  db:
+    pattern: "db-{env}"
+    maxLength: 255
+    allowed: "[a-z0-9-]"

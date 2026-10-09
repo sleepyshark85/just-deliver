@@ -1,0 +1,33 @@
+kind: Mapping
+match: { type: shared-substrate, class: standard }
+# Free-tier budget (docs/engineering/standards.md section 6): Azure allows one free-tier Cosmos account per subscription, so it lives here once.
+nodes:
+  group:
+    template: azure/resource-group
+    config:
+      resourceGroupName: ${name('rg')}
+      location: ${env.region}
+      tags: { project: just-deliver-mvp, tier: substrate }
+  workspace:
+    template: azure/log-analytics
+    config:
+      resourceGroupName: ${group.resourceGroupName}
+      location: ${group.location}
+      workspaceName: ${name('law')}
+      dailyQuotaGb: 0.15
+  cosmos:
+    template: azure/cosmos-account
+    config:
+      resourceGroupName: ${group.resourceGroupName}
+      location: ${group.location}
+      accountName: ${name('cosmos')}
+      enableFreeTier: true
+      totalThroughputLimit: 1000                  # Azure itself refuses anything beyond the free RU/s
+exports:
+  resourceGroupName: ${group.resourceGroupName}
+  workspaceId: ${workspace.workspaceId}
+  workspaceName: ${workspace.workspaceName}
+  workspaceCustomerId: ${workspace.workspaceCustomerId}
+  cosmosAccountId: ${cosmos.accountId}
+  cosmosAccountName: ${cosmos.accountName}
+  cosmosEndpoint: ${cosmos.documentEndpoint}

@@ -1,0 +1,17 @@
+# The dev environment on top of the shared substrate; its descriptor is the base's values plus these.
+#   jd env up samples/environments/dev.yaml --catalog catalog --base shared.env.yaml --out dev.env.yaml
+kind: EnvironmentDefinition
+name: dev
+tier: team
+requires:
+  - type: env-substrate
+    id: substrate
+values:
+  resourceGroup: ${resource.substrate.resourceGroupName}
+  containerAppsEnvironment:
+    id: ${resource.substrate.containerAppsEnvironmentId}
+    defaultDomain: ${resource.substrate.defaultDomain}
+  cosmos:
+    databaseName: ${resource.substrate.databaseName}
+    databaseId: ${resource.substrate.databaseId}
+grantable: [cosmos.accountId]

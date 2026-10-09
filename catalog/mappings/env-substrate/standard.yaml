@@ -1,0 +1,32 @@
+kind: Mapping
+match: { type: env-substrate, class: standard }
+# Reads the shared substrate from the base descriptor (env.shared.*, env.logAnalytics.*, env.cosmos.*).
+nodes:
+  group:
+    template: azure/resource-group
+    config:
+      resourceGroupName: ${name('rg')}
+      location: ${env.region}
+      tags: { project: just-deliver-mvp, tier: substrate }
+  apps:
+    template: azure/container-apps-environment
+    config:
+      resourceGroupName: ${group.resourceGroupName}
+      location: ${group.location}
+      environmentName: ${name('cae')}
+      workspaceResourceGroupName: ${env.shared.resourceGroup}
+      workspaceName: ${env.logAnalytics.name}
+      workspaceCustomerId: ${env.logAnalytics.customerId}
+  database:
+    template: azure/cosmos-sql-database
+    config:
+      resourceGroupName: ${env.shared.resourceGroup}
+      accountName: ${env.cosmos.accountName}
+      databaseName: ${name('db')}
+      throughput: 400                             # shared by the environment's containers; two environments use 800 of the free 1000
+exports:
+  resourceGroupName: ${group.resourceGroupName}
+  containerAppsEnvironmentId: ${apps.environmentId}
+  defaultDomain: ${apps.defaultDomain}
+  databaseId: ${database.databaseId}
+  databaseName: ${database.databaseName}

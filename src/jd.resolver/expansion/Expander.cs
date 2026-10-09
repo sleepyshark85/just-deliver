@@ -14,14 +14,16 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 {
     /// <param name="workload">The parsed workload definition, already schema-validated.</param>
     /// <param name="workloadFile">Name reported in errors about the workload itself.</param>
-    public ExpansionResult Expand(JObject workload, string workloadFile)
+    public ExpansionResult Expand(JObject workload, string workloadFile) =>
+        Expand((string?)workload["metadata"]?["name"] ?? string.Empty, (string?)workload["metadata"]?["team"] ?? string.Empty, workload["requires"] as JArray ?? [], workloadFile);
+
+    /// <summary>Expands <paramref name="requires"/> (entries with <c>type</c>, optional <c>id</c> and <c>class</c>) for an owner that is not a workload document.</summary>
+    public ExpansionResult Expand(string name, string team, JArray requires, string workloadFile)
     {
-        var name = (string?)workload["metadata"]?["name"] ?? string.Empty;
-        var team = (string?)workload["metadata"]?["team"] ?? string.Empty;
         var requirements = new List<ExpandedRequirement>();
         var errors = new List<LoadError>();
         var index = 0;
-        foreach (var entry in workload["requires"] as JArray ?? [])
+        foreach (var entry in requires)
         {
             var type = (string?)entry["type"] ?? string.Empty;
             var requirement = new Requirement(
