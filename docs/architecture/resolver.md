@@ -227,13 +227,13 @@ nodes:
 The workload's `container.variables` reach the runtime node through the one **config-level form** the engine has, `fn::entries`
 (in the style of Pulumi's `fn::` functions): `{ fn::entries: workload.variables }` as a node's config value stands for that map,
 and the node deploys it as a list of `{name, value}` items sorted by name (ordinal), because a Pulumi YAML template cannot turn a
-map into the list a Container App's `env` wants. The form is exactly `{ fn::entries: workload.variables }`: any other source (a
-literal map included) is an error (`fn::entries is not valid here`). It is valid only in the **runtime** mapping's node config, and not
-in a `grant` node there: only the walk of the runtime mapping's other nodes is given the workload's variables, so a requirement
-mapping, a policy-added node, a policy value or a grant using it gets the same error. A workload variable may itself be named
-`fn::entries`; it is an ordinary variable. A policy cannot give the whole entries field (`runtime.variables`), which would drop the
-list form, nor a path below a variable (`runtime.variables.<NAME>.x`, a variable is one string); it gives `runtime.variables.<NAME>`.
-A runtime-mapping grant node is also given no resolved exports at expansion: its `${resource.…}` stays a reference and is an error.
+map into the list a Container App's `env` wants. The form is exactly `{ fn::entries: workload.variables }`, and it is valid only as the
+value of a **top-level field of the `runtime` node's config** in the runtime mapping, and never in a `grant`. Anywhere else (nested in
+an object, an array item, another node, a requirement mapping, a policy `add` or `set` value, a literal map as the source) it is an
+error: `fn::entries is not valid here`. Only the walk of that one field is given the workload's variables, which are walked as plain
+properties, so a variable may itself be named `fn::entries`. A policy gives individual variables, `runtime.variables.<NAME>`, as a
+**string** (an expression string is fine); not the whole field (which would drop the list form), not a path below a variable
+(`runtime.variables.<NAME>.x`), and not an object, array, number, boolean or null, all errors at the path as written in the policy.
 
 - In the graph the value stays a **map** (`ConfigObject` with `AsEntries`), so every variable is a leaf `variables.<NAME>` with its
   own provenance (`Workload: container.variables`, or the policy that set it) and its own pending state, and a
@@ -322,7 +322,7 @@ path       := segment { '.' segment }          # segment: letters, digits, '_' a
 | `role.<name>` | role GUID from the catalog `Roles`; unknown is an error |
 | `workload.name`, `workload.team` | the workload being resolved |
 | `workload.image`, `workload.port` | `container.image`, and the first of `container.ports`; a workload with no ports makes `workload.port` an error naming the workload. Like every expression result it is text (`"8080"`): Pulumi config values are strings, and the template's `Integer` input parses it. Meant for runtime mappings; the graph carries both (`WorkloadImage`, `WorkloadPort`), so the orchestrator's second pass evaluates them like the first |
-| `resource.<id>.<export>` | reference to a requirement's export: **pending** unless the caller knows its value. Allowed in the workload's own nodes (runtime mapping, policy-added nodes) and in workload variables, never in a requirement's node config |
+| `resource.<id>.<export>` | reference to a requirement's export: **pending** unless the caller knows its value. Read only by the `runtime` node (its workload variables); an error in any other node |
 | `runtime.<output>` | **pending** reference to the runtime node (an edge to it); an environment definition has no runtime, so there it is an error |
 | `<node>.<output>` | **pending** reference to an output of a node in scope; unknown node is an error |
 
@@ -359,7 +359,7 @@ Every invalid expression in a string is reported (file, location, message) and t
 | References | Static values resolve immediately. `${node.output}` stays a pending reference ([Expressions](#expressions)) and becomes a graph edge. |
 | Phases | Derived from edges, never listed per template: `runtime` for the runtime node itself; `after-runtime` when a node depends on the runtime node (it references `runtime.*`) directly or through a node that does; `infrastructure` otherwise. |
 | Built-ins | `name(kind)` and `guid(...)` as defined in [Expressions](#expressions) ([C14](../open-questions.md)). Role GUIDs come from `roles.yaml`. Nothing else. |
-| Security | References may target only the workload's own nodes and `env.*` resources the [environment descriptor](#environment-descriptor) lists as grantable. Cross-workload references are rejected by the engine. The graph builder enforces it statically ([D19](../open-questions.md)): every `env.<path>` a `grant` node's config reads, including inside functions and added or overridden by a policy, must be in `grantable`, otherwise an error names the node, the field and the path. Other nodes may read any `env.*` value. A `resource.<id>.<export>` reference in a requirement's node config is an error (requirement scopes must not read each other): edges there come only from references to nodes in the same scope. The `@workload` scope (the runtime mapping and the nodes workload-scope policies add) may read any requirement's exports, except in a `grant` node: an export can carry `env.*` values that the grantable check on the grant's own fields would not see, so a grant reading one is an error. |
+| Security | References may target only the workload's own nodes and `env.*` resources the [environment descriptor](#environment-descriptor) lists as grantable. Cross-workload references are rejected by the engine. The graph builder enforces it statically ([D19](../open-questions.md)): every `env.<path>` a `grant` node's config reads, including inside functions and added or overridden by a policy, must be in `grantable`, otherwise an error names the node, the field and the path. Other nodes may read any `env.*` value. **Only the node named `runtime` of the runtime mapping may read `${resource.<id>.<export>}`** (its workload variables), and it is never a grant. Every other node (a requirement's, a policy-added one, grant or not, another node of the runtime mapping, a grant there) gets an error naming the node and field, whether the export is static or pending: requirement scopes must not read each other, and an export can carry `env.*` values the grantable check on a grant's own fields would not see. A mapping's `exports` cannot contain `${resource.…}` either (the catalog loader rejects it at `exports.<name>`); an export may read `env.*`, its own nodes' outputs and `runtime.*`. Edges in a requirement's scope come only from references to nodes in the same scope. |
 
 ## Output: ResolvedGraph
 
@@ -376,7 +376,7 @@ Per node:
 | stack | The id with `/` replaced by `.` and `@` by `_` (Pulumi stack names allow `[A-Za-z0-9_.-]`), for example `shop.dev.orders.database` and `shop.dev._workload.appinsights`: one backend stack per node, so workloads never share a stack. Unique by construction: ids contain no `.` or `_`, and `_workload` cannot be a requirement id. Node names (mapping `nodes:` keys and policy `add:` keys) must match `^[a-z]([a-z0-9-]*[a-z0-9])?$`; the catalog loader enforces it in code, since the schema validator ignores `propertyNames`. Length limits of the backend are the adapter's concern. |
 | scope, name, template, kind | As expanded (`kind`: `create` or `grant`). |
 | config, provenance | Values (`Resolved` or `Pending`) and where each leaf came from. |
-| depends-on | Ids of nodes in the same scope referenced by a pending `${node.output}`, the runtime node's id when the config references `runtime.*`, and, for a `@workload` node reading `${resource.<id>.<export>}`, the nodes that export waits on (its own `${node.output}` references, in the requirement's scope); sorted. |
+| depends-on | Ids of nodes in the same scope referenced by a pending `${node.output}`, the runtime node's id when the config references `runtime.*`, and, for the runtime node reading `${resource.<id>.<export>}`, the nodes that export waits on (its own `${node.output}` references, in the requirement's scope); sorted. |
 | phase | `infrastructure`, `runtime` or `after-runtime`, derived (see [Engine rules](#engine-rules-generic-code-written-once)). |
 | probe | On the runtime node only: the runtime mapping's `probe` (`path`, `expectedStatus`). Not part of the hash. |
 | hash | Lowercase hex SHA-256 of the UTF-8 bytes of the JSON object `{"template":…,"kind":"create"\|"grant","config":…}` in that key order, written by Newtonsoft `JToken.ToString(Formatting.None)` with default string escaping; config is the canonical form below. YAML date-like values stay strings, so the hash does not depend on the machine's time zone. |

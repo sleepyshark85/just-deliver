@@ -400,7 +400,9 @@ public class OrchestratorTests
         Assert.Empty(backend.Calls);
     }
 
-    // The two mappings below make the runtime's variables, and a node of the workload reading an export, wait for a deployed output.
+    // Only the runtime node reads the workload's variables and the requirements' exports, and the walk does not deploy it until S16. These
+    // tests make it a node of the infrastructure phase, as the release flow will see it, and check the second pass on it. 'group' is a
+    // node name in two scopes (the runtime mapping declares one too): the runtime reads its own scope's by name and the requirement's only through an export.
     private const string ExportingMapping = """
         kind: Mapping
         match: { type: thing }
@@ -413,46 +415,66 @@ public class OrchestratorTests
           key: ${group.key}
         """;
 
-    // 'wiring' is a node of the runtime mapping that is not the runtime: it is deployed by the walk, which the runtime itself is not yet.
-    private const string WiringRuntimeMapping = """
+    private const string RuntimeReadingMapping = """
         kind: Mapping
         match: { kind: runtime }
         nodes:
+          group:
+            template: t/group
+            config: { owner: x }
           runtime:
             template: t/runtime
-            config: { k: 1 }
-          wiring:
-            template: t/wiring
             config:
-              settled: ${name('thing')}
+              own: ${group.name}
               label: ${name('thing')}-${resource.thing.out}
+              image: ${workload.image}:${workload.port}-${resource.thing.out}
+              settled: ${name('thing')}
               variables:
                 fn::entries: workload.variables
         """;
 
-    private static Task<RunReport> DeployWiringAsync(FakeBackend backend, string variables) =>
-        DeployResolvedAsync(backend, ExportingMapping, WiringRuntimeMapping, container: $"container:\n  image: reg/app:1\n  variables:\n{variables}");
-
-    private static async Task<RunReport> DeployResolvedAsync(FakeBackend backend, string mapping, string runtimeMapping, string policy = "", string container = "")
+    private static async Task<(RunReport Report, ResolvedGraph Graph)> DeployRuntimeAsync(FakeBackend backend, string variables)
     {
-        var (graph, catalog) = await ResolveAsync(DefaultRequires, mapping, runtimeMapping: runtimeMapping, policy: policy, container: container);
-        return await new Orchestrator(backend, backend, catalog, Env).DeployAsync(graph, null, CancellationToken.None);
+        var (graph, catalog) = await ResolveAsync(
+            DefaultRequires, ExportingMapping, runtimeMapping: RuntimeReadingMapping,
+            container: $"container:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n{variables}");
+        var asDeployed = graph with { Nodes = graph.Nodes.Select(n => n.Name == "runtime" ? n with { Phase = Phase.Infrastructure } : n).ToList() };
+        return (await new Orchestrator(backend, backend, catalog, Env).DeployAsync(asDeployed, null, CancellationToken.None), graph);
     }
+
+    private static Dictionary<string, ConfigEntry> Deployed(FakeBackend backend, string stack) =>
+        backend.Calls.Single(c => c.Package.StackName == stack).Package.DeploymentParameters;
 
     [Fact]
     public async Task A_pending_workload_variable_is_resolved_in_the_second_pass_and_the_variables_are_a_list_sorted_by_name()
     {
         var backend = new FakeBackend();
 
-        var report = await DeployWiringAsync(backend, "    ZED: '${resource.thing.out}'\n    ALPHA: lit\n    MID: 'x-${resource.thing.out}'\n");
+        var (report, _) = await DeployRuntimeAsync(backend, "    ZED: '${resource.thing.out}'\n    ALPHA: lit\n    MID: 'x-${resource.thing.out}'\n");
 
         Assert.True(report.Succeeded);
-        var wiring = backend.Calls.Single(c => c.Package.StackName == "shop.dev._workload.wiring").Package.DeploymentParameters;
-        const string deployed = "pre-id-shop.dev.thing.group";
-        Assert.Equal($$"""[{"name":"ALPHA","value":"lit"},{"name":"MID","value":"x-{{deployed}}"},{"name":"ZED","value":"{{deployed}}"}]""", wiring["variables"].Value);
-        Assert.False(wiring["variables"].IsSecret);
-        // The export was deployed first: the wiring node comes after the requirement's node in the walk.
-        Assert.True(backend.Calls.FindIndex(c => c.Package.StackName == "shop.dev.thing.group") < backend.Calls.FindIndex(c => c.Package.StackName == "shop.dev._workload.wiring"));
+        var runtime = Deployed(backend, "shop.dev._workload.runtime");
+        const string exported = "pre-id-shop.dev.thing.group";
+        Assert.Equal($$"""[{"name":"ALPHA","value":"lit"},{"name":"MID","value":"x-{{exported}}"},{"name":"ZED","value":"{{exported}}"}]""", runtime["variables"].Value);
+        Assert.False(runtime["variables"].IsSecret);
+        // The export is deployed first, and the runtime comes after both nodes it reads.
+        var order = backend.Calls.Select(c => c.Package.StackName).ToList();
+        Assert.True(order.IndexOf("shop.dev.thing.group") < order.IndexOf("shop.dev._workload.runtime"));
+        Assert.True(order.IndexOf("shop.dev._workload.group") < order.IndexOf("shop.dev._workload.runtime"));
+    }
+
+    [Fact]
+    public async Task Each_scope_gives_the_runtime_its_own_value_for_a_node_name_they_share()
+    {
+        var backend = new FakeBackend();
+
+        await DeployRuntimeAsync(backend, "    A: '${resource.thing.out}'\n");
+
+        var runtime = Deployed(backend, "shop.dev._workload.runtime");
+        // ${group.name}: the workload's group. The variable reads thing's group, only through its export.
+        Assert.Equal("n-shop.dev._workload.group", runtime["own"].Value);
+        Assert.Contains("pre-id-shop.dev.thing.group", runtime["variables"].Value);
+        Assert.DoesNotContain("_workload.group", runtime["variables"].Value);
     }
 
     [Fact]
@@ -460,59 +482,29 @@ public class OrchestratorTests
     {
         var backend = new FakeBackend();
 
-        var report = await DeployWiringAsync(backend, "    PLAIN: lit\n    CONNECTION: '${resource.thing.key}'\n");
+        var (report, _) = await DeployRuntimeAsync(backend, "    PLAIN: lit\n    CONNECTION: '${resource.thing.key}'\n");
 
         Assert.True(report.Succeeded);
-        var wiring = backend.Calls.Single(c => c.Package.StackName == "shop.dev._workload.wiring").Package.DeploymentParameters;
-        Assert.True(wiring["variables"].IsSecret);
-        Assert.Contains("k-shop.dev.thing.group", wiring["variables"].Value);
-        Assert.False(wiring["settled"].IsSecret);
+        var runtime = Deployed(backend, "shop.dev._workload.runtime");
+        Assert.True(runtime["variables"].IsSecret);
+        Assert.Contains("k-shop.dev.thing.group", runtime["variables"].Value);
+        Assert.False(runtime["own"].IsSecret);
     }
 
     [Fact]
-    public async Task A_runtime_node_that_is_not_called_runtime_evaluates_the_same_in_both_passes()
+    public async Task The_second_pass_evaluates_name_image_and_port_of_the_runtime_node_as_the_first_did()
     {
         var backend = new FakeBackend();
 
-        await DeployWiringAsync(backend, "    A: lit\n");
+        var (_, graph) = await DeployRuntimeAsync(backend, "    A: lit\n");
 
-        // 'settled' has no reference, so the resolver fixes it with the node's own name; 'label' waits for an output, so the
-        // second pass evaluates name() again, and must use the same name.
-        var (graph, _) = await ResolveAsync(mapping: ExportingMapping, runtimeMapping: WiringRuntimeMapping, container: "container:\n  image: reg/app:1\n");
-        var wiring = graph.Nodes.Single(n => n.Name == "wiring");
-        Assert.Equal("shop-wiring", Assert.IsType<Resolved>(Assert.IsType<ConfigText>(wiring.Config["settled"]).Result).Value);
-        Assert.IsType<Pending>(Assert.IsType<ConfigText>(wiring.Config["label"]).Result);
-        var deployed = backend.Calls.Single(c => c.Package.StackName == "shop.dev._workload.wiring").Package.DeploymentParameters;
-        Assert.Equal("shop-wiring", deployed["settled"].Value);
-        Assert.Equal("shop-wiring-pre-id-shop.dev.thing.group", deployed["label"].Value);
-    }
-
-    [Fact]
-    public async Task A_workload_node_reading_an_export_and_the_workload_image_and_port_resolves_in_the_second_pass()
-    {
-        var backend = new FakeBackend();
-        const string policy = """
-            kind: Policy
-            name: extra
-            reason: r
-            match: { kind: runtime }
-            add:
-              extra:
-                template: t/extra
-                config:
-                  fromExport: ${resource.thing.out}
-                  fromSecret: ${resource.thing.key}
-                  both: ${workload.image}:${workload.port}-${resource.thing.out}
-            """;
-
-        var report = await DeployResolvedAsync(backend, ExportingMapping, RuntimeMapping, policy, "container:\n  image: reg/app\n  ports:\n    - port: 8080\n");
-
-        Assert.True(report.Succeeded);
-        var extra = backend.Calls.Single(c => c.Package.StackName == "shop.dev._workload.extra").Package.DeploymentParameters;
-        Assert.Equal("pre-id-shop.dev.thing.group", extra["fromExport"].Value);
-        Assert.False(extra["fromExport"].IsSecret);
-        Assert.Equal("k-shop.dev.thing.group", extra["fromSecret"].Value);
-        Assert.True(extra["fromSecret"].IsSecret);
-        Assert.Equal("reg/app:8080-pre-id-shop.dev.thing.group", extra["both"].Value);
+        // 'settled' has no reference, so the resolver fixed it with the node's own name; 'label' waits for an output, so the second
+        // pass evaluates name() again and must use the same name. The image and port are the graph's.
+        var runtimeNode = graph.Nodes.Single(n => n.Name == "runtime");
+        var settled = Assert.IsType<Resolved>(Assert.IsType<ConfigText>(runtimeNode.Config["settled"]).Result).Value;
+        Assert.IsType<Pending>(Assert.IsType<ConfigText>(runtimeNode.Config["label"]).Result);
+        var runtime = Deployed(backend, "shop.dev._workload.runtime");
+        Assert.Equal(("shop-runtime", "shop-runtime-pre-id-shop.dev.thing.group"), (settled, runtime["label"].Value));
+        Assert.Equal("reg/app:1:8080-pre-id-shop.dev.thing.group", runtime["image"].Value);
     }
 }

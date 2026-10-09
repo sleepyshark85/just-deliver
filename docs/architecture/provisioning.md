@@ -185,8 +185,10 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
 - **Deploy.** Per infrastructure-phase node: evaluate the node's pending config again with the same
   `ExpressionEvaluator` and a context whose known outputs are the outputs captured from the nodes deployed before it (the
   workload name, team, image and port, the current id and the node names in scope are the node's scope, as in the first pass).
-  `${resource.<id>.<export>}` (a `@workload` node's, e.g. a runtime variable) is known once its requirement's nodes are
-  deployed: the exports are evaluated with those nodes' outputs by `ExportValues`, the helper `DescriptorComposer` uses too.
+  Node outputs are read by node name and only from the node's own scope and from the runtime, since two scopes may share a node name;
+  what another scope exports arrives through its exports: `${resource.<id>.<export>}` (read only by the runtime node, e.g. a workload
+  variable) is known once its requirement's nodes are deployed, the exports being evaluated with those nodes' outputs by `ExportValues`,
+  the helper `DescriptorComposer` uses too.
   Every value must be resolved before the node is deployed; otherwise the walk stops and the error names node, field and
   reference. Config becomes backend entries: strings as they are, numbers and booleans in invariant form (`0.15`,
   `true`), objects and arrays as compact JSON (a Pulumi config value is always a string; templates read maps and lists

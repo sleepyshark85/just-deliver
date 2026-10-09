@@ -171,7 +171,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             }
 
             var path = first.Path.Split(PathSeparator);
-            if (EntriesMisuse(config, path) is { } misuse)
+            if (EntriesMisuse(config, path, first.Value) is { } misuse)
             {
                 errors.Add(new LoadError(first.Policy.Source, $"{field}.{first.Shown}", $"policy '{first.Policy.Name}' gives '{first.Shown}' of node '{label}': {misuse}"));
                 continue;
@@ -205,9 +205,9 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         return config;
     }
 
-    // An entries field (the workload's variables) takes one key per name, each a string: not the field as a whole, which would drop its list
-    // form, and not a path below a key.
-    private static string? EntriesMisuse(ConfigObject config, string[] path)
+    // An entries field (the workload's variables) takes one key per name, each a string (an expression string is fine): not the field as a whole,
+    // which would drop its list form, not a path below a key, and not another kind of value.
+    private static string? EntriesMisuse(ConfigObject config, string[] path, JToken value)
     {
         for (var length = 1; length <= path.Length; length++)
         {
@@ -215,7 +215,8 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             {
                 return length == path.Length
                     ? "it is the list built from a map of entries; give its keys instead."
-                    : length < path.Length - 1 ? "an entry is a single value; give a key of the entries, not a path below it." : null;
+                    : length < path.Length - 1 ? "an entry is a single value; give a key of the entries, not a path below it."
+                    : value is JValue { Type: JTokenType.String } ? null : "an entry is a string.";
             }
         }
 

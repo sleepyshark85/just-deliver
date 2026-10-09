@@ -39,6 +39,15 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     [GeneratedRegex(@"^[a-z][a-z0-9]*$")]
     private static partial Regex FunctionNamePattern();
 
+    [GeneratedRegex(@"'[^']*'")]
+    private static partial Regex LiteralPattern();
+
+    [GeneratedRegex(@"\$\{[^}]*(?<![\w.-])resource\.")]
+    private static partial Regex ResourcePathPattern();
+
+    /// <summary>Whether <paramref name="text"/> has an expression that reads a <c>resource.</c> path, in a function argument too; quoted literals do not count.</summary>
+    public static bool ReadsResource(string text) => ResourcePathPattern().IsMatch(LiteralPattern().Replace(text, "''"));
+
     // Text is null while the value waits on References. EnvPaths are the env.<path> values read to produce it.
     private sealed record Value(string? Text, IReadOnlySet<Reference> References, IReadOnlySet<string> EnvPaths);
 

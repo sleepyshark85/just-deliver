@@ -155,6 +155,23 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
+    public async Task Preview_reports_a_mapping_export_that_references_a_resource_instead_of_failing()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\n");
+        WriteTemp("catalog/types/database.yaml", "kind: ResourceType\nname: database\ndescription: d\nclasses: [standard]\nexports: [endpoint]\n");
+        WriteTemp("catalog/mappings/database.yaml", "kind: Mapping\nmatch: { type: database }\nnodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.endpoint}\n");
+
+        var (code, stdout, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Empty(stdout);
+        Assert.Contains(Path.Combine(catalog, "mappings/database.yaml"), stderr);
+        Assert.Contains("exports.endpoint", stderr);
+        Assert.Contains("an export cannot reference", stderr);
+    }
+
+    [Fact]
     public async Task Preview_prints_resolver_errors_with_file_and_location()
     {
         var catalog = Path.Combine(_temp, "catalog");

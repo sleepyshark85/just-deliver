@@ -73,7 +73,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         // Mapping problems are reported against the mapping file; the prefix says which requirement exposed them.
         var found = new List<LoadError>();
         var evaluator = EvaluatorFor(owner, requirement.Id, mapping.Nodes.Keys);
-        var nodes = EvaluateNodes(mapping, null, string.Empty, found, (_, _) => evaluator);
+        var nodes = EvaluateNodes(mapping, found, (_, _) => (evaluator, null));
         var exports = EvaluateExports(mapping, evaluator, found);
         if (found.Count > 0)
         {
@@ -104,8 +104,10 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         }
 
         var found = new List<LoadError>();
-        // A grant gets neither: a static export would be substituted here, out of the graph builder's sight, and workload input must not reach a grant.
-        var nodes = EvaluateNodes(mapping, owner.Variables, ownerFile, found, (name, kind) => EvaluatorFor(owner, name, mapping.Nodes.Keys, kind == NodeKind.Grant ? null : known));
+        var variables = new WorkloadVariables(owner.Variables, ownerFile);
+        var nodes = EvaluateNodes(mapping, found, (name, kind) => IsRuntimeNode(name, kind)
+            ? (EvaluatorFor(owner, name, mapping.Nodes.Keys, known), variables)
+            : (EvaluatorFor(owner, name, mapping.Nodes.Keys), null));
         if (found.Count > 0)
         {
             errors.AddRange(found.Select(e => e with { Message = $"for the runtime: {e.Message}" }));
@@ -115,28 +117,22 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         return new ExpandedRuntime(mapping.Source, nodes, mapping.Probe, ownerFile);
     }
 
-    // variables are the workload's, given only for the runtime mapping (and never to a grant): they are what its fn::entries form stands for.
+    // Only the runtime node (never a grant) reads the workload's variables and the requirements' exports; any other node that tries is
+    // an error, reported where it is found.
+    private static bool IsRuntimeNode(string name, NodeKind kind) => name == ExpressionEvaluator.RuntimeNode && kind != NodeKind.Grant;
+
     private static List<ExpandedNode> EvaluateNodes(
-        Mapping mapping, JObject? variables, string workloadFile, List<LoadError> found, Func<string, NodeKind, ExpressionEvaluator> evaluatorFor)
+        Mapping mapping, List<LoadError> found, Func<string, NodeKind, (ExpressionEvaluator Evaluator, WorkloadVariables? Variables)> contextFor)
     {
         var nodes = new List<ExpandedNode>();
         foreach (var (nodeName, node) in mapping.Nodes)
         {
-            var problems = new List<LoadError>();
+            var (evaluator, variables) = contextFor(nodeName, node.Kind);
             nodes.Add(new ExpandedNode(nodeName, node.Template, node.Kind,
-                ConfigWalker.WalkConfig(node.Config, evaluatorFor(nodeName, node.Kind), mapping.Source, $"nodes.{nodeName}.config", problems, node.Kind == NodeKind.Grant ? null : variables).Properties));
-            found.AddRange(problems.Select(e => InWorkload(e, workloadFile)));
+                ConfigWalker.WalkConfig(node.Config, evaluator, mapping.Source, $"nodes.{nodeName}.config", found, variables).Properties));
         }
 
         return nodes;
-    }
-
-    // A problem inside the substituted variables is the workload's: it is reported at container.variables.<NAME> of its file.
-    private static LoadError InWorkload(LoadError error, string workloadFile)
-    {
-        var marker = ConfigWalker.EntriesKey + ".";
-        var at = error.Location.IndexOf(marker, StringComparison.Ordinal);
-        return at < 0 || workloadFile.Length == 0 ? error : error with { File = workloadFile, Location = "container.variables." + error.Location[(at + marker.Length)..] };
     }
 
     private static Dictionary<string, EvalResult> EvaluateExports(Mapping mapping, ExpressionEvaluator evaluator, List<LoadError> found)

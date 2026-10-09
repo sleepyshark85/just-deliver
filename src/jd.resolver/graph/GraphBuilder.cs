@@ -79,15 +79,11 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
 
             foreach (var reference in (text.Result as Pending)?.References ?? (IEnumerable<Reference>)[])
             {
-                // A requirement's node config may not read another requirement (D19). The workload's own nodes may read its exports,
-                // except a grant: an export can carry env values the grantable check would not see.
-                if (reference.Kind == ReferenceKind.Resource && scope != WorkloadScope)
+                // Only the runtime node reads requirements' exports (workload variables). Elsewhere an export could carry environment values
+                // past the grantable check, or one requirement could read another (D19).
+                if (reference.Kind == ReferenceKind.Resource && !(scope == WorkloadScope && node.Name == ExpressionEvaluator.RuntimeNode && node.Kind != NodeKind.Grant))
                 {
-                    Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}; node config cannot reference another requirement.");
-                }
-                else if (reference.Kind == ReferenceKind.Resource && node.Kind == NodeKind.Grant)
-                {
-                    Fail($"grant field '{field}' references resource.{reference.Target}.{reference.Output}; a grant cannot read an export, which may carry environment values the grantable check does not see.");
+                    Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}; only the runtime node may read a requirement's export.");
                 }
                 else if (reference.Kind == ReferenceKind.Resource)
                 {
