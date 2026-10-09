@@ -44,6 +44,7 @@ public sealed record ResolvedRequirement(
 public sealed record PolicyResult(
     string CatalogVersion,
     string WorkloadName,
+    string WorkloadTeam,
     IReadOnlyList<ResolvedRequirement> Requirements,
     IReadOnlyList<ResolvedNode> WorkloadNodes,
     IReadOnlyList<LoadError> Errors);

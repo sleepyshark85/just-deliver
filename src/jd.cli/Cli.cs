@@ -1,16 +1,18 @@
+using jd.bp.pulumi;
+using jd.core.bp;
+using jd.orchestrator;
 using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
-using jd.resolver.expansion;
 using jd.resolver.graph;
-using jd.resolver.policies;
 using jd.resolver.workload;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace jd.cli;
 
 /// <summary>
-/// The composition root: parses arguments, wires the validator and the resolver stages, prints results and returns the exit code
-/// (0 success, 1 validation or resolution errors, 2 usage errors). Holds no resolution logic.
+/// The composition root: parses arguments, wires the validator, the resolver, the orchestrator and the Pulumi backend, prints
+/// results and returns the exit code (0 success, 1 validation, resolution or deployment errors, 2 usage errors). Holds no resolution logic.
 /// </summary>
 public static class Cli
 {
@@ -24,12 +26,15 @@ public static class Cli
           jd preview <workload.yaml> --env <environment.yaml> --catalog <dir> [--json]
           jd release create <manifest.yaml> --out <release-set.yaml>
           jd release show <release-set.yaml>
+          jd deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
           jd --help
 
         validate  checks a workload against its schema and rules.
         preview   validates the workload, then prints the resolved graph (--json: as stable JSON).
         release   create writes an immutable release set (pinned workloads, deploy order) from a manifest; show prints one.
-        Exit codes: 0 success, 1 validation or resolution errors, 2 usage errors.
+        deploy    provisions the infrastructure nodes in order (--preview: only shows the changes; nothing is created).
+                  Backend: PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
+        Exit codes: 0 success, 1 validation, resolution or deployment errors, 2 usage errors.
 
         """;
 
@@ -37,10 +42,22 @@ public static class Cli
 
     private sealed record ValidateOptions(string Workload) : Options(Workload);
 
-    private sealed record PreviewOptions(string Workload, string Environment, string Catalog, bool Json) : Options(Workload);
+    private abstract record ResolveOptions(string Workload, string Environment, string Catalog) : Options(Workload);
 
-    public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default)
+    private sealed record PreviewOptions(string Workload, string Environment, string Catalog, bool Json) : ResolveOptions(Workload, Environment, Catalog);
+
+    private sealed record DeployOptions(string Workload, string Environment, string Catalog, bool DryRun) : ResolveOptions(Workload, Environment, Catalog);
+
+    private const string BackendUrlVariable = "PULUMI_BACKEND_URL";
+    private const string PassphraseVariable = "PULUMI_CONFIG_PASSPHRASE";
+    private const string PassphraseFileVariable = "PULUMI_CONFIG_PASSPHRASE_FILE";
+
+    // backend is the one deploy uses; when null, the Pulumi backend configured from the process environment variables.
+    // environmentVariable reads them (null: the process environment). Both are test seams.
+    public static async Task<int> RunAsync(
+        string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, IBackEndProvider? backend = null, Func<string, string?>? environmentVariable = null)
     {
+        environmentVariable ??= System.Environment.GetEnvironmentVariable;
         if (args.Contains("--help") || args.Contains("-h"))
         {
             stdout.Write(Usage);
@@ -67,9 +84,15 @@ public static class Cli
             return UsageError;
         }
 
+        if (options is DeployOptions && backend is null && BackendSettingsProblem(environmentVariable) is { } missing)
+        {
+            stderr.WriteLine($"jd: {missing}");
+            return UsageError;
+        }
+
         try
         {
-            return await RunCommandAsync(options, stdout, stderr, cancellationToken);
+            return await RunCommandAsync(options, backend, environmentVariable, stdout, stderr, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -79,7 +102,7 @@ public static class Cli
         }
     }
 
-    private static async Task<int> RunCommandAsync(Options options, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    private static async Task<int> RunCommandAsync(Options options, IBackEndProvider? backend, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var loaded = await WorkloadFile.LoadAsync(options.Workload, cancellationToken);
         if (loaded.Workload is not { } workload)
@@ -88,32 +111,92 @@ public static class Cli
             return Invalid;
         }
 
-        if (options is not PreviewOptions preview)
+        if (options is not ResolveOptions resolve)
         {
             stdout.WriteLine($"{options.Workload}: valid.");
             return Success;
         }
 
-        var catalogResult = await CatalogDirectory.LoadAsync(preview.Catalog, cancellationToken);
-        var environmentResult = await EnvironmentFile.LoadAsync(preview.Environment, cancellationToken);
+        var catalogResult = await CatalogDirectory.LoadAsync(resolve.Catalog, cancellationToken);
+        var environmentResult = await EnvironmentFile.LoadAsync(resolve.Environment, cancellationToken);
         if (catalogResult.Catalog is not { } catalog || environmentResult.Descriptor is not { } environment)
         {
             // Catalog errors name files relative to the catalog root; the person needs the path they can open.
             // An error about the catalog as a whole names no real file and is left as it is.
-            Print(catalogResult.Errors.Select(e => Path.Combine(preview.Catalog, e.File) is var full && File.Exists(full) ? e with { File = full } : e)
+            Print(catalogResult.Errors.Select(e => Path.Combine(resolve.Catalog, e.File) is var full && File.Exists(full) ? e with { File = full } : e)
                 .Concat(environmentResult.Errors), stderr);
             return Invalid;
         }
 
-        var graph = new GraphBuilder(environment).Build(new PolicyApplier(catalog, environment).Apply(new Expander(catalog, environment).Expand(workload, options.Workload)));
+        var graph = Resolver.Resolve(workload, options.Workload, catalog, environment);
         if (graph.Errors.Count > 0)
         {
             Print(graph.Errors, stderr);
             return Invalid;
         }
 
-        stdout.Write(preview.Json ? GraphJson.Serialize(graph) : PreviewFormatter.Format(graph));
+        if (resolve is DeployOptions deploy)
+        {
+            return await DeployAsync(deploy, graph, catalog, environment, backend, environmentVariable, stdout, stderr, cancellationToken);
+        }
+
+        stdout.Write(resolve is PreviewOptions { Json: true } ? GraphJson.Serialize(graph) : PreviewFormatter.Format(graph));
         return Success;
+    }
+
+    // Templates live in the catalog's templates directory; the graph must fit them before anything is created.
+    private static async Task<int> DeployAsync(
+        DeployOptions options, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend,
+        Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var templates = await TemplateLibrary.LoadAsync(Path.Combine(options.Catalog, CatalogDirectory.TemplatesDirectory), cancellationToken);
+        var misfits = templates.Check(graph);
+        if (misfits.Count > 0)
+        {
+            Print(misfits, stderr);
+            return Invalid;
+        }
+
+        var orchestrator = new Orchestrator(backend ?? CreatePulumiBackend(environmentVariable), templates, catalog, environment);
+        void Show(NodeReport report) => stdout.Write(DeployFormatter.Format(report));
+        var run = options.DryRun
+            ? await orchestrator.PreviewAsync(graph, Show, cancellationToken)
+            : await orchestrator.DeployAsync(graph, Show, cancellationToken);
+        if (!run.Succeeded)
+        {
+            stderr.WriteLine($"jd: stopped at {run.Nodes[^1].NodeId}: {run.Nodes[^1].Message}");
+            return Invalid;
+        }
+
+        return Success;
+    }
+
+    // State location and secrets passphrase must be set explicitly: a default would lose track of stacks between runs, or
+    // encrypt with a passphrase nobody chose. An empty passphrase is a choice (local/dev); a passphrase file is another.
+    private static string? BackendSettingsProblem(Func<string, string?> environmentVariable)
+    {
+        if (environmentVariable(BackendUrlVariable) is null)
+        {
+            return $"{BackendUrlVariable} is not set. Set it to where Pulumi keeps state, for example file://<directory> or an Azure blob URL; without it stacks would be lost between runs.";
+        }
+
+        return environmentVariable(PassphraseVariable) is null && environmentVariable(PassphraseFileVariable) is null
+            ? $"{PassphraseVariable} is not set. Set it (empty is acceptable for local/dev only), or set {PassphraseFileVariable}."
+            : null;
+    }
+
+    private static IBackEndProvider CreatePulumiBackend(Func<string, string?> environmentVariable)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.RegisterPulumiBackend(options =>
+        {
+            options.BackendUrl = environmentVariable(BackendUrlVariable);
+            options.ConfigPassPhrase = environmentVariable(PassphraseVariable);
+            options.PulumiHome = environmentVariable("PULUMI_HOME");
+            options.ScratchDirectory = environmentVariable("JD_SCRATCH_DIR") ?? options.ScratchDirectory;
+        });
+        return services.BuildServiceProvider().GetRequiredService<IBackEndProvider>();
     }
 
     private static void Print(IEnumerable<LoadError> errors, TextWriter writer)
@@ -132,29 +215,29 @@ public static class Cli
             return (options.Workload, "not found or not a file.");
         }
 
-        if (options is not PreviewOptions preview)
+        if (options is not ResolveOptions resolve)
         {
             return null;
         }
 
-        if (!File.Exists(preview.Environment))
+        if (!File.Exists(resolve.Environment))
         {
-            return (preview.Environment, "not found or not a file.");
+            return (resolve.Environment, "not found or not a file.");
         }
 
-        return Directory.Exists(preview.Catalog) ? null : (preview.Catalog, "not found or not a directory.");
+        return Directory.Exists(resolve.Catalog) ? null : (resolve.Catalog, "not found or not a directory.");
     }
 
     private static (Options? Options, string Problem) Parse(string[] args)
     {
         var command = args.FirstOrDefault();
-        if (command is not ("validate" or "preview"))
+        if (command is not ("validate" or "preview" or "deploy"))
         {
             return (null, command is null ? "no command given." : $"unknown command '{command}'.");
         }
 
         string? environment = null, catalog = null;
-        var json = false;
+        bool json = false, dryRun = false;
         var positional = new List<string>();
         for (var i = 1; i < args.Length; i++)
         {
@@ -162,6 +245,9 @@ public static class Cli
             {
                 case "--json":
                     json = true;
+                    break;
+                case "--preview":
+                    dryRun = true;
                     break;
                 case "--env" or "--catalog":
                     if (i + 1 == args.Length)
@@ -194,13 +280,21 @@ public static class Cli
 
         if (command == "validate")
         {
-            return environment is null && catalog is null && !json
+            return environment is null && catalog is null && !json && !dryRun
                 ? (new ValidateOptions(positional[0]), string.Empty)
                 : (null, "validate takes only a workload file.");
         }
 
-        return environment is null || catalog is null
-            ? (null, "preview needs --env and --catalog.")
-            : (new PreviewOptions(positional[0], environment, catalog, json), string.Empty);
+        if (environment is null || catalog is null)
+        {
+            return (null, $"{command} needs --env and --catalog.");
+        }
+
+        if (command == "deploy")
+        {
+            return json ? (null, "deploy has no --json option.") : (new DeployOptions(positional[0], environment, catalog, dryRun), string.Empty);
+        }
+
+        return dryRun ? (null, "preview has no --preview option.") : (new PreviewOptions(positional[0], environment, catalog, json), string.Empty);
     }
 }

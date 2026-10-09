@@ -32,7 +32,7 @@ public partial class TemplateLibraryTests
             config, new Dictionary<string, Provenance>(), "hash", [], false);
 
     private static ResolvedGraph Graph(IEnumerable<GraphNode> nodes, IReadOnlyDictionary<string, IReadOnlyDictionary<string, EvalResult>>? exports = null) =>
-        new("1", "dev", "w", nodes.ToList(), exports ?? new Dictionary<string, IReadOnlyDictionary<string, EvalResult>>(), []);
+        new("1", "dev", "w", "crew", nodes.ToList(), exports ?? new Dictionary<string, IReadOnlyDictionary<string, EvalResult>>(), []);
 
     [Fact]
     public async Task The_seed_catalog_and_sample_workload_fit_the_template_library()

@@ -66,13 +66,13 @@ internal class PulumiBackendProvider : IBackEndProvider
             };
         });
 
-    public Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(DeploymentPackage package, CancellationToken cancellationToken) =>
-        InWorkDirectoryAsync(package.StackName, async workDir =>
+    public Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(string stackName, string deploymentContent, CancellationToken cancellationToken) =>
+        InWorkDirectoryAsync(stackName, async workDir =>
         {
             // The backend scopes stacks by project; the template content gives the same project as DeployAsync.
-            await File.WriteAllTextAsync(Path.Combine(workDir, "Pulumi.yaml"), package.DeploymentContent, cancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(workDir, "Pulumi.yaml"), deploymentContent, cancellationToken);
 
-            var pulumiStack = StackNames.ToPulumi(package.StackName);
+            var pulumiStack = StackNames.ToPulumi(stackName);
             var workspace = await LocalWorkspace.CreateAsync(new LocalWorkspaceOptions
             {
                 WorkDir = workDir,

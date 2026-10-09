@@ -10,6 +10,8 @@
     <Project Path="src/jd.definitionvalidator/jd.definitionvalidator.csproj" />
     <Project Path="src/jd.definitionvalidator.tests/jd.definitionvalidator.tests.csproj" />
     <Project Path="src/jd.resolver/jd.resolver.csproj" />
+    <Project Path="src/jd.orchestrator.tests/jd.orchestrator.tests.csproj" />
+    <Project Path="src/jd.orchestrator/jd.orchestrator.csproj" />
     <Project Path="src/jd.resolver.tests/jd.resolver.tests.csproj" />
   </Folder>
   <Folder Name="/src/backend-providers/">

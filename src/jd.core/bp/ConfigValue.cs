@@ -1,3 +1,5 @@
+namespace jd.core.bp;
+
 public class ConfigEntry
 {
     /// <summary>

@@ -1,3 +1,4 @@
+using jd.core.bp;
 using jd.definitionvalidator;
 using jd.resolver;
 using jd.resolver.expansion;
@@ -15,11 +16,12 @@ internal sealed record TemplateInterface(IReadOnlySet<string> Inputs, IReadOnlyS
 /// <see cref="ResolvedGraph"/> fits it: the templates exist, nodes set only declared inputs and all required ones,
 /// and node-output references name declared outputs. Lives here because templates are Pulumi-specific.
 /// </summary>
-public sealed class TemplateLibrary
+public sealed class TemplateLibrary : ITemplateStore
 {
     private const string TemplateFile = "Pulumi.yaml";
 
     private readonly Dictionary<string, TemplateInterface> _templates = [];
+    private readonly Dictionary<string, string> _content = [];
     private readonly List<LoadError> _loadErrors = [];
 
     private TemplateLibrary()
@@ -60,6 +62,7 @@ public sealed class TemplateLibrary
             {
                 if (YamlSchemaValidator.ParseYaml(yaml) is JObject root)
                 {
+                    library._content[name] = yaml;
                     library._templates[name] = new TemplateInterface(
                         Names(root, "configuration"),
                         Names(root, "configuration", requiredOnly: true),
@@ -84,6 +87,9 @@ public sealed class TemplateLibrary
         (root[block] as JObject)?.Properties()
             .Where(p => !requiredOnly || (p.Value as JObject)?.ContainsKey("default") != true)
             .Select(p => p.Name).ToHashSet() ?? [];
+
+    public string GetContent(string templateName) =>
+        _content.TryGetValue(templateName, out var content) ? content : throw new KeyNotFoundException($"template '{templateName}' is not in the template library.");
 
     /// <summary>Every way the graph does not fit the library, with node id, template and key; empty when it fits.</summary>
     public IReadOnlyList<LoadError> Check(ResolvedGraph graph)

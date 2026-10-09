@@ -56,7 +56,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             }
         }
 
-        return new PolicyResult(catalog.Version, expansion.WorkloadName, requirements, workloadNodes, errors);
+        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, requirements, workloadNodes, errors);
     }
 
     // Workload scope is kind: runtime, optionally narrowed by tier. The 'runtime' key is accepted but not matched yet:

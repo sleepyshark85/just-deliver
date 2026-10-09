@@ -5,13 +5,9 @@
 
 ## Now
 
-- **Next slice:** S11 — Orchestrator (infra nodes) — first slice that creates Azure resources
-- **In progress:** S11 — approved by review, rebased on `main` (branch `mvp/s11-orchestrator`, local worktree
-  `.claude/worktrees/agent-a31843c7a36d7bcd8`); only its Azure test remains.
-- **Blocked:** S11's Azure test — the sandbox daily-cap policy bug (fixed in PR #15) must be re-applied by the user:
-  `tools/sandbox/sandbox.sh apply --subscription ca89cbcc-e368-4e81-9e80-6686b4d9f3b9 --email sleepyshark.85@gmail.com`.
-  Then run `tools/verify.sh --azure` on the S11 branch, merge, and continue with S12. Also before S15: the user makes
-  the `just-deliver-sample-app` GHCR package public.
+- **Next slice:** S12 — Substrate from data
+- **In progress:** —
+- **Blocked:** —
 
 ## Slices
 
@@ -31,7 +27,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S08 | CLI skeleton | done | PR #12 | 2 + suggestions | Round 1: 2 blocking (directory/unreadable inputs crashed with raw exceptions; multi-line schema errors without file). Workload loading moved to `jd.resolver.workload`; preview shows `(from env.…)`. **M1 complete.** |
 | S09 | Template library | done | PR #13 | 2 | Round 1: 4 blocking (container names could collide across workloads → cross-workload grant; workspace shared key in clear state; adapter→resolver dependency not in standards — amended; `!`). Cosmos account now hard-capped (`totalThroughputLimit`). `samples/provisioner` removed. |
 | S10 | Provider fixes | done | PR #14 | 2 | Round 1: 3 blocking (outputs lookup could report a deployed stack as undeployed; preview made "not deployed" ambiguous; dead `Version`). Refresh events no longer counted as changes. Real offline Pulumi tests in the gate. |
-| S11 | Orchestrator (infra nodes) | in-review | `mvp/s11-orchestrator` | 2 | APPROVE after round 2 (teardown failures hidden; silent empty passphrase; backend URL now required). Azure test blocked by the sandbox policy bug until re-applied. |
+| S11 | Orchestrator (infra nodes) | done | PR #20 | 2 | First Azure slice. Round 1: 2 blocking (teardown failures hidden; silent empty passphrase); backend URL now required. Azure test found a bug in our own sandbox policy (int vs float compare) — fixed (PR #15), re-applied by the user; test green, nothing left behind. |
 | S12 | Substrate from data | todo | | | |
 | S13 | Release set (offline) | done | PR #18 | 2 | Round 1: 4 blocking — **release sources never committed** (old VS `.gitignore` rule `[Rr]elease/`; local gate passed because files existed on disk — caught by the reviewer's clean worktree); set fields could be tampered (now derived from verified definitions); BOM/invalid UTF-8; duplicated topological sort (shared now). |
 | S13b | Deploy a release set (infra) | todo | | | |
@@ -49,21 +45,15 @@ Picked up by the slice named; remove once done.
 
 - **Loader (minor):** scanner failures report only "Exception during deserialization (line N)"; append the inner
   exception message.
-- **S11/S13:** introduce a single `Resolver.Resolve(...)` facade when the second production caller appears (CLI
-  and orchestrator); the stage chain is currently wired in the CLI and the golden test.
 - **S12:** the substrate passes `totalThroughputLimit: 1000` and `enableFreeTier: true`; its Azure test asserts the
   deployed account's `capacity.totalThroughputLimit = 1000` and that both environment databases (400 RU/s each) fit.
 - **S10/S12:** template `fn::invoke`s (e.g. `getSharedKeys`) run during preview, so previewing a brand-new
   environment fails until its workspace exists — preview substrate in dependency order, or tolerate it.
 - **S15:** the runtime mapping sends `runtime.appInsightsConnectionString` to the app's `APPLICATIONINSIGHTS_CONNECTION_STRING`
   (Azure Monitor SDK's own name, not in the workload's variables). The app assumes partition key `/id`.
-- **S11:** YamlDotNet is now 16.x (Pulumi.Automation pins it); Pulumi config values are strings — serialise
-  structured values (maps) as JSON.
-- **S11:** `GetOutputsAsync` takes a whole `DeploymentPackage` but ignores its required `DeploymentParameters`; decide
-  the narrower signature when writing the orchestrator.
 - **Briefs:** cap production lines (~250) separately from tests; a cohesive slice's tests should not be trimmed to fit.
-- **S11:** per-workload resources (database, App Insights) currently target `${env.resourceGroup}` (substrate);
-  give workloads their own tagged resource group so `tools/azure/cleanup.sh` can remove them.
+- **Teardown:** per-workload Cosmos containers live in the substrate account; MVP test teardown removes everything
+  with `tools/azure/cleanup.sh --yes --all` at the end (no per-workload resource groups — decided in S11's brief).
 - **Validator:** NJsonSchema silently ignores some keywords (`propertyNames` confirmed). Don't rely on a schema
   keyword for a rule without a test proving it is enforced.
 
@@ -79,6 +69,10 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-09 (S11 on Azure)** — First real deployment through `jd`: resource group + capped workspace, outputs
+  passed, re-run zero changes, nothing left behind. User asked about Kubernetes support: answered (runtime adapter +
+  catalog data + identity decision + test cluster); not scheduled unless the user asks.
 
 - **2026-10-09 (repo public)** — The user made the repository public. GitHub Actions now runs (`verify` green) and
   `main` is protected server-side: PR only, `verify` required and up to date, no force-push, admins included,

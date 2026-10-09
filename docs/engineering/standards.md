@@ -35,6 +35,7 @@ Dependencies point inward. Inner layers know nothing about Pulumi, Azure or the 
 |---|---|---|---|
 | Domain / contracts | `jd.core` | BCL only | everything else |
 | Resolution | `jd.resolver` (catalog + engine) | `jd.core`, `jd.definitionvalidator`, YAML/JSON parsing | Pulumi, Azure SDKs, backend providers, CLI |
+| Application | `jd.orchestrator` | `jd.core`, `jd.resolver` | Pulumi, Azure SDKs, backend providers, CLI |
 | Validation | `jd.definitionvalidator` | `jd.core`, schema libs | Pulumi, Azure SDKs |
 | Infrastructure adapters | `backend-providers/jd.bp.pulumi` | `jd.core`, Pulumi Automation, the resolver's public output contract (`ResolvedGraph`, config values, references, `LoadError`) | resolver internals beyond that contract, CLI |
 | Composition root | `jd.cli` | everything | — (only wiring, argument parsing, output) |
