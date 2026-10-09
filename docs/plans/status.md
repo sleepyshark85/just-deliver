@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S03 — Environment descriptor
+- **Next slice:** S04 — Expression evaluator
 - **In progress:** —
 - **Blocked:** —
 
@@ -17,8 +17,8 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 |---|---|---|---|---|---|
 | S00 | Repo baseline + team setup | done | `main` | | Strict build, verify gate, hook, CI, agents, standards, sandbox |
 | S01 | Workload schema v2 | done | PR #2 | 1 + suggestions | APPROVE first round; non-blocking test/doc gaps fixed before merge. `id` pattern widened vs ADR 0011 (hyphens, ≤16) — recorded under C13/C14 |
-| S02 | Catalog formats + loader | done | PR #3 | 2 | Round 1: 2 blocking (false cascading errors; resolver.md example contradicted seed). ~630 lines, over guideline, accepted. Follow-ups for S04/S05: duplicate-key error lacks line/key; test pinning 'no Catalog' suppression when a file is unreadable; YAML parsed 3x per file; JToken mutability (clone in S06) |
-| S03 | Environment descriptor | todo | | | |
+| S02 | Catalog formats + loader | done | PR #3 | 2 | Round 1: 2 blocking (false cascading errors; resolver.md example contradicted seed). ~630 lines, over guideline, accepted. Follow-ups moved to carry-forward notes. |
+| S03 | Environment descriptor | done | PR #4 | 2 | Round 1: 1 blocking — NJsonSchema ignores `propertyNames`, so dotted keys could shadow nested values (D19 boundary); now enforced in code. `CatalogError` renamed `LoadError`. |
 | S04 | Expression evaluator | todo | | | |
 | S05 | Matching + expansion | todo | | | |
 | S06 | Policies + provenance | todo | | | |
@@ -34,6 +34,20 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S16 | Deploy steps | todo | | | |
 | S17 | jd deploy + record | todo | | | |
 | S18 | E2E run and docs | todo | | | |
+
+## Carry-forward notes
+
+Picked up by the slice named; remove once done.
+
+- **S04/S05 (parser):** duplicate-key error lacks key/line; test pinning the "no Catalog" suppression when a
+  file is unreadable; YAML parsed 3x per catalog file; move `CatalogParser.ToSchemaError` next to `LoadError`.
+- **S06:** catalog records hold mutable `JToken`s — clone on consumption.
+- **S09:** Azure role assignments need the full role-definition id; the `role-assignment` template must build
+  it from the role GUID (`roles.yaml` holds GUIDs only).
+- **S11:** per-workload resources (database, App Insights) currently target `${env.resourceGroup}` (substrate);
+  give workloads their own tagged resource group so `tools/azure/cleanup.sh` can remove them.
+- **Validator:** NJsonSchema silently ignores some keywords (`propertyNames` confirmed). Don't rely on a schema
+  keyword for a rule without a test proving it is enforced.
 
 ## Environment
 
@@ -55,8 +69,9 @@ Newest first. One entry per session: what moved, decisions taken, anything the n
   each merge. User asked to choose: GitHub Pro + fix billing, make public, or stay local-only.
   Workflow note: developer runs in an isolated worktree; reviewer verifies in a temporary detached
   worktree; the lead commits the status update on the slice branch before merging.
-  Trial so far (Sonnet dev / Opus review): S01 approved first round; S02 needed one fix round for two
-  real blocking issues the reviewer caught — the pairing is working as intended. Briefs should cap
+  Trial so far (Sonnet dev / Opus review): S01 approved first round; S02 and S03 each needed one fix
+  round for real blocking issues the reviewer caught (S03: a security-relevant validator gap) — the
+  pairing is working as intended. Briefs should cap
   slice size more tightly (S02 overran).
 - **2026-10-08** — Repo baseline and team setup (S00). Docs reorganised; sandbox subscription
   prepared and guardrails verified; strict build, `tools/verify.sh`, commit hook, CI; developer

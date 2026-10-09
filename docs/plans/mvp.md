@@ -59,7 +59,7 @@ with file-level detail at dispatch time.
 |---|---|---|---|
 | S01 | **Workload schema v2** (H50): `requires[].id` (default = type, unique, pattern `^[a-z][a-z0-9-]{1,14}[a-z0-9]$`), `class` (default `standard`), drop `metadata.environment`, type `cosmos-sql`, refs `${resource.<id>.<output>}`; reject `overrides` for now | — | Validator tests for each rule; sample workloads updated |
 | S02 | **Catalog formats + loader**: JSON Schemas for `catalog.yaml`, type, mapping, policy, naming, roles; `jd.resolver` project with a loader that validates and reports file+path errors; seed catalog for `cosmos-sql` and `runtime` | S01 | Invalid catalog files fail with actionable errors; seed catalog loads |
-| S03 | **Environment descriptor**: format + schema + loader (region, tier, substrate outputs, grantable resources) | S02 | Loader tests; a sample descriptor |
+| S03 | **Environment descriptor**: format + schema + loader (region, tier, substrate outputs, grantable resources) | S02 | Loader tests; descriptor generated in S12 |
 | S04 | **Expression evaluator**: `${…}` substitution, typed references for node outputs, built-ins `name()` (from `naming.yaml`), `guid()` (UUIDv5), `role.*` | S02, S03 | Pure unit tests incl. unknown references and naming length limits |
 | S05 | **Matching + expansion**: specificity ordering, ties are errors, mapping → nodes, type `exports` contract checked | S04 | Tests: match, tie, missing mapping, missing export |
 | S06 | **Policies + provenance**: `default`/`set`/`add`, layering template < mapping < policy, per-field provenance; seed `enforce-monitoring` | S05 | Tests for precedence and provenance; policy adds App Insights node |

@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/environment.schema.json",
+  "title": "just-deliver environment descriptor",
+  "description": "What an environment (its substrate) publishes so the resolver can resolve ${env.<path>} references. name, region and tier are addressable as env.name, env.region and env.tier; every other env.<dot.path> resolves inside values. grantable lists the values paths workloads may grant on (security boundary).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "name", "region", "tier", "values"],
+  "properties": {
+    "kind": { "enum": ["Environment"] },
+    "name": {
+      "description": "Environment name; same pattern as workload ids.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+    },
+    "region": { "type": "string", "minLength": 1 },
+    "tier": { "enum": ["team", "protected"] },
+    "values": { "$ref": "#/definitions/values" },
+    "grantable": {
+      "description": "Dot paths under values that workloads may grant on. Each must exist in values.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "definitions": {
+    "values": {
+      "description": "Substrate outputs: nested mappings of strings. Keys must not contain dots, so a dot path is unambiguous (enforced by the loader; the schema validator ignores propertyNames).",
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          { "type": "string" },
+          { "$ref": "#/definitions/values" }
+        ]
+      }
+    }
+  }
+}

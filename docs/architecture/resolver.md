@@ -174,6 +174,33 @@ set: { enableAutomaticFailover: true }
 `match: { kind: runtime, runtime: container-app }` produces the Container App revision
 ([ADR 0013](../decisions/0013-container-apps-runtime.md)). The app is not special-cased in the engine.
 
+## Environment descriptor
+
+An environment publishes what the resolver needs as one YAML document, validated by
+[`schemas/environment.schema.json`](../../schemas/environment.schema.json) (embedded in `jd.resolver`).
+It is written from substrate deployment outputs (slice S12); the resolver only reads it.
+
+```yaml
+kind: Environment
+name: dev                 # same pattern as workload ids
+region: southeastasia
+tier: team                # team | protected
+values:                   # substrate outputs, addressable as ${env.<path>}
+  resourceGroup: rg-…
+  cosmos: { accountName: …, accountId: …, endpoint: … }
+  logAnalytics: { id: … }
+grantable:                # paths under values that workloads may grant on
+  - cosmos.accountId
+```
+
+- **Lookup:** `env.name`, `env.region` and `env.tier` are reserved and come from the top-level
+  fields; any other `env.<dot.path>` resolves to a string inside `values`. A path to a group (for
+  example `env.cosmos`) or to nothing is not found.
+- **Rules beyond the schema:** `values` must not define `name`, `region` or `tier`; no key in `values`
+  may contain `.` (a dot path must be unambiguous); every `grantable` path must be a value in `values`. The loader reports all errors with their location.
+- **Security:** `grantable` is the boundary the engine enforces for `grant` nodes
+  ([D19](../open-questions.md)): a workload can only grant on the listed `env.*` resources.
+
 ## Engine rules (generic code, written once)
 
 | Rule | Behaviour |
@@ -184,7 +211,7 @@ set: { enableAutomaticFailover: true }
 | References | Static values resolve immediately. `${node.output}` stays a typed reference and becomes a graph edge. |
 | Phases | Derived from edges, not a hard-coded list: anything referencing `runtime.*` lands after the revision step. |
 | Built-ins | `name(kind)` applies `naming.yaml` (pattern, max length, charset, hash suffix — [C14](../open-questions.md)). `guid(...)` is UUIDv5, deterministic and re-run safe. Role GUIDs come from `roles.yaml`. Nothing else. |
-| Security | References may target only the workload's own nodes and `env.*` resources the environment descriptor marks grantable. Cross-workload references are rejected by the engine. |
+| Security | References may target only the workload's own nodes and `env.*` resources the [environment descriptor](#environment-descriptor) lists as grantable. Cross-workload references are rejected by the engine. |
 
 ## Output: ResolvedGraph
 
@@ -227,7 +254,6 @@ Adding a resource type = one type file + one template + one mapping + one golden
 
 - Workload schema changes ([H50](../open-questions.md)): `id`, `class`, drop `metadata.environment`;
   rename `database` to protocol-named types.
-- **Environment descriptor:** the substrate must publish its resources (resource group, region,
-  workspace, shared servers, tier, grantable resources) as versioned data. Not yet built.
+- **Environment descriptor:** defined above; the substrate publishes it from its deployment outputs (S12).
 - [D18](../open-questions.md): SQL/Postgres grants need data-plane SQL, not ARM — modelled as a
   `grant` node using a job-backed template; where that job runs is open.
