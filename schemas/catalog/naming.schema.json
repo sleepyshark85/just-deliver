@@ -24,7 +24,7 @@
           },
           "maxLength": { "description": "Longest legal name.", "type": "integer", "minimum": 1 },
           "allowed": {
-            "description": "Regex character class of legal characters, for example [a-z0-9-].",
+            "description": "Regex character class of legal characters, for example [a-z0-9-]. Must accept every hex digit 0-9a-f, because the hash is appended after filtering.",
             "type": "string",
             "pattern": "^\\[.+\\]$"
           }

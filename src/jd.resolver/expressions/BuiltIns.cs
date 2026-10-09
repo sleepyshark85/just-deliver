@@ -27,17 +27,6 @@ public static partial class BuiltIns
             return null;
         }
 
-        Regex allowed;
-        try
-        {
-            allowed = new Regex(rule.Allowed);
-        }
-        catch (ArgumentException e)
-        {
-            fail($"naming rule '{kind}' has an invalid 'allowed' character class '{rule.Allowed}': {e.Message}");
-            return null;
-        }
-
         var values = new Dictionary<string, string>
         {
             ["workload"] = context.WorkloadName,
@@ -45,8 +34,9 @@ public static partial class BuiltIns
             ["env"] = context.Environment.Name,
             ["hash"] = Hash(context, kind),
         };
+        // The catalog loader has checked that the class is a valid regex that allows the hash digits (the static Regex cache compiles it once).
         var name = Placeholder().Replace(rule.Pattern, m => values[m.Groups[1].Value]).ToLowerInvariant();
-        name = string.Concat(name.Where(c => allowed.IsMatch(c.ToString())));
+        name = string.Concat(name.Where(c => Regex.IsMatch(c.ToString(), rule.Allowed)));
         if (name.Length > rule.MaxLength)
         {
             // Keep the readable prefix; the hash keeps truncated names unique.

@@ -166,11 +166,20 @@ metadata:
     }
 
     [Fact]
+    public async Task BrokenYaml_IsReportedNotThrown()
+    {
+        var result = await ValidateAsync(Header + "container: [x\nother: 1\n");
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.StartsWith("Validation error:"));
+    }
+
+    [Fact]
     public async Task RepeatedKey_IsRejected()
     {
         var result = await ValidateAsync(Header + "container:\n  image: registry.example/app:1.0.0\n  image: other:2\n");
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Contains("image"));
+        Assert.Contains(result.Errors, e => e.Contains("duplicate key 'image' at line 9."));
     }
 }

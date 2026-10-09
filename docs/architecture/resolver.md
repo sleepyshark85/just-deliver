@@ -71,7 +71,7 @@ loader; the expression evaluator interprets them later.
 | `ResourceType` | `name`, `classes`, `exports`, `description` | `name` unique |
 | `Mapping` | `match`, `nodes`, `exports` | `match.type`, when present, names a declared type |
 | `Policy` | `name`, `reason`, `match`, and at least one of `set` / `default` / `add` | `name` unique |
-| `Naming` | `rules` (resource kind → `pattern`, `maxLength`, `allowed`) | files merge; a rule is defined once |
+| `Naming` | `rules` (resource kind → `pattern`, `maxLength`, `allowed`) | files merge; a rule is defined once; `allowed` must be a valid regex character class that accepts every hex digit `0-9a-f` |
 | `Roles` | `roles` (name → role-definition GUID) | files merge; a role is defined once |
 
 A node is `{ template, kind?: create | grant, config }`; `kind` defaults to `create`. Mapping `match`
@@ -237,7 +237,7 @@ Every invalid expression in a string is reported (file, location, message) and t
 - `name('<kind>')` applies the `Naming` rule for the kind: substitute `{workload}`, `{id}` (the requirement's
   effective id, or the node name for nodes not tied to a requirement), `{env}` and `{hash}`; lowercase; drop
   characters not matching `allowed`; if longer than `maxLength`, keep the first `maxLength - 6` characters and append
-  the hash. `{hash}` is the first 6 lowercase hex characters of SHA-256 over `workload|env|id|kind`. An unknown kind
+  the hash (so `allowed` must accept every hex digit `0-9a-f`; the loader enforces it). `{hash}` is the first 6 lowercase hex characters of SHA-256 over `workload|env|id|kind`. An unknown kind
   is an error.
 - `guid(arg, …)` is a UUIDv5 (RFC 4122) of the arguments joined with `|`, in the fixed namespace
   `8d6c1f0e-5b3a-4c7e-9a21-7e4f0b2d6c35`. Changing the namespace changes every generated id.

@@ -199,14 +199,6 @@ public class ExpressionEvaluatorTests
     }
 
     [Fact]
-    public void Name_with_invalid_allowed_class_is_an_error()
-    {
-        var naming = new Dictionary<string, NamingRule> { ["bad"] = new("{id}", 10, "[a-") };
-
-        Assert.Contains("invalid 'allowed'", Fails("${name('bad')}", Context(naming: naming)).Message);
-    }
-
-    [Fact]
     public void Uuid5_matches_the_rfc_4122_vector()
     {
         var dns = new Guid("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
@@ -238,7 +230,8 @@ public class ExpressionEvaluatorTests
     [Fact]
     public async Task Seed_catalog_and_workload_strings_evaluate()
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
+        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog;
+        Assert.NotNull(catalog);
         var workload = YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
         var mapping = Assert.Single(catalog.Mappings);
