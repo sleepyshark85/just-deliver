@@ -25,6 +25,29 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
     public Task<RunReport> PreviewAsync(ResolvedGraph graph, Action<NodeReport>? progress, CancellationToken cancellationToken) =>
         new Walk(provider, templates, catalog, environment, graph, preview: true, progress).RunAsync(cancellationToken);
 
+    /// <summary>
+    /// Deploys (or previews) each workload's graph in the order given and stops after the first workload that fails, so the
+    /// graphs after it are never touched. <paramref name="workloadStarted"/> gets each workload's name before its nodes run.
+    /// Returns the workloads handled; the last one failed when the release did.
+    /// </summary>
+    public async Task<IReadOnlyList<WorkloadRun>> DeployReleaseAsync(
+        IReadOnlyList<ResolvedGraph> graphs, bool preview, Action<string>? workloadStarted, Action<NodeReport>? progress, CancellationToken cancellationToken)
+    {
+        var runs = new List<WorkloadRun>();
+        foreach (var graph in graphs)
+        {
+            workloadStarted?.Invoke(graph.Workload);
+            var run = preview ? await PreviewAsync(graph, progress, cancellationToken) : await DeployAsync(graph, progress, cancellationToken);
+            runs.Add(new WorkloadRun(graph.Workload, run));
+            if (!run.Succeeded)
+            {
+                break;
+            }
+        }
+
+        return runs;
+    }
+
     private sealed class Walk(
         IBackEndProvider provider, ITemplateStore templates, Catalog catalog, EnvironmentDescriptor environment, ResolvedGraph graph, bool preview, Action<NodeReport>? progress)
     {

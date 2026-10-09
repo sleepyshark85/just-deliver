@@ -9,7 +9,10 @@ namespace jd.cli.tests;
 /// <summary>
 /// Real resources, free tier only: the sample <c>shared</c> and <c>dev</c> definitions (renamed with a random suffix, so names cannot
 /// collide) brought up with <c>jd env up</c> on a local file state. Checks the descriptors, the free-tier Cosmos account and its
-/// RU/s cap and the workspace's daily cap through <c>az</c>, and that running each again changes nothing. Always deletes the resource
+/// RU/s cap and the workspace's daily cap through <c>az</c>, and that running each again changes nothing. Then the sample release set is
+/// deployed on <c>dev</c> (<c>jd release create</c>, <c>jd release deploy</c>): the workloads get distinct containers in the dev database
+/// without throughput of their own, so the free-tier RU/s budget holds, and a second deploy changes nothing. It is one scenario because
+/// Azure allows one free-tier Cosmos account per subscription and the substrate here is that account. Always deletes the resource
 /// groups it created. Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>,
 /// <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI, and a subscription
 /// <b>without an existing free-tier Cosmos account</b> (Azure allows one per subscription; the test creates it and deletes it).
@@ -101,8 +104,16 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.DoesNotContain(": deployed", output);
     }
 
+    private static async Task<(int Code, string Output)> ReleaseAsync(IBackEndProvider backend, params string[] args)
+    {
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var code = await Cli.RunAsync(["release", .. args], stdout, stderr, CancellationToken.None, backend);
+        return (code, stdout + stderr.ToString());
+    }
+
     [Fact]
-    public async Task Shared_then_dev_are_provisioned_from_data_within_the_free_tier_and_a_second_run_changes_nothing()
+    public async Task Shared_then_dev_are_provisioned_and_a_release_set_deploys_onto_dev_within_the_free_tier_and_reruns_change_nothing()
     {
         var region = System.Environment.GetEnvironmentVariable("JD_REGION")
             ?? throw new InvalidOperationException("The Azure tests need JD_REGION (see docs/plans/status.md, Environment).");
@@ -147,5 +158,40 @@ public sealed class EnvUpAzureTests : IDisposable
         var (againDevCode, againDev) = await UpAsync(backend, region, dev, "--base", sharedDescriptor, "--out", devDescriptor);
         Assert.True(againDevCode == 0, againDev);
         AssertNothingChanged(againDev, 3);
+
+        // The sample release set on dev: two workloads, one container each in the dev database, the grants waiting for the runtime.
+        var releaseSet = Path.Combine(_root, "release.yaml");
+        var (createCode, createOutput) = await ReleaseAsync(backend, "create", Path.Combine(AppContext.BaseDirectory, "samples", "releases", "sample.manifest.yaml"), "--out", releaseSet);
+        Assert.True(createCode == 0, createOutput);
+        var deploy = new[] { "deploy", releaseSet, "--env", devDescriptor, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog") };
+        var (releaseCode, releaseOutput) = await ReleaseAsync(backend, deploy);
+        Assert.True(releaseCode == 0, releaseOutput);
+        // All four grants (a database role assignment and a metrics-publisher assignment per workload) wait for the runtime, which does not exist yet.
+        foreach (var grant in new[] { "/database/access", "/@workload/appinsights-access" })
+        {
+            Assert.Equal(2, releaseOutput.Split('\n').Count(line => line.Contains($"{grant}: waiting for runtime", StringComparison.Ordinal)));
+        }
+
+        var containers = Az("cosmosdb", "sql", "container", "list", "--account-name", account, "--resource-group", sharedGroup, "--database-name", database, "--query", "[].name")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(2, containers.Length);
+        Assert.Equal(2, containers.Distinct().Count());
+        Assert.Single(containers, name => name.StartsWith("just-deliver-sample-app-", StringComparison.Ordinal));
+        Assert.Single(containers, name => name.StartsWith("just-deliver-sample-worker-", StringComparison.Ordinal));
+
+        // Free-tier RU/s budget: a container with shared throughput has none of its own (Azure answers the throughput query with an error),
+        // the database keeps its 400 and the account still refuses anything beyond 1,000.
+        foreach (var container in containers)
+        {
+            var own = _az.Run("cosmosdb", "sql", "container", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--database-name", database, "--name", container, "--subscription", _az.Subscription);
+            Assert.NotEqual(0, own.Code);
+        }
+
+        Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", database, "--query", "resource.throughput"));
+        Assert.Equal("1000", Az("cosmosdb", "show", "--name", account, "--resource-group", sharedGroup, "--query", "capacity.totalThroughputLimit"));
+
+        var (againReleaseCode, againRelease) = await ReleaseAsync(backend, deploy);
+        Assert.True(againReleaseCode == 0, againRelease);
+        AssertNothingChanged(againRelease, 4);
     }
 }

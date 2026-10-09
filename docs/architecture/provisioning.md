@@ -202,6 +202,16 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   state location would lose track of stacks between runs. Optional: `PULUMI_HOME`, `JD_SCRATCH_DIR`. The orchestrator
   refuses a graph whose catalog version or environment differs from the catalog and environment it was given.
 
+### Release sets (`jd release deploy`)
+
+A release set ([release.md](release.md)) is deployed by the same path as one workload, once per workload. `ReleaseResolver`
+(`jd.resolver`) parses each embedded definition and runs `Resolver.Resolve` in `Order`, naming errors `<set>#<workload>`;
+the CLI checks every graph against the templates; then `Orchestrator.DeployReleaseAsync` walks the graphs in that order
+(`DeployAsync`, or `PreviewAsync` with `--preview`) and stops after the first workload that fails, so later workloads are
+never touched. All resolution and checks come before the first node, so a resolve error in the last workload creates nothing.
+Rollback of the workloads before a failure is not part of the walk (open question E31): the run reports where it stopped and
+running it again resumes. The workloads' containers share the environment database's throughput (no per-container RU/s).
+
 ### Substrate (`jd env up`)
 
 An environment's substrate is provisioned by the same path as a workload's infrastructure: `Resolver.ResolveSubstrate` resolves an
