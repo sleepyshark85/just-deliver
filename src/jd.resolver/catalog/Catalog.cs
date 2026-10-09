@@ -36,6 +36,12 @@ public sealed record MatchCriteria(IReadOnlyDictionary<string, string> Criteria)
     public const string TypeKey = "type";
     public const string ClassKey = "class";
     public const string TierKey = "tier";
+
+    // Keys only policies use: a node's template, and the runtime scope (kind: runtime) of a workload-scope policy.
+    public const string TemplateKey = "template";
+    public const string KindKey = "kind";
+    public const string RuntimeKey = "runtime";
+    public const string RuntimeKind = "runtime";
 }
 
 public sealed record Mapping(

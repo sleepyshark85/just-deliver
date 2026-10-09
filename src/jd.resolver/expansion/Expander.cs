@@ -62,16 +62,8 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         var nodes = new List<ExpandedNode>();
         foreach (var (nodeName, node) in mapping.Nodes)
         {
-            var config = new Dictionary<string, ConfigValue>();
-            foreach (var (key, value) in node.Config)
-            {
-                if (Walk(value, evaluator, mapping.Source, $"nodes.{nodeName}.config.{key}", found) is { } walked)
-                {
-                    config[key] = walked;
-                }
-            }
-
-            nodes.Add(new ExpandedNode(nodeName, node.Template, node.Kind, config));
+            var config = WalkConfig(node.Config, evaluator, mapping.Source, $"nodes.{nodeName}.config", found);
+            nodes.Add(new ExpandedNode(nodeName, node.Template, node.Kind, config.Properties));
         }
 
         var exports = new Dictionary<string, EvalResult>();
@@ -92,9 +84,24 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         return new ExpandedRequirement(requirement.Id, requirement.Type, requirement.Class, mapping.Source, nodes, exports);
     }
 
+    /// <summary>Walks each top-level field of a node's config; a field that failed to evaluate is omitted (see <see cref="Walk"/>).</summary>
+    internal static ConfigObject WalkConfig(IReadOnlyDictionary<string, JToken> config, ExpressionEvaluator evaluator, string file, string location, ICollection<LoadError> errors)
+    {
+        var properties = new Dictionary<string, ConfigValue>();
+        foreach (var (key, value) in config)
+        {
+            if (Walk(value, evaluator, file, $"{location}.{key}", errors) is { } walked)
+            {
+                properties[key] = walked;
+            }
+        }
+
+        return new ConfigObject(properties);
+    }
+
     // Null means a string failed to evaluate. The failure is already in errors and the whole requirement is discarded,
     // so the surrounding object or array simply omits the value.
-    private static ConfigValue? Walk(JToken token, ExpressionEvaluator evaluator, string file, string location, ICollection<LoadError> errors)
+    internal static ConfigValue? Walk(JToken token, ExpressionEvaluator evaluator, string file, string location, ICollection<LoadError> errors)
     {
         switch (token)
         {
