@@ -15,6 +15,9 @@ configuration:
   # Apply the free tier discount; Azure allows one free-tier account per subscription
   enableFreeTier:
     type: Boolean
+  # Hard cap on provisioned RU/s across the account, enforced by Azure (backstop for the free tier)
+  totalThroughputLimit:
+    type: Integer
 
 resources:
   account:
@@ -26,6 +29,8 @@ resources:
       kind: GlobalDocumentDB
       databaseAccountOfferType: Standard
       enableFreeTier: ${enableFreeTier}
+      capacity:
+        totalThroughputLimit: ${totalThroughputLimit}
       consistencyPolicy:
         defaultConsistencyLevel: Session
       locations:

@@ -5,9 +5,7 @@ nodes:
   container:
     template: azure/cosmos-sql-container
     config:
-      resourceGroupName: ${env.resourceGroup}
       accountId: ${env.cosmos.accountId}
-      accountName: ${env.cosmos.accountName}
       databaseName: ${env.cosmos.databaseName}
       containerName: ${name('cosmos-container')}
       partitionKeyPath: /id

@@ -36,7 +36,7 @@ Dependencies point inward. Inner layers know nothing about Pulumi, Azure or the 
 | Domain / contracts | `jd.core` | BCL only | everything else |
 | Resolution | `jd.resolver` (catalog + engine) | `jd.core`, `jd.definitionvalidator`, YAML/JSON parsing | Pulumi, Azure SDKs, backend providers, CLI |
 | Validation | `jd.definitionvalidator` | `jd.core`, schema libs | Pulumi, Azure SDKs |
-| Infrastructure adapters | `backend-providers/jd.bp.pulumi` | `jd.core`, Pulumi Automation | resolver internals, CLI |
+| Infrastructure adapters | `backend-providers/jd.bp.pulumi` | `jd.core`, Pulumi Automation, the resolver's public output contract (`ResolvedGraph`, config values, references, `LoadError`) | resolver internals beyond that contract, CLI |
 | Composition root | `jd.cli` | everything | — (only wiring, argument parsing, output) |
 
 - `tools/verify.sh` enforces the inner-layer rule mechanically; the reviewer checks the rest.
@@ -68,7 +68,7 @@ the guardrails are a safety net, not the plan. Every resource a slice creates mu
 
 | Service | Rule |
 |---|---|
-| Cosmos DB | One free-tier account per subscription (substrate). Sum of RU/s across all databases/containers ≤ 1,000. No serverless, no autoscale above 1,000. |
+| Cosmos DB | One free-tier account per subscription (substrate). Sum of RU/s across all databases/containers ≤ 1,000. No serverless, no autoscale above 1,000. The account is created with `capacity.totalThroughputLimit` = 1,000 (the `cosmos-account` template's required `totalThroughputLimit` input), so Azure itself refuses anything beyond the free RU/s: the backstop if a mapping or override gets the budget wrong. |
 | Container Apps | Consumption profile only; `minReplicas: 0`; 0.25 vCPU / 0.5 Gi. |
 | Log Analytics / App Insights | Daily cap ≤ 0.15 GB; sampling on. |
 | Anything else | Must be free (role assignments, managed identities) or explicitly approved by the user first. |

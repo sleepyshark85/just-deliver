@@ -18,14 +18,11 @@ configuration:
   # Name of the Log Analytics workspace the environment logs to
   workspaceName:
     type: String
+  # Customer id of that workspace (output workspaceCustomerId of log-analytics)
+  workspaceCustomerId:
+    type: String
 
 variables:
-  workspace:
-    fn::invoke:
-      function: azure-native:operationalinsights:getWorkspace
-      arguments:
-        resourceGroupName: ${workspaceResourceGroupName}
-        workspaceName: ${workspaceName}
   workspaceKeys:
     fn::invoke:
       function: azure-native:operationalinsights:getSharedKeys
@@ -44,8 +41,10 @@ resources:
       appLogsConfiguration:
         destination: log-analytics
         logAnalyticsConfiguration:
-          customerId: ${workspace.customerId}
-          sharedKey: ${workspaceKeys.primarySharedKey}
+          customerId: ${workspaceCustomerId}
+          # Neither side is secret in the provider schema; without fn::secret the key would sit in state in clear text.
+          sharedKey:
+            fn::secret: ${workspaceKeys.primarySharedKey}
 
 outputs:
   environmentId: ${environment.id}

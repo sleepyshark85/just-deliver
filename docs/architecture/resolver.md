@@ -172,9 +172,17 @@ a node's `template` is `<provider>/<name>`.
   `scope`, the data-plane scope id of the container.
 - `options: protect: true` per protection class ([ADR 0010](../decisions/0010-replacement-protection-classes.md)).
 - Pulumi config values are strings; structured inputs (`Map<String>` tags) are passed as JSON.
+- Templates declare inputs under `configuration:`, which current Pulumi reports as deprecated in favour of `config:`.
+  They stay on `configuration:` because project-level `config:` cannot declare the `number` type the Log Analytics
+  daily cap needs. When that changes, rename the block in each template and change the block name `TemplateLibrary`
+  reads (`jd.bp.pulumi`); the contract check fails every template it can no longer read.
+- Where a template needs part of an ARM id (resource group, account name, subscription), it takes the id as its
+  input and splits it (`fn::split`) instead of asking for the parts, so there is one source and no Azure call.
+- A secret read inside a template (the Log Analytics shared key) is wrapped in `fn::secret`, because the provider
+  schema does not mark it secret and it would otherwise sit in state in clear text.
 
 The seed library: substrate `resource-group`, `log-analytics` (daily cap), `container-apps-environment`
-(Consumption only), `cosmos-account`, `cosmos-sql-database` (shared throughput); workload `cosmos-sql-container`,
+(Consumption only), `cosmos-account` (with a throughput hard cap), `cosmos-sql-database` (shared throughput); workload `cosmos-sql-container`,
 `cosmos-sql-role-assignment`, `application-insights`, `role-assignment`.
 
 ### Runtime is a mapping too

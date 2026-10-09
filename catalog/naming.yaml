@@ -1,9 +1,10 @@
 kind: Naming
 rules:
   # Placeholders: {workload}, {id}, {env}, {hash}.
-  # Containers of all workloads share one database, so the name carries the workload.
+  # Containers of all workloads share one database, so the name carries the workload; the hash keeps
+  # "shop-orders"+"store" apart from "shop"+"orders-store" (a clash would let one grant reach another's container).
   cosmos-container:
-    pattern: "{workload}-{id}"
+    pattern: "{workload}-{id}-{hash}"
     maxLength: 255
     allowed: "[a-z0-9-]"
   appi:

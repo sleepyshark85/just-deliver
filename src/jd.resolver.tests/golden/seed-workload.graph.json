@@ -61,24 +61,20 @@
       "kind": "Create",
       "stack": "just-deliver-sample-app.dev.cosmos-sql.container",
       "phase": "Infrastructure",
-      "hash": "feb519636541f910001051f7e68a679c6b561aced793715c43b1474be95c6353",
+      "hash": "be91b38a16b89b968dbbbb12efd3ed8610e3a023bc3f4b4364f40d642a57b154",
       "dependsOn": [],
       "dependsOnRuntime": false,
       "config": {
         "accountId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev",
-        "accountName": "cosmos-dev",
-        "containerName": "just-deliver-sample-app-cosmos-sql",
+        "containerName": "just-deliver-sample-app-cosmos-sql-609b25",
         "databaseName": "db-dev",
-        "partitionKeyPath": "/id",
-        "resourceGroupName": "rg-dev"
+        "partitionKeyPath": "/id"
       },
       "provenance": {
         "accountId": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "accountName": "Mapping: mappings/cosmos-sql/standard.yaml",
         "containerName": "Mapping: mappings/cosmos-sql/standard.yaml",
         "databaseName": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "partitionKeyPath": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "resourceGroupName": "Mapping: mappings/cosmos-sql/standard.yaml"
+        "partitionKeyPath": "Mapping: mappings/cosmos-sql/standard.yaml"
       }
     },
     {

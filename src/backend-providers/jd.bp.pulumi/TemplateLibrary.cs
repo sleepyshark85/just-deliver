@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 namespace jd.bp.pulumi;
 
 /// <summary>What a template's <c>Pulumi.yaml</c> declares: its inputs (<c>configuration:</c>), those without a default, and its <c>outputs:</c>.</summary>
-public sealed record TemplateInterface(IReadOnlySet<string> Inputs, IReadOnlySet<string> RequiredInputs, IReadOnlySet<string> Outputs);
+internal sealed record TemplateInterface(IReadOnlySet<string> Inputs, IReadOnlySet<string> RequiredInputs, IReadOnlySet<string> Outputs);
 
 /// <summary>
 /// The Pulumi YAML template library (<c>catalog/templates/&lt;provider&gt;/&lt;name&gt;/Pulumi.yaml</c>) and the offline check that a
@@ -42,6 +42,7 @@ public sealed class TemplateLibrary
         var sources = new List<(string Name, string Yaml)>();
         foreach (var file in Directory.EnumerateFiles(root, TemplateFile, SearchOption.AllDirectories))
         {
+            // Safe: EnumerateFiles yields paths with a file name, so the directory is never null.
             var name = Path.GetRelativePath(root, Path.GetDirectoryName(file)!).Replace(Path.DirectorySeparatorChar, '/');
             sources.Add((name, await File.ReadAllTextAsync(file, cancellationToken)));
         }
