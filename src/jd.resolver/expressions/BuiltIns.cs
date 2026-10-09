@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -16,8 +15,6 @@ public static partial class BuiltIns
 
     private const int HashLength = 6;
 
-    private static readonly ConcurrentDictionary<string, Regex> AllowedClasses = new();
-
     [GeneratedRegex(@"\{(workload|id|env|hash)\}")]
     private static partial Regex Placeholder();
 
@@ -30,9 +27,6 @@ public static partial class BuiltIns
             return null;
         }
 
-        // The catalog loader has checked that the class is a valid regex that allows the hash digits.
-        var allowed = AllowedClasses.GetOrAdd(rule.Allowed, pattern => new Regex(pattern));
-
         var values = new Dictionary<string, string>
         {
             ["workload"] = context.WorkloadName,
@@ -40,8 +34,9 @@ public static partial class BuiltIns
             ["env"] = context.Environment.Name,
             ["hash"] = Hash(context, kind),
         };
+        // The catalog loader has checked that the class is a valid regex that allows the hash digits (the static Regex cache compiles it once).
         var name = Placeholder().Replace(rule.Pattern, m => values[m.Groups[1].Value]).ToLowerInvariant();
-        name = string.Concat(name.Where(c => allowed.IsMatch(c.ToString())));
+        name = string.Concat(name.Where(c => Regex.IsMatch(c.ToString(), rule.Allowed)));
         if (name.Length > rule.MaxLength)
         {
             // Keep the readable prefix; the hash keeps truncated names unique.

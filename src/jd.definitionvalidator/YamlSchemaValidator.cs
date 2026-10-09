@@ -54,10 +54,10 @@ public class YamlSchemaValidator
             {
                 switch (parser.Current)
                 {
-                    case NodeEvent node:
+                    case NodeEvent or AnchorAlias:
                         if (open.TryPeek(out var parent) && parent is not null)
                         {
-                            if (parent.NextIsKey && node is Scalar key && !parent.Keys.Add(key.Value))
+                            if (parent.NextIsKey && parser.Current is Scalar key && !parent.Keys.Add(key.Value))
                             {
                                 return (key.Value, key.Start.Line);
                             }
@@ -65,9 +65,9 @@ public class YamlSchemaValidator
                             parent.NextIsKey = !parent.NextIsKey;
                         }
 
-                        if (node is MappingStart or SequenceStart)
+                        if (parser.Current is MappingStart or SequenceStart)
                         {
-                            open.Push(node is MappingStart ? new MappingFrame() : null);
+                            open.Push(parser.Current is MappingStart ? new MappingFrame() : null);
                         }
 
                         break;
@@ -77,9 +77,9 @@ public class YamlSchemaValidator
                 }
             }
         }
-        catch (YamlException)
+        catch (Exception)
         {
-            // Not a repeated key after all; the caller falls back to the parser's own message.
+            // Best-effort enrichment (the scanner throws plain exceptions too); the caller falls back to the parser's message.
         }
 
         return null;

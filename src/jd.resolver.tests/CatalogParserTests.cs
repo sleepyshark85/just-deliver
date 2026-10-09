@@ -170,6 +170,22 @@ public class CatalogParserTests
     }
 
     [Fact]
+    public async Task Repeated_key_after_an_alias_is_located_correctly()
+    {
+        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: &v \"1\"\nref: *v\nx: 1\nx: 2\n"));
+
+        Assert.Contains("duplicate key 'x' at line 5", Assert.Single(result.Errors).Message);
+    }
+
+    [Fact]
+    public async Task Scanner_failure_is_an_error_not_an_exception()
+    {
+        var result = await Parse(("catalog.yaml", "kind: Naming\nrules: [x\nother: 1\n"));
+
+        Assert.Contains("not valid YAML", Assert.Single(result.Errors).Message);
+    }
+
+    [Fact]
     public async Task Missing_catalog_is_reported_beside_an_unknown_kind()
     {
         var result = await Parse(("odd.yaml", "kind: Widget\n"));
