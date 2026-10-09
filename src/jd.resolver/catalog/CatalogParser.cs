@@ -33,7 +33,7 @@ public static partial class CatalogParser
 
     public static async Task<CatalogLoadResult> ParseAsync(IEnumerable<CatalogSource> sources, CancellationToken cancellationToken = default)
     {
-        var errors = new List<CatalogError>();
+        var errors = new List<LoadError>();
         var documents = new List<Document>();
         var unreadable = 0;
         foreach (var source in sources.OrderBy(s => s.Path, StringComparer.Ordinal))
@@ -80,7 +80,7 @@ public static partial class CatalogParser
         return new CatalogLoadResult(catalog, errors);
     }
 
-    private static async Task<Document?> ReadDocumentAsync(CatalogSource source, List<CatalogError> errors, CancellationToken cancellationToken)
+    private static async Task<Document?> ReadDocumentAsync(CatalogSource source, List<LoadError> errors, CancellationToken cancellationToken)
     {
         JToken parsed;
         try
@@ -89,7 +89,7 @@ public static partial class CatalogParser
             stream.Load(new StringReader(source.Content));
             if (stream.Documents.Count > 1)
             {
-                errors.Add(new CatalogError(source.Path, string.Empty, "contains several YAML documents; use one YAML document per file."));
+                errors.Add(new LoadError(source.Path, string.Empty, "contains several YAML documents; use one YAML document per file."));
                 return null;
             }
 
@@ -97,83 +97,74 @@ public static partial class CatalogParser
         }
         catch (Exception ex)
         {
-            errors.Add(new CatalogError(source.Path, string.Empty, $"not valid YAML: {ex.Message}"));
+            errors.Add(new LoadError(source.Path, string.Empty, $"not valid YAML: {ex.Message}"));
             return null;
         }
 
         if (parsed is not JObject body)
         {
-            errors.Add(new CatalogError(source.Path, string.Empty, "must be one YAML mapping with a 'kind' key."));
+            errors.Add(new LoadError(source.Path, string.Empty, "must be one YAML mapping with a 'kind' key."));
             return null;
         }
 
         if (body["kind"] is not { Type: JTokenType.String } kindToken)
         {
-            errors.Add(new CatalogError(source.Path, "kind", $"required; one of {string.Join(", ", Kinds)}."));
+            errors.Add(new LoadError(source.Path, "kind", $"required; one of {string.Join(", ", Kinds)}."));
             return null;
         }
 
         var kind = (string?)kindToken ?? string.Empty;
         if (!Kinds.Contains(kind))
         {
-            errors.Add(new CatalogError(source.Path, "kind", $"unknown kind '{kind}'; expected one of {string.Join(", ", Kinds)}."));
+            errors.Add(new LoadError(source.Path, "kind", $"unknown kind '{kind}'; expected one of {string.Join(", ", Kinds)}."));
             return null;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var result = await Validator.ValidateContentAsync(await ReadSchemaAsync(kind, cancellationToken), source.Content);
+        var result = await Validator.ValidateContentAsync(await EmbeddedSchema.ReadAsync($"schemas/catalog/{kind.ToLowerInvariant()}.schema.json", cancellationToken), source.Content);
         errors.AddRange(result.Errors.Select(e => ToSchemaError(source.Path, e)));
         return new Document(source.Path, kind, body, result.IsValid);
     }
 
-    internal static CatalogError ToSchemaError(string file, string schemaError)
+    internal static LoadError ToSchemaError(string file, string schemaError)
     {
         var path = SchemaErrorRegex().Match(schemaError).Groups["path"].Value;
         var location = path.Trim('/');
         var detail = string.Join(' ', schemaError.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
-        return new CatalogError(file, location, $"schema violation: {detail}");
-    }
-
-    private static async Task<string> ReadSchemaAsync(string kind, CancellationToken cancellationToken)
-    {
-        var name = $"schemas/catalog/{kind.ToLowerInvariant()}.schema.json";
-        await using var stream = typeof(CatalogParser).Assembly.GetManifestResourceStream(name)
-            ?? throw new InvalidOperationException($"Schema '{name}' is not embedded in jd.resolver.");
-        using var reader = new StreamReader(stream);
-        return await reader.ReadToEndAsync(cancellationToken);
+        return new LoadError(file, location, $"schema violation: {detail}");
     }
 
     private static List<Document> OfKind(List<Document> documents, string kind) => documents.Where(d => d.Kind == kind).ToList();
 
     // Valid documents have the shapes the schemas guarantee; invalid ones are only asked for what they may lack.
 
-    private static void CheckSingleCatalog(List<Document> catalogs, bool allFilesReadable, List<CatalogError> errors)
+    private static void CheckSingleCatalog(List<Document> catalogs, bool allFilesReadable, List<LoadError> errors)
     {
         if (catalogs.Count == 0 && allFilesReadable)
         {
-            errors.Add(new CatalogError("(catalog)", string.Empty, $"no file of kind {CatalogKind}; exactly one is required."));
+            errors.Add(new LoadError("(catalog)", string.Empty, $"no file of kind {CatalogKind}; exactly one is required."));
         }
 
         foreach (var extra in catalogs.Skip(1))
         {
-            errors.Add(new CatalogError(extra.Source, "kind", $"a second {CatalogKind} file; exactly one is allowed (first: {catalogs[0].Source})."));
+            errors.Add(new LoadError(extra.Source, "kind", $"a second {CatalogKind} file; exactly one is allowed (first: {catalogs[0].Source})."));
         }
     }
 
     private static string? NameOf(Document d) => d.Body["name"] is { Type: JTokenType.String } name ? (string?)name : null;
 
-    private static void CheckUnique(List<Document> documents, string kind, List<CatalogError> errors)
+    private static void CheckUnique(List<Document> documents, string kind, List<LoadError> errors)
     {
         foreach (var group in documents.Where(d => NameOf(d) is not null).GroupBy(d => NameOf(d)))
         {
             foreach (var duplicate in group.Skip(1))
             {
-                errors.Add(new CatalogError(duplicate.Source, "name", $"{kind} '{group.Key}' is already declared in {group.First().Source}."));
+                errors.Add(new LoadError(duplicate.Source, "name", $"{kind} '{group.Key}' is already declared in {group.First().Source}."));
             }
         }
     }
 
-    private static void CheckMappingTypes(List<Mapping> mappings, List<Document> typeDocuments, List<CatalogError> errors)
+    private static void CheckMappingTypes(List<Mapping> mappings, List<Document> typeDocuments, List<LoadError> errors)
     {
         var declared = typeDocuments.Select(NameOf).OfType<string>().Distinct().Order().ToList();
         foreach (var mapping in mappings)
@@ -181,13 +172,13 @@ public static partial class CatalogParser
             if (mapping.Match.Criteria.TryGetValue("type", out var type) && !declared.Contains(type))
             {
                 var known = declared.Count == 0 ? "none" : string.Join(", ", declared);
-                errors.Add(new CatalogError(mapping.Source, "match.type", $"'{type}' is not a declared ResourceType (declared: {known})."));
+                errors.Add(new LoadError(mapping.Source, "match.type", $"'{type}' is not a declared ResourceType (declared: {known})."));
             }
         }
     }
 
     // Naming and Roles files are merged; the same key in two files is ambiguous, so it is an error.
-    private static Dictionary<string, T> Merge<T>(IEnumerable<Document> documents, string property, Func<JToken, T> convert, List<CatalogError> errors)
+    private static Dictionary<string, T> Merge<T>(IEnumerable<Document> documents, string property, Func<JToken, T> convert, List<LoadError> errors)
     {
         var merged = new Dictionary<string, T>();
         var origin = new Dictionary<string, string>();
@@ -197,7 +188,7 @@ public static partial class CatalogParser
             {
                 if (origin.TryGetValue(entry.Key, out var first))
                 {
-                    errors.Add(new CatalogError(document.Source, $"{property}.{entry.Key}", $"already defined in {first}."));
+                    errors.Add(new LoadError(document.Source, $"{property}.{entry.Key}", $"already defined in {first}."));
                     continue;
                 }
 

@@ -25,9 +25,8 @@
   },
   "definitions": {
     "values": {
-      "description": "Substrate outputs: nested mappings of strings. Keys must not contain dots, so a dot path is unambiguous.",
+      "description": "Substrate outputs: nested mappings of strings. Keys must not contain dots, so a dot path is unambiguous (enforced by the loader; the schema validator ignores propertyNames).",
       "type": "object",
-      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
       "additionalProperties": {
         "anyOf": [
           { "type": "string" },

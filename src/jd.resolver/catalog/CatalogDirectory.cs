@@ -10,7 +10,7 @@ public static class CatalogDirectory
     {
         if (!Directory.Exists(root))
         {
-            return new CatalogLoadResult(null, [new CatalogError(root, string.Empty, "catalog directory not found.")]);
+            return new CatalogLoadResult(null, [new LoadError(root, string.Empty, "catalog directory not found.")]);
         }
 
         var sources = new List<CatalogSource>();

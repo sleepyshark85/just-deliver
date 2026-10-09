@@ -10,6 +10,8 @@ namespace jd.resolver.environment;
 /// </summary>
 public static class EnvironmentParser
 {
+    private const string SchemaName = "schemas/environment.schema.json";
+
     private static readonly YamlSchemaValidator Validator = new();
 
     public static async Task<EnvironmentLoadResult> ParseAsync(string source, string content, CancellationToken cancellationToken = default)
@@ -21,10 +23,10 @@ public static class EnvironmentParser
         }
         catch (Exception ex)
         {
-            return new EnvironmentLoadResult(null, [new CatalogError(source, string.Empty, $"not valid YAML: {ex.Message}")]);
+            return new EnvironmentLoadResult(null, [new LoadError(source, string.Empty, $"not valid YAML: {ex.Message}")]);
         }
 
-        var result = await Validator.ValidateContentAsync(await ReadSchemaAsync(cancellationToken), content);
+        var result = await Validator.ValidateContentAsync(await EmbeddedSchema.ReadAsync(SchemaName, cancellationToken), content);
         if (!result.IsValid || parsed is not JObject body)
         {
             return new EnvironmentLoadResult(null, result.Errors.Select(e => CatalogParser.ToSchemaError(source, e)).ToList());
@@ -32,18 +34,23 @@ public static class EnvironmentParser
 
         // The schema guarantees these exist and have these shapes.
         var valuesNode = (JObject)body["values"]!;
-        var errors = new List<CatalogError>();
+        var errors = new List<LoadError>();
         foreach (var reserved in EnvironmentDescriptor.ReservedKeys.Where(valuesNode.ContainsKey))
         {
-            errors.Add(new CatalogError(source, $"values.{reserved}", $"'{reserved}' is reserved for the top-level field and cannot be a value."));
+            errors.Add(new LoadError(source, $"values.{reserved}", $"'{reserved}' is reserved for the top-level field and cannot be a value."));
         }
 
         var values = new Dictionary<string, string>();
-        Flatten(valuesNode, string.Empty, values);
+        Flatten(valuesNode, string.Empty, values, source, errors);
         var grantable = body["grantable"] is JArray array ? array.Select(t => (string?)t ?? string.Empty).ToList() : [];
-        foreach (var path in grantable.Where(p => !values.ContainsKey(p)))
+        for (var i = 0; i < grantable.Count; i++)
         {
-            errors.Add(new CatalogError(source, "grantable", $"'{path}' is not a value in 'values'; grantable paths must point at a value."));
+            if (values.ContainsKey(grantable[i]))
+            {
+                continue;
+            }
+
+            errors.Add(new LoadError(source, $"grantable.{i}", $"'{grantable[i]}' is not a value in 'values'; grantable paths must point at a value."));
         }
 
         return errors.Count > 0
@@ -53,29 +60,25 @@ public static class EnvironmentParser
                 errors);
     }
 
-    // Values are nested mappings of strings, so every leaf is a string.
-    private static void Flatten(JObject node, string prefix, Dictionary<string, string> into)
+    // Values are nested mappings of strings, so every leaf is a string. A dot in a key would make a dot path
+    // ambiguous (a flat "a.b" key against nested a: { b }), which would let one value shadow another, so it is rejected.
+    private static void Flatten(JObject node, string prefix, Dictionary<string, string> into, string source, List<LoadError> errors)
     {
         foreach (var property in node.Properties())
         {
             var path = prefix.Length == 0 ? property.Name : $"{prefix}.{property.Name}";
-            if (property.Value is JObject child)
+            if (property.Name.Length == 0 || property.Name.Contains('.'))
             {
-                Flatten(child, path, into);
+                errors.Add(new LoadError(source, $"values.{path}", "keys must be non-empty and must not contain '.'; nest a mapping instead (a: { b: … })."));
+            }
+            else if (property.Value is JObject child)
+            {
+                Flatten(child, path, into, source, errors);
             }
             else
             {
                 into[path] = (string)property.Value!;
             }
         }
-    }
-
-    private static async Task<string> ReadSchemaAsync(CancellationToken cancellationToken)
-    {
-        const string name = "schemas/environment.schema.json";
-        await using var stream = typeof(EnvironmentParser).Assembly.GetManifestResourceStream(name)
-            ?? throw new InvalidOperationException($"Schema '{name}' is not embedded in jd.resolver.");
-        using var reader = new StreamReader(stream);
-        return await reader.ReadToEndAsync(cancellationToken);
     }
 }

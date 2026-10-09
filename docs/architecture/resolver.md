@@ -196,8 +196,8 @@ grantable:                # paths under values that workloads may grant on
 - **Lookup:** `env.name`, `env.region` and `env.tier` are reserved and come from the top-level
   fields; any other `env.<dot.path>` resolves to a string inside `values`. A path to a group (for
   example `env.cosmos`) or to nothing is not found.
-- **Rules beyond the schema:** `values` must not define `name`, `region` or `tier`; every `grantable`
-  path must be a value in `values`. The loader reports all errors with their location.
+- **Rules beyond the schema:** `values` must not define `name`, `region` or `tier`; no key in `values`
+  may contain `.` (a dot path must be unambiguous); every `grantable` path must be a value in `values`. The loader reports all errors with their location.
 - **Security:** `grantable` is the boundary the engine enforces for `grant` nodes
   ([D19](../open-questions.md)): a workload can only grant on the listed `env.*` resources.
 

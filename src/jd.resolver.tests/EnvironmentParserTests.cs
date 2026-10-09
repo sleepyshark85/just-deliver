@@ -63,7 +63,7 @@ public class EnvironmentParserTests
     {
         var result = await Parse(Valid.Replace("- cosmos.accountId", "- cosmos.missing"));
         var error = Assert.Single(result.Errors);
-        Assert.Equal("grantable", error.Location);
+        Assert.Equal("grantable.0", error.Location);
         Assert.Contains("cosmos.missing", error.Message);
     }
 
@@ -71,7 +71,7 @@ public class EnvironmentParserTests
     public async Task Grantable_path_naming_a_group_rather_than_a_value_is_rejected()
     {
         var result = await Parse(Valid.Replace("- cosmos.accountId", "- cosmos"));
-        Assert.Equal("grantable", Assert.Single(result.Errors).Location);
+        Assert.Equal("grantable.0", Assert.Single(result.Errors).Location);
     }
 
     [Fact]
@@ -86,7 +86,24 @@ public class EnvironmentParserTests
     public async Task Code_rule_errors_are_all_reported_together()
     {
         var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  tier: x").Replace("- cosmos.accountId", "- nope"));
-        Assert.Equal(["values.tier", "grantable"], result.Errors.Select(e => e.Location));
+        Assert.Equal(["values.tier", "grantable.0"], result.Errors.Select(e => e.Location));
+    }
+
+    [Fact]
+    public async Task Dotted_key_in_values_is_rejected_so_it_cannot_shadow_a_nested_path()
+    {
+        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  cosmos.accountId: /other"));
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("values.cosmos.accountId", error.Location);
+        Assert.Contains("'.'", error.Message);
+        Assert.Null(result.Descriptor);
+    }
+
+    [Fact]
+    public async Task Dotted_key_in_a_nested_mapping_is_rejected()
+    {
+        var result = await Parse(Valid.Replace("logAnalytics: { id: /law/id }", "logAnalytics: { \"a.b\": x }"));
+        Assert.Equal("values.logAnalytics.a.b", Assert.Single(result.Errors).Location);
     }
 
     [Fact]
