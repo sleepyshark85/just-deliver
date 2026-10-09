@@ -64,10 +64,10 @@ and every `${resource.<id>.<output>}` in `container.variables` names a declared 
 
 ```yaml
 requires:
-  - type: database                 # id defaults to "database", environment's shared server
-  - type: database
+  - type: cosmos-sql               # id defaults to "cosmos-sql", environment's shared server
+  - type: cosmos-sql
     id: reporting                  # second database, same shared server
-  - type: database
+  - type: cosmos-sql
     id: ledger
     class: dedicated               # its own server: a different substrate tier
 ```
@@ -126,7 +126,7 @@ requires:
 | Rule | Detail |
 |---|---|
 | Whitelist | Platform defines overridable fields per type, e.g. `database: [backup_retention_days, connection_timeout]`, `cache: [sku, eviction_policy, persistence]`, `queue: [max_message_size, default_ttl]`. Protects encryption, compliance tags etc. |
-| Reason | `override_reason` mandatory (schema-enforced) |
+| Reason | `override_reason` mandatory (to be enforced when overrides return; the MVP schema rejects overrides altogether) |
 | Approval | dev: no; staging: no; production: yes (ops must approve deviations). Since the platform diffs against the previous definition, a new override is a sensitive-field change routed to the gate (0007) |
 | Precedence | Overrides must **not** beat compliance policies — the old algorithm applied them after policies; see [provisioning.md](provisioning.md#precedence) |
 | Non-persistence | Not carried to the next deployment unless re-specified; prevents hidden drift. A permanent need belongs in the mapping |
@@ -146,7 +146,7 @@ Current MVP state: overrides are out of MVP scope and the schema rejects them.
 **Type naming rule (C52):** the type names the *interface the code binds to*; the class names the
 *operational shape the code cannot see*. `type: database` breaks the moment it resolves to an engine the
 team's driver does not expect, so expect `type: postgres` / `cosmos`, `class: dedicated` — abstract SKU, HA,
-backup and size, never the wire protocol. This would change the current `database`/`cache`/`queue` enum.
+backup and size, never the wire protocol.
 
 ## Pending schema changes (H50)
 

@@ -88,6 +88,7 @@
           "class": {
             "description": "Operational shape of the resource, such as how isolated it is. Optional; defaults to standard.",
             "type": "string",
+            "default": "standard",
             "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$"
           }
         }

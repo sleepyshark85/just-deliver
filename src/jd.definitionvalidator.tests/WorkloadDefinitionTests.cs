@@ -123,6 +123,7 @@ metadata:
         var result = await ValidateAsync(Header + "  environment: dev\ncontainer:\n  image: registry.example/app:1.0.0\n");
 
         Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("environment"));
     }
 
     [Fact]
@@ -133,6 +134,7 @@ metadata:
             "  - type: cosmos-sql\n    overrides:\n      sku: big\n    override_reason: because\n"));
 
         Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("overrides"));
     }
 
     [Theory]
@@ -155,9 +157,11 @@ metadata:
     [Fact]
     public async Task WorkloadRulesAreNotRun_WhenSchemaFails()
     {
-        var result = await ValidateAsync(Workload("", "  - id: primary\n"));
+        // Fails the schema (no type) and would fail the uniqueness rule if the rules ran.
+        var result = await ValidateAsync(Workload("", "  - id: dup\n  - id: dup\n"));
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Contains("type"));
+        Assert.DoesNotContain(result.Errors, e => e.Contains("distinct"));
     }
 }

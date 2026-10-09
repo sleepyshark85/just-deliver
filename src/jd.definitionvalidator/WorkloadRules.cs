@@ -23,6 +23,7 @@ public static partial class WorkloadRules
         for (var i = 0; i < requires.Count; i++)
         {
             var effectiveId = (string?)requires[i]["id"] ?? (string?)requires[i]["type"];
+            // Unreachable on a schema-valid document (type is required); only satisfies nullability.
             if (effectiveId is null)
             {
                 continue;

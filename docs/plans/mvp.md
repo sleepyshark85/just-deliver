@@ -57,7 +57,7 @@ with file-level detail at dispatch time.
 
 | ID | Slice | Depends | Acceptance |
 |---|---|---|---|
-| S01 | **Workload schema v2** (H50): `requires[].id` (default = type, unique, ≤12 lowercase alnum), `class` (default `standard`), drop `metadata.environment`, type `cosmos-sql`, refs `${resource.<id>.<output>}`; reject `overrides` for now | — | Validator tests for each rule; sample workloads updated |
+| S01 | **Workload schema v2** (H50): `requires[].id` (default = type, unique, pattern `^[a-z][a-z0-9-]{1,14}[a-z0-9]$`), `class` (default `standard`), drop `metadata.environment`, type `cosmos-sql`, refs `${resource.<id>.<output>}`; reject `overrides` for now | — | Validator tests for each rule; sample workloads updated |
 | S02 | **Catalog formats + loader**: JSON Schemas for `catalog.yaml`, type, mapping, policy, naming, roles; `jd.resolver` project with a loader that validates and reports file+path errors; seed catalog for `cosmos-sql` and `runtime` | S01 | Invalid catalog files fail with actionable errors; seed catalog loads |
 | S03 | **Environment descriptor**: format + schema + loader (region, tier, substrate outputs, grantable resources) | S02 | Loader tests; a sample descriptor |
 | S04 | **Expression evaluator**: `${…}` substitution, typed references for node outputs, built-ins `name()` (from `naming.yaml`), `guid()` (UUIDv5), `role.*` | S02, S03 | Pure unit tests incl. unknown references and naming length limits |

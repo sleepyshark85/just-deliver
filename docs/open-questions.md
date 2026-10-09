@@ -73,11 +73,13 @@ Two prerequisite spikes remain (when `protect` fails; whether Pulumi YAML can dr
 - **Open:** which classes exist per resource type; whether `class: dedicated` in production requires approval given the cost difference.
 
 ### C13. Multiple resources of the same type — see [ADR 0011](decisions/0011-requirement-id.md)
+- **MVP pattern (S01):** `type`, `id` and `class` share `^[a-z][a-z0-9-]{1,14}[a-z0-9]$`. Hyphens are allowed so a hyphenated type can be its own default id; provider-specific name limits (e.g. storage accounts: 24 chars, no hyphens) are the namer's job (S04), and the final id budget is still open under C14.
 
 ### C14. Resource naming `OPEN`
 - Global uniqueness (SQL, storage), length limits (storage accounts: 24 chars, lowercase alphanumeric), collisions across environments, name reclaim blocked by soft-delete.
 - Names are generated from workload name plus prefixes/suffixes; the budget must be worked out before it bites.
 - **Tightened by C13:** the name must also hold a resource `id` (~12 chars) plus workload name, environment and type prefix. With `metadata.name` allowing 40 chars, the budget does not close — derive the scheme from the tightest target rather than from the workload name outward. May force tightening the `metadata.name` pattern (H50).
+- **MVP pattern (S01):** `type`/`id`/`class` use `^[a-z][a-z0-9-]{1,14}[a-z0-9]$` (hyphens allowed so a hyphenated type can be its own default id); provider-specific limits (storage accounts: 24 chars, no hyphens) are the namer's job (S04); the final id budget is still open here.
 
 ### C15. Cost attribution and control `OPEN`
 - Nobody owns cost in the current design.
@@ -289,9 +291,9 @@ Residual open points: `timeout` ceiling in protected environments; verifying PIT
 ### H50. Definition schema evolution `OPEN`
 - How team-authored definitions migrate across `apiVersion` changes, how many versions are supported at once, how validation errors reach teams so they can fix them unaided.
 - **Shaped by A2:** under a push model validation must be available *before* upload (CLI or CI step against their own file), not only as a deployment-time rejection.
-- **Pending changes to `workload.schema.json`** (decided, not yet applied):
-  1. **Remove `metadata.environment`** (A1, A2): currently required while its own description says the same definition deploys everywhere. Environment is a deployment parameter. Weaker same argument for `name` and `team` (registration identity; can drift if duplicated in the file).
-  2. **Add `id` and `class` to `requires` items** (C12, C13): `id` optional, defaults to type name, unique within workload, ~12 chars lowercase alphanumeric.
+- **Changes to `workload.schema.json`** (1 and 2 applied in S01, the rest pending):
+  1. **Remove `metadata.environment`** (A1, A2) — *applied (S01)*: currently required while its own description says the same definition deploys everywhere. Environment is a deployment parameter. Weaker same argument for `name` and `team` (registration identity; can drift if duplicated in the file).
+  2. **Add `id` and `class` to `requires` items** (C12, C13) — *applied (S01)*: `id` optional, defaults to type name, unique within workload (checked in code), pattern `^[a-z][a-z0-9-]{1,14}[a-z0-9]$`.
   3. **Add a `hooks` block** (E28, E33): `preDeploy`, `verify`, `postDeploy`, each with `command`, optional `image` (defaults to workload image for `preDeploy`), `timeout` default 10 minutes, optional tier restriction, `destructive` on `preDeploy`.
   4. *Possible:* tighten the `metadata.name` pattern, since C14's naming budget does not close.
 - C52's "type names the interface" rule may change the current `database` / `cache` / `queue` types.
