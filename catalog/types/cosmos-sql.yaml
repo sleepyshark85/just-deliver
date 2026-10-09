@@ -1,5 +1,0 @@
-kind: ResourceType
-name: cosmos-sql
-description: A container in the environment's shared Cosmos DB database, accessed through the SQL (NoSQL) API.
-classes: [standard]
-exports: [endpoint, database, container]

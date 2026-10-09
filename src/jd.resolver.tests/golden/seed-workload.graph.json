@@ -54,40 +54,40 @@
       }
     },
     {
-      "id": "just-deliver-sample-app/dev/cosmos-sql/container",
-      "scope": "cosmos-sql",
+      "id": "just-deliver-sample-app/dev/database/container",
+      "scope": "database",
       "name": "container",
       "template": "azure/cosmos-sql-container",
       "kind": "Create",
-      "stack": "just-deliver-sample-app.dev.cosmos-sql.container",
+      "stack": "just-deliver-sample-app.dev.database.container",
       "phase": "Infrastructure",
-      "hash": "be91b38a16b89b968dbbbb12efd3ed8610e3a023bc3f4b4364f40d642a57b154",
+      "hash": "00fae051387801ff00f46f3cfac991230cfb6030f635ff22fd8bd5d61d6bf067",
       "dependsOn": [],
       "dependsOnRuntime": false,
       "config": {
         "accountId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev",
-        "containerName": "just-deliver-sample-app-cosmos-sql-609b25",
+        "containerName": "just-deliver-sample-app-database-623014",
         "databaseName": "db-dev",
         "partitionKeyPath": "/id"
       },
       "provenance": {
-        "accountId": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "containerName": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "databaseName": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "partitionKeyPath": "Mapping: mappings/cosmos-sql/standard.yaml"
+        "accountId": "Mapping: mappings/database/standard.yaml",
+        "containerName": "Mapping: mappings/database/standard.yaml",
+        "databaseName": "Mapping: mappings/database/standard.yaml",
+        "partitionKeyPath": "Mapping: mappings/database/standard.yaml"
       }
     },
     {
-      "id": "just-deliver-sample-app/dev/cosmos-sql/access",
-      "scope": "cosmos-sql",
+      "id": "just-deliver-sample-app/dev/database/access",
+      "scope": "database",
       "name": "access",
       "template": "azure/cosmos-sql-role-assignment",
       "kind": "Grant",
-      "stack": "just-deliver-sample-app.dev.cosmos-sql.access",
+      "stack": "just-deliver-sample-app.dev.database.access",
       "phase": "AfterRuntime",
       "hash": "26e30b16b6baf8ffdb9d8d6b651162443298e5a6d4e2ebcc49bea1453d8faa0e",
       "dependsOn": [
-        "just-deliver-sample-app/dev/cosmos-sql/container"
+        "just-deliver-sample-app/dev/database/container"
       ],
       "dependsOnRuntime": true,
       "config": {
@@ -98,19 +98,20 @@
         "scope": "${container.scope}"
       },
       "provenance": {
-        "accountId": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "principalId": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "roleAssignmentId": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "roleGuid": "Mapping: mappings/cosmos-sql/standard.yaml",
-        "scope": "Mapping: mappings/cosmos-sql/standard.yaml"
+        "accountId": "Mapping: mappings/database/standard.yaml",
+        "principalId": "Mapping: mappings/database/standard.yaml",
+        "roleAssignmentId": "Mapping: mappings/database/standard.yaml",
+        "roleGuid": "Mapping: mappings/database/standard.yaml",
+        "scope": "Mapping: mappings/database/standard.yaml"
       }
     }
   ],
   "exports": {
-    "cosmos-sql": {
+    "database": {
       "container": "${container.containerName}",
       "database": "db-dev",
-      "endpoint": "https://cosmos-dev.documents.azure.com:443/"
+      "endpoint": "https://cosmos-dev.documents.azure.com:443/",
+      "engine": "cosmos-sql"
     }
   }
 }

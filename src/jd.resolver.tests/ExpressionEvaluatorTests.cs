@@ -99,9 +99,9 @@ public class ExpressionEvaluatorTests
     {
         Assert.Equal([new Reference(ReferenceKind.Node, "database", "databaseName")], Await("${database.databaseName}").References);
         Assert.Equal([new Reference(ReferenceKind.Node, "runtime", "principalId")], Await("${runtime.principalId}").References);
-        var pending = Await("${resource.cosmos-sql.endpoint}");
-        Assert.Equal([new Reference(ReferenceKind.Resource, "cosmos-sql", "endpoint")], pending.References);
-        Assert.Equal("${resource.cosmos-sql.endpoint}", pending.Original);
+        var pending = Await("${resource.database.endpoint}");
+        Assert.Equal([new Reference(ReferenceKind.Resource, "database", "endpoint")], pending.References);
+        Assert.Equal("${resource.database.endpoint}", pending.Original);
     }
 
     [Fact]
@@ -128,9 +128,9 @@ public class ExpressionEvaluatorTests
     [Fact]
     public void Resource_references_resolve_from_known_outputs()
     {
-        var known = new Dictionary<Reference, string> { [new(ReferenceKind.Resource, "cosmos-sql", "endpoint")] = "https://x" };
+        var known = new Dictionary<Reference, string> { [new(ReferenceKind.Resource, "database", "endpoint")] = "https://x" };
 
-        Assert.Equal("https://x", Resolve("${resource.cosmos-sql.endpoint}", Context(known: known)));
+        Assert.Equal("https://x", Resolve("${resource.database.endpoint}", Context(known: known)));
     }
 
     [Theory]
@@ -235,7 +235,7 @@ public class ExpressionEvaluatorTests
         Assert.NotNull(catalog);
         var workload = YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
-        var mapping = Assert.Single(catalog.Mappings, m => m.Match.Criteria["type"] == "cosmos-sql");
+        var mapping = Assert.Single(catalog.Mappings, m => m.Match.Criteria["type"] == "database");
         var policy = Assert.Single(catalog.Policies);
         var nodeNames = mapping.Nodes.Keys.Concat(policy.Add.Keys).ToHashSet();
         var strings = mapping.Nodes.Values.Concat(policy.Add.Values).SelectMany(n => n.Config.Values)
@@ -253,7 +253,7 @@ public class ExpressionEvaluatorTests
         Assert.Contains(results, r => r is Resolved v && v.Value.StartsWith("shop-db-", StringComparison.Ordinal));
         Assert.Contains(new Resolved("00000000-0000-0000-0000-000000000002"), results);
         Assert.Contains(results, r => r is Pending p && p.Original.StartsWith("${guid(container.scope, runtime.principalId", StringComparison.Ordinal));
-        Assert.Contains(results, r => r is Pending p && p.References.Contains(new Reference(ReferenceKind.Resource, "cosmos-sql", "endpoint")));
+        Assert.Contains(results, r => r is Pending p && p.References.Contains(new Reference(ReferenceKind.Resource, "database", "endpoint")));
     }
 
     [Fact]

@@ -45,7 +45,7 @@ metadata:
     {
         var result = await ValidateAsync(Workload(
             "  variables:\n    MAIN: ${resource.primary.endpoint}\n    OTHER: ${resource.reporting.endpoint}\n",
-            "  - type: cosmos-sql\n    id: primary\n  - type: cosmos-sql\n    id: reporting\n    class: dedicated\n"));
+            "  - type: database\n    id: primary\n  - type: database\n    id: reporting\n    class: dedicated\n"));
 
         Assert.True(result.IsValid, result.ToString());
     }
@@ -54,8 +54,8 @@ metadata:
     public async Task ReferenceWithoutId_ResolvesToTypeAsEffectiveId()
     {
         var result = await ValidateAsync(Workload(
-            "  variables:\n    DB: ${resource.cosmos-sql.endpoint}\n",
-            "  - type: cosmos-sql\n"));
+            "  variables:\n    DB: ${resource.database.endpoint}\n",
+            "  - type: database\n"));
 
         Assert.True(result.IsValid, result.ToString());
     }
@@ -63,11 +63,11 @@ metadata:
     [Fact]
     public async Task TwoRequirementsOfSameTypeWithoutIds_AreRejected_AskingForDistinctIds()
     {
-        var result = await ValidateAsync(Workload("", "  - type: cosmos-sql\n  - type: cosmos-sql\n"));
+        var result = await ValidateAsync(Workload("", "  - type: database\n  - type: database\n"));
 
         Assert.False(result.IsValid);
         var error = Assert.Single(result.Errors);
-        Assert.Contains("'cosmos-sql'", error);
+        Assert.Contains("'database'", error);
         Assert.Contains("requires[0], requires[1]", error);
         Assert.Contains("distinct 'id's", error);
     }
@@ -75,10 +75,10 @@ metadata:
     [Fact]
     public async Task ExplicitIdCollidingWithAnotherTypeDefault_IsRejected()
     {
-        var result = await ValidateAsync(Workload("", "  - type: cosmos-sql\n  - type: redis\n    id: cosmos-sql\n"));
+        var result = await ValidateAsync(Workload("", "  - type: database\n  - type: redis\n    id: database\n"));
 
         Assert.False(result.IsValid);
-        Assert.Contains("'cosmos-sql'", Assert.Single(result.Errors));
+        Assert.Contains("'database'", Assert.Single(result.Errors));
     }
 
     [Fact]
@@ -86,32 +86,32 @@ metadata:
     {
         var result = await ValidateAsync(Workload(
             "  variables:\n    DB: ${resource.missing.endpoint}\n",
-            "  - type: cosmos-sql\n"));
+            "  - type: database\n"));
 
         Assert.False(result.IsValid);
         var error = Assert.Single(result.Errors);
         Assert.Contains("container.variables.DB", error);
         Assert.Contains("'missing'", error);
-        Assert.Contains("cosmos-sql", error);
+        Assert.Contains("database", error);
     }
 
     [Fact]
     public async Task ReferenceByTypeWhenRequirementHasAnId_IsRejected()
     {
         var result = await ValidateAsync(Workload(
-            "  variables:\n    DB: ${resource.cosmos-sql.endpoint}\n",
-            "  - type: cosmos-sql\n    id: primary\n"));
+            "  variables:\n    DB: ${resource.database.endpoint}\n",
+            "  - type: database\n    id: primary\n"));
 
         Assert.False(result.IsValid);
-        Assert.Contains("'cosmos-sql'", Assert.Single(result.Errors));
+        Assert.Contains("'database'", Assert.Single(result.Errors));
     }
 
     [Fact]
     public async Task ReferenceWithoutOutput_IsRejected()
     {
         var result = await ValidateAsync(Workload(
-            "  variables:\n    DB: ${resource.cosmos-sql}\n",
-            "  - type: cosmos-sql\n"));
+            "  variables:\n    DB: ${resource.database}\n",
+            "  - type: database\n"));
 
         Assert.False(result.IsValid);
         Assert.Contains("container.variables.DB", Assert.Single(result.Errors));
@@ -131,7 +131,7 @@ metadata:
     {
         var result = await ValidateAsync(Workload(
             "",
-            "  - type: cosmos-sql\n    overrides:\n      sku: big\n    override_reason: because\n"));
+            "  - type: database\n    overrides:\n      sku: big\n    override_reason: because\n"));
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Contains("overrides"));
@@ -141,12 +141,12 @@ metadata:
     [InlineData("type: Cosmos")]
     [InlineData("type: cosmos_sql")]
     [InlineData("type: ab")]
-    [InlineData("type: cosmos-sql-too-long-name")]
+    [InlineData("type: database-too-long-name")]
     [InlineData("type: cosmos-")]
-    [InlineData("type: cosmos-sql\n    id: Primary")]
-    [InlineData("type: cosmos-sql\n    id: 1primary")]
-    [InlineData("type: cosmos-sql\n    id: pp")]
-    [InlineData("type: cosmos-sql\n    class: Dedicated")]
+    [InlineData("type: database\n    id: Primary")]
+    [InlineData("type: database\n    id: 1primary")]
+    [InlineData("type: database\n    id: pp")]
+    [InlineData("type: database\n    class: Dedicated")]
     public async Task BadTypeIdOrClassPattern_IsRejected(string requirement)
     {
         var result = await ValidateAsync(Workload("", "  - " + requirement + "\n"));

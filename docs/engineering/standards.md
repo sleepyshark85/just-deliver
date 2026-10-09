@@ -11,7 +11,7 @@ infrastructure. Code that bakes in what should be data defeats the MVP.
 - **Must not** appear in C#: resource names, regions, SKUs, sizes, role GUIDs, resource-type
   knowledge ("Cosmos needs X"), template names, ordering of resources, environment names, URLs,
   subscription/tenant ids. These live in the catalog, the environment descriptor, or configuration.
-- **Must not** branch on resource types or workload names (`if (type == "cosmos-sql")`). Add a
+- **Must not** branch on resource types or workload names (`if (type == "database")`). Add a
   catalog file or a matching rule instead ([resolver.md](../architecture/resolver.md)).
 - Configuration comes from options/environment variables bound at the composition root, never read
   ad hoc deep in the code.

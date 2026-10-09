@@ -57,11 +57,11 @@ public sealed class WorkloadFileTests : IDisposable
     [Fact]
     public async Task A_rule_error_has_its_location_split_from_the_message()
     {
-        var result = await LoadAsync((await File.ReadAllTextAsync(Sample)) + "  - type: cosmos-sql\n");
+        var result = await LoadAsync((await File.ReadAllTextAsync(Sample)) + "  - type: database\n");
 
         Assert.Null(result.Workload);
         var error = Assert.Single(result.Errors);
         Assert.Equal("requires[0], requires[1]", error.Location);
-        Assert.StartsWith("the id 'cosmos-sql' is used more than once", error.Message);
+        Assert.StartsWith("the id 'database' is used more than once", error.Message);
     }
 }

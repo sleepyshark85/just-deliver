@@ -32,12 +32,12 @@ container:                            # SCORE-compatible subset
   image: myregistry.azurecr.io/just-deliver-sample-app:1.0.0
   variables:
     LOG_LEVEL: info
-    COSMOS_ENDPOINT: ${resource.cosmos-sql.endpoint}   # endpoint only; app uses its managed identity
+    COSMOS_ENDPOINT: ${resource.database.endpoint}   # endpoint only; app uses its managed identity
   ports:
     - port: 8080
       protocol: TCP
 requires:
-  - type: cosmos-sql
+  - type: database
 ```
 
 | Field | Required | Notes |
@@ -64,10 +64,10 @@ and every `${resource.<id>.<output>}` in `container.variables` names a declared 
 
 ```yaml
 requires:
-  - type: cosmos-sql               # id defaults to "cosmos-sql", environment's shared server
-  - type: cosmos-sql
+  - type: database                 # id defaults to "database", environment's shared server
+  - type: database
     id: reporting                  # second database, same shared server
-  - type: cosmos-sql
+  - type: database
     id: ledger
     class: dedicated               # its own server: a different substrate tier
 ```

@@ -32,9 +32,10 @@ A mapping is the "blessed" configuration for a resource type. Illustrative value
 | `cache` | `azure-redis` | sku `Basic`, eviction_policy `allkeys-lru`, persistence false, monitoring true |
 | `queue` | `azure-service-bus` | sku `Standard`, max_message_size 256 KB, default_ttl 14 days, monitoring true |
 
-The only mapping implemented today resolves `cosmos-sql` to a **Cosmos DB** SQL container (partition key `/id`) in
-the environment's shared database, with a container-scoped grant — see `catalog/mappings/cosmos-sql` and
-`catalog/templates/azure`. Engine choice per type is still open (see [mvp.md](../plans/mvp.md#needs-decision)).
+The only mapping implemented today resolves `database` to a **Cosmos DB** SQL container (partition key `/id`) in
+the environment's shared database, with a container-scoped grant, and exports `engine: cosmos-sql` so the code
+knows what it got — see `catalog/mappings/database` and `catalog/templates/azure`. The mapping, not the type,
+picks the engine (user decision, C52); changing it for an existing workload must later route to approval (F54).
 
 **Environment-specific values** (illustrative, `database`):
 
