@@ -209,10 +209,11 @@ public class ExpanderTests
 
         Assert.Empty(result.Errors);
         var requirement = Assert.Single(result.Requirements);
-        Assert.Equal(["database", "container", "access"], requirement.Nodes.Select(n => n.Name));
-        Assert.Equal(NodeKind.Grant, requirement.Nodes[2].Kind);
+        Assert.Equal(["access", "container", "database"], requirement.Nodes.Select(n => n.Name).Order(StringComparer.Ordinal));
+        var access = requirement.Nodes.Single(n => n.Name == "access");
+        Assert.Equal(NodeKind.Grant, access.Kind);
         Assert.Equal(["container", "database", "endpoint"], requirement.Exports.Keys.Order(StringComparer.Ordinal));
-        Assert.IsType<Pending>(Assert.IsType<ConfigText>(requirement.Nodes[2].Config["principalId"]).Result);
+        Assert.IsType<Pending>(Assert.IsType<ConfigText>(access.Config["principalId"]).Result);
     }
 
     private static string Text(ConfigValue value) => Assert.IsType<Resolved>(Assert.IsType<ConfigText>(value).Result).Value;

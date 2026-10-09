@@ -13,18 +13,19 @@ public sealed record Requirement(string Id, string Type, string Class)
 /// </summary>
 public static class MappingMatcher
 {
-    // The match keys a requirement provides. Any other key (kind, runtime) belongs to runtime mappings and never matches.
-    public const string TypeKey = "type";
-    public const string ClassKey = "class";
-    public const string TierKey = "tier";
-
     /// <summary>
     /// Returns the most specific mapping whose every <c>match</c> criterion equals the requirement's value. A tie at the top
     /// or no match is added to <paramref name="errors"/> at <paramref name="file"/>/<paramref name="location"/>, and null returned.
     /// </summary>
     public static Mapping? Select(IEnumerable<Mapping> mappings, Requirement requirement, string tier, string file, string location, ICollection<LoadError> errors)
     {
-        var provided = new Dictionary<string, string> { [TypeKey] = requirement.Type, [ClassKey] = requirement.Class, [TierKey] = tier };
+        // Any other key (kind, runtime) belongs to runtime mappings and never matches a requirement.
+        var provided = new Dictionary<string, string>
+        {
+            [MatchCriteria.TypeKey] = requirement.Type,
+            [MatchCriteria.ClassKey] = requirement.Class,
+            [MatchCriteria.TierKey] = tier,
+        };
         var described = $"requirement '{requirement.Id}' (type '{requirement.Type}', class '{requirement.Class}', tier '{tier}')";
         var matching = mappings
             .Where(m => m.Match.Criteria.All(c => provided.TryGetValue(c.Key, out var value) && value == c.Value))

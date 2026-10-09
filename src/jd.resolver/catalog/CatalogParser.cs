@@ -152,7 +152,7 @@ public static class CatalogParser
         var declared = typeDocuments.Select(NameOf).OfType<string>().Distinct().Order().ToList();
         foreach (var mapping in mappings)
         {
-            if (mapping.Match.Criteria.TryGetValue("type", out var type) && !declared.Contains(type))
+            if (mapping.Match.Criteria.TryGetValue(MatchCriteria.TypeKey, out var type) && !declared.Contains(type))
             {
                 var known = declared.Count == 0 ? "none" : string.Join(", ", declared);
                 errors.Add(new LoadError(mapping.Source, "match.type", $"'{type}' is not a declared ResourceType (declared: {known})."));
@@ -165,7 +165,7 @@ public static class CatalogParser
     {
         foreach (var mapping in mappings)
         {
-            if (!mapping.Match.Criteria.TryGetValue("type", out var name) || types.FirstOrDefault(t => t.Name == name) is not { } type)
+            if (!mapping.Match.Criteria.TryGetValue(MatchCriteria.TypeKey, out var name) || types.FirstOrDefault(t => t.Name == name) is not { } type)
             {
                 continue;
             }

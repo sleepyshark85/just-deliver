@@ -29,9 +29,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
                 type,
                 (string?)entry["class"] ?? Requirement.DefaultClass);
             var location = $"requires[{index++}]";
-            var before = errors.Count;
-            var expanded = ExpandOne(requirement, name, team, workloadFile, location, errors);
-            if (expanded is not null && errors.Count == before)
+            if (ExpandOne(requirement, name, team, workloadFile, location, errors) is { } expanded)
             {
                 requirements.Add(expanded);
             }
@@ -85,7 +83,12 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             }
         }
 
-        errors.AddRange(found.Select(e => e with { Message = $"for {location} ('{requirement.Id}'): {e.Message}" }));
+        if (found.Count > 0)
+        {
+            errors.AddRange(found.Select(e => e with { Message = $"for {location} ('{requirement.Id}'): {e.Message}" }));
+            return null;
+        }
+
         return new ExpandedRequirement(requirement.Id, requirement.Type, requirement.Class, mapping.Source, nodes, exports);
     }
 

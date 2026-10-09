@@ -69,7 +69,7 @@ loader; the expression evaluator interprets them later.
 |---|---|---|
 | `Catalog` | `version` | exactly one |
 | `ResourceType` | `name`, `classes`, `exports`, `description` | `name` unique |
-| `Mapping` | `match`, `nodes`, `exports` | `match.type`, when present, names a declared type |
+| `Mapping` | `match`, `nodes`, `exports` | `match.type`, when present, names a declared type; `exports` keys equal the type's `exports` |
 | `Policy` | `name`, `reason`, `match`, and at least one of `set` / `default` / `add` | `name` unique |
 | `Naming` | `rules` (resource kind → `pattern`, `maxLength`, `allowed`) | files merge; a rule is defined once; `allowed` must be a valid regex character class that accepts every hex digit `0-9a-f` |
 | `Roles` | `roles` (name → role-definition GUID) | files merge; a role is defined once |
@@ -271,7 +271,7 @@ content digest, config (values and typed references, with provenance), protectio
 
 1. **Static checks:** every type has a mapping per environment tier; no ambiguous matches; every
    `${…}` resolves to a real template config key or output; required template config supplied;
-   exports cover the type contract; naming fits the longest legal workload name.
+   mapping exports equal the type's exports exactly; naming fits the longest legal workload name.
 2. **Golden tests:** sample workloads resolved and snapshotted; PR diffs show resolution changes.
 3. **Fleet dry-run:** resolve every registered workload against the PR's catalog and report which change.
 4. **`pulumi preview` in a sandbox** for changed templates.
