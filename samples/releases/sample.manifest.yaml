@@ -1,0 +1,11 @@
+kind: ReleaseManifest
+label: 1.0.0
+
+# One release of both sample workloads. Definition paths are relative to this file.
+# dependsOn is ordering only: the app is deployed after the worker (think of the app
+# enqueuing work for it), which also makes the order differ from alphabetical.
+workloads:
+  - definition: ../workloads/sample-app.yaml
+    dependsOn:
+      - just-deliver-sample-worker
+  - definition: ../workloads/sample-worker.yaml
