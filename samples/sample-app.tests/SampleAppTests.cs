@@ -41,7 +41,58 @@ public sealed class SampleAppTests
         return (app, new HttpClient { BaseAddress = new Uri(app.Urls.First()) });
     }
 
-    private static CosmosException Cosmos(HttpStatusCode status) => new("failed", status, 0, "activity", 0);
+    private static CosmosException Cosmos(HttpStatusCode status, int subStatus = 0) => new("failed", status, subStatus, "activity", 0);
+
+    // Counts how many handles are created and disposed.
+    private sealed class Handle : IDisposable
+    {
+        public int Disposals;
+
+        public void Dispose() => Interlocked.Increment(ref Disposals);
+    }
+
+    [Fact]
+    public void A_missing_container_is_not_a_missing_document()
+    {
+        Assert.True(CosmosItemStore.IsMissingDocument(Cosmos(HttpStatusCode.NotFound)));
+        Assert.False(CosmosItemStore.IsMissingDocument(Cosmos(HttpStatusCode.NotFound, 1003)));
+        Assert.False(CosmosItemStore.IsMissingDocument(Cosmos(HttpStatusCode.Forbidden)));
+    }
+
+    [Fact]
+    public async Task Health_is_503_when_the_container_is_missing()
+    {
+        var (app, client) = await Start(new FakeStore { Failure = Cosmos(HttpStatusCode.NotFound, 1003) });
+        await using var _ = app;
+
+        var response = await client.GetAsync("/health");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("returned 404.1003", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Concurrent_callers_share_one_connection_and_a_failed_one_is_disposed_once()
+    {
+        var created = 0;
+        var connection = new SharedConnection<Handle>(() =>
+        {
+            Interlocked.Increment(ref created);
+            return new Handle();
+        });
+
+        var used = await Task.WhenAll(Enumerable.Range(0, 50).Select(_ => Task.Run(connection.Get)));
+        Assert.Equal(1, created);
+        Assert.All(used, h => Assert.Same(used[0], h));
+
+        // Every caller fails at once; only the first still finds its handle in place.
+        Parallel.ForEach(used, connection.Drop);
+        Assert.Equal(1, used[0].Disposals);
+
+        var next = connection.Get();
+        Assert.NotSame(used[0], next);
+        Assert.Equal(2, created);
+    }
 
     [Fact]
     public async Task Health_is_200_when_the_store_works()

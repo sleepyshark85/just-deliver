@@ -19,11 +19,56 @@ public interface IItemStore
 }
 
 /// <summary>
-/// Cosmos DB through <see cref="DefaultAzureCredential"/> only: no key, no connection string.
-/// Nothing is contacted until the first call, and a failure is never remembered: the client is dropped
-/// so the next request starts clean (ADR 0012: the grant arrives after the process starts). Calls time out after 5 s.
+/// Holds one shared, lazily created resource. Concurrent callers get the same instance, and a failed
+/// instance is disposed once, by whoever still finds it in place.
 /// </summary>
-public sealed class CosmosItemStore(string? endpoint, string? database, string? container) : IItemStore, IDisposable
+public sealed class SharedConnection<T>(Func<T> create) : IDisposable where T : class, IDisposable
+{
+    private readonly object _gate = new();
+    private T? _current;
+
+    public T Get()
+    {
+        lock (_gate)
+        {
+            return _current ??= create();
+        }
+    }
+
+    /// <summary>Forgets <paramref name="used"/> and disposes it, unless another caller already replaced it.</summary>
+    public void Drop(T used)
+    {
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_current, used))
+            {
+                return;
+            }
+
+            _current = null;
+        }
+
+        used.Dispose();
+    }
+
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            _current?.Dispose();
+            _current = null;
+        }
+    }
+}
+
+/// <summary>
+/// Cosmos DB through <see cref="DefaultAzureCredential"/> only: no key, no connection string.
+/// Nothing is contacted until the first call. A Cosmos answer (403 before the grant lands, 404 for a missing
+/// container) is per request and the same client sees the grant once it propagates; any other failure (credential
+/// unavailable, timeout, not configured) is never remembered: the client is dropped so the next request starts
+/// clean (ADR 0012). Calls time out after 5 s.
+/// </summary>
+public sealed class CosmosItemStore : IItemStore, IDisposable
 {
     // The container's partition key is /id (catalog/mappings/cosmos-sql); the probe reads a document that never exists.
     private const string ProbeId = "health-probe";
@@ -31,8 +76,13 @@ public sealed class CosmosItemStore(string? endpoint, string? database, string? 
     // The SDK can retry an unreachable endpoint for far longer than a probe may wait, so every call is bounded here.
     private static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(5);
 
-    private CosmosClient? _client;
-    private Container? _container;
+    private readonly SharedConnection<Handle> _connection;
+
+    public CosmosItemStore(string? endpoint, string? database, string? container) =>
+        _connection = new SharedConnection<Handle>(() => Connect(endpoint, database, container));
+
+    /// <summary>Only a plain 404 means the document is absent; 404 with a substatus (e.g. 1003) means the container or database is.</summary>
+    public static bool IsMissingDocument(CosmosException e) => e is { StatusCode: HttpStatusCode.NotFound, SubStatusCode: 0 };
 
     public async Task CheckAccessAsync(CancellationToken ct) => await GetAsync(ProbeId, ct);
 
@@ -45,40 +95,44 @@ public sealed class CosmosItemStore(string? endpoint, string? database, string? 
         {
             return await Run(async c => (await c.ReadItemAsync<Item>(id, new PartitionKey(id), cancellationToken: ct)).Resource);
         }
-        catch (CosmosException e) when (e.StatusCode == HttpStatusCode.NotFound)
+        catch (CosmosException e) when (IsMissingDocument(e))
         {
             return null;
         }
     }
 
-    public void Dispose() => _client?.Dispose();
+    public void Dispose() => _connection.Dispose();
 
     private async Task<T> Run<T>(Func<Container, Task<T>> action)
     {
+        var handle = _connection.Get();
         try
         {
-            return await action(_container ??= Connect()).WaitAsync(CallTimeout);
+            return await action(handle.Container).WaitAsync(CallTimeout);
         }
-        catch (Exception e) when (e is not CosmosException { StatusCode: HttpStatusCode.NotFound })
+        catch (Exception e) when (e is not CosmosException)
         {
-            _container = null;
-            _client?.Dispose();
-            _client = null;
+            _connection.Drop(handle);
             throw;
         }
     }
 
-    private Container Connect()
+    private static Handle Connect(string? endpoint, string? database, string? container)
     {
         if (string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(database) || string.IsNullOrEmpty(container))
         {
             throw new InvalidOperationException("Cosmos DB is not configured: set COSMOS_ENDPOINT, COSMOS_DATABASE and COSMOS_CONTAINER.");
         }
 
-        _client = new CosmosClient(endpoint, new DefaultAzureCredential(), new CosmosClientOptions
+        var client = new CosmosClient(endpoint, new DefaultAzureCredential(), new CosmosClientOptions
         {
             UseSystemTextJsonSerializerWithOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web),
         });
-        return _client.GetContainer(database, container);
+        return new Handle(client, client.GetContainer(database, container));
+    }
+
+    private sealed record Handle(CosmosClient Client, Container Container) : IDisposable
+    {
+        public void Dispose() => Client.Dispose();
     }
 }

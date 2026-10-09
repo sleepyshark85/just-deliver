@@ -20,7 +20,8 @@ public static class SampleAppFactory
             builder.Services.AddOpenTelemetry().UseAzureMonitor();
         }
 
-        builder.Services.AddSingleton<IItemStore>(store ?? new CosmosItemStore(config["COSMOS_ENDPOINT"], config["COSMOS_DATABASE"], config["COSMOS_CONTAINER"]));
+        // A factory, so the host disposes the store (and its Cosmos client) on shutdown.
+        builder.Services.AddSingleton<IItemStore>(_ => store ?? new CosmosItemStore(config["COSMOS_ENDPOINT"], config["COSMOS_DATABASE"], config["COSMOS_CONTAINER"]));
         return Map(builder.Build());
     }
 
@@ -31,9 +32,7 @@ public static class SampleAppFactory
         {
             try
             {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                timeout.CancelAfter(TimeSpan.FromSeconds(5));
-                await items.CheckAccessAsync(timeout.Token);
+                await items.CheckAccessAsync(ct);
                 return Results.Ok(new { status = "healthy" });
             }
             catch (Exception e)
@@ -78,7 +77,7 @@ public static class SampleAppFactory
         TimeoutException => "timed out reaching Cosmos DB",
         CosmosException c when c.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized =>
             $"Cosmos DB denied access ({(int)c.StatusCode}): the identity has no grant yet",
-        CosmosException c => $"Cosmos DB returned {(int)c.StatusCode}",
+        CosmosException c => $"Cosmos DB returned {(int)c.StatusCode}" + (c.SubStatusCode == 0 ? "" : $".{c.SubStatusCode}"),
         _ => $"{e.GetType().Name}: {e.Message.Split('\n')[0]}",
     };
 }
