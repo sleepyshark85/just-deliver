@@ -17,6 +17,7 @@
   <ItemGroup>
     <Content Include="../../catalog/**/*.yaml" Link="catalog/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../samples/provisioner/workload.yaml" Link="samples/workload.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="golden/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

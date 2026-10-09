@@ -44,7 +44,8 @@ internal static class ConfigWalker
                     .OfType<ConfigValue>()
                     .ToList());
             case JValue { Type: JTokenType.String } text:
-                return evaluator.Evaluate((string?)text ?? string.Empty, file, location, errors) is { } result ? new ConfigText(result) : null;
+                var envPaths = new HashSet<string>();
+                return evaluator.Evaluate((string?)text ?? string.Empty, file, location, errors, envPaths) is { } result ? new ConfigText(result, envPaths) : null;
             default:
                 // JTokens are mutable; never hand out the catalog's own.
                 return new ConfigScalar(token.DeepClone());

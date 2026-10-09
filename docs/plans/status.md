@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S07 — Graph builder
+- **Next slice:** S08 — CLI skeleton
 - **In progress:** —
 - **Blocked:** —
 
@@ -23,7 +23,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S04a | Catalog loader hardening | done | PR #6 | 2 | Review follow-ups from S02–S04. Round 1: 1 blocking — new duplicate-key enrichment crashed on scanner errors (regression); fixed with tests. |
 | S05 | Matching + expansion | done | PR #9 | 1 + suggestions | APPROVE first round. ~456 lines (≈223 prod) — developer stopped at the cap and reported, as asked; lead accepted. |
 | S06 | Policies + provenance | done | PR #10 | 2 | Round 1: 4 blocking (expansion errors dropped; duplicate added-node names; overlapping paths resolved by length instead of conflict; `!`). Loader now rejects policies fitting neither scope. ~330 prod lines after review fixes. |
-| S07 | Graph builder | todo | | | |
+| S07 | Graph builder | done | PR #11 | 2 | Round 1: 4 blocking (stack names invalid for Pulumi and collision-prone; time-zone-dependent date parsing broke hash determinism; untested pending-function grant path; `!`). Stacks now `id` with `/`→`.`, `@`→`_`; node names enforced in code. |
 | S08 | CLI skeleton | todo | | | |
 | S09 | Template library | todo | | | |
 | S10 | Provider fixes | todo | | | |
@@ -45,10 +45,9 @@ Picked up by the slice named; remove once done.
 
 - **Loader (minor):** scanner failures report only "Exception during deserialization (line N)"; append the inner
   exception message.
-- **Loader (minor):** a single policy can still overlap with itself (`a: {b: 1}` and `a.b: 2`); reject in
-  `CheckPolicyScopes`. resolver.md: say a bare `runtime` path (no dot) is rejected too.
-- **S06/S07:** the schema allows a requirement mapping with no `type` in `match`; it then matches every type and
-  skips the exports contract check. Reject it, or check the contract against the requirement's type on selection.
+- **S08:** `jd validate`/`jd preview` must validate the workload against its schema before resolving — the graph's
+  "stack names unique by construction" relies on validated workload names and ids.
+- **S10:** Pulumi caps stack names at 100 characters; the adapter maps longer graph stacks to a hash-truncated name.
 - **Briefs:** cap production lines (~250) separately from tests; a cohesive slice's tests should not be trimmed to fit.
 - **S09:** the Viedoc revision moves the Cosmos database into the substrate (one 400 RU/s shared database per
   environment); the `cosmos-sql` mapping creates a container and a container-scoped grant instead of a database.
