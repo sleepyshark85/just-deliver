@@ -87,7 +87,7 @@ public static class ReleaseBuilder
         foreach (var source in sources)
         {
             // The YAML parser does not take a byte order mark; the SHA-256 was taken over the bytes with it.
-            var loaded = await WorkloadFile.ParseAsync(source.File, source.Definition.TrimStart('﻿'), cancellationToken);
+            var loaded = await WorkloadFile.ParseAsync(source.File, source.Definition.TrimStart('\uFEFF'), cancellationToken);
             if (loaded.Workload is not { } workload)
             {
                 errors.AddRange(loaded.Errors.Select(e => source.Location.Length == 0 ? e : e with { Location = e.Location.Length == 0 ? source.Location : $"{source.Location}.{e.Location}" }));

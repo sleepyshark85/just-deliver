@@ -66,7 +66,9 @@ Name and dependency checks run only when every definition loaded, since an unrea
 - Loading checks each embedded definition against its recorded SHA-256, then runs every create-time rule on the
   verified definitions and `dependsOn` (valid definition, digest pin, unique names, known dependencies, no cycle) and
   derives name, team, image and order. The in-memory set is built only from that, so no stored field can disagree
-  with a definition, and hand-editing any field of a set either fails the hash or fails a rule.
+  with a definition. Hand-editing a definition fails the hash; an edited `dependsOn` must still pass every rule.
+  `label`, `createdAt` and `dependsOn` are not hashed — like the definitions' hashes themselves, they are anchored
+  by the release record (S17).
 - The hash inside the file is a consistency check: someone who edits a definition and its hash together produces a
   set that still loads. The external anchor is the release record kept per environment (S17), which holds the
   hashes the platform actually received.
