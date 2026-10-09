@@ -4,7 +4,6 @@ kind: Workload
 metadata:
   name: just-deliver-sample-app
   team: platform-team
-  environment: dev
 
 container:
   image: myregistry.azurecr.io/just-deliver-sample-app:1.0.0
@@ -12,16 +11,16 @@ container:
     LOG_LEVEL: info
     # Only the endpoint is needed - the app authenticates with its managed
     # identity, so no key or connection string is injected here.
-    COSMOS_ENDPOINT: ${resource.database.endpoint}
+    COSMOS_ENDPOINT: ${resource.cosmos-sql.endpoint}
   ports:
     - port: 8080
       protocol: TCP
 
-# Declared by type only. The platform decides that "database" means a Cosmos DB
+# Declared by type only. The platform decides that "cosmos-sql" means a Cosmos DB
 # account with a database and container, and provisions the identity and role
 # assignment that let this workload reach it.
 #
 # Deliberately absent: monitoring. Log Analytics and Application Insights are
 # attached by the enforce-monitoring global policy, not requested by the team.
 requires:
-  - type: database
+  - type: cosmos-sql
