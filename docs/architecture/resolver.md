@@ -246,7 +246,9 @@ Every invalid expression in a string is reported (file, location, message) and t
 
 | Rule | Behaviour |
 |---|---|
-| Matching | Specificity = number of matched criteria. A tie is an error, never file order. |
+| Matching | A mapping matches when every `match` key equals the requirement's value. A requirement provides only `type`, `class` (default `standard`) and `tier` (from the environment); a mapping using any other key (`kind`, `runtime`) never matches a requirement. Specificity = number of `match` keys. A tie at the top is an error naming the tied files, never file order; no match is an error naming the requirement's type, class and tier. |
+| Type contract | A mapping's `exports` keys must equal its type's `exports` exactly; the catalog loader rejects a mismatch (missing or extra) at the mapping file, location `exports`. |
+| Expansion | Each node of the selected mapping becomes an expanded node (name, template, kind, config); config strings and mapping `exports` are evaluated with the effective requirement id as the current id and the mapping's node names in scope, other scalars pass through, objects and arrays recurse, and catalog tokens are cloned. Result per requirement: id, type, class, mapping file, nodes, exports (`Resolved` or `Pending`). Errors from all requirements are collected; a requirement with an error is left out of the result. |
 | Layering | Template default < mapping < team override (only `overridable` fields, validated; post-MVP) < policy `set`. `default` only fills gaps. Fixes the old algorithm applying overrides after policies. |
 | Provenance | Every config field carries `{value, source file, rule, catalog version}`. |
 | References | Static values resolve immediately. `${node.output}` stays a pending reference ([Expressions](#expressions)) and becomes a graph edge. |

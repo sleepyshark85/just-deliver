@@ -60,6 +60,7 @@ public static class CatalogParser
         CheckUnique(typeDocuments, "ResourceType", errors);
         CheckUnique(policyDocuments, "Policy", errors);
         CheckMappingTypes(mappings, typeDocuments, errors);
+        CheckExportsContract(mappings, types, errors);
 
         if (errors.Count > 0)
         {
@@ -155,6 +156,26 @@ public static class CatalogParser
             {
                 var known = declared.Count == 0 ? "none" : string.Join(", ", declared);
                 errors.Add(new LoadError(mapping.Source, "match.type", $"'{type}' is not a declared ResourceType (declared: {known})."));
+            }
+        }
+    }
+
+    // A mapping must export exactly what its type promises, so ${resource.<id>.<export>} always resolves.
+    private static void CheckExportsContract(List<Mapping> mappings, List<ResourceType> types, List<LoadError> errors)
+    {
+        foreach (var mapping in mappings)
+        {
+            if (!mapping.Match.Criteria.TryGetValue("type", out var name) || types.FirstOrDefault(t => t.Name == name) is not { } type)
+            {
+                continue;
+            }
+
+            var missing = type.Exports.Where(e => !mapping.Exports.ContainsKey(e)).ToList();
+            var extra = mapping.Exports.Keys.Where(e => !type.Exports.Contains(e)).ToList();
+            if (missing.Count > 0 || extra.Count > 0)
+            {
+                var problems = new[] { missing.Count > 0 ? $"missing {string.Join(", ", missing)}" : null, extra.Count > 0 ? $"not in the type: {string.Join(", ", extra)}" : null };
+                errors.Add(new LoadError(mapping.Source, "exports", $"must export exactly the exports of type '{name}' ({string.Join(", ", type.Exports)}); {string.Join("; ", problems.OfType<string>())}."));
             }
         }
     }
