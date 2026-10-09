@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S09 — Template library (M2, first Azure-facing slice)
+- **Next slice:** S10 — Provider fixes
 - **In progress:** —
 - **Blocked:** —
 
@@ -25,7 +25,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S06 | Policies + provenance | done | PR #10 | 2 | Round 1: 4 blocking (expansion errors dropped; duplicate added-node names; overlapping paths resolved by length instead of conflict; `!`). Loader now rejects policies fitting neither scope. ~330 prod lines after review fixes. |
 | S07 | Graph builder | done | PR #11 | 2 | Round 1: 4 blocking (stack names invalid for Pulumi and collision-prone; time-zone-dependent date parsing broke hash determinism; untested pending-function grant path; `!`). Stacks now `id` with `/`→`.`, `@`→`_`; node names enforced in code. |
 | S08 | CLI skeleton | done | PR #12 | 2 + suggestions | Round 1: 2 blocking (directory/unreadable inputs crashed with raw exceptions; multi-line schema errors without file). Workload loading moved to `jd.resolver.workload`; preview shows `(from env.…)`. **M1 complete.** |
-| S09 | Template library | todo | | | |
+| S09 | Template library | done | PR #13 | 2 | Round 1: 4 blocking (container names could collide across workloads → cross-workload grant; workspace shared key in clear state; adapter→resolver dependency not in standards — amended; `!`). Cosmos account now hard-capped (`totalThroughputLimit`). `samples/provisioner` removed. |
 | S10 | Provider fixes | todo | | | |
 | S11 | Orchestrator (infra nodes) | todo | | | |
 | S12 | Substrate from data | todo | | | |
@@ -47,12 +47,14 @@ Picked up by the slice named; remove once done.
   exception message.
 - **S11/S13:** introduce a single `Resolver.Resolve(...)` facade when the second production caller appears (CLI
   and orchestrator); the stage chain is currently wired in the CLI and the golden test.
+- **S12:** the substrate passes `totalThroughputLimit: 1000` and `enableFreeTier: true`; its Azure test asserts the
+  deployed account's `capacity.totalThroughputLimit = 1000` and that both environment databases (400 RU/s each) fit.
+- **S10/S12:** template `fn::invoke`s (e.g. `getSharedKeys`) run during preview, so previewing a brand-new
+  environment fails until its workspace exists — preview substrate in dependency order, or tolerate it.
+- **S11:** YamlDotNet is now 16.x (Pulumi.Automation pins it); Pulumi config values are strings — serialise
+  structured values (maps) as JSON.
 - **S10:** Pulumi caps stack names at 100 characters; the adapter maps longer graph stacks to a hash-truncated name.
 - **Briefs:** cap production lines (~250) separately from tests; a cohesive slice's tests should not be trimmed to fit.
-- **S09:** the Viedoc revision moves the Cosmos database into the substrate (one 400 RU/s shared database per
-  environment); the `cosmos-sql` mapping creates a container and a container-scoped grant instead of a database.
-- **S09:** Azure role assignments need the full role-definition id; the `role-assignment` template must build
-  it from the role GUID (`roles.yaml` holds GUIDs only).
 - **S11:** per-workload resources (database, App Insights) currently target `${env.resourceGroup}` (substrate);
   give workloads their own tagged resource group so `tools/azure/cleanup.sh` can remove them.
 - **Validator:** NJsonSchema silently ignores some keywords (`propertyNames` confirmed). Don't rely on a schema
