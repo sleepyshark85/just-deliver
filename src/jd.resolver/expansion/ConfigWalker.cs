@@ -37,7 +37,7 @@ internal static class ConfigWalker
                 var walked = Walk(entries.Value, evaluator, file, $"{location}.{EntriesKey}", errors);
                 if (walked is not (null or ConfigObject))
                 {
-                    errors.Add(new LoadError(file, location, $"{EntriesKey} takes a map, but its source '{entries.Value}' is not one; the only source is {EntriesSource}, in a mapping's node config."));
+                    errors.Add(new LoadError(file, location, $"{EntriesKey} (source '{entries.Value}') is not valid here; its only source is {EntriesSource}, in a runtime mapping's node config."));
                 }
 
                 return walked is ConfigObject map ? map with { AsEntries = true } : null;

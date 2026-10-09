@@ -36,7 +36,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             var nodes = requirement.Nodes
                 .Select(n => ApplyNodePolicies(
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(requirement.Mapping, requirement.Mapping, Layer.Mapping),
-                    requirement.Type, requirement.Class, evaluator, $"{requirement.Id}/{n.Name}", [], errors))
+                    requirement.Type, requirement.Class, evaluator, $"{requirement.Id}/{n.Name}", [], string.Empty, errors))
                 .ToList();
             requirements.Add(new ResolvedRequirement(requirement.Id, requirement.Type, requirement.Class, requirement.Mapping, requirement.Exports, nodes));
         }
@@ -54,7 +54,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             {
                 var node = ApplyNodePolicies(
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(runtime.Mapping, runtime.Mapping, Layer.Mapping),
-                    null, null, EvaluatorFor(n.Name, inScope), n.Name, n.Name == ExpressionEvaluator.RuntimeNode ? workloadPolicies : [], errors);
+                    null, null, EvaluatorFor(n.Name, inScope), n.Name, n.Name == ExpressionEvaluator.RuntimeNode ? workloadPolicies : [], runtime.WorkloadFile, errors);
                 runtimeNodes.Add(n.Name == ExpressionEvaluator.RuntimeNode ? node with { Probe = runtime.Probe } : node);
             }
         }
@@ -80,7 +80,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
                 var evaluator = EvaluatorFor(name, policy.Add.Keys);
                 var config = ConfigWalker.WalkConfig(node.Config, evaluator, policy.Source, $"add.{name}.config", errors);
                 workloadNodes.Add(ApplyNodePolicies(
-                    name, node.Template, node.Kind, config, new Provenance(policy.Source, policy.Name, Layer.PolicyAdd), null, null, evaluator, name, [], errors));
+                    name, node.Template, node.Kind, config, new Provenance(policy.Source, policy.Name, Layer.PolicyAdd), null, null, evaluator, name, [], string.Empty, errors));
             }
         }
 
@@ -115,13 +115,13 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
 
     private ResolvedNode ApplyNodePolicies(
         string name, string template, NodeKind kind, ConfigObject config, Provenance origin,
-        string? type, string? cls, ExpressionEvaluator evaluator, string label, List<Policy> workloadPolicies, List<LoadError> errors)
+        string? type, string? cls, ExpressionEvaluator evaluator, string label, List<Policy> workloadPolicies, string workloadFile, List<LoadError> errors)
     {
         var provenance = new Dictionary<string, Provenance>();
         Record(provenance, string.Empty, config, origin);
         foreach (var (field, entries) in config.Properties.Where(p => p.Value is ConfigObject { AsEntries: true }))
         {
-            Record(provenance, field, entries, new Provenance(WorkloadVariablesRule, WorkloadVariablesRule, Layer.Workload));
+            Record(provenance, field, entries, new Provenance(workloadFile, WorkloadVariablesRule, Layer.Workload));
         }
 
         var matching = _policies.Where(p => MatchesNode(p, template, type, cls)).Concat(workloadPolicies).ToList();
@@ -171,7 +171,14 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             }
 
             var path = first.Path.Split(PathSeparator);
-            if (isDefault && IsPresent(config, path))
+            if (Get(config, path) is ConfigObject { AsEntries: true })
+            {
+                errors.Add(new LoadError(first.Policy.Source, $"{field}.{first.Path}",
+                    $"policy '{first.Policy.Name}' gives '{first.Path}' of node '{label}' as a whole, but it is the list built from a map of entries; give its keys ('{first.Path}.<NAME>') instead."));
+                continue;
+            }
+
+            if (isDefault && Get(config, path) is not null)
             {
                 continue;
             }
@@ -199,20 +206,20 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         return config;
     }
 
-    private static bool IsPresent(ConfigObject config, string[] path)
+    private static ConfigValue? Get(ConfigObject config, string[] path)
     {
         ConfigValue current = config;
         foreach (var segment in path)
         {
             if (current is not ConfigObject obj || !obj.Properties.TryGetValue(segment, out var next))
             {
-                return false;
+                return null;
             }
 
             current = next;
         }
 
-        return true;
+        return current;
     }
 
     // Copy-on-write: returns the updated object, creating missing intermediate objects; null when a parent is not an object.

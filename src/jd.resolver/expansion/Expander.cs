@@ -73,7 +73,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         // Mapping problems are reported against the mapping file; the prefix says which requirement exposed them.
         var found = new List<LoadError>();
         var evaluator = EvaluatorFor(owner, requirement.Id, mapping.Nodes.Keys);
-        var nodes = EvaluateNodes(mapping, _ => evaluator, owner.Variables, found);
+        var nodes = EvaluateNodes(mapping, _ => evaluator, null, string.Empty, found);
         var exports = EvaluateExports(mapping, evaluator, found);
         if (found.Count > 0)
         {
@@ -104,27 +104,39 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         }
 
         var found = new List<LoadError>();
-        var nodes = EvaluateNodes(mapping, name => EvaluatorFor(owner, name, mapping.Nodes.Keys, known), owner.Variables, found);
+        var nodes = EvaluateNodes(mapping, name => EvaluatorFor(owner, name, mapping.Nodes.Keys, known), owner.Variables, ownerFile, found);
         if (found.Count > 0)
         {
             errors.AddRange(found.Select(e => e with { Message = $"for the runtime: {e.Message}" }));
             return null;
         }
 
-        return new ExpandedRuntime(mapping.Source, nodes, mapping.Probe);
+        return new ExpandedRuntime(mapping.Source, nodes, mapping.Probe, ownerFile);
     }
 
-    private static List<ExpandedNode> EvaluateNodes(Mapping mapping, Func<string, ExpressionEvaluator> evaluatorFor, JObject variables, List<LoadError> found)
+    // variables are the workload's, set only for the runtime mapping: they are the source of its fn::entries forms.
+    private static List<ExpandedNode> EvaluateNodes(
+        Mapping mapping, Func<string, ExpressionEvaluator> evaluatorFor, JObject? variables, string workloadFile, List<LoadError> found)
     {
         var nodes = new List<ExpandedNode>();
         foreach (var (nodeName, node) in mapping.Nodes)
         {
-            var config = node.Config.ToDictionary(c => c.Key, c => WithEntriesSource(c.Value, variables));
+            var config = node.Config.ToDictionary(c => c.Key, c => variables is null ? c.Value : WithEntriesSource(c.Value, variables));
+            var problems = new List<LoadError>();
             nodes.Add(new ExpandedNode(nodeName, node.Template, node.Kind,
-                ConfigWalker.WalkConfig(config, evaluatorFor(nodeName), mapping.Source, $"nodes.{nodeName}.config", found).Properties));
+                ConfigWalker.WalkConfig(config, evaluatorFor(nodeName), mapping.Source, $"nodes.{nodeName}.config", problems).Properties));
+            found.AddRange(problems.Select(e => InWorkload(e, workloadFile)));
         }
 
         return nodes;
+    }
+
+    // A problem inside the substituted variables is the workload's: it is reported at container.variables.<NAME> of its file.
+    private static LoadError InWorkload(LoadError error, string workloadFile)
+    {
+        var marker = ConfigWalker.EntriesKey + ".";
+        var at = error.Location.IndexOf(marker, StringComparison.Ordinal);
+        return at < 0 || workloadFile.Length == 0 ? error : error with { File = workloadFile, Location = "container.variables." + error.Location[(at + marker.Length)..] };
     }
 
     // The source of an fn::entries form is the workload's variables; the walker then evaluates them like any other map.

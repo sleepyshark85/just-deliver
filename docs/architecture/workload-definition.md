@@ -47,7 +47,7 @@ requires:
 | `metadata.name` | yes | Feeds generated resource names, so it must survive prefixes/suffixes (C14) |
 | `metadata.team` | yes | Drives approval routing and cost attribution |
 | `container.image` | yes | Fully qualified, including tag |
-| `container.variables` | no | String map; may contain `${resource.<id>.<output>}` references |
+| `container.variables` | no | String map; may contain `${resource.<id>.<output>}` references and no other `${…}` expression (rejected, naming the variable) |
 | `container.ports[]` | no | `port` 1-65535 (required), `protocol` `TCP`/`UDP` |
 | `requires[].type` | yes | Lowercase kebab-case, `^[a-z][a-z0-9-]{1,14}[a-z0-9]$`. Whether the type exists is the resolver's job (catalog), not the schema's |
 | `requires[].id` | no | Same pattern as `type`; effective id defaults to `type` |

@@ -63,7 +63,10 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
         var dependsOn = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var (field, text) in Texts(new ConfigObject(node.Config), string.Empty))
         {
-            void Fail(string message) => errors.Add(new LoadError(node.Provenance.GetValueOrDefault(field)?.Source ?? id, field, $"node '{id}': {message}"));
+            // A workload variable is reported against the workload's definition, where its author wrote it.
+            var origin = node.Provenance.GetValueOrDefault(field);
+            var location = origin?.Layer == Layer.Workload ? origin.Rule + field[field.IndexOf('.')..] : field;
+            void Fail(string message) => errors.Add(new LoadError(origin?.Source ?? id, location, $"node '{id}': {message}"));
 
             if (node.Kind == NodeKind.Grant)
             {
@@ -76,10 +79,15 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
 
             foreach (var reference in (text.Result as Pending)?.References ?? (IEnumerable<Reference>)[])
             {
-                // A requirement's node config may not read another requirement (D19). The workload's own nodes may read its exports.
+                // A requirement's node config may not read another requirement (D19). The workload's own nodes may read its exports,
+                // except a grant: an export can carry env values the grantable check would not see.
                 if (reference.Kind == ReferenceKind.Resource && scope != WorkloadScope)
                 {
                     Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}; node config cannot reference another requirement.");
+                }
+                else if (reference.Kind == ReferenceKind.Resource && node.Kind == NodeKind.Grant)
+                {
+                    Fail($"grant field '{field}' references resource.{reference.Target}.{reference.Output}; a grant cannot read an export, which may carry environment values the grantable check does not see.");
                 }
                 else if (reference.Kind == ReferenceKind.Resource)
                 {

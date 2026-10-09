@@ -32,8 +32,8 @@ public sealed record ExpandedRequirement(
     IReadOnlyList<ExpandedNode> Nodes,
     IReadOnlyDictionary<string, EvalResult> Exports);
 
-/// <summary>The workload's runtime nodes expanded from the runtime mapping in <see cref="Mapping"/>, with the mapping's probe.</summary>
-public sealed record ExpandedRuntime(string Mapping, IReadOnlyList<ExpandedNode> Nodes, Probe? Probe);
+/// <summary>The workload's runtime nodes expanded from the runtime mapping in <see cref="Mapping"/>, with the mapping's probe. <see cref="WorkloadFile"/> is where the workload's variables, which the runtime mapping puts in its config, were written.</summary>
+public sealed record ExpandedRuntime(string Mapping, IReadOnlyList<ExpandedNode> Nodes, Probe? Probe, string WorkloadFile);
 
 /// <summary>Who the requirements belong to: a workload (it has a runtime), or an environment definition (substrate, no runtime).</summary>
 public enum OwnerKind

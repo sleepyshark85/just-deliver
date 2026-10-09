@@ -9,9 +9,11 @@ namespace jd.definitionvalidator;
 /// </summary>
 public static partial class WorkloadRules
 {
-    // The whole body of a reference, "<id>.<output>", is captured so malformed ones are reported too.
-    [GeneratedRegex(@"\$\{resource\.([^}]*)\}")]
-    private static partial Regex ReferenceRegex();
+    // Any expression, with its body captured; only ${resource.<id>.<output>} is allowed in a variable.
+    [GeneratedRegex(@"\$\{([^}]*)\}")]
+    private static partial Regex ExpressionRegex();
+
+    private const string ResourcePrefix = "resource.";
 
     public static IReadOnlyList<string> Check(JToken workload)
     {
@@ -45,9 +47,17 @@ public static partial class WorkloadRules
         {
             foreach (var variable in variables.Properties())
             {
-                foreach (Match reference in ReferenceRegex().Matches((string?)variable.Value ?? string.Empty))
+                foreach (Match reference in ExpressionRegex().Matches((string?)variable.Value ?? string.Empty))
                 {
-                    var body = reference.Groups[1].Value;
+                    // A variable is workload input crossing into the platform: it may only name what a requirement exports (D19).
+                    var expression = reference.Groups[1].Value.Trim();
+                    if (!expression.StartsWith(ResourcePrefix, StringComparison.Ordinal))
+                    {
+                        errors.Add($"container.variables.{variable.Name}: '{reference.Value}' is not allowed; a variable may only reference a requirement's output, as ${{resource.<id>.<output>}}.");
+                        continue;
+                    }
+
+                    var body = expression[ResourcePrefix.Length..];
                     var separator = body.IndexOf('.');
                     if (separator <= 0 || separator == body.Length - 1)
                     {

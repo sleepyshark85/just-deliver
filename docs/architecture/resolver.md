@@ -228,17 +228,21 @@ The workload's `container.variables` reach the runtime node through the one **co
 (in the style of Pulumi's `fn::` functions): `{ fn::entries: workload.variables }` as a node's config value stands for that map,
 and the node deploys it as a list of `{name, value}` items sorted by name (ordinal), because a Pulumi YAML template cannot turn a
 map into the list a Container App's `env` wants. The only source is `workload.variables`; any other source is an error
-(`fn::entries takes a map, but its source '…' is not one`). The form belongs in a mapping's node config: a policy-added node has
-no workload variables to name.
+(`fn::entries (source '…') is not valid here`). The form is valid only in the **runtime** mapping's node config: only that mapping
+is given the workload's variables, so a requirement mapping or a policy-added node using it gets the same error. A policy cannot
+give the whole entries field (`runtime.variables`), which would drop the list form; it gives its keys (`runtime.variables.<NAME>`).
 
 - In the graph the value stays a **map** (`ConfigObject` with `AsEntries`), so every variable is a leaf `variables.<NAME>` with its
   own provenance (`Workload: container.variables`, or the policy that set it) and its own pending state, and a
   workload-scope policy addresses it as `runtime.variables.<NAME>`. The canonical config, graph JSON and node hash show the
   deployed form: the sorted list. The orchestrator builds that list when it fills the node, so a change of form changes the hash.
-- Each value is an ordinary expression string. `${resource.<id>.<export>}` takes the value of that requirement's export. An export
+- A variable's value is text that may contain only `${resource.<id>.<output>}` references; the workload validator
+  (`WorkloadRules`) rejects any other `${…}` (`env`, `name()`, `workload`, `runtime`, `role`, a node), naming the variable, because a
+  variable is workload input crossing into the platform ([D19](../open-questions.md)). `${resource.<id>.<export>}` takes the value of that requirement's export. An export
   that is already a value (`${env.cosmos.endpoint}`) is resolved at expansion, so preview shows it; one that reads a node output
   (`${container.containerName}`) stays pending and adds an edge from the runtime node to that node (see Security and the depends-on
-  field). An unknown id or export is an error naming the variable (`variables.<NAME>`).
+  field). An unknown id or export is an error naming the variable, reported against the workload file at `container.variables.<NAME>`, as is any
+  other problem in a variable's value.
 - A value that reads a secret output makes the whole `variables` entry secret (the existing rule), so it is masked in the backend's
   config and state. In the Container App it still appears as plain text in `env`; `secrets` + `secretRef` are a later slice.
 
@@ -352,7 +356,7 @@ Every invalid expression in a string is reported (file, location, message) and t
 | References | Static values resolve immediately. `${node.output}` stays a pending reference ([Expressions](#expressions)) and becomes a graph edge. |
 | Phases | Derived from edges, never listed per template: `runtime` for the runtime node itself; `after-runtime` when a node depends on the runtime node (it references `runtime.*`) directly or through a node that does; `infrastructure` otherwise. |
 | Built-ins | `name(kind)` and `guid(...)` as defined in [Expressions](#expressions) ([C14](../open-questions.md)). Role GUIDs come from `roles.yaml`. Nothing else. |
-| Security | References may target only the workload's own nodes and `env.*` resources the [environment descriptor](#environment-descriptor) lists as grantable. Cross-workload references are rejected by the engine. The graph builder enforces it statically ([D19](../open-questions.md)): every `env.<path>` a `grant` node's config reads, including inside functions and added or overridden by a policy, must be in `grantable`, otherwise an error names the node, the field and the path. Other nodes may read any `env.*` value. A `resource.<id>.<export>` reference in a requirement's node config is an error (requirement scopes must not read each other): edges there come only from references to nodes in the same scope. The `@workload` scope (the runtime mapping and the nodes workload-scope policies add) may read any requirement's exports. |
+| Security | References may target only the workload's own nodes and `env.*` resources the [environment descriptor](#environment-descriptor) lists as grantable. Cross-workload references are rejected by the engine. The graph builder enforces it statically ([D19](../open-questions.md)): every `env.<path>` a `grant` node's config reads, including inside functions and added or overridden by a policy, must be in `grantable`, otherwise an error names the node, the field and the path. Other nodes may read any `env.*` value. A `resource.<id>.<export>` reference in a requirement's node config is an error (requirement scopes must not read each other): edges there come only from references to nodes in the same scope. The `@workload` scope (the runtime mapping and the nodes workload-scope policies add) may read any requirement's exports, except in a `grant` node: an export can carry `env.*` values that the grantable check on the grant's own fields would not see, so a grant reading one is an error. |
 
 ## Output: ResolvedGraph
 

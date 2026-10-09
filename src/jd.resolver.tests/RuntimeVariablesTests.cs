@@ -81,7 +81,7 @@ public class RuntimeVariablesTests
         var list = (JArray)ConfigJson.ToToken(new ConfigObject(Runtime(graph).Config))["variables"]!;
         Assert.Equal(["BETA", "ZED", "alpha"], list.Select(i => (string?)i["name"]));
         Assert.Equal(["b", "z", "a"], list.Select(i => (string?)i["value"]));
-        Assert.Equal(new Provenance("container.variables", "container.variables", Layer.Workload), Runtime(graph).Provenance["variables.ZED"]);
+        Assert.Equal(new Provenance("workload.yaml", "container.variables", Layer.Workload), Runtime(graph).Provenance["variables.ZED"]);
     }
 
     [Fact]
@@ -125,8 +125,31 @@ public class RuntimeVariablesTests
         var graph = await ResolveAsync(variables);
 
         var error = Assert.Single(graph.Errors);
-        Assert.Equal("variables.BAD", error.Location);
+        Assert.Equal(("workload.yaml", "container.variables.BAD"), (error.File, error.Location));
         Assert.Contains(reference, error.Message);
+    }
+
+    [Fact]
+    public async Task A_variable_that_fails_to_evaluate_is_reported_against_the_workload_file()
+    {
+        var graph = await ResolveAsync("    BAD: ${env.nope}\n");
+
+        var error = Assert.Single(graph.Errors);
+        Assert.Equal(("workload.yaml", "container.variables.BAD"), (error.File, error.Location));
+        Assert.Contains("env.nope", error.Message);
+    }
+
+    [Fact]
+    public async Task A_grant_node_cannot_read_an_export_but_another_workload_node_can()
+    {
+        const string add = "add:\n  reader:\n    template: t/reader\n    config: { v: '${resource.sqldb.endpoint}' }\n  granter:\n    kind: grant\n    template: t/grant\n    config: { v: '${resource.sqldb.endpoint}' }\n";
+
+        var graph = await ResolveAsync(string.Empty, [WorkloadPolicy("readers", add)]);
+
+        var error = Assert.Single(graph.Errors);
+        Assert.Equal("v", error.Location);
+        Assert.Contains("node 'shop/dev/@workload/granter'", error.Message);
+        Assert.Contains("a grant cannot read an export", error.Message);
     }
 
     [Fact]
@@ -185,6 +208,27 @@ public class RuntimeVariablesTests
         Assert.Contains("'variables.X'", error.Message);
     }
 
+    [Theory]
+    [InlineData("set: { runtime.variables: x }\n", "set.variables")]
+    [InlineData("default: { runtime.variables: x }\n", "default.variables")]
+    public async Task A_policy_cannot_give_the_whole_variables_field_but_its_keys_are_fine(string body, string location)
+    {
+        var graph = await ResolveAsync("    A: a\n", [WorkloadPolicy("whole", body)]);
+
+        var error = Assert.Single(graph.Errors);
+        Assert.Equal(location, error.Location);
+        Assert.Contains("give its keys ('variables.<NAME>')", error.Message);
+    }
+
+    [Fact]
+    public async Task Entries_are_only_valid_in_the_runtime_mapping()
+    {
+        var graph = await ResolveAsync(string.Empty, mapping: Mapping(", vars: { fn::entries: workload.variables }"));
+
+        var error = Assert.Single(graph.Errors);
+        Assert.Contains("fn::entries (source 'workload.variables') is not valid here", error.Message);
+    }
+
     [Fact]
     public async Task The_form_is_part_of_the_node_hash()
     {
@@ -206,7 +250,7 @@ public class RuntimeVariablesTests
         var graph = await ResolveAsync(string.Empty, runtimeMapping: RuntimeMapping.Replace("fn::entries: workload.variables", "fn::entries: workload.nope", StringComparison.Ordinal));
 
         var error = Assert.Single(graph.Errors);
-        Assert.Contains("fn::entries takes a map", error.Message);
+        Assert.Contains("fn::entries (source 'workload.nope') is not valid here", error.Message);
         Assert.Contains("workload.nope", error.Message);
         Assert.Contains("workload.variables", error.Message);
     }
