@@ -28,5 +28,8 @@ public sealed record ExpandedRequirement(
     IReadOnlyList<ExpandedNode> Nodes,
     IReadOnlyDictionary<string, EvalResult> Exports);
 
-/// <summary>Requirements that expanded cleanly; a requirement with any error is left out and its errors are in <see cref="Errors"/>.</summary>
-public sealed record ExpansionResult(IReadOnlyList<ExpandedRequirement> Requirements, IReadOnlyList<LoadError> Errors);
+/// <param name="WorkloadName">The workload's <c>metadata.name</c>, carried on for policy evaluation.</param>
+/// <param name="WorkloadTeam">The workload's <c>metadata.team</c>.</param>
+/// <param name="Requirements">Requirements that expanded cleanly; a requirement with any error is left out.</param>
+/// <param name="Errors">Everything that kept a requirement from expanding.</param>
+public sealed record ExpansionResult(string WorkloadName, string WorkloadTeam, IReadOnlyList<ExpandedRequirement> Requirements, IReadOnlyList<LoadError> Errors);

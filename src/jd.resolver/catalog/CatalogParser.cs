@@ -60,6 +60,7 @@ public static class CatalogParser
         CheckUnique(typeDocuments, "ResourceType", errors);
         CheckUnique(policyDocuments, "Policy", errors);
         CheckMappingTypes(mappings, typeDocuments, errors);
+        CheckPolicyScopes(policies, errors);
         CheckExportsContract(mappings, types, errors);
 
         if (errors.Count > 0)
@@ -143,6 +144,50 @@ public static class CatalogParser
             foreach (var duplicate in group.Skip(1))
             {
                 errors.Add(new LoadError(duplicate.Source, "name", $"{kind} '{group.Key}' is already declared in {group.First().Source}."));
+            }
+        }
+    }
+
+    // Every policy must apply to node scope or workload scope (resolver.md, Policy scope); one that fits neither would silently do nothing.
+    private static void CheckPolicyScopes(List<Policy> policies, List<LoadError> errors)
+    {
+        foreach (var policy in policies)
+        {
+            var criteria = policy.Match.Criteria;
+            var kind = criteria.GetValueOrDefault(MatchCriteria.KindKey);
+            void Fail(string location, string message) => errors.Add(new LoadError(policy.Source, location, message));
+
+            if (kind is not null && kind != MatchCriteria.RuntimeKind)
+            {
+                Fail("match.kind", $"'{kind}' is not a policy scope; the only 'kind' a policy can match is '{MatchCriteria.RuntimeKind}'.");
+            }
+            else if (kind is null)
+            {
+                if (criteria.ContainsKey(MatchCriteria.RuntimeKey))
+                {
+                    Fail("match.runtime", $"'runtime' needs 'kind: {MatchCriteria.RuntimeKind}'; node-scope policies match type, class, tier and template.");
+                }
+
+                if (policy.Add.Count > 0)
+                {
+                    Fail("add", $"a node-scope policy cannot add nodes; use 'kind: {MatchCriteria.RuntimeKind}' to add nodes once per workload.");
+                }
+            }
+            else
+            {
+                var node = criteria.Keys.Where(k => k is MatchCriteria.TypeKey or MatchCriteria.ClassKey or MatchCriteria.TemplateKey).Order().ToList();
+                if (node.Count > 0)
+                {
+                    Fail("match", $"a 'kind: {MatchCriteria.RuntimeKind}' policy cannot also match {string.Join(", ", node)}.");
+                }
+
+                foreach (var (field, entries) in new[] { ("set", policy.Set), ("default", policy.Default) })
+                {
+                    foreach (var path in entries.Keys.Where(k => !k.StartsWith(MatchCriteria.RuntimeKey + ".", StringComparison.Ordinal)))
+                    {
+                        Fail($"{field}.{path}", $"a 'kind: {MatchCriteria.RuntimeKind}' policy can only set or default fields under '{MatchCriteria.RuntimeKey}.', not '{path}'.");
+                    }
+                }
             }
         }
     }
