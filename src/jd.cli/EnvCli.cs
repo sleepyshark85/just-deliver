@@ -30,8 +30,14 @@ internal static class EnvCli
             return UsageError;
         }
 
-        var region = options.Region ?? environmentVariable(RegionVariable);
-        problem = region is null ? $"no region: pass --region or set {RegionVariable}." : Unreadable(options) ?? (backend is null ? Cli.BackendSettingsProblem(environmentVariable) : null);
+        var configured = options.Region ?? environmentVariable(RegionVariable);
+        if (configured is not { } region)
+        {
+            stderr.WriteLine($"jd: no region: pass --region or set {RegionVariable}.");
+            return UsageError;
+        }
+
+        problem = Unreadable(options) ?? (backend is null ? Cli.BackendSettingsProblem(environmentVariable) : null);
         if (problem is not null)
         {
             stderr.WriteLine($"jd: {problem}");
@@ -40,7 +46,7 @@ internal static class EnvCli
 
         try
         {
-            return await UpAsync(options, region!, backend, environmentVariable, stdout, stderr, cancellationToken);
+            return await UpAsync(options, region, backend, environmentVariable, stdout, stderr, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -79,11 +85,7 @@ internal static class EnvCli
             return code;
         }
 
-        // Secret or null outputs are left out, so a value that needs one cannot be filled and is reported.
-        var outputs = run.Nodes.ToDictionary(
-            n => n.NodeId,
-            n => (IReadOnlyDictionary<string, string>)n.Outputs.Where(o => o.Value is { IsSecret: false, Value: not null }).ToDictionary(o => o.Key, o => o.Value.Value!));
-        var composed = await composer.ComposeAsync(outputs, cancellationToken);
+        var composed = await composer.ComposeAsync(run.Nodes.ToDictionary(n => n.NodeId, n => n.Outputs), cancellationToken);
         if (composed.Yaml is not { } yaml)
         {
             Cli.Print(composed.Errors, stderr);

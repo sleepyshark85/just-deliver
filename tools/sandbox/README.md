@@ -30,6 +30,11 @@ source ~/.just-deliver/<subscription>.env
 az login --service-principal --username "$ARM_CLIENT_ID" --password="$ARM_CLIENT_SECRET" --tenant "$ARM_TENANT_ID"
 ```
 
+The Azure tests (`tools/verify.sh --azure`, Category=Azure) run as this team identity, never as a personal login: they require `ARM_CLIENT_ID`,
+`ARM_CLIENT_SECRET`, `ARM_TENANT_ID` and `ARM_SUBSCRIPTION_ID` in the environment (the credentials file sets them), fail with a message if any
+is missing, and run every `az` command against a temporary `AZURE_CONFIG_DIR` they log in to themselves. They also need a subscription
+without an existing free-tier Cosmos account.
+
 ## Free-tier constraints the team must design for
 
 Verify figures on Azure's pricing pages; grants change.

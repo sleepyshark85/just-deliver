@@ -28,10 +28,13 @@ public sealed class EnvCliTests : IDisposable
 
         public List<string> Calls { get; } = [];
 
+        /// <summary>The output name that comes back as a secret from every deploy.</summary>
+        public string? SecretOutput { get; set; }
+
         public Task<DeploymentResult> DeployAsync(DeploymentPackage package, CancellationToken cancellationToken)
         {
             Calls.Add(package.StackName);
-            var outputs = ByNode[package.StackName[(package.StackName.LastIndexOf('.') + 1)..]].ToDictionary(o => o.Key, o => new ConfigEntry(o.Value));
+            var outputs = ByNode[package.StackName[(package.StackName.LastIndexOf('.') + 1)..]].ToDictionary(o => o.Key, o => new ConfigEntry(o.Value, o.Key == SecretOutput));
             return Task.FromResult(new DeploymentResult { Outputs = outputs, Summary = new() { ["Create"] = 1 } });
         }
 
@@ -61,7 +64,7 @@ public sealed class EnvCliTests : IDisposable
         var second = await RunAsync(backend, Region, "up", Dev, "--catalog", Catalog, "--base", shared, "--out", dev);
 
         Assert.Equal((0, 0), (first.Code, second.Code));
-        Assert.Equal(["dev.dev.substrate.apps", "dev.dev.substrate.database", "dev.dev.substrate.group", "shared.shared.substrate.cosmos", "shared.shared.substrate.group", "shared.shared.substrate.workspace"], backend.Calls.Order().ToList());
+        Assert.Equal(["_dev.dev.substrate.apps", "_dev.dev.substrate.database", "_dev.dev.substrate.group", "_shared.shared.substrate.cosmos", "_shared.shared.substrate.group", "_shared.shared.substrate.workspace"], backend.Calls.Order().ToList());
         var descriptor = (await jd.resolver.environment.EnvironmentFile.LoadAsync(dev)).Descriptor!;
         Assert.Equal(("dev", "region-1"), (descriptor.Name, descriptor.Region));
         Assert.Equal("cosmos-1", descriptor.Values["cosmos.accountName"]);
@@ -122,6 +125,21 @@ public sealed class EnvCliTests : IDisposable
         Assert.Contains("values.cosmos.databaseId", unknown.Err);
         Assert.Contains("'env.shared.resourceGroup' is not a value of environment 'dev'", noBase.Err);
         Assert.Empty(backend.Calls);
+    }
+
+    [Fact]
+    public async Task A_value_that_needs_a_secret_output_fails_and_nothing_is_written_or_printed()
+    {
+        var backend = new OutputBackend { SecretOutput = "documentEndpoint" };
+        var path = Path.Combine(_temp, "out.yaml");
+
+        var (code, stdout, stderr) = await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", path);
+
+        Assert.Equal(1, code);
+        Assert.Contains("values.cosmos.endpoint", stderr);
+        Assert.Contains("missing, null or secret", stderr);
+        Assert.False(File.Exists(path));
+        Assert.DoesNotContain("https://cosmos-1/", stdout + stderr);
     }
 
     [Theory]

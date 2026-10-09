@@ -9,13 +9,14 @@ namespace jd.cli.tests;
 /// Real resources, free tier only: a test-only catalog whose one type maps to a resource group and a Log Analytics workspace
 /// (daily cap 0.15 GB, the template's default 30-day retention) that references the group's outputs. Deploys it with the real
 /// Pulumi backend on a local file state, deploys again for zero changes, and always deletes the resource group.
-/// Run with <c>tools/verify.sh --azure</c>; needs the Azure credentials in the environment, <c>JD_REGION</c> and the pulumi CLI.
+/// Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>, <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI.
 /// </summary>
 [Trait("Category", "Azure")]
 public sealed class DeployAzureTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jd-azure-" + Guid.NewGuid().ToString("N"));
     private readonly string _suffix = Guid.NewGuid().ToString("N")[..8];
+    private readonly AzureCli _az = AzureCli.Login();
 
     private string ResourceGroup => "rg-jd-s11-" + _suffix;
 
@@ -27,6 +28,7 @@ public sealed class DeployAzureTests : IDisposable
         }
         finally
         {
+            _az.Dispose();
             if (Directory.Exists(_root))
             {
                 Directory.Delete(_root, recursive: true);
@@ -38,9 +40,7 @@ public sealed class DeployAzureTests : IDisposable
     // created the group leaves nothing to delete, which "az group exists" reports.
     private void DeleteResourceGroup()
     {
-        var subscription = System.Environment.GetEnvironmentVariable("ARM_SUBSCRIPTION_ID")
-            ?? throw new InvalidOperationException($"ARM_SUBSCRIPTION_ID is not set, so resource group {ResourceGroup} could not be checked or deleted.");
-        var exists = AzureCli.Run($"group exists --name {ResourceGroup} --subscription {subscription}");
+        var exists = _az.Run("group", "exists", "--name", ResourceGroup, "--subscription", _az.Subscription);
         if (exists.Code == 0 && exists.Output.Trim() == "false")
         {
             return;
@@ -51,7 +51,7 @@ public sealed class DeployAzureTests : IDisposable
             throw new InvalidOperationException($"Could not check resource group {ResourceGroup}: {exists.Error}");
         }
 
-        var delete = AzureCli.Run($"group delete --name {ResourceGroup} --subscription {subscription} --yes");
+        var delete = _az.Run("group", "delete", "--name", ResourceGroup, "--subscription", _az.Subscription, "--yes");
         if (delete.Code != 0)
         {
             throw new InvalidOperationException($"Could not delete resource group {ResourceGroup}; run tools/azure/cleanup.sh --yes. {delete.Error}");

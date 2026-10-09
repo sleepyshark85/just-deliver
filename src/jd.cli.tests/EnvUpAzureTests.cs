@@ -9,21 +9,21 @@ namespace jd.cli.tests;
 /// <summary>
 /// Real resources, free tier only: the sample <c>shared</c> and <c>dev</c> definitions (renamed with a random suffix, so names cannot
 /// collide) brought up with <c>jd env up</c> on a local file state. Checks the descriptors, the free-tier Cosmos account and its
-/// RU/s cap through <c>az</c>, and that running each again changes nothing. Always deletes the resource groups it created.
-/// Run with <c>tools/verify.sh --azure</c>; needs the Azure credentials in the environment, <c>JD_REGION</c>, <c>ARM_SUBSCRIPTION_ID</c> and the pulumi CLI.
+/// RU/s cap and the workspace's daily cap through <c>az</c>, and that running each again changes nothing. Always deletes the resource
+/// groups it created. Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>,
+/// <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI, and a subscription
+/// <b>without an existing free-tier Cosmos account</b> (Azure allows one per subscription; the test creates it and deletes it).
 /// </summary>
 [Trait("Category", "Azure")]
 public sealed class EnvUpAzureTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jd-azure-" + Guid.NewGuid().ToString("N"));
     private readonly string _suffix = Guid.NewGuid().ToString("N")[..8];
+    private readonly AzureCli _az = AzureCli.Login();
 
     private string SharedName => "s12sh" + _suffix;
 
     private string DevName => "s12dv" + _suffix;
-
-    private static string Subscription => System.Environment.GetEnvironmentVariable("ARM_SUBSCRIPTION_ID")
-        ?? throw new InvalidOperationException("ARM_SUBSCRIPTION_ID is not set, so the test resource groups could not be checked or deleted.");
 
     public void Dispose()
     {
@@ -33,6 +33,7 @@ public sealed class EnvUpAzureTests : IDisposable
         }
         finally
         {
+            _az.Dispose();
             if (Directory.Exists(_root))
             {
                 Directory.Delete(_root, recursive: true);
@@ -45,7 +46,7 @@ public sealed class EnvUpAzureTests : IDisposable
     // Container Apps environment logs to the shared workspace.
     private List<string> TestGroups()
     {
-        var list = AzureCli.Run($"group list --subscription {Subscription} --query \"[?tags.project=='just-deliver-mvp' && contains(name, '{_suffix}')].name\" -o tsv");
+        var list = _az.Run("group", "list", "--subscription", _az.Subscription, "--query", $"[?tags.project=='just-deliver-mvp' && contains(name, '{_suffix}')].name", "-o", "tsv");
         return list.Code == 0
             ? list.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).OrderBy(g => g.Contains(DevName, StringComparison.Ordinal) ? 0 : 1).ToList()
             : throw new InvalidOperationException($"Could not list the test resource groups; run tools/azure/cleanup.sh --yes --all. {list.Error}");
@@ -55,7 +56,7 @@ public sealed class EnvUpAzureTests : IDisposable
     {
         foreach (var group in TestGroups())
         {
-            var delete = AzureCli.Run($"group delete --name {group} --subscription {Subscription} --yes");
+            var delete = _az.Run("group", "delete", "--name", group, "--subscription", _az.Subscription, "--yes");
             if (delete.Code != 0)
             {
                 throw new InvalidOperationException($"Could not delete resource group {group}; run tools/azure/cleanup.sh --yes --all. {delete.Error}");
@@ -78,10 +79,11 @@ public sealed class EnvUpAzureTests : IDisposable
         return path;
     }
 
-    private static string Az(string arguments)
+    // The value of a --query, as tsv.
+    private string Az(params string[] arguments)
     {
-        var result = AzureCli.Run($"{arguments} --subscription {Subscription} -o tsv");
-        return result.Code == 0 ? result.Output.Trim() : throw new InvalidOperationException($"az {arguments} failed: {result.Error}");
+        var result = _az.Run([.. arguments, "--subscription", _az.Subscription, "-o", "tsv"]);
+        return result.Code == 0 ? result.Output.Trim() : throw new InvalidOperationException($"az {string.Join(' ', arguments)} failed: {result.Error}");
     }
 
     private static async Task<(int Code, string Output)> UpAsync(IBackEndProvider backend, string region, params string[] args)
@@ -125,8 +127,10 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.NotNull(loadedShared);
         var account = loadedShared.Values["cosmos.accountName"];
         var sharedGroup = loadedShared.Values["shared.resourceGroup"];
-        Assert.Equal("true", Az($"cosmosdb show --name {account} --resource-group {sharedGroup} --query enableFreeTier"), ignoreCase: true);
-        Assert.Equal("1000", Az($"cosmosdb show --name {account} --resource-group {sharedGroup} --query capacity.totalThroughputLimit"));
+        Assert.Equal("true", Az("cosmosdb", "show", "--name", account, "--resource-group", sharedGroup, "--query", "enableFreeTier"), ignoreCase: true);
+        Assert.Equal("1000", Az("cosmosdb", "show", "--name", account, "--resource-group", sharedGroup, "--query", "capacity.totalThroughputLimit"));
+        var cap = Az("monitor", "log-analytics", "workspace", "show", "--workspace-name", loadedShared.Values["logAnalytics.name"], "--resource-group", sharedGroup, "--query", "workspaceCapping.dailyQuotaGb");
+        Assert.Equal(0.15, double.Parse(cap, System.Globalization.CultureInfo.InvariantCulture));
 
         var (devCode, devOutput) = await UpAsync(backend, region, dev, "--base", sharedDescriptor, "--out", devDescriptor);
         Assert.True(devCode == 0, devOutput);
@@ -135,7 +139,7 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal(account, loadedDev.Values["cosmos.accountName"]);
         Assert.Equal(["cosmos.accountId"], loadedDev.Grantable);
         var database = loadedDev.Values["cosmos.databaseName"];
-        Assert.Equal("400", Az($"cosmosdb sql database throughput show --account-name {account} --resource-group {sharedGroup} --name {database} --query resource.throughput"));
+        Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", database, "--query", "resource.throughput"));
 
         var (againSharedCode, againShared) = await UpAsync(backend, region, shared, "--out", sharedDescriptor);
         Assert.True(againSharedCode == 0, againShared);

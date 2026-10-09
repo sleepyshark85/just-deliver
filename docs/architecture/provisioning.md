@@ -204,8 +204,9 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
 ### Substrate (`jd env up`)
 
 An environment's substrate is provisioned by the same path as a workload's infrastructure: `Resolver.ResolveSubstrate` resolves an
-**environment definition** (substrate requirements, matched by catalog mappings like workload requirements; the definition's name
-stands for the workload and it has no runtime, so workload-scope policies add nothing) and the orchestrator deploys the graph.
+**environment definition** (substrate requirements, matched by catalog mappings like workload requirements; the owner is
+named `@<name>`, so its ids and stacks (`_dev.dev.substrate.group`) can never collide with a workload's, and it has no runtime, so
+workload-scope policies add nothing) and the orchestrator deploys the graph.
 There is no second resolution or deploy path. Because Azure allows one free-tier Cosmos account per subscription there are two
 layers: `shared` (once per subscription: resource group, Log Analytics workspace with a daily cap, the Cosmos account with free
 tier and `totalThroughputLimit: 1000`) and one definition per environment on top of the shared descriptor (`--base`): resource
@@ -213,7 +214,7 @@ group, Container Apps environment (Consumption) on the shared workspace, and a C
 in the shared account. Two environments use 800 of the 1,000 free RU/s. These values live in the catalog mappings, not in code.
 
 After the deploy, `DescriptorComposer` evaluates the definition's `values` (each an expression over `${resource.<id>.<export>}`):
-an export is evaluated with its requirement's node outputs (`NodeReport.Outputs`, secrets and nulls excluded), which makes
+an export is evaluated with its requirement's node outputs (`NodeReport.Outputs` holds only non-secret outputs; null ones are dropped by the composer), which makes
 `${resource.…}` resolve. The values are merged into the base descriptor's (new keys only), and the result is validated with the
 descriptor loader before it is written. The same composition runs once **before** the deploy with the values still pending, so
 every error that does not need an output is found while nothing exists yet.

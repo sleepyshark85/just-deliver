@@ -151,6 +151,7 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
         }
 
         private static NodeReport Report(GraphNode node, NodeOutcome outcome, string message, DeploymentResult? result = null) =>
-            new(node.Id, outcome, result?.Summary ?? [], result?.Changes ?? [], message, TimeSpan.Zero, result?.Outputs ?? []);
+            new(node.Id, outcome, result?.Summary ?? [], result?.Changes ?? [], message, TimeSpan.Zero,
+                result?.Outputs.Where(o => !o.Value.IsSecret).ToDictionary(o => o.Key, o => o.Value) ?? []);
     }
 }

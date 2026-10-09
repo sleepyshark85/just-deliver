@@ -1,3 +1,4 @@
+using jd.core.bp;
 using jd.resolver.catalog;
 using jd.resolver.expressions;
 using jd.resolver.graph;
@@ -19,11 +20,12 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
 {
     private static readonly ISerializer Serializer = new SerializerBuilder().WithQuotingNecessaryStrings().Build();
 
-    // outputs: values by node id (no secrets, no nulls); null before the deploy, when a value waiting on an output is only checked.
-    public async Task<ComposedDescriptor> ComposeAsync(IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? outputs, CancellationToken cancellationToken = default)
+    // outputs: by node id; null before the deploy, when a value waiting on an output is only checked. Secret and null outputs are
+    // dropped here, so a value that needs one stays pending and is reported, and a secret never reaches the descriptor.
+    public async Task<ComposedDescriptor> ComposeAsync(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>>? outputs, CancellationToken cancellationToken = default)
     {
         var errors = new List<LoadError>();
-        var evaluator = new ExpressionEvaluator(Context(outputs is null ? new Dictionary<Reference, string>() : ExportValues(outputs)));
+        var evaluator = new ExpressionEvaluator(Context(outputs is null ? new Dictionary<Reference, string>() : ExportValues(outputs, errors)));
         var added = Evaluate(definition.Values, "values", evaluator, outputs is null, errors);
         var merged = Nest(environment.Values);
         Merge(merged, added, string.Empty, errors);
@@ -46,22 +48,23 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
     }
 
     private ExpressionContext Context(IReadOnlyDictionary<Reference, string> known, string currentId = "", IReadOnlySet<string>? nodeNames = null) =>
-        new(catalog.Roles, catalog.Naming, environment, definition.Name, string.Empty, currentId, nodeNames ?? new HashSet<string>(), known);
+        new(catalog.Roles, catalog.Naming, environment, graph.Workload, graph.WorkloadTeam, currentId, nodeNames ?? new HashSet<string>(), known);
 
     // Each export, evaluated with the outputs of its requirement's nodes, is the value of ${resource.<id>.<export>}.
-    private Dictionary<Reference, string> ExportValues(IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> outputs)
+    private Dictionary<Reference, string> ExportValues(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>> outputs, List<LoadError> errors)
     {
         var known = new Dictionary<Reference, string>();
         foreach (var (scope, exports) in graph.Exports)
         {
             var nodes = graph.Nodes.Where(n => n.Scope == scope).ToList();
+            // The filter keeps only entries with a value, so the ! below is safe.
             var nodeOutputs = nodes.Where(n => outputs.ContainsKey(n.Id))
-                .SelectMany(n => outputs[n.Id].Select(o => (new Reference(ReferenceKind.Node, n.Name, o.Key), o.Value)))
-                .ToDictionary(o => o.Item1, o => o.Value);
+                .SelectMany(n => outputs[n.Id].Where(o => o.Value is { IsSecret: false, Value: not null }).Select(o => (new Reference(ReferenceKind.Node, n.Name, o.Key), o.Value.Value!)))
+                .ToDictionary(o => o.Item1, o => o.Item2);
             var evaluator = new ExpressionEvaluator(Context(nodeOutputs, scope, nodes.Select(n => n.Name).ToHashSet()));
             foreach (var (export, result) in exports)
             {
-                var resolved = result is Pending pending ? evaluator.Evaluate(pending.Original, definitionFile, $"exports.{export}", new List<LoadError>()) : result;
+                var resolved = result is Pending pending ? evaluator.Evaluate(pending.Original, definitionFile, $"exports.{export}", errors) : result;
                 if (resolved is Resolved value)
                 {
                     known[new Reference(ReferenceKind.Resource, scope, export)] = value.Value;
@@ -86,6 +89,7 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
                 continue;
             }
 
+            // The schema makes every leaf of values a string or a mapping (a mapping is handled above), so the cast and the ! are safe.
             var text = (string)property.Value!;
             result[property.Name] = evaluator.Evaluate(text, definitionFile, location, errors) switch
             {

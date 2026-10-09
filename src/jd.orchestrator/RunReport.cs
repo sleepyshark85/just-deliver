@@ -28,7 +28,7 @@ public enum NodeOutcome
 /// <param name="Changes">The provider's per-resource changes; empty when nothing was run.</param>
 /// <param name="Message">Why a node is pending, waiting or failed; empty otherwise.</param>
 /// <param name="Elapsed">How long the node took.</param>
-/// <param name="Outputs">The outputs the stack exported after a deploy (secrets flagged); empty otherwise.</param>
+/// <param name="Outputs">The non-secret outputs the stack exported after a deploy; empty otherwise. Secrets stay inside the walk: reports get persisted.</param>
 public sealed record NodeReport(
     string NodeId,
     NodeOutcome Outcome,

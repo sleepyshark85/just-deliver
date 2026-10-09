@@ -1,3 +1,4 @@
+using jd.core.bp;
 using jd.definitionvalidator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
@@ -37,20 +38,20 @@ public class SubstrateTests
 
     private static readonly Dictionary<string, Dictionary<string, string>> SharedOutputs = new()
     {
-        ["shared/shared/substrate/group"] = new() { ["resourceGroupName"] = "rg-shared-1", ["location"] = Region },
-        ["shared/shared/substrate/workspace"] = new() { ["workspaceId"] = "/ws/id", ["workspaceName"] = "law-1", ["workspaceCustomerId"] = "cust-1" },
-        ["shared/shared/substrate/cosmos"] = new() { ["accountId"] = "/cosmos/id", ["accountName"] = "cosmos-1", ["documentEndpoint"] = "https://cosmos-1.documents.azure.com:443/" },
+        ["@shared/shared/substrate/group"] = new() { ["resourceGroupName"] = "rg-shared-1", ["location"] = Region },
+        ["@shared/shared/substrate/workspace"] = new() { ["workspaceId"] = "/ws/id", ["workspaceName"] = "law-1", ["workspaceCustomerId"] = "cust-1" },
+        ["@shared/shared/substrate/cosmos"] = new() { ["accountId"] = "/cosmos/id", ["accountName"] = "cosmos-1", ["documentEndpoint"] = "https://cosmos-1.documents.azure.com:443/" },
     };
 
     private static readonly Dictionary<string, Dictionary<string, string>> DevOutputs = new()
     {
-        ["dev/dev/substrate/group"] = new() { ["resourceGroupName"] = "rg-dev-1", ["location"] = Region },
-        ["dev/dev/substrate/apps"] = new() { ["environmentId"] = "/apps/id", ["defaultDomain"] = "dev.example.io" },
-        ["dev/dev/substrate/database"] = new() { ["databaseId"] = "/db/id", ["databaseName"] = "db-dev" },
+        ["@dev/dev/substrate/group"] = new() { ["resourceGroupName"] = "rg-dev-1", ["location"] = Region },
+        ["@dev/dev/substrate/apps"] = new() { ["environmentId"] = "/apps/id", ["defaultDomain"] = "dev.example.io" },
+        ["@dev/dev/substrate/database"] = new() { ["databaseId"] = "/db/id", ["databaseName"] = "db-dev" },
     };
 
-    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Outputs(Dictionary<string, Dictionary<string, string>> outputs) =>
-        outputs.ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, string>)o.Value);
+    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>> Outputs(Dictionary<string, Dictionary<string, string>> outputs) =>
+        outputs.ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, ConfigEntry>)o.Value.ToDictionary(v => v.Key, v => new ConfigEntry(v.Value)));
 
     private static async Task<(ResolvedGraph Graph, DescriptorComposer Composer)> PrepareAsync(EnvironmentDefinition definition, EnvironmentDescriptor? baseDescriptor = null)
     {
@@ -75,8 +76,8 @@ public class SubstrateTests
     {
         var (graph, _) = await PrepareAsync(await DefinitionAsync());
 
-        Assert.Equal(["shared/shared/substrate/cosmos", "shared/shared/substrate/group", "shared/shared/substrate/workspace"], graph.Nodes.Select(n => n.Id).Order(StringComparer.Ordinal).ToList());
-        Assert.Equal("shared/shared/substrate/group", graph.Nodes[0].Id);
+        Assert.Equal(["@shared/shared/substrate/cosmos", "@shared/shared/substrate/group", "@shared/shared/substrate/workspace"], graph.Nodes.Select(n => n.Id).Order(StringComparer.Ordinal).ToList());
+        Assert.Equal("@shared/shared/substrate/group", graph.Nodes[0].Id);
         Assert.Equal(true, Scalar(graph, "cosmos", "enableFreeTier"));
         Assert.Equal(1000L, Scalar(graph, "cosmos", "totalThroughputLimit"));
         Assert.Equal(0.15, Scalar(graph, "workspace", "dailyQuotaGb"));
@@ -93,7 +94,7 @@ public class SubstrateTests
         Assert.Equal(400L, Scalar(graph, "database", "throughput"));
         var apps = graph.Nodes.Single(n => n.Name == "apps");
         Assert.Equal(new Resolved("law-1"), ((ConfigText)apps.Config["workspaceName"]).Result);
-        Assert.Equal(["dev/dev/substrate/group"], apps.DependsOn);
+        Assert.Equal(["@dev/dev/substrate/group"], apps.DependsOn);
     }
 
     [Fact]
@@ -152,6 +153,47 @@ public class SubstrateTests
 
         Assert.Null(composed.Yaml);
         Assert.Contains(composed.Errors, e => e.Location == "values.cosmos.endpoint" && e.Message.Contains("no usable deployed output"));
+    }
+
+    [Fact]
+    public async Task A_secret_or_null_output_is_never_used_and_never_appears_in_the_result()
+    {
+        var (_, composer) = await PrepareAsync(await DefinitionAsync());
+        var outputs = Outputs(SharedOutputs).ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, ConfigEntry>)new Dictionary<string, ConfigEntry>(o.Value));
+        var cosmos = new Dictionary<string, ConfigEntry>(outputs["@shared/shared/substrate/cosmos"]) { ["documentEndpoint"] = new("s3cr3t-endpoint", isSecret: true) };
+        outputs["@shared/shared/substrate/cosmos"] = cosmos;
+        var workspace = new Dictionary<string, ConfigEntry>(outputs["@shared/shared/substrate/workspace"]) { ["workspaceName"] = new(null) };
+        outputs["@shared/shared/substrate/workspace"] = workspace;
+
+        var composed = await composer.ComposeAsync(outputs);
+
+        Assert.Null(composed.Yaml);
+        Assert.Contains(composed.Errors, e => e.Location == "values.cosmos.endpoint" && e.Message.Contains("missing, null or secret"));
+        Assert.Contains(composed.Errors, e => e.Location == "values.logAnalytics.name" && e.Message.Contains("missing, null or secret"));
+        Assert.DoesNotContain("s3cr3t-endpoint", string.Join('\n', composed.Errors.Select(e => e.ToString())));
+    }
+
+    [Fact]
+    public async Task A_workload_named_like_the_environment_shares_no_id_stack_or_generated_name_with_its_substrate()
+    {
+        var files = new[]
+        {
+            "kind: Catalog\nversion: \"1\"\n",
+            "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n",
+            "kind: Naming\nrules:\n  rg:\n    pattern: \"rg-{env}-{hash}\"\n    maxLength: 90\n    allowed: \"[a-z0-9-]\"\n",
+            "kind: Mapping\nmatch: { type: thing }\nnodes:\n  group:\n    template: t/group\n    config:\n      groupName: ${name('rg')}\nexports:\n  out: ${group.groupName}\n",
+        }.Select((content, i) => new CatalogSource($"f{i}.yaml", content));
+        var catalog = (await CatalogParser.ParseAsync(files)).Catalog!;
+        var definition = new EnvironmentDefinition("dev", "team", [new JObject { ["type"] = "thing", ["id"] = "substrate" }], [], []);
+        var environment = definition.Over(Region, null);
+        var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: dev, team: crew }\nrequires:\n  - type: thing\n    id: substrate\n");
+
+        var substrate = Resolver.ResolveSubstrate(definition, "definition.yaml", catalog, environment).Nodes.Single();
+        var workloadNode = Resolver.Resolve(workload, "workload.yaml", catalog, environment).Nodes.Single();
+
+        Assert.Equal(("@dev/dev/substrate/group", "_dev.dev.substrate.group"), (substrate.Id, substrate.Stack));
+        Assert.Equal(("dev/dev/substrate/group", "dev.dev.substrate.group"), (workloadNode.Id, workloadNode.Stack));
+        Assert.NotEqual(((ConfigText)substrate.Config["groupName"]).Result, ((ConfigText)workloadNode.Config["groupName"]).Result);
     }
 
     [Fact]

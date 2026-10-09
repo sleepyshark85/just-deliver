@@ -221,9 +221,12 @@ The descriptor is produced from an **environment definition**
 ([`schemas/environment-definition.schema.json`](../../schemas/environment-definition.schema.json), `jd.resolver`):
 `kind: EnvironmentDefinition`, `name`, `tier`, `requires` (substrate types, with `id` and `class` as in a workload; effective ids
 unique), `values` (the descriptor's layout; each leaf an expression, normally `${resource.<id>.<export>}`) and `grantable`.
-`Resolver.ResolveSubstrate(definition, file, catalog, environment)` is the one entry point: the definition's name is the workload
-name in node ids and `name()`, its team is empty (`${workload.team}` is empty), and workload-scope policies add nothing since there
-is no runtime. The `environment` is `definition.Over(region, base)`: the definition's name and tier, the region given on the
+`Resolver.ResolveSubstrate(definition, file, catalog, environment)` is the one entry point. The owner is the definition, with
+the name `@<name>` (a workload name cannot start with `@`) in node ids, stacks and `name()` hashes: ids `@dev/dev/substrate/group`,
+stacks `_dev.dev.substrate.group`, so a workload named like the environment, with a requirement `substrate`, shares nothing with the
+substrate and a workload deploy never touches it ([ADR 0006](../decisions/0006-infra-deployed-with-app.md)). `ExpansionResult.Owner` records the owner kind
+(`Workload` or `Environment`); an environment owner has no runtime, so workload-scope policies add nothing. Its team is empty
+(`${workload.team}` is empty). The `environment` is `definition.Over(region, base)`: the definition's name and tier, the region given on the
 command line, and the **base descriptor's values and `grantable`**, so mappings read `${env.…}` of the layer below.
 
 `DescriptorComposer` turns the resolved graph and the node outputs into the descriptor text: each export is evaluated with its
