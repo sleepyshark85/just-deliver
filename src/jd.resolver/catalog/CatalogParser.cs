@@ -195,7 +195,6 @@ public static class CatalogParser
             var kind = criteria.GetValueOrDefault(MatchCriteria.KindKey);
             void Fail(string location, string message) => errors.Add(new LoadError(policy.Source, location, message));
 
-
             if (kind is not null && kind != MatchCriteria.RuntimeKind)
             {
                 Fail("match.kind", $"'{kind}' is not a policy scope; the only 'kind' a policy can match is '{MatchCriteria.RuntimeKind}'.");
