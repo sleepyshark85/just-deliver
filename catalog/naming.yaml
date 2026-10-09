@@ -1,0 +1,15 @@
+kind: Naming
+rules:
+  # Placeholders: {workload}, {id}, {env}, {hash}.
+  cosmos-database:
+    pattern: "{workload}-{id}-{env}"
+    maxLength: 255
+    allowed: "[a-z0-9-]"
+  cosmos-container:
+    pattern: "{id}"
+    maxLength: 255
+    allowed: "[a-z0-9-]"
+  appi:
+    pattern: "appi-{workload}-{env}-{hash}"
+    maxLength: 260
+    allowed: "[a-z0-9-]"

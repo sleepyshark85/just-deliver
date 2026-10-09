@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S02 — Catalog formats + loader
+- **Next slice:** S03 — Environment descriptor
 - **In progress:** —
 - **Blocked:** —
 
@@ -17,7 +17,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 |---|---|---|---|---|---|
 | S00 | Repo baseline + team setup | done | `main` | | Strict build, verify gate, hook, CI, agents, standards, sandbox |
 | S01 | Workload schema v2 | done | PR #2 | 1 + suggestions | APPROVE first round; non-blocking test/doc gaps fixed before merge. `id` pattern widened vs ADR 0011 (hyphens, ≤16) — recorded under C13/C14 |
-| S02 | Catalog formats + loader | todo | | | |
+| S02 | Catalog formats + loader | done | PR #3 | 2 | Round 1: 2 blocking (false cascading errors; resolver.md example contradicted seed). ~630 lines, over guideline, accepted. Follow-ups for S04/S05: duplicate-key error lacks line/key; test pinning 'no Catalog' suppression when a file is unreadable; YAML parsed 3x per file; JToken mutability (clone in S06) |
 | S03 | Environment descriptor | todo | | | |
 | S04 | Expression evaluator | todo | | | |
 | S05 | Matching + expansion | todo | | | |
@@ -55,7 +55,9 @@ Newest first. One entry per session: what moved, decisions taken, anything the n
   each merge. User asked to choose: GitHub Pro + fix billing, make public, or stay local-only.
   Workflow note: developer runs in an isolated worktree; reviewer verifies in a temporary detached
   worktree; the lead commits the status update on the slice branch before merging.
-  Trial so far (Sonnet dev / Opus review): S01 approved first round, good quality.
+  Trial so far (Sonnet dev / Opus review): S01 approved first round; S02 needed one fix round for two
+  real blocking issues the reviewer caught — the pairing is working as intended. Briefs should cap
+  slice size more tightly (S02 overran).
 - **2026-10-08** — Repo baseline and team setup (S00). Docs reorganised; sandbox subscription
   prepared and guardrails verified; strict build, `tools/verify.sh`, commit hook, CI; developer
   and reviewer agents; standards and review checklist; MVP sliced into S01–S18.

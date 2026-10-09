@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The catalog formats are part of the code, so their schemas ship inside the assembly. -->
+  <ItemGroup>
+    <EmbeddedResource Include="../../schemas/catalog/*.schema.json" LogicalName="schemas/catalog/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../jd.definitionvalidator/jd.definitionvalidator.csproj" />
+  </ItemGroup>
+
+</Project>

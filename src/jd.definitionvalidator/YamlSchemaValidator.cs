@@ -12,9 +12,18 @@ public class YamlSchemaValidator
     // Quoted scalars still stay strings.
     private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder()
         .WithAttemptingUnquotedStringTypeDeserialization()
+        // A repeated key would otherwise silently keep the last value.
+        .WithDuplicateKeyChecking()
         .Build();
 
     private readonly Func<JToken, IReadOnlyList<string>>? _rules;
+
+    /// <summary>Parses YAML into the JSON tree the schemas are validated against (same scalar typing as validation).</summary>
+    public static JToken ParseYaml(string yamlContent)
+    {
+        var yamlObject = YamlDeserializer.Deserialize(yamlContent);
+        return JToken.Parse(JsonConvert.SerializeObject(yamlObject));
+    }
 
     /// <param name="rules">
     /// Checks for what the schema cannot express, run only on a document that passed the schema
@@ -48,9 +57,7 @@ public class YamlSchemaValidator
         try
         {
             var schema = await JsonSchema.FromJsonAsync(schemaContent);
-            var yamlObject = YamlDeserializer.Deserialize(yamlContent);
-            var json = JsonConvert.SerializeObject(yamlObject);
-            var instance = JToken.Parse(json);
+            var instance = ParseYaml(yamlContent);
 
             var validationErrors = schema.Validate(instance);
 

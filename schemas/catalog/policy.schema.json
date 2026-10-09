@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/catalog/policy.schema.json",
+  "title": "just-deliver catalog policy",
+  "description": "IT Ops layer. 'set' overrides any other layer, 'default' only fills gaps, 'add' adds nodes. At least one of the three is required. Unique by name across the catalog.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "name", "reason", "match"],
+  "anyOf": [
+    { "required": ["set"] },
+    { "required": ["default"] },
+    { "required": ["add"] }
+  ],
+  "properties": {
+    "kind": { "enum": ["Policy"] },
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$" },
+    "reason": {
+      "description": "Why the policy exists; shown to teams asking why a setting has its value.",
+      "type": "string",
+      "minLength": 1
+    },
+    "match": {
+      "description": "Criteria the policy applies to: the mapping criteria plus 'template' (the template of a node).",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "class": { "type": "string" },
+        "tier": { "type": "string" },
+        "kind": { "type": "string" },
+        "runtime": { "type": "string" },
+        "template": { "type": "string" }
+      }
+    },
+    "set": {
+      "description": "Config path -> value. Wins over every other layer.",
+      "type": "object",
+      "minProperties": 1
+    },
+    "default": {
+      "description": "Config path -> value, applied only where nothing else set the field.",
+      "type": "object",
+      "minProperties": 1
+    },
+    "add": {
+      "description": "Nodes added to the graph, by name.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/definitions/node" }
+    }
+  },
+  "definitions": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template", "config"],
+      "properties": {
+        "template": { "description": "Template reference, relative to the catalog's templates directory.", "type": "string", "minLength": 1 },
+        "kind": { "description": "create (default) or grant. Grants are surfaced in the approval diff.", "enum": ["create", "grant"], "default": "create" },
+        "config": { "description": "Template configuration. Values are any YAML scalar or map, kept as written.", "type": "object" }
+      }
+    }
+  }
+}

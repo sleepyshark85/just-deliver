@@ -1,0 +1,4 @@
+kind: Roles
+roles:
+  cosmos-data-contributor: 00000000-0000-0000-0000-000000000002   # Cosmos DB Built-in Data Contributor
+  monitoring-metrics-publisher: 3913510d-42f4-4e42-8a64-420c390055eb # Monitoring Metrics Publisher

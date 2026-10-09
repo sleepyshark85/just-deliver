@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/catalog/roles.schema.json",
+  "title": "just-deliver catalog roles",
+  "description": "Role name -> role definition GUID, referenced from mappings as ${role.<name>}. Files of this kind are merged; a role may be named only once.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "roles"],
+  "properties": {
+    "kind": { "enum": ["Roles"] },
+    "roles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+      }
+    }
+  }
+}

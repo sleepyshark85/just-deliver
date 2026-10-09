@@ -7,6 +7,8 @@
     <Project Path="src/jd.core/jd.core.csproj" />
     <Project Path="src/jd.definitionvalidator/jd.definitionvalidator.csproj" />
     <Project Path="src/jd.definitionvalidator.tests/jd.definitionvalidator.tests.csproj" />
+    <Project Path="src/jd.resolver/jd.resolver.csproj" />
+    <Project Path="src/jd.resolver.tests/jd.resolver.tests.csproj" />
   </Folder>
   <Folder Name="/src/backend-providers/">
     <Project Path="src/backend-providers/jd.bp.pulumi/jd.bp.pulumi.csproj" />

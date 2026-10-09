@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/catalog/catalog.schema.json",
+  "title": "just-deliver catalog descriptor",
+  "description": "Identifies the catalog. The catalog is versioned as one unit and the version is recorded on every deployment. Exactly one file of this kind per catalog.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "version"],
+  "properties": {
+    "kind": { "enum": ["Catalog"] },
+    "version": {
+      "description": "Catalog version, recorded next to the definition SHA of every deployment.",
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}
