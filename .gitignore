@@ -148,3 +148,6 @@ yarn-error.log
 
 # Agent worktrees
 .claude/worktrees/
+
+# Third-party source material (internal to the company it came from) — never commit
+docs/real-world-use-case/

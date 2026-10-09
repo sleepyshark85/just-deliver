@@ -300,6 +300,62 @@ Residual open points: `timeout` ceiling in protected environments; verifying PIT
 
 ---
 
+## R. Raised by the Viedoc use case
+
+From [use-cases/viedoc-daybreak.md](use-cases/viedoc-daybreak.md) (2026-10-09). A real regulated suite
+releasing ~40 applications together through 9 environments and 4 regions.
+
+### C53. The unit of release: a pinned set of workloads `OPEN`
+- Viedoc releases one immutable **deployment set** (all pinned versions, one label) and installs the same set
+  everywhere. Our model deploys workloads one at a time (A1, A2).
+- Proposed: a **release set** of workload definitions, image digests and workload-level `dependsOn`, under
+  one label. The orchestrator deploys and switches in dependency order. Per-workload deploys become a set of
+  one, so nothing is lost.
+- Cross-workload *resource* references stay forbidden (D19). Ordering is not access.
+- Open: whether a set may mix teams' workloads freely; how a set relates to a team's own environment.
+
+### E52. Qualification evidence on every deploy `OPEN`
+- Regulated customers need IQ (what is installed equals what was pinned, observed rather than recorded), OQ
+  (each application meets one health contract) and smoke on every deploy; PQ and the regulatory suite on stage.
+- Proposed: IQ = a refresh shows no drift, plus running image digests equal to pinned. The OQ contract is
+  catalog data (the runtime mapping declares the probe). Results go on the release record with machine
+  identity. Relates to E28 (`verify`) and E36.
+
+### E53. Multi-region rollout `OPEN`
+- An environment can have several regional instances (Viedoc: 4 regions, training then production each, China
+  in a separate cloud). Rollout order and parallelism are data. Deploy-dark-then-switch already lets
+  "deploy Monday, switch Japan Thursday" happen.
+- Open: separate-cloud regions (credentials, agents, registry), and whether instances share one resolved graph.
+
+### F54. Approvals with signature meaning `OPEN`
+- Regulated approvals (test lead, PM, QA) must record who, when and what the signature means (21 CFR Part 11),
+  bound to the exact set approved. Extends F37.
+- Proposed: approval policy as data per environment tier (required roles, order). The approval record is
+  immutable on the release record. Identity comes from Entra. Promotion refuses without it.
+
+### F55. Release documents and evidence packages `OPEN`
+- Viedoc produces 30 documents per release (13 in a customer-facing VIRP), and many need a registry number.
+- Proposed: the release record is the evidence source. Document templates are versioned data like the catalog.
+  A generator renders final documents with machine identity, immutable and filed. A numbering registry is data.
+  Outside the core engine; consumes its records.
+
+### F56. Work-tracking integration `OPEN`
+- Release scope, PR gating on work-item completeness, and release notes all come from work items (Azure DevOps).
+- Proposed: a work-tracking adapter feeding release readiness and documents. The platform does not become a
+  work tracker.
+
+### B57. Environment admission rules `OPEN`
+- Which kinds of set an environment accepts (integration: latest main; regression and production: release sets
+  only; dev: main plus a branch under test). Integration auto-deploys on merge.
+- Proposed: admission policy as data, enforced by the orchestrator. Relates to B5 and B6.
+
+### H58. Validating the platform itself `OPEN`
+- In a GAMP 5 context the platform is a validated computerised system. Catalog CI, golden tests and fleet
+  dry-run double as its validation evidence; records and the audit trail must be immutable (F39).
+- Open: change control for catalog and policy changes (a policy edit is a change to a validated system).
+
+---
+
 ## Suggested order
 
 Blocking items first, then the differentiator, then scope control:

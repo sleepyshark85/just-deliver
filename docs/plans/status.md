@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S05 — Matching + expansion (not started; paused at the user's request after S04a)
+- **Next slice:** S05 — Matching + expansion
 - **In progress:** —
 - **Blocked:** —
 
@@ -29,12 +29,15 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S10 | Provider fixes | todo | | | |
 | S11 | Orchestrator (infra nodes) | todo | | | |
 | S12 | Substrate from data | todo | | | |
-| S13 | Second workload | todo | | | |
+| S13 | Release set (offline) | todo | | | |
+| S13b | Deploy a release set (infra) | todo | | | |
 | S14 | Sample app | todo | | | |
 | S15 | Runtime mapping + container-app | todo | | | |
 | S16 | Deploy steps | todo | | | |
-| S17 | jd deploy + record | todo | | | |
-| S18 | E2E run and docs | todo | | | |
+| S17 | Release record + qualification | todo | | | |
+| S18 | Second environment + approvals | todo | | | |
+| S19 | Promotion | todo | | | |
+| S20 | E2E run and docs | todo | | | |
 
 ## Carry-forward notes
 
@@ -43,6 +46,8 @@ Picked up by the slice named; remove once done.
 - **Loader (minor):** scanner failures report only "Exception during deserialization (line N)"; append the inner
   exception message.
 - **S06:** catalog records hold mutable `JToken`s — clone on consumption.
+- **S09:** the Viedoc revision moves the Cosmos database into the substrate (one 400 RU/s shared database per
+  environment); the `cosmos-sql` mapping creates a container and a container-scoped grant instead of a database.
 - **S09:** Azure role assignments need the full role-definition id; the `role-assignment` template must build
   it from the role GUID (`roles.yaml` holds GUIDs only).
 - **S11:** per-workload resources (database, App Insights) currently target `${env.resourceGroup}` (substrate);
@@ -62,6 +67,12 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-09 (Viedoc)** — Investigated a real regulated customer (Viedoc / Project Daybreak):
+  `docs/use-cases/viedoc-daybreak.md`. Raw sources stay local (gitignored). Added open questions C53, E52,
+  E53, F54, F55, F56, B57, H58. MVP revised: release sets (S13, S13b), qualification record (S17), second
+  environment + approvals (S18), promotion (S19), E2E is now S20. Decisions for the user: Bicep backend
+  (vs 0002/0003), App Service runtime (vs 0013), deployment set as the unit of release.
 
 - **2026-10-09 (later)** — S02, S03, S04 and S04a merged (PRs #3–#6). Each needed exactly one fix round for
   real issues (false cascading errors, an ignored schema keyword weakening `grantable`, uncommented `!`, a
