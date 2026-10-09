@@ -13,8 +13,8 @@ Internal Developer Platform for Azure. Start every session with [docs/README.md]
 | Role | Who | Model |
 |---|---|---|
 | Lead | the main session | Opus 5.5 |
-| Developer | `developer` agent ([.claude/agents/developer.md](.claude/agents/developer.md)) | Opus 5.5 |
-| Reviewer | `reviewer` agent ([.claude/agents/reviewer.md](.claude/agents/reviewer.md)) | Fable 5.1 — a different model from the developer, by design |
+| Developer | `developer` agent ([.claude/agents/developer.md](.claude/agents/developer.md)) | Sonnet 5.5 |
+| Reviewer | `reviewer` agent ([.claude/agents/reviewer.md](.claude/agents/reviewer.md)) | Opus 5.5 — a different model from the developer, by design |
 
 ## Lead workflow
 
@@ -33,6 +33,10 @@ Internal Developer Platform for Azure. Start every session with [docs/README.md]
 
 Work one slice at a time. Do not involve the user unless blocked: an ADR or architecture conflict,
 a needed decision, a guardrail or free-tier limit in the way, missing credentials, or 3 failed review rounds.
+
+**Model trial:** the developer/reviewer pairing (Sonnet/Opus) is on trial. If PR quality is poor — repeated
+blocking design findings, over-engineering, or slices needing 3 rounds — stop and ask the user to choose
+different models. Record each slice's review rounds in status.md so the trial can be judged.
 
 ## Non-negotiables
 

@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: Independent code reviewer for one slice branch. Reviews correctness AND design principles, simplicity, unnecessary code, hard-coding and free-tier safety against docs/engineering/review-checklist.md. Give it only the slice brief and the branch name — never the developer's reasoning.
-model: fable
+model: opus
 effort: high
 tools: Read, Grep, Glob, Bash
 ---

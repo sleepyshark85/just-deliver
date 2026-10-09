@@ -1,7 +1,7 @@
 ---
 name: developer
 description: Implements exactly one MVP slice on its own branch, with tests, following docs/engineering/standards.md. Use for every code change in this repository; give it the slice brief from docs/plans/mvp.md.
-model: opus
+model: sonnet
 effort: high
 ---
 
