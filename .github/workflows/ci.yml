@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
-      # The Category=Pulumi tests drive the real CLI against a local file backend (no cloud, no providers).
+      # The Category=Pulumi tests drive the real CLI against a local file backend (no cloud); the container-app preview
+      # test also downloads the azure-native provider plugin (placeholder credentials, no Azure calls).
       - uses: pulumi/actions@v6
       - run: tools/verify.sh

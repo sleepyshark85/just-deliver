@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S15 — runtime mapping + `container-app` template.
+- **Next slice:** S15b — runtime mapping and the `runtime` node (then S15c — variables and `runtime.*` policies).
 - **In progress:** —
 - **Blocked:** —
 
@@ -32,8 +32,10 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S12a | `database` type (user decision) | done | PR #23 | 1 | APPROVE first round, 0 production C# lines (catalog, schema, samples, goldens, docs). Default requirement id is now `database`, so container and stack names changed (`…-database-623014`) — harmless now (nothing live), but a type/engine change on a deployed workload recreates its container (F54). |
 | S13 | Release set (offline) | done | PR #18 | 2 | Round 1: 4 blocking — **release sources never committed** (old VS `.gitignore` rule `[Rr]elease/`; local gate passed because files existed on disk — caught by the reviewer's clean worktree); set fields could be tampered (now derived from verified definitions); BOM/invalid UTF-8; duplicated topological sort (shared now). |
 | S13b | Deploy a release set (infra) | done | PR #24 | 2 | `jd release deploy`: resolve + template-check every workload first, then deploy in set order, stop at the first failing workload. Round 1: 1 blocking (one-pass error reporting untested); lead also required a shared argument reader (size), deduped template errors, and an Azure run guard (`JD_AZURE_TESTS=1` + per-host `flock` in `verify.sh --azure`) after an agent's unfiltered `dotnet test` reached Azure and collided with the lead's gate. Azure gate green (CLI 83/83, 49 min, nothing left). |
-| S14 | Sample app | done | PR #16 | 2 | Done ahead of S11–S13 (independent). Round 1: 2 blocking (`/health` false-healthy on a missing container; unsynchronised shared Cosmos client → leaks/flapping). Image `ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385…` — **package must be made public by the user**. |
-| S15 | Runtime mapping + container-app | todo | | | |
+| S14 | Sample app | done | PR #16 | 2 | Done ahead of S11–S13 (independent). Round 1: 2 blocking (`/health` false-healthy on a missing container; unsynchronised shared Cosmos client → leaks/flapping). Image `ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385…` — public (anonymous pull verified 2026-10-09). |
+| S15a | `container-app` template | done | PR #25 | 1 | Split from S15. Developer stopped at the risk as briefed: Pulumi YAML cannot turn a map into a list, so the template takes `variables` as `List<Map<String>>` (`{name, value}`) and the engine converts (S15c). APPROVE first round. Azure gate green (CLI 84/84, real Container App: Multiple, SystemAssigned, min 0). |
+| S15b | Runtime mapping + `runtime` node | todo | | | Runtime mapping (`kind: runtime`), `workload.image`/`workload.port`, probe as data, phase `runtime` (not deployed until S16). |
+| S15c | Variables + `runtime.*` policies | todo | | | `${resource.*}` in workload variables, map→list for the template, enforce-monitoring sets the App Insights connection string. |
 | S16 | Deploy steps | todo | | | |
 | S17 | Release record + qualification | todo | | | |
 | S18 | Second environment + approvals | todo | | | |
@@ -48,8 +50,14 @@ Picked up by the slice named; remove once done.
   exception message.
 - **S10/S12:** template `fn::invoke`s (e.g. `getSharedKeys`) run during preview, so previewing a brand-new
   environment fails until its workspace exists — preview substrate in dependency order, or tolerate it.
-- **S15:** the runtime mapping sends `runtime.appInsightsConnectionString` to the app's `APPLICATIONINSIGHTS_CONNECTION_STRING`
+- **S15c:** the runtime mapping sends `runtime.appInsightsConnectionString` to the app's `APPLICATIONINSIGHTS_CONNECTION_STRING`
   (Azure Monitor SDK's own name, not in the workload's variables). The app assumes partition key `/id`.
+- **S15c/S16 (S15a review):** a secret value in `variables` stays encrypted in Pulumi state but is plain text in the
+  Container App's `env` (readable with Reader) — secret values should become Container App `secrets` + `secretRef`
+  (ADR 0013 runtime port). Add an offline check that a secret `variables` entry is masked in preview.
+- **Tests (S15a review, minor):** `ContainerAppAzureTests` duplicates ~60 lines of `DeployAzureTests` setup — share a
+  helper when next touching them; CI downloads azure-native on every run (consider caching `~/.pulumi/plugins`);
+  seed templates do not pin the azure-native version.
 - **Briefs:** cap production lines (~250) separately from tests; a cohesive slice's tests should not be trimmed to fit.
 - **S15:** add a test workload variable reading `${resource.database.engine}` to show the engine export reaching the app (S12a review suggestion).
 - **Azure test (S13b suggestion):** the per-container throughput check asserts only a non-zero `az` exit; also assert Azure's
@@ -79,6 +87,8 @@ Newest first. One entry per session: what moved, decisions taken, anything the n
   S13b merged (PR #24, 2 rounds). Incident: with `ARM_*` in the session, an agent's plain `dotnet test` ran the Azure
   tests, created the free-tier Cosmos account and died mid-teardown; the lead's gate then collided. Cleaned up; guard
   added (Azure tests only via `tools/verify.sh --azure`, one run per host). Agents must not run Azure tests.
+  S15 split into S15a/b/c; S15a merged (PR #25, 1 round). A developer experiment with the Pulumi CLI created an
+  ephemeral Pulumi Cloud agent account (unclaimed, expires ~3 days); our state stays on the file backend.
 
 - **2026-10-09 (before restart)** — User decisions: workloads ask for `database`, the platform team's catalog mappings
   decide the engine (Cosmos today) → S12a; Kubernetes (cloud or on-prem) is possible later via a runtime adapter +
