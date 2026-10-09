@@ -13,4 +13,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+      # The Category=Pulumi tests drive the real CLI against a local file backend (no cloud, no providers).
+      - uses: pulumi/actions@v6
       - run: tools/verify.sh

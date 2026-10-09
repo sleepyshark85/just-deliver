@@ -135,8 +135,8 @@ inter-resource dependencies such as a read replica (C52 graph); naming (C14); ru
 - **Project** (`Pulumi.yaml`) = resource definitions. **Stack** (`Pulumi.<stack>.yaml` + state) = one
   parameterised, independently deployable instance. Stack size is arbitrary; small per-resource-type stacks
   trade orchestration complexity for failure isolation and independent lifecycles.
-- Convention: **one stack per workload per resource-type project** (stack name = workload name), not per
-  environment.
+- Convention: **one stack per graph node**, named from the node id ([resolver.md](resolver.md#output-resolvedgraph));
+  the project is the template. Stacks of one template are independent.
 - `LocalWorkspace` shells out to a locally installed `pulumi` CLI — used here, no Pulumi Cloud account.
   `RemoteWorkspace` is Pulumi Deployments (managed remote execution from git) — not used.
   `InlineProgramArgs` = program as a C# `PulumiFn`; `LocalProgramArgs` = `Pulumi.yaml` on disk (`WorkDir`) — used.
@@ -152,14 +152,34 @@ layer — at `UpAsync()` the file already holds what the code wrote. Config is a
 hand-authors it. YAML runtime gotcha: numeric-looking strings such as `"1.2"` are coerced to numbers by
 `${}` substitution (so a version such as `1.2` is better written as a literal in the template).
 
+### Stack naming, outputs and work directories
+
+- `DeploymentPackage.Name` is the template (Pulumi project); `DeploymentPackage.StackName` is the graph's stack.
+- Pulumi limits stack names to 100 characters of `[A-Za-z0-9_.-]`. The provider passes names up to 100 unchanged;
+  a longer name becomes its first 83 characters + `-` + the first 16 hex characters of the SHA-256 of the full
+  name (`StackNames`): deterministic, 100 characters, distinct for different graph stacks. Callers always use the
+  graph name, also with `GetOutputsAsync`. Names that Pulumi or the file system cannot take are rejected.
+- `GetOutputsAsync(project, stackName)` lists the project's stacks and reads the matching stack's outputs from
+  state: no refresh, no preview, no provider plugin. It returns null when the stack does not exist. Note that
+  `PreviewAsync` creates an empty stack, so after a preview of a never-deployed node the result is an empty
+  output set, not null. The orchestrator uses it to fill references to already-deployed nodes during preview;
+  there are no fake or placeholder values in the provider.
+- Every operation runs in `<ScratchDirectory>/just-deliver/<pulumi stack name>`, created for the operation and
+  removed afterwards, on success, failure and cancellation. Everything durable is in the backend, and config is
+  rewritten from code on every run, so nothing is kept between operations. Two concurrent operations on one stack
+  would share the directory, but Pulumi's stack lock already forbids them.
+- Secret config values are written with `--secret` semantics (`ConfigEntry.IsSecret`), come back as secret
+  outputs (`IsSecret`), and do not appear in clear text in state.
+- `CancellationToken` flows from every public provider method to the Automation API calls.
+
 ### Chaining stacks
 
 Provision stack A → read `UpResult.Outputs` → `SetConfigAsync` into stack B → provision B. Alternative:
 `StackReference` reads another stack's outputs live from inside a program via `<org>/<project>/<stack>`
 (`organization` is fixed on the local backend), read-only, no staleness. **Chosen: config-passing by the
 orchestrator**, because one orchestrator already sequences everything and holds the values;
-`StackReference` pays off only when stacks are provisioned independently. In preview mode there are no real
-outputs, so chained values fall back to placeholders.
+`StackReference` pays off only when stacks are provisioned independently. In preview, references to already-deployed
+nodes are filled from `GetOutputsAsync`; references to nodes not yet deployed stay pending (never fake values).
 
 ### Backend and state
 
@@ -195,6 +215,6 @@ runner).
 | Design | Code today (`src/backend-providers/jd.bp.pulumi`, `catalog/templates`) |
 |---|---|
 | Templates at `templates/<provider>/<resource-type>/Pulumi.yaml` | `catalog/templates/<provider>/<resource-type>/Pulumi.yaml`; no per-template default config (the orchestrator sets every input) |
-| Stack name = workload name | Stack name = `DeploymentPackage.Name` (e.g. `resource-group`, `appinsights-metrics-publisher`) — collides across workloads |
-| Fresh temp dir, cleaned up | `<ScratchDirectory>/just-deliver/<name>/<version>`, not cleaned up |
+| One stack per graph node | `DeploymentPackage.StackName` (shortened above 100 characters); `Name` is the template |
+| Fresh temp dir, cleaned up | `<ScratchDirectory>/just-deliver/<stack>`, removed after every operation |
 | — | Every `DeployAsync`/`PreviewAsync` runs `RefreshAsync` first; per-property changes captured from engine events into `DeploymentResult.Changes` |
