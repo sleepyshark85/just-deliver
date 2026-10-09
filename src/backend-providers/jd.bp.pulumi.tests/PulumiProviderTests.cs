@@ -71,9 +71,7 @@ public sealed class PulumiProviderTests : IDisposable
 
     private static DeploymentPackage Package(string greeting = "hello", string stack = Stack) => new()
     {
-        Name = "echo",
         StackName = stack,
-        Version = "1",
         DeploymentContent = Template,
         DeploymentParameters = new()
         {
@@ -89,21 +87,23 @@ public sealed class PulumiProviderTests : IDisposable
     {
         var ct = CancellationToken.None;
 
-        Assert.Null(await _provider.GetOutputsAsync("echo", Stack, ct));
+        Assert.Null(await _provider.GetOutputsAsync(Package(), ct));
 
         var preview = await _provider.PreviewAsync(Package(), ct);
         Assert.Empty(preview.Outputs);
         Assert.True(preview.Summary.GetValueOrDefault("Create") > 0);
+        Assert.Null(await _provider.GetOutputsAsync(Package(), ct)); // the preview created an empty stack: still not deployed
 
         var deployed = await _provider.DeployAsync(Package(), ct);
         Assert.Equal("hello", deployed.Outputs["greeting"].Value);
         Assert.False(deployed.Outputs["greeting"].IsSecret);
 
-        var read = await _provider.GetOutputsAsync("echo", Stack, ct);
+        var read = await _provider.GetOutputsAsync(Package(), ct);
         Assert.NotNull(read);
         Assert.Equal("hello", read["greeting"].Value);
 
         var again = await _provider.DeployAsync(Package(), ct);
+        Assert.Empty(again.Changes);
         Assert.DoesNotContain(again.Summary, kvp => kvp.Key != "Same" && kvp.Value > 0);
         Assert.Equal("hello", again.Outputs["greeting"].Value);
     }
@@ -114,17 +114,19 @@ public sealed class PulumiProviderTests : IDisposable
         var ct = CancellationToken.None;
 
         var deployed = await _provider.DeployAsync(Package(), ct);
-        var read = await _provider.GetOutputsAsync("echo", Stack, ct);
+        var read = await _provider.GetOutputsAsync(Package(), ct);
 
         Assert.True(deployed.Outputs["password"].IsSecret);
         Assert.Equal("s3cret-value", deployed.Outputs["password"].Value);
         Assert.NotNull(read);
         Assert.True(read["password"].IsSecret);
         Assert.Equal("s3cret-value", read["password"].Value);
-        foreach (var file in Directory.EnumerateFiles(Path.Combine(_root, "state"), "*", SearchOption.AllDirectories))
-        {
-            Assert.DoesNotContain("s3cret-value", await File.ReadAllTextAsync(file, ct));
-        }
+        // Positive control: the scan reads real state, in which the non-secret value is visible in clear.
+        var state = Directory.EnumerateFiles(Path.Combine(_root, "state"), "*", SearchOption.AllDirectories).ToList();
+        Assert.NotEmpty(state);
+        var contents = await Task.WhenAll(state.Select(file => File.ReadAllTextAsync(file, ct)));
+        Assert.Contains(contents, text => text.Contains("hello"));
+        Assert.DoesNotContain(contents, text => text.Contains("s3cret-value"));
     }
 
     [Fact]
@@ -135,8 +137,8 @@ public sealed class PulumiProviderTests : IDisposable
         await _provider.DeployAsync(Package("one", "shop.dev.a.echo"), ct);
         await _provider.DeployAsync(Package("two", "shop.dev.b.echo"), ct);
 
-        Assert.Equal("one", (await _provider.GetOutputsAsync("echo", "shop.dev.a.echo", ct))!["greeting"].Value);
-        Assert.Equal("two", (await _provider.GetOutputsAsync("echo", "shop.dev.b.echo", ct))!["greeting"].Value);
+        Assert.Equal("one", (await _provider.GetOutputsAsync(Package(stack: "shop.dev.a.echo"), ct))!["greeting"].Value);
+        Assert.Equal("two", (await _provider.GetOutputsAsync(Package(stack: "shop.dev.b.echo"), ct))!["greeting"].Value);
     }
 
     [Fact]
@@ -147,7 +149,7 @@ public sealed class PulumiProviderTests : IDisposable
 
         await _provider.DeployAsync(Package(stack: longStack), ct);
 
-        Assert.Equal("hello", (await _provider.GetOutputsAsync("echo", longStack, ct))!["greeting"].Value);
+        Assert.Equal("hello", (await _provider.GetOutputsAsync(Package(stack: longStack), ct))!["greeting"].Value);
     }
 
     [Fact]
@@ -163,7 +165,7 @@ public sealed class PulumiProviderTests : IDisposable
         await Assert.ThrowsAnyAsync<Exception>(() => _provider.PreviewAsync(broken, ct));
         Assert.False(Directory.Exists(ScratchStackDirectory(Stack)));
 
-        await _provider.GetOutputsAsync("echo", Stack, ct);
+        await _provider.GetOutputsAsync(Package(), ct);
         Assert.False(Directory.Exists(ScratchStackDirectory(Stack)));
     }
 
@@ -175,8 +177,16 @@ public sealed class PulumiProviderTests : IDisposable
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _provider.DeployAsync(Package(), cts.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _provider.PreviewAsync(Package(), cts.Token));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _provider.GetOutputsAsync("echo", Stack, cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _provider.GetOutputsAsync(Package(), cts.Token));
 
         Assert.False(Directory.Exists(ScratchStackDirectory(Stack)));
+    }
+
+    [Fact]
+    public async Task An_invalid_stack_name_fails_the_returned_task()
+    {
+        var task = _provider.DeployAsync(Package(stack: "../escape"), CancellationToken.None);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => task);
     }
 }

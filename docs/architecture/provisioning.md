@@ -154,20 +154,22 @@ hand-authors it. YAML runtime gotcha: numeric-looking strings such as `"1.2"` ar
 
 ### Stack naming, outputs and work directories
 
-- `DeploymentPackage.Name` is the template (Pulumi project); `DeploymentPackage.StackName` is the graph's stack.
+- `DeploymentPackage.DeploymentContent` is the template (its `name:` is the Pulumi project); `DeploymentPackage.StackName` is the graph's stack.
 - Pulumi limits stack names to 100 characters of `[A-Za-z0-9_.-]`. The provider passes names up to 100 unchanged;
   a longer name becomes its first 83 characters + `-` + the first 16 hex characters of the SHA-256 of the full
   name (`StackNames`): deterministic, 100 characters, distinct for different graph stacks. Callers always use the
   graph name, also with `GetOutputsAsync`. Names that Pulumi or the file system cannot take are rejected.
-- `GetOutputsAsync(project, stackName)` lists the project's stacks and reads the matching stack's outputs from
-  state: no refresh, no preview, no provider plugin. It returns null when the stack does not exist. Note that
-  `PreviewAsync` creates an empty stack, so after a preview of a never-deployed node the result is an empty
-  output set, not null. The orchestrator uses it to fill references to already-deployed nodes during preview;
-  there are no fake or placeholder values in the provider.
+- `GetOutputsAsync(package)` takes the same package as `DeployAsync` (so the project always matches), lists the
+  project's stacks and reads the matching stack's outputs from state: no refresh, no preview, no provider plugin.
+  It returns null when the stack is "not deployed": it does not exist, or it has no resources recorded
+  (`PreviewAsync` creates an empty stack, so a preview alone does not make a node deployed). The orchestrator uses
+  it to fill references to already-deployed nodes during preview; there are no fake or placeholder values in the
+  provider.
+- Refresh runs before every deploy and preview but its events are not recorded: `DeploymentResult.Changes` holds only the deploy or preview changes, so a no-op re-deploy has none.
 - Every operation runs in `<ScratchDirectory>/just-deliver/<pulumi stack name>`, created for the operation and
   removed afterwards, on success, failure and cancellation. Everything durable is in the backend, and config is
   rewritten from code on every run, so nothing is kept between operations. Two concurrent operations on one stack
-  would share the directory, but Pulumi's stack lock already forbids them.
+  would share the directory, so callers must not run two operations on one stack at once (the orchestrator is sequential).
 - Secret config values are written with `--secret` semantics (`ConfigEntry.IsSecret`), come back as secret
   outputs (`IsSecret`), and do not appear in clear text in state.
 - `CancellationToken` flows from every public provider method to the Automation API calls.
@@ -215,6 +217,6 @@ runner).
 | Design | Code today (`src/backend-providers/jd.bp.pulumi`, `catalog/templates`) |
 |---|---|
 | Templates at `templates/<provider>/<resource-type>/Pulumi.yaml` | `catalog/templates/<provider>/<resource-type>/Pulumi.yaml`; no per-template default config (the orchestrator sets every input) |
-| One stack per graph node | `DeploymentPackage.StackName` (shortened above 100 characters); `Name` is the template |
+| One stack per graph node | `DeploymentPackage.StackName` (shortened above 100 characters); the project is the template's `name:` |
 | Fresh temp dir, cleaned up | `<ScratchDirectory>/just-deliver/<stack>`, removed after every operation |
-| — | Every `DeployAsync`/`PreviewAsync` runs `RefreshAsync` first; per-property changes captured from engine events into `DeploymentResult.Changes` |
+| — | Every `DeployAsync`/`PreviewAsync` runs `RefreshAsync` first; per-property changes captured from the deploy or preview engine events (not the refresh) into `DeploymentResult.Changes` |

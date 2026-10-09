@@ -66,13 +66,13 @@ internal class PulumiBackendProvider : IBackEndProvider
             };
         });
 
-    public Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(string project, string stackName, CancellationToken cancellationToken) =>
-        InWorkDirectoryAsync(stackName, async workDir =>
+    public Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(DeploymentPackage package, CancellationToken cancellationToken) =>
+        InWorkDirectoryAsync(package.StackName, async workDir =>
         {
-            // The backend scopes stacks by project, so the workspace needs a project file; it holds no resources.
-            await File.WriteAllTextAsync(Path.Combine(workDir, "Pulumi.yaml"), $"name: {project}\nruntime: yaml\n", cancellationToken);
+            // The backend scopes stacks by project; the template content gives the same project as DeployAsync.
+            await File.WriteAllTextAsync(Path.Combine(workDir, "Pulumi.yaml"), package.DeploymentContent, cancellationToken);
 
-            var pulumiStack = StackNames.ToPulumi(stackName);
+            var pulumiStack = StackNames.ToPulumi(package.StackName);
             var workspace = await LocalWorkspace.CreateAsync(new LocalWorkspaceOptions
             {
                 WorkDir = workDir,
@@ -80,7 +80,8 @@ internal class PulumiBackendProvider : IBackEndProvider
             }, cancellationToken);
 
             var stacks = await workspace.ListStacksAsync(cancellationToken);
-            if (!stacks.Any(s => s.Name == pulumiStack))
+            // A preview creates an empty stack; with no resources recorded it has never been deployed.
+            if (!stacks.Any(s => s.Name == pulumiStack && s.ResourceCount > 0))
             {
                 return null;
             }
@@ -89,8 +90,9 @@ internal class PulumiBackendProvider : IBackEndProvider
             return ToEntries(await stack.GetOutputsAsync(cancellationToken));
         });
 
-    private Task<T> InWorkDirectoryAsync<T>(string graphStack, Func<string, Task<T>> operation) =>
-        WorkDirectory.RunAsync(_optionsMonitor.CurrentValue.ScratchDirectory, StackNames.ToPulumi(graphStack), operation);
+    // Async so an invalid stack name fails the returned task instead of throwing at the call.
+    private async Task<T> InWorkDirectoryAsync<T>(string graphStack, Func<string, Task<T>> operation) =>
+        await WorkDirectory.RunAsync(_optionsMonitor.CurrentValue.ScratchDirectory, StackNames.ToPulumi(graphStack), operation);
 
     private static Dictionary<string, ConfigEntry> ToEntries(IEnumerable<KeyValuePair<string, OutputValue>> outputs) =>
         outputs.ToDictionary(kvp => kvp.Key, kvp => new ConfigEntry(FormatOutputValue(kvp.Value.Value), kvp.Value.IsSecret));
@@ -101,11 +103,6 @@ internal class PulumiBackendProvider : IBackEndProvider
         var stackName = StackNames.ToPulumi(package.StackName);
 
         await File.WriteAllTextAsync(Path.Combine(workDir, "Pulumi.yaml"), package.DeploymentContent, cancellationToken);
-
-        if (!string.IsNullOrEmpty(package.DeploymentDefaultParametersContent))
-        {
-            await File.WriteAllTextAsync(Path.Combine(workDir, $"Pulumi.{stackName}.yaml"), package.DeploymentDefaultParametersContent, cancellationToken);
-        }
 
         var stack = await LocalWorkspace.CreateOrSelectStackAsync(new LocalProgramArgs(stackName, workDir)
         {
@@ -129,9 +126,9 @@ internal class PulumiBackendProvider : IBackEndProvider
             }
         }
 
+        // Refresh events are not recorded as changes: they would report an operation on every resource.
         await stack.RefreshAsync(new RefreshOptions
         {
-            OnEvent = OnEngineEvent,
             OnStandardError = error => _logger.LogError(error),
         }, cancellationToken);
 
