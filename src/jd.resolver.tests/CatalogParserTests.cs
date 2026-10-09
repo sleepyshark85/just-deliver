@@ -208,7 +208,7 @@ public class CatalogParserTests
     [InlineData("a@b")]
     public async Task Node_names_in_mappings_and_policy_adds_must_be_lowercase_kebab(string name)
     {
-        var mapping = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ kind: runtime }}\nnodes:\n  \"{name}\":\n    template: t/x\n    config: {{}}\nexports: {{}}\n"));
+        var mapping = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ kind: runtime }}\nnodes:\n  runtime:\n    template: t/x\n    config: {{}}\n  \"{name}\":\n    template: t/x\n    config: {{}}\n"));
         var policy = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {{ kind: runtime }}\nadd:\n  \"{name}\":\n    template: t/x\n    config: {{}}\n"));
 
         var mappingError = Assert.Single(mapping.Errors);
@@ -221,7 +221,7 @@ public class CatalogParserTests
     [Fact]
     public async Task Kebab_node_names_load()
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime }\nnodes:\n  a:\n    template: t/x\n    config: {}\n  app-insights-2:\n    template: t/x\n    config: {}\nexports: {}\n"));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime }\nnodes:\n  runtime:\n    template: t/x\n    config: {}\n  app-insights-2:\n    template: t/x\n    config: {}\n"));
 
         Assert.Empty(result.Errors);
     }
@@ -231,11 +231,63 @@ public class CatalogParserTests
     {
         const string body = "nodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: x\n";
         var neither = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ class: standard }}\n{body}"));
-        var runtime = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ kind: runtime, runtime: container-app }}\n{body}"));
+        var runtime = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime, runtime: container-app }\nnodes:\n  runtime:\n    template: t/db\n    config: {}\n"));
 
         var error = Assert.Single(neither.Errors);
         Assert.Equal(("m.yaml", "match"), (error.File, error.Location));
         Assert.Empty(runtime.Errors);
+    }
+
+    private const string RuntimeNode = "nodes:\n  runtime:\n    template: t/rt\n    config: {}\n";
+
+    [Fact]
+    public async Task A_runtime_mapping_loads_with_its_probe_and_no_exports()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime }\nprobe: { path: /health, expectedStatus: 200 }\n" + RuntimeNode));
+
+        Assert.Empty(result.Errors);
+        var mapping = Assert.Single(result.Catalog!.Mappings);
+        Assert.True(mapping.IsRuntime);
+        Assert.Equal(new Probe("/health", 200), mapping.Probe);
+    }
+
+    [Theory]
+    [InlineData("kind: Mapping\nmatch: { kind: runtime }\nnodes:\n  other:\n    template: t/rt\n    config: {}\n", "nodes", "must declare a node named 'runtime'")]
+    [InlineData("kind: Mapping\nmatch: { kind: runtime }\n" + RuntimeNode + "exports:\n  endpoint: x\n", "exports", "has no exports")]
+    [InlineData("kind: Mapping\nmatch: { type: alpha-db }\nnodes:\n  runtime:\n    template: t/rt\n    config: {}\nexports:\n  endpoint: x\n", "nodes.runtime", "declared only by a runtime mapping")]
+    [InlineData("kind: Mapping\nmatch: { type: alpha-db }\nprobe: { path: /health, expectedStatus: 200 }\nnodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: x\n", "probe", "only a runtime mapping has a probe")]
+    public async Task The_runtime_mapping_rules_are_enforced(string mapping, string location, string message)
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("types/a.yaml", TypeFile("alpha-db")), ("m.yaml", mapping));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("m.yaml", location), (error.File, error.Location));
+        Assert.Contains(message, error.Message);
+    }
+
+    [Theory]
+    [InlineData("{ path: health, expectedStatus: 200 }", "probe.path")]
+    [InlineData("{ path: /health, expectedStatus: 99 }", "probe.expectedStatus")]
+    [InlineData("{ path: /health, expectedStatus: 600 }", "probe.expectedStatus")]
+    [InlineData("{ path: /health, expectedStatus: ok }", "probe.expectedStatus")]
+    [InlineData("{ path: /health }", "probe.expectedStatus")]
+    [InlineData("{ expectedStatus: 200 }", "probe.path")]
+    [InlineData("{ path: /health, expectedStatus: 200, method: POST }", "probe.method")]
+    public async Task A_bad_probe_is_an_error(string probe, string location)
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ kind: runtime }}\nprobe: {probe}\n" + RuntimeNode));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("m.yaml", location), (error.File, error.Location));
+    }
+
+    [Fact]
+    public async Task A_policy_cannot_add_a_node_named_runtime()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { kind: runtime }\nadd:\n  runtime:\n    template: t/x\n    config: {}\n"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("p.yaml", "add.runtime"), (error.File, error.Location));
     }
 
     [Fact]

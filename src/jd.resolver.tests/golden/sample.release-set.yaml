@@ -35,7 +35,7 @@ workloads:
     # attached by the enforce-monitoring global policy, not requested by the team.
     requires:
       - type: database
-- definitionSha256: 4d41993de881a5ef467a66d1182f2578782f5667ec1d5f77cfc6ef42d6c6de96
+- definitionSha256: 0a9e95ba24ae103113785cd3df2d2c442c983c1fa29b445f85922fad9966102f
   dependsOn: []
   definition: |
     apiVersion: just-deliver/v1
@@ -54,6 +54,9 @@ workloads:
         COSMOS_ENDPOINT: ${resource.database.endpoint}
         COSMOS_DATABASE: ${resource.database.database}
         COSMOS_CONTAINER: ${resource.database.container}
+      ports:
+        - port: 8080
+          protocol: TCP
 
     requires:
       - type: database

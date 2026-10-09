@@ -1,0 +1,22 @@
+kind: Mapping
+match: { kind: runtime }
+# Every workload runs as a Container App on Consumption in the environment's Container Apps environment, sized for the free
+# tier (standards section 6). The image and first port come from the workload's definition. This is the runtime node (phase
+# runtime): the infrastructure walk does not deploy it, the release flow does.
+probe: { path: /health, expectedStatus: 200 }
+nodes:
+  runtime:
+    template: azure/container-app
+    config:
+      resourceGroupName: ${env.resourceGroup}
+      location: ${env.region}
+      containerAppsEnvironmentId: ${env.containerAppsEnvironment.id}
+      containerAppName: ${name('ca')}
+      image: ${workload.image}
+      targetPort: ${workload.port}
+      externalIngress: true
+      cpu: 0.25
+      memory: 0.5Gi
+      minReplicas: 0
+      maxReplicas: 1
+      variables: []                               # the workload's variables arrive with S15c

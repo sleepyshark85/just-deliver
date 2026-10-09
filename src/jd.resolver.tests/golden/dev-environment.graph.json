@@ -13,7 +13,6 @@
       "phase": "Infrastructure",
       "hash": "283e2d4ecdf7cc70bc0fdd1af14e8522a7a92d0d57d961ac79595ea23a3dd90e",
       "dependsOn": [],
-      "dependsOnRuntime": false,
       "config": {
         "accountName": "cosmos-shared",
         "databaseName": "db-dev",
@@ -37,7 +36,6 @@
       "phase": "Infrastructure",
       "hash": "f81edaab3db2ec9f056984c02350c6b40a37a92956991710d6c23ddc16dac5d2",
       "dependsOn": [],
-      "dependsOnRuntime": false,
       "config": {
         "location": "region-1",
         "resourceGroupName": "rg-dev-ef5892",
@@ -65,7 +63,6 @@
       "dependsOn": [
         "@dev/dev/substrate/group"
       ],
-      "dependsOnRuntime": false,
       "config": {
         "environmentName": "cae-dev-7dae27",
         "location": "${group.location}",

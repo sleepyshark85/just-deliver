@@ -10,7 +10,7 @@ namespace jd.orchestrator;
 /// <summary>
 /// Walks a <see cref="ResolvedGraph"/> in graph order and provisions its infrastructure-phase nodes through the backend,
 /// one at a time. Each node's pending config is evaluated again with the outputs of the nodes deployed before it, so a
-/// value is never guessed. Nodes that depend on the runtime are not touched. Rules: docs/architecture/provisioning.md.
+/// value is never guessed. The runtime node and the nodes that depend on it are not touched. Rules: docs/architecture/provisioning.md.
 /// </summary>
 public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templates, Catalog catalog, EnvironmentDescriptor environment)
 {
@@ -82,9 +82,10 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
 
         private async Task<NodeReport> RunNodeAsync(GraphNode node, CancellationToken cancellationToken)
         {
-            if (node.Phase == Phase.AfterRuntime)
+            if (node.Phase != Phase.Infrastructure)
             {
-                return Report(node, NodeOutcome.WaitingForRuntime, "depends on the runtime, which is deployed in a later step.");
+                var message = node.Phase == Phase.Runtime ? "the runtime is deployed in a later step." : "depends on the runtime, which is deployed in a later step.";
+                return Report(node, NodeOutcome.WaitingForRuntime, message);
             }
 
             try

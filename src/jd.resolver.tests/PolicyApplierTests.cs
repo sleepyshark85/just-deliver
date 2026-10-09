@@ -31,7 +31,7 @@ public class PolicyApplierTests
 
     private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string tier = "team", bool expectExpansionErrors = false)
     {
-        var files = BaseFiles.Concat(policies).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
+        var files = BaseFiles.Concat(policies).Append(TestCatalog.RuntimeMapping).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
@@ -184,6 +184,35 @@ public class PolicyApplierTests
     private const string Monitoring =
         "add:\n  appi:\n    template: t/appi\n    config: { name: \"${name('thing')}\", host: '${env.host}' }\n  appi-access:\n    kind: grant\n    template: t/role\n    config: { scope: '${appi.id}', who: '${runtime.principalId}' }\n"
         + "set: { runtime.connection: '${appi.cs}' }\ndefault: { runtime.other: x }\n";
+
+    [Fact]
+    public async Task The_runtime_nodes_come_from_the_runtime_mapping_with_its_probe_and_get_node_scope_policies()
+    {
+        var result = await ApplyAsync([Policy("size", "{ template: t/runtime }", "set: { k: 2 }\n")]);
+
+        var runtime = Assert.Single(result.RuntimeNodes);
+        Assert.Equal(("runtime", new Probe("/health", 200)), (runtime.Name, runtime.Probe));
+        Assert.Equal(2, Number(runtime.Config["k"]));
+        Assert.Equal(new Provenance("f5.yaml", "size", Layer.PolicySet), runtime.Provenance["k"]);
+        Assert.Empty(result.WorkloadNodes);
+    }
+
+    [Fact]
+    public async Task A_policy_cannot_add_a_node_the_runtime_mapping_already_declares()
+    {
+        var runtimeMapping = "kind: Mapping\nmatch: { kind: runtime }\nnodes:\n  runtime:\n    template: t/rt\n    config: {}\n  sidecar:\n    template: t/s\n    config: {}\n";
+        var policy = Policy("pol", "{ kind: runtime }", "add:\n  sidecar:\n    template: t/x\n    config: {}\n");
+        var loaded = await CatalogParser.ParseAsync(BaseFiles.Append(runtimeMapping).Append(policy).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
+        Assert.Empty(loaded.Errors);
+        var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\ncontainer: { image: i }\nrequires:\n  - type: sqldb\n");
+
+        var result = new PolicyApplier(loaded.Catalog!, Env()).Apply(new Expander(loaded.Catalog!, Env()).Expand(workload, "workload.yaml"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("f6.yaml", "add.sidecar"), (error.File, error.Location));
+        Assert.Contains("already declares", error.Message);
+        Assert.Empty(result.WorkloadNodes);
+    }
 
     [Fact]
     public async Task A_runtime_policy_adds_nodes_once_per_workload_and_they_get_node_scope_policies()
@@ -350,6 +379,7 @@ public class PolicyApplierTests
             new Dictionary<string, string>
             {
                 ["resourceGroup"] = "rg",
+                ["containerAppsEnvironment.id"] = "/cae",
                 ["cosmos.accountName"] = "acct",
                 ["cosmos.databaseName"] = "db",
                 ["cosmos.accountId"] = "/acct",

@@ -21,28 +21,29 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
     /// <summary>Scope of nodes added by workload-scope policies; requirement ids cannot contain '@'.</summary>
     public const string WorkloadScope = "@workload";
 
-    private sealed record Draft(string Id, string Scope, string Stack, ResolvedNode Node, List<string> DependsOn, bool DependsOnRuntime);
+    private sealed record Draft(string Id, string Scope, string Stack, ResolvedNode Node, List<string> DependsOn);
 
     public ResolvedGraph Build(PolicyResult policy)
     {
         var errors = new List<LoadError>(policy.Errors);
         var exports = policy.Requirements.OrderBy(r => r.Id, StringComparer.Ordinal).ToDictionary(r => r.Id, r => r.Exports);
         var entries = policy.Requirements.SelectMany(r => r.Nodes.Select(n => (Scope: r.Id, Node: n)))
-            .Concat(policy.WorkloadNodes.Select(n => (Scope: WorkloadScope, Node: n)))
+            .Concat(policy.RuntimeNodes.Concat(policy.WorkloadNodes).Select(n => (Scope: WorkloadScope, Node: n)))
             .Select(e => (e.Scope, e.Node, Id: $"{policy.WorkloadName}/{environment.Name}/{e.Scope}/{e.Node.Name}"))
             .ToList();
 
+        var runtimeId = entries.Where(e => e.Scope == WorkloadScope && e.Node.Name == ExpressionEvaluator.RuntimeNode).Select(e => e.Id).FirstOrDefault();
         var drafts = entries
-            .Select(e => Analyse(e.Scope, e.Node, e.Id, entries.Where(x => x.Scope == e.Scope).ToDictionary(x => x.Node.Name, x => x.Id), errors))
+            .Select(e => Analyse(e.Scope, e.Node, e.Id, entries.Where(x => x.Scope == e.Scope).ToDictionary(x => x.Node.Name, x => x.Id), runtimeId, errors))
             .ToDictionary(d => d.Id);
         var phases = new Dictionary<string, Phase>();
         var nodes = new List<GraphNode>();
         foreach (var draft in OrderNodes(drafts, errors).Select(id => drafts[id]))
         {
-            phases[draft.Id] = draft.DependsOnRuntime || draft.DependsOn.Any(d => phases[d] == Phase.AfterRuntime) ? Phase.AfterRuntime : Phase.Infrastructure;
+            phases[draft.Id] = draft.Id == runtimeId ? Phase.Runtime : draft.DependsOn.Any(d => phases[d] != Phase.Infrastructure) ? Phase.AfterRuntime : Phase.Infrastructure;
             nodes.Add(new GraphNode(
                 draft.Id, draft.Scope, draft.Node.Name, draft.Node.Template, draft.Node.Kind, draft.Stack, phases[draft.Id],
-                draft.Node.Config, draft.Node.Provenance, Hash(draft.Node), draft.DependsOn, draft.DependsOnRuntime));
+                draft.Node.Config, draft.Node.Provenance, Hash(draft.Node), draft.DependsOn, draft.Node.Probe));
         }
 
         return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, nodes, exports, errors);
@@ -53,10 +54,10 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
     private static string Stack(string id) => id.Replace('/', '.').Replace('@', '_');
 
     // Finds a node's dependencies from its pending references and applies the security check to its environment reads.
-    private Draft Analyse(string scope, ResolvedNode node, string id, Dictionary<string, string> idsInScope, List<LoadError> errors)
+    // runtimeId is the workload's runtime node, or null for an environment definition, which has none.
+    private Draft Analyse(string scope, ResolvedNode node, string id, Dictionary<string, string> idsInScope, string? runtimeId, List<LoadError> errors)
     {
         var dependsOn = new SortedSet<string>(StringComparer.Ordinal);
-        var runtime = false;
         foreach (var (field, text) in Texts(new ConfigObject(node.Config), string.Empty))
         {
             void Fail(string message) => errors.Add(new LoadError(node.Provenance.GetValueOrDefault(field)?.Source ?? id, field, $"node '{id}': {message}"));
@@ -78,7 +79,14 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
                 }
                 else if (reference.Target == ExpressionEvaluator.RuntimeNode)
                 {
-                    runtime = true;
+                    if (runtimeId is null)
+                    {
+                        Fail($"field '{field}' references runtime.{reference.Output}, but there is no runtime.");
+                    }
+                    else
+                    {
+                        dependsOn.Add(runtimeId);
+                    }
                 }
                 else if (idsInScope.TryGetValue(reference.Target, out var target))
                 {
@@ -92,7 +100,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
             }
         }
 
-        return new Draft(id, scope, Stack(id), node, dependsOn.ToList(), runtime);
+        return new Draft(id, scope, Stack(id), node, dependsOn.ToList());
     }
 
     // Every config string with its provenance key: the dotted path, an array being one leaf.

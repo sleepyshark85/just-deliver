@@ -119,6 +119,10 @@ public sealed class CliTests : IDisposable
         Assert.Contains("  partitionKeyPath = /id   [Mapping: mappings/database/standard.yaml]", stdout);
         Assert.Contains("= pending: ", stdout);
         Assert.Contains("depends on: ", stdout);
+        // The runtime node: its own phase, the probe as data, its fields from the runtime mapping.
+        Assert.Contains("template: azure/container-app  kind: Create  phase: Runtime", stdout);
+        Assert.Contains("  probe: GET /health expects 200", stdout);
+        Assert.Contains("  targetPort = 8080   [Mapping: mappings/runtime/container-app.yaml]", stdout);
     }
 
     [Fact]
@@ -195,6 +199,8 @@ public sealed class CliTests : IDisposable
         Assert.Contains("just-deliver-sample-app/dev/database/container: deployed (create 1, ", stdout);
         Assert.Contains("  create azure-native:t:T", stdout);
         Assert.Contains("just-deliver-sample-app/dev/database/access: waiting for runtime (no changes, ", stdout);
+        Assert.Contains("just-deliver-sample-app/dev/@workload/runtime: waiting for runtime (no changes, ", stdout);
+        Assert.Contains("the runtime is deployed in a later step", stdout);
     }
 
     [Fact]

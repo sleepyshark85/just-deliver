@@ -24,6 +24,7 @@ public class ExpressionEvaluatorTests
         new Dictionary<string, string>
         {
             ["resourceGroup"] = "rg-test",
+            ["containerAppsEnvironment.id"] = "/cae",
             ["cosmos.accountName"] = "acct",
             ["cosmos.databaseName"] = "db",
             ["cosmos.accountId"] = "/acct/id",
@@ -37,8 +38,10 @@ public class ExpressionEvaluatorTests
         string id = "db",
         Dictionary<Reference, string>? known = null,
         IReadOnlyDictionary<string, NamingRule>? naming = null,
-        IReadOnlyDictionary<string, string>? roles = null) =>
-        new(roles ?? Roles, naming ?? Naming, Env, workload, "team-a", id, new HashSet<string> { "database", "container" }, known ?? []);
+        IReadOnlyDictionary<string, string>? roles = null,
+        string? image = null,
+        int? port = null) =>
+        new(roles ?? Roles, naming ?? Naming, Env, workload, "team-a", id, new HashSet<string> { "database", "container" }, known ?? [], image, port);
 
     private static (EvalResult? Result, List<LoadError> Errors) Run(string text, ExpressionContext? context = null)
     {
@@ -93,6 +96,22 @@ public class ExpressionEvaluatorTests
         Assert.Equal("shop", Resolve("${workload.name}"));
         Assert.Equal("00000000-0000-0000-0000-000000000001", Resolve("${role.reader}"));
     }
+
+    [Fact]
+    public void The_workloads_image_and_first_port_resolve()
+    {
+        var context = Context(image: "registry.example/app@sha256:abc", port: 8080);
+
+        Assert.Equal("registry.example/app@sha256:abc", Resolve("${workload.image}", context));
+        Assert.Equal("8080", Resolve("${workload.port}", context));
+        Assert.Equal("http://shop:8080", Resolve("http://${workload.name}:${workload.port}", context));
+    }
+
+    [Theory]
+    [InlineData("${workload.port}", "workload 'shop' declares no port")]
+    [InlineData("${workload.image}", "workload 'shop' declares no image")]
+    public void A_workload_value_the_workload_lacks_is_an_error_naming_the_workload(string text, string message) =>
+        Assert.Contains(message, Fails(text).Message);
 
     [Fact]
     public void Node_runtime_and_resource_namespaces_are_pending_with_their_references()
@@ -235,16 +254,17 @@ public class ExpressionEvaluatorTests
         Assert.NotNull(catalog);
         var workload = YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
-        var mapping = Assert.Single(catalog.Mappings, m => m.Match.Criteria["type"] == "database");
+        var mapping = Assert.Single(catalog.Mappings, m => m.Match.Criteria.GetValueOrDefault("type") == "database");
+        var runtime = Assert.Single(catalog.Mappings, m => m.IsRuntime);
         var policy = Assert.Single(catalog.Policies);
         var nodeNames = mapping.Nodes.Keys.Concat(policy.Add.Keys).ToHashSet();
-        var strings = mapping.Nodes.Values.Concat(policy.Add.Values).SelectMany(n => n.Config.Values)
+        var strings = mapping.Nodes.Values.Concat(policy.Add.Values).Concat(runtime.Nodes.Values).SelectMany(n => n.Config.Values)
             .Concat(policy.Set.Values).Select(t => t.ToString())
             .Concat(mapping.Exports.Values)
             .Append(sampleEndpoint)
             .ToList();
 
-        var evaluator = new ExpressionEvaluator(new ExpressionContext(catalog.Roles, catalog.Naming, Env, "shop", "team-a", "db", nodeNames, new Dictionary<Reference, string>()));
+        var evaluator = new ExpressionEvaluator(new ExpressionContext(catalog.Roles, catalog.Naming, Env, "shop", "team-a", "db", nodeNames, new Dictionary<Reference, string>(), "registry.example/app:1", 8080));
         var errors = new List<LoadError>();
         var results = strings.Select(s => evaluator.Evaluate(s, "seed", "", errors)).ToList();
 

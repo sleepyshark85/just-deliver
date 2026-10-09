@@ -95,6 +95,18 @@ public sealed class DeployAzureTests : IDisposable
             exports:
               workspace: ${workspace.workspaceName}
             """);
+        // The walk does not deploy the runtime node, so this test-only stand-in never reaches Azure; every workload needs a runtime mapping.
+        Write("catalog/mappings/runtime.yaml", """
+            kind: Mapping
+            match: { kind: runtime }
+            nodes:
+              runtime:
+                template: azure/resource-group
+                config:
+                  resourceGroupName: ${env.probeGroup}
+                  location: ${env.region}
+                  tags: { project: just-deliver-mvp }
+            """);
         foreach (var template in new[] { "resource-group", "log-analytics" })
         {
             var from = Path.Combine(AppContext.BaseDirectory, "catalog", "templates", "azure", template, "Pulumi.yaml");

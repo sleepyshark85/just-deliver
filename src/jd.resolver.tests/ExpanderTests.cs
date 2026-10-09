@@ -27,7 +27,7 @@ public class ExpanderTests
 
     private static async Task<Catalog> LoadAsync(params string[] mappings)
     {
-        var files = BaseFiles.Concat(mappings).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
+        var files = BaseFiles.Concat(mappings).Append(TestCatalog.RuntimeMapping).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var result = await CatalogParser.ParseAsync(files);
         Assert.Empty(result.Errors);
         return result.Catalog!;
@@ -110,7 +110,7 @@ public class ExpanderTests
     }
 
     [Theory]
-    [InlineData("{ type: sqldb, kind: runtime }")]
+    [InlineData("{ type: sqldb, kind: other }")]
     [InlineData("{ type: sqldb, runtime: container-app }")]
     public async Task A_mapping_using_a_key_the_requirement_lacks_never_matches(string match)
     {
@@ -119,6 +119,103 @@ public class ExpanderTests
         var error = Assert.Single(Expand(catalog, "  - type: sqldb\n").Errors);
 
         Assert.Contains("no mapping matches", error.Message);
+    }
+
+    private const string RuntimeNodeYaml = "  runtime:\n    template: t/rt\n    config: { image: '${workload.image}', port: '${workload.port}', name: \"${name('thing')}\" }\n";
+
+    private static string RuntimeMapping(string match = "{ kind: runtime }", string extra = "") =>
+        $"kind: Mapping\nmatch: {match}\n{extra}nodes:\n{RuntimeNodeYaml}";
+
+    private static JObject WorkloadWith(string container) =>
+        (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\ncontainer:\n{container}requires: []\n");
+
+    private static async Task<ExpansionResult> ExpandRuntimeAsync(string container, string tier, params string[] mappings) =>
+        new Expander(await LoadWithoutRuntimeAsync(mappings), Env(tier)).Expand(WorkloadWith(container), "workload.yaml");
+
+    private static async Task<Catalog> LoadWithoutRuntimeAsync(string[] mappings)
+    {
+        var result = await CatalogParser.ParseAsync(BaseFiles.Concat(mappings).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
+        Assert.Empty(result.Errors);
+        return result.Catalog!;
+    }
+
+    [Fact]
+    public async Task A_workload_gets_the_runtime_nodes_of_the_matching_runtime_mapping_with_image_port_and_probe()
+    {
+        var result = await ExpandRuntimeAsync("  image: reg.example/app:1\n  ports:\n    - port: 8080\n    - port: 9090\n", "team",
+            RuntimeMapping(extra: "probe: { path: /health, expectedStatus: 200 }\n"));
+
+        Assert.Empty(result.Errors);
+        var runtime = Assert.IsType<ExpandedRuntime>(result.Runtime);
+        var node = Assert.Single(runtime.Nodes);
+        Assert.Equal(("runtime", "t/rt", "f4.yaml"), (node.Name, node.Template, runtime.Mapping));
+        Assert.Equal("reg.example/app:1", Text(node.Config["image"]));
+        Assert.Equal("8080", Text(node.Config["port"]));
+        Assert.StartsWith("shop-", Text(node.Config["name"]));
+        Assert.Equal(new Probe("/health", 200), runtime.Probe);
+    }
+
+    [Fact]
+    public async Task The_most_specific_runtime_mapping_wins_by_tier()
+    {
+        var plain = RuntimeMapping().Replace("t/rt", "t/plain");
+        var guarded = RuntimeMapping("{ kind: runtime, tier: protected }").Replace("t/rt", "t/guarded");
+        const string container = "  image: i\n  ports:\n    - port: 80\n";
+
+        Assert.Equal("t/plain", (await ExpandRuntimeAsync(container, "team", plain, guarded)).Runtime!.Nodes[0].Template);
+        Assert.Equal("t/guarded", (await ExpandRuntimeAsync(container, "protected", plain, guarded)).Runtime!.Nodes[0].Template);
+    }
+
+    [Fact]
+    public async Task Two_runtime_mappings_that_tie_are_an_error_naming_both_files()
+    {
+        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "team", RuntimeMapping(), RuntimeMapping("{ kind: runtime }", "# second\n"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Null(result.Runtime);
+        Assert.Contains("matches 2 mappings equally well: f4.yaml, f5.yaml", error.Message);
+    }
+
+    [Fact]
+    public async Task No_runtime_mapping_for_the_tier_is_an_error_naming_the_tier()
+    {
+        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "team", RuntimeMapping("{ kind: runtime, tier: protected }"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Null(result.Runtime);
+        Assert.Contains("no mapping matches the runtime of the workload (tier 'team')", error.Message);
+    }
+
+    [Fact]
+    public async Task A_runtime_mapping_naming_a_runtime_is_never_selected_until_workloads_can_name_one()
+    {
+        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "team", RuntimeMapping("{ kind: runtime, runtime: container-app }"));
+
+        Assert.Contains("no mapping matches the runtime", Assert.Single(result.Errors).Message);
+    }
+
+    [Fact]
+    public async Task Reading_the_port_of_a_workload_without_ports_is_an_error_naming_the_workload()
+    {
+        var result = await ExpandRuntimeAsync("  image: i\n", "team", RuntimeMapping());
+
+        var error = Assert.Single(result.Errors);
+        Assert.Null(result.Runtime);
+        Assert.Equal(("f4.yaml", "nodes.runtime.config.port"), (error.File, error.Location));
+        Assert.Contains("for the runtime: ", error.Message);
+        Assert.Contains("workload 'shop' declares no port", error.Message);
+    }
+
+    [Fact]
+    public async Task An_environment_definition_has_no_runtime_and_does_not_need_a_runtime_mapping()
+    {
+        var catalog = await LoadWithoutRuntimeAsync(["kind: Mapping\nmatch: { type: sqldb }\nnodes:\n  n:\n    template: t/n\n    config: { a: 1 }\nexports:\n  endpoint: x\n"]);
+
+        var result = new Expander(catalog, Env()).ExpandEnvironment("dev", (JArray)YamlSchemaValidator.ParseYaml("- type: sqldb\n"), "definition.yaml");
+
+        Assert.Empty(result.Errors);
+        Assert.Null(result.Runtime);
+        Assert.Single(result.Requirements);
     }
 
     [Fact]
@@ -199,6 +296,7 @@ public class ExpanderTests
             new Dictionary<string, string>
             {
                 ["resourceGroup"] = "rg",
+                ["containerAppsEnvironment.id"] = "/cae",
                 ["cosmos.accountName"] = "acct",
                 ["cosmos.databaseName"] = "db",
                 ["cosmos.accountId"] = "/acct",
@@ -211,6 +309,9 @@ public class ExpanderTests
         Assert.Empty(result.Errors);
         var requirement = Assert.Single(result.Requirements);
         Assert.Equal(["access", "container"], requirement.Nodes.Select(n => n.Name).Order(StringComparer.Ordinal));
+        var runtime = Assert.IsType<ExpandedRuntime>(result.Runtime);
+        Assert.Equal(("runtime", "azure/container-app"), (Assert.Single(runtime.Nodes).Name, runtime.Nodes[0].Template));
+        Assert.Equal(("8080", "/health", 200), (Text(runtime.Nodes[0].Config["targetPort"]), runtime.Probe!.Path, runtime.Probe.ExpectedStatus));
         var access = requirement.Nodes.Single(n => n.Name == "access");
         Assert.Equal(NodeKind.Grant, access.Kind);
         Assert.Equal(["container", "database", "endpoint", "engine"], requirement.Exports.Keys.Order(StringComparer.Ordinal));

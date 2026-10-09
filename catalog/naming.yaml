@@ -11,6 +11,11 @@ rules:
     pattern: "appi-{workload}-{env}-{hash}"
     maxLength: 260
     allowed: "[a-z0-9-]"
+  # The workload's Container App, unique within the environment's resource group; at most 32 characters.
+  ca:
+    pattern: "ca-{workload}-{hash}"
+    maxLength: 32
+    allowed: "[a-z0-9-]"
   # Substrate: the environment name is in every name; the hash keeps globally unique ones (Cosmos accounts) apart from other deployments.
   rg:
     pattern: "rg-{env}-{hash}"
