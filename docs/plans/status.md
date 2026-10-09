@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S06 — Policies + provenance
+- **Next slice:** S07 — Graph builder
 - **In progress:** —
 - **Blocked:** —
 
@@ -22,7 +22,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S04 | Expression evaluator | done | PR #5 | 2 | Round 1: 1 blocking (uncommented `!`). Golden hash/guid values pinned. ~690 lines — 2nd size overrun despite 'stop and report' in the brief. |
 | S04a | Catalog loader hardening | done | PR #6 | 2 | Review follow-ups from S02–S04. Round 1: 1 blocking — new duplicate-key enrichment crashed on scanner errors (regression); fixed with tests. |
 | S05 | Matching + expansion | done | PR #9 | 1 + suggestions | APPROVE first round. ~456 lines (≈223 prod) — developer stopped at the cap and reported, as asked; lead accepted. |
-| S06 | Policies + provenance | todo | | | |
+| S06 | Policies + provenance | done | PR #10 | 2 | Round 1: 4 blocking (expansion errors dropped; duplicate added-node names; overlapping paths resolved by length instead of conflict; `!`). Loader now rejects policies fitting neither scope. ~330 prod lines after review fixes. |
 | S07 | Graph builder | todo | | | |
 | S08 | CLI skeleton | todo | | | |
 | S09 | Template library | todo | | | |
@@ -45,7 +45,8 @@ Picked up by the slice named; remove once done.
 
 - **Loader (minor):** scanner failures report only "Exception during deserialization (line N)"; append the inner
   exception message.
-- **S06:** catalog records hold mutable `JToken`s — clone on consumption (S05's expander already deep-clones).
+- **Loader (minor):** a single policy can still overlap with itself (`a: {b: 1}` and `a.b: 2`); reject in
+  `CheckPolicyScopes`. resolver.md: say a bare `runtime` path (no dot) is rejected too.
 - **S06/S07:** the schema allows a requirement mapping with no `type` in `match`; it then matches every type and
   skips the exports contract check. Reject it, or check the contract against the requirement's type on selection.
 - **Briefs:** cap production lines (~250) separately from tests; a cohesive slice's tests should not be trimmed to fit.
