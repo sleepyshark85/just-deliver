@@ -50,8 +50,8 @@ Picked up by the slice named; remove once done.
   exception message.
 - **S10/S12:** template `fn::invoke`s (e.g. `getSharedKeys`) run during preview, so previewing a brand-new
   environment fails until its workspace exists — preview substrate in dependency order, or tolerate it.
-- **S15c:** Part 0 = S15b review hazards (see S15b row). The runtime mapping sends `runtime.appInsightsConnectionString` to the app's `APPLICATIONINSIGHTS_CONNECTION_STRING`
-  (Azure Monitor SDK's own name, not in the workload's variables). The app assumes partition key `/id`.
+- **S15c:** resolved: enforce-monitoring sets `runtime.variables.APPLICATIONINSIGHTS_CONNECTION_STRING` (Azure Monitor SDK's own
+  name, not in the workload's variables) as a workload-scope policy on the runtime node. The app assumes partition key `/id`.
 - **S15c/S16 (S15a review):** a secret value in `variables` stays encrypted in Pulumi state but is plain text in the
   Container App's `env` (readable with Reader) — secret values should become Container App `secrets` + `secretRef`
   (ADR 0013 runtime port). Add an offline check that a secret `variables` entry is masked in preview.

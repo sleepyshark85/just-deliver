@@ -10,7 +10,7 @@ namespace jd.orchestrator;
 
 /// <summary>
 /// Evaluates a node's config again with the outputs known by now and converts it to backend config entries: a string as it
-/// is, a number or boolean in invariant form, an object or array as compact JSON. Values still waiting on a reference are
+/// is, a number or boolean in invariant form, an object or array as compact JSON (an entries object as a list of name/value items). Values still waiting on a reference are
 /// listed in <see cref="Unresolved"/>; evaluation problems in <see cref="Errors"/>. A value that read a secret output is a secret.
 /// </summary>
 internal sealed class ConfigFiller(ExpressionEvaluator evaluator, string nodeId, IReadOnlySet<Reference> secrets)
@@ -56,7 +56,15 @@ internal sealed class ConfigFiller(ExpressionEvaluator evaluator, string nodeId,
                 return FillPending(pending, path);
             case ConfigObject obj:
                 var properties = obj.Properties.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => (p.Key, Value: Fill(p.Value, $"{path}.{p.Key}"))).ToList();
-                return properties.All(p => p.Value is not null) ? new JObject(properties.Select(p => new JProperty(p.Key, p.Value))) : null;
+                if (properties.Any(p => p.Value is null))
+                {
+                    return null;
+                }
+
+                // An entries object is deployed as a list of name/value items, already in name order.
+                return obj.AsEntries
+                    ? new JArray(properties.Select(p => new JObject { ["name"] = p.Key, ["value"] = p.Value }))
+                    : new JObject(properties.Select(p => new JProperty(p.Key, p.Value)));
             case ConfigArray array:
                 var items = array.Items.Select((item, i) => Fill(item, $"{path}[{i.ToString(CultureInfo.InvariantCulture)}]")).ToList();
                 return items.All(i => i is not null) ? new JArray(items) : null;

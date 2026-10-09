@@ -8,6 +8,9 @@ namespace jd.resolver.policies;
 public enum Layer
 {
     Mapping,
+
+    /// <summary>The workload's own definition: its <c>container.variables</c>.</summary>
+    Workload,
     PolicySet,
     PolicyDefault,
     PolicyAdd,
@@ -47,6 +50,8 @@ public sealed record PolicyResult(
     string CatalogVersion,
     string WorkloadName,
     string WorkloadTeam,
+    string? WorkloadImage,
+    int? WorkloadPort,
     IReadOnlyList<ResolvedRequirement> Requirements,
     IReadOnlyList<ResolvedNode> RuntimeNodes,
     IReadOnlyList<ResolvedNode> WorkloadNodes,

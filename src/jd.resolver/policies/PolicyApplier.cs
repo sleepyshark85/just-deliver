@@ -15,6 +15,9 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
 {
     private const char PathSeparator = '.';
 
+    // The source shown for the runtime's variables that come from the workload's definition (the file is the workload being resolved).
+    private const string WorkloadVariablesRule = "container.variables";
+
     // Policy name order makes conflict reports and "same value" provenance independent of file order.
     private readonly IReadOnlyList<Policy> _policies = catalog.Policies.OrderBy(p => p.Name, StringComparer.Ordinal).ToList();
 
@@ -33,29 +36,32 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             var nodes = requirement.Nodes
                 .Select(n => ApplyNodePolicies(
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(requirement.Mapping, requirement.Mapping, Layer.Mapping),
-                    requirement.Type, requirement.Class, evaluator, $"{requirement.Id}/{n.Name}", errors))
+                    requirement.Type, requirement.Class, evaluator, $"{requirement.Id}/{n.Name}", [], errors))
                 .ToList();
             requirements.Add(new ResolvedRequirement(requirement.Id, requirement.Type, requirement.Class, requirement.Mapping, requirement.Exports, nodes));
         }
 
-        // The runtime mapping's nodes get node-scope policies like any mapping node.
+        // The runtime mapping's nodes get node-scope policies like any mapping node; the runtime node also gets the workload-scope
+        // policies' set and default (their paths start with 'runtime.', which the catalog loader enforces). A node added by a
+        // workload-scope policy may be read by those values.
+        var workloadPolicies = _policies.Where(p => expansion.Owner == OwnerKind.Workload && IsWorkloadScope(p)).ToList();
         var runtimeNodes = new List<ResolvedNode>();
         var runtimeNames = expansion.Runtime?.Nodes.Select(n => n.Name).ToHashSet() ?? [];
         if (expansion.Runtime is { } runtime)
         {
-            var evaluator = EvaluatorFor(ExpressionEvaluator.RuntimeNode, runtimeNames);
+            var inScope = runtimeNames.Concat(workloadPolicies.SelectMany(p => p.Add.Keys)).ToList();
             foreach (var n in runtime.Nodes)
             {
                 var node = ApplyNodePolicies(
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(runtime.Mapping, runtime.Mapping, Layer.Mapping),
-                    null, null, evaluator, n.Name, errors);
+                    null, null, EvaluatorFor(n.Name, inScope), n.Name, n.Name == ExpressionEvaluator.RuntimeNode ? workloadPolicies : [], errors);
                 runtimeNodes.Add(n.Name == ExpressionEvaluator.RuntimeNode ? node with { Probe = runtime.Probe } : node);
             }
         }
 
         var workloadNodes = new List<ResolvedNode>();
         var addedBy = new Dictionary<string, Policy>();
-        foreach (var policy in _policies.Where(p => expansion.Owner == OwnerKind.Workload && IsWorkloadScope(p)))
+        foreach (var policy in workloadPolicies)
         {
             foreach (var (name, node) in policy.Add)
             {
@@ -74,11 +80,11 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
                 var evaluator = EvaluatorFor(name, policy.Add.Keys);
                 var config = ConfigWalker.WalkConfig(node.Config, evaluator, policy.Source, $"add.{name}.config", errors);
                 workloadNodes.Add(ApplyNodePolicies(
-                    name, node.Template, node.Kind, config, new Provenance(policy.Source, policy.Name, Layer.PolicyAdd), null, null, evaluator, name, errors));
+                    name, node.Template, node.Kind, config, new Provenance(policy.Source, policy.Name, Layer.PolicyAdd), null, null, evaluator, name, [], errors));
             }
         }
 
-        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, requirements, runtimeNodes, workloadNodes, errors);
+        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, expansion.WorkloadImage, expansion.WorkloadPort, requirements, runtimeNodes, workloadNodes, errors);
     }
 
     // Workload scope is kind: runtime, optionally narrowed by tier. The 'runtime' key is accepted but not matched yet:
@@ -109,15 +115,26 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
 
     private ResolvedNode ApplyNodePolicies(
         string name, string template, NodeKind kind, ConfigObject config, Provenance origin,
-        string? type, string? cls, ExpressionEvaluator evaluator, string label, List<LoadError> errors)
+        string? type, string? cls, ExpressionEvaluator evaluator, string label, List<Policy> workloadPolicies, List<LoadError> errors)
     {
         var provenance = new Dictionary<string, Provenance>();
         Record(provenance, string.Empty, config, origin);
-        var matching = _policies.Where(p => MatchesNode(p, template, type, cls)).ToList();
+        foreach (var (field, entries) in config.Properties.Where(p => p.Value is ConfigObject { AsEntries: true }))
+        {
+            Record(provenance, field, entries, new Provenance(WorkloadVariablesRule, WorkloadVariablesRule, Layer.Workload));
+        }
+
+        var matching = _policies.Where(p => MatchesNode(p, template, type, cls)).Concat(workloadPolicies).ToList();
+
+        // A workload-scope policy addresses the runtime node by name: its entries here have that name removed.
+        Func<Policy, IReadOnlyDictionary<string, JToken>> Scoped(Func<Policy, IReadOnlyDictionary<string, JToken>> entries) =>
+            p => workloadPolicies.Contains(p)
+                ? entries(p).Where(e => e.Key.StartsWith(name + PathSeparator, StringComparison.Ordinal)).ToDictionary(e => e.Key[(name.Length + 1)..], e => e.Value)
+                : entries(p);
 
         // Sets replace whatever is there; defaults only fill what is absent after the sets.
-        config = ApplyLayer(config, provenance, matching, p => p.Set, Layer.PolicySet, evaluator, label, errors);
-        config = ApplyLayer(config, provenance, matching, p => p.Default, Layer.PolicyDefault, evaluator, label, errors);
+        config = ApplyLayer(config, provenance, matching, Scoped(p => p.Set), Layer.PolicySet, evaluator, label, errors);
+        config = ApplyLayer(config, provenance, matching, Scoped(p => p.Default), Layer.PolicyDefault, evaluator, label, errors);
         return new ResolvedNode(name, template, kind, config.Properties, provenance);
     }
 
@@ -205,7 +222,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         if (index == path.Length - 1)
         {
             properties[path[index]] = value;
-            return new ConfigObject(properties);
+            return obj with { Properties = properties };
         }
 
         var child = properties.GetValueOrDefault(path[index]) ?? new ConfigObject(new Dictionary<string, ConfigValue>());
@@ -215,7 +232,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         }
 
         properties[path[index]] = updated;
-        return new ConfigObject(properties);
+        return obj with { Properties = properties };
     }
 
     // Records the provenance of every leaf under value, keyed by dotted path.

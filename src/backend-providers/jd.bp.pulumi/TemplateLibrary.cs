@@ -131,12 +131,14 @@ public sealed class TemplateLibrary : ITemplateStore
 
         return errors;
 
-        // The runtime node arrives with its own mapping (S15) and resource references are the graph builder's concern.
+        // Resource references are the graph builder's concern: their export is checked here, where it is declared.
         void CheckOutputs(string scope, IEnumerable<Reference> references, string file, string location)
         {
-            foreach (var reference in references.Where(r => r.Kind == ReferenceKind.Node && r.Target != ExpressionEvaluator.RuntimeNode))
+            foreach (var reference in references.Where(r => r.Kind == ReferenceKind.Node))
             {
-                if (byName.TryGetValue((scope, reference.Target), out var target) && _templates.TryGetValue(target.Template, out var declared) && !declared.Outputs.Contains(reference.Output))
+                // The runtime is a node of the workload, whichever scope names it.
+                var targetScope = reference.Target == ExpressionEvaluator.RuntimeNode ? GraphBuilder.WorkloadScope : scope;
+                if (byName.TryGetValue((targetScope, reference.Target), out var target) && _templates.TryGetValue(target.Template, out var declared) && !declared.Outputs.Contains(reference.Output))
                 {
                     errors.Add(new LoadError(file, location, $"references {reference.Target}.{reference.Output}, but template '{target.Template}' (node '{target.Id}') declares no output '{reference.Output}'."));
                 }

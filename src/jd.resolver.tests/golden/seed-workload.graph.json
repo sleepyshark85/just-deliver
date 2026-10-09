@@ -27,6 +27,29 @@
       }
     },
     {
+      "id": "just-deliver-sample-app/dev/database/container",
+      "scope": "database",
+      "name": "container",
+      "template": "azure/cosmos-sql-container",
+      "kind": "Create",
+      "stack": "just-deliver-sample-app.dev.database.container",
+      "phase": "Infrastructure",
+      "hash": "00fae051387801ff00f46f3cfac991230cfb6030f635ff22fd8bd5d61d6bf067",
+      "dependsOn": [],
+      "config": {
+        "accountId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev",
+        "containerName": "just-deliver-sample-app-database-623014",
+        "databaseName": "db-dev",
+        "partitionKeyPath": "/id"
+      },
+      "provenance": {
+        "accountId": "Mapping: mappings/database/standard.yaml",
+        "containerName": "Mapping: mappings/database/standard.yaml",
+        "databaseName": "Mapping: mappings/database/standard.yaml",
+        "partitionKeyPath": "Mapping: mappings/database/standard.yaml"
+      }
+    },
+    {
       "id": "just-deliver-sample-app/dev/@workload/runtime",
       "scope": "@workload",
       "name": "runtime",
@@ -34,8 +57,11 @@
       "kind": "Create",
       "stack": "just-deliver-sample-app.dev._workload.runtime",
       "phase": "Runtime",
-      "hash": "d57bcef9175cf7094df84c812b400c75c7efeeb53ad1c8513a3268834efc0ba2",
-      "dependsOn": [],
+      "hash": "877b8a49ec136b99a1de8077c57bbb6cc1818639e48fcf4db353d0b8915e0781",
+      "dependsOn": [
+        "just-deliver-sample-app/dev/@workload/appinsights",
+        "just-deliver-sample-app/dev/database/container"
+      ],
       "config": {
         "containerAppName": "ca-just-deliver-sample-appc15e1b",
         "containerAppsEnvironmentId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.App/managedEnvironments/cae-dev",
@@ -48,7 +74,28 @@
         "minReplicas": 0,
         "resourceGroupName": "rg-dev",
         "targetPort": "8080",
-        "variables": []
+        "variables": [
+          {
+            "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+            "value": "${appinsights.connectionString}"
+          },
+          {
+            "name": "COSMOS_CONTAINER",
+            "value": "${resource.database.container}"
+          },
+          {
+            "name": "COSMOS_DATABASE",
+            "value": "db-dev"
+          },
+          {
+            "name": "COSMOS_ENDPOINT",
+            "value": "https://cosmos-dev.documents.azure.com:443/"
+          },
+          {
+            "name": "LOG_LEVEL",
+            "value": "info"
+          }
+        ]
       },
       "provenance": {
         "containerAppName": "Mapping: mappings/runtime/container-app.yaml",
@@ -62,7 +109,11 @@
         "minReplicas": "Mapping: mappings/runtime/container-app.yaml",
         "resourceGroupName": "Mapping: mappings/runtime/container-app.yaml",
         "targetPort": "Mapping: mappings/runtime/container-app.yaml",
-        "variables": "Mapping: mappings/runtime/container-app.yaml"
+        "variables.APPLICATIONINSIGHTS_CONNECTION_STRING": "PolicySet: enforce-monitoring (policies/enforce-monitoring.yaml)",
+        "variables.COSMOS_CONTAINER": "Workload: container.variables",
+        "variables.COSMOS_DATABASE": "Workload: container.variables",
+        "variables.COSMOS_ENDPOINT": "Workload: container.variables",
+        "variables.LOG_LEVEL": "Workload: container.variables"
       },
       "probe": {
         "path": "/health",
@@ -93,29 +144,6 @@
         "roleAssignmentId": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
         "roleGuid": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
         "scope": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)"
-      }
-    },
-    {
-      "id": "just-deliver-sample-app/dev/database/container",
-      "scope": "database",
-      "name": "container",
-      "template": "azure/cosmos-sql-container",
-      "kind": "Create",
-      "stack": "just-deliver-sample-app.dev.database.container",
-      "phase": "Infrastructure",
-      "hash": "00fae051387801ff00f46f3cfac991230cfb6030f635ff22fd8bd5d61d6bf067",
-      "dependsOn": [],
-      "config": {
-        "accountId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev",
-        "containerName": "just-deliver-sample-app-database-623014",
-        "databaseName": "db-dev",
-        "partitionKeyPath": "/id"
-      },
-      "provenance": {
-        "accountId": "Mapping: mappings/database/standard.yaml",
-        "containerName": "Mapping: mappings/database/standard.yaml",
-        "databaseName": "Mapping: mappings/database/standard.yaml",
-        "partitionKeyPath": "Mapping: mappings/database/standard.yaml"
       }
     },
     {

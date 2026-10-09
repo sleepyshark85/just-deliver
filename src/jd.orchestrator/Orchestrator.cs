@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using jd.core.bp;
+using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expressions;
@@ -96,7 +97,8 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
                     await ReadDeployedOutputsAsync(node, cancellationToken);
                 }
 
-                var filler = new ConfigFiller(new ExpressionEvaluator(ContextFor(node)), node.Id, SecretOutputs(node));
+                var exported = ExportsFor(node);
+                var filler = new ConfigFiller(new ExpressionEvaluator(ContextFor(node, exported)), node.Id, SecretOutputs(node, exported));
                 var parameters = filler.Fill(node.Config);
                 if (filler.Errors.Count > 0)
                 {
@@ -129,9 +131,10 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
         // The current id is the node's requirement (the node itself at workload scope), as in the first pass. Node names in scope
         // are all nodes of the node's scope; the first pass allowed only the adding policy's nodes at workload scope, but it already
         // rejected any other name, so the wider set cannot change a result here. Only the known outputs differ.
-        private ExpressionContext ContextFor(GraphNode node)
+        private ExpressionContext ContextFor(GraphNode node, ExportValues exported)
         {
-            var known = new Dictionary<Reference, string>();
+            // What a requirement's exports are worth by now is what ${resource.<id>.<export>} reads.
+            var known = new Dictionary<Reference, string>(exported.Values);
             foreach (var id in node.DependsOn.Where(_outputs.ContainsKey))
             {
                 foreach (var (output, entry) in _outputs[id])
@@ -152,12 +155,23 @@ public sealed class Orchestrator(IBackEndProvider provider, ITemplateStore templ
                 graph.WorkloadTeam,
                 node.Scope == GraphBuilder.WorkloadScope ? node.Name : node.Scope,
                 graph.Nodes.Where(n => n.Scope == node.Scope).Select(n => n.Name).ToHashSet(),
-                known);
+                known,
+                graph.WorkloadImage,
+                graph.WorkloadPort);
         }
 
-        private HashSet<Reference> SecretOutputs(GraphNode node) =>
+        // The exports of every requirement deployed so far; an export that fails to evaluate fails the node.
+        private ExportValues ExportsFor(GraphNode node)
+        {
+            var errors = new List<LoadError>();
+            var exported = ExportValues.Evaluate(graph, catalog, environment, _outputs.ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, ConfigEntry>)o.Value), includeSecrets: true, node.Id, errors);
+            return errors.Count == 0 ? exported : throw new InvalidOperationException(string.Join(' ', errors));
+        }
+
+        private HashSet<Reference> SecretOutputs(GraphNode node, ExportValues exported) =>
             node.DependsOn.Where(_outputs.ContainsKey)
                 .SelectMany(id => _outputs[id].Where(o => o.Value.IsSecret).Select(o => new Reference(ReferenceKind.Node, _byId[id].Name, o.Key)))
+                .Concat(exported.Secrets)
                 .ToHashSet();
 
         // Preview deploys nothing, so what an upstream node exports is read from state, if it was deployed before.

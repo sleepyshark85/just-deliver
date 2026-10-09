@@ -13,7 +13,11 @@ public sealed record ConfigScalar(JToken Value) : ConfigValue;
 /// <summary>A string, evaluated: <see cref="Resolved"/> or <see cref="Pending"/> on references. EnvPaths are the <c>env.</c> paths it read.</summary>
 public sealed record ConfigText(EvalResult Result, IReadOnlySet<string> EnvPaths) : ConfigValue;
 
-public sealed record ConfigObject(IReadOnlyDictionary<string, ConfigValue> Properties) : ConfigValue;
+/// <summary>
+/// A mapping of names to values. <paramref name="AsEntries"/> marks one declared with <c>fn::entries</c>: it stays a map
+/// while policies address its keys, and is deployed as a list of <c>{name, value}</c> items sorted by name.
+/// </summary>
+public sealed record ConfigObject(IReadOnlyDictionary<string, ConfigValue> Properties, bool AsEntries = false) : ConfigValue;
 
 public sealed record ConfigArray(IReadOnlyList<ConfigValue> Items) : ConfigValue;
 

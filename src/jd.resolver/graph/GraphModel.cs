@@ -47,6 +47,8 @@ public sealed record ResolvedGraph(
     string Environment,
     string Workload,
     string WorkloadTeam,
+    string? WorkloadImage,
+    int? WorkloadPort,
     IReadOnlyList<GraphNode> Nodes,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, EvalResult>> Exports,
     IReadOnlyList<LoadError> Errors);

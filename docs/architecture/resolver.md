@@ -218,8 +218,29 @@ nodes:
       memory: 0.5Gi
       minReplicas: 0
       maxReplicas: 1
-      variables: []                               # the workload's variables arrive with S15c
+      variables:                                  # the workload's variables, deployed as a list of {name, value}
+        fn::entries: workload.variables
 ```
+
+#### Workload variables
+
+The workload's `container.variables` reach the runtime node through the one **config-level form** the engine has, `fn::entries`
+(in the style of Pulumi's `fn::` functions): `{ fn::entries: workload.variables }` as a node's config value stands for that map,
+and the node deploys it as a list of `{name, value}` items sorted by name (ordinal), because a Pulumi YAML template cannot turn a
+map into the list a Container App's `env` wants. The only source is `workload.variables`; any other source is an error
+(`fn::entries takes a map, but its source '…' is not one`). The form belongs in a mapping's node config: a policy-added node has
+no workload variables to name.
+
+- In the graph the value stays a **map** (`ConfigObject` with `AsEntries`), so every variable is a leaf `variables.<NAME>` with its
+  own provenance (`Workload: container.variables`, or the policy that set it) and its own pending state, and a
+  workload-scope policy addresses it as `runtime.variables.<NAME>`. The canonical config, graph JSON and node hash show the
+  deployed form: the sorted list. The orchestrator builds that list when it fills the node, so a change of form changes the hash.
+- Each value is an ordinary expression string. `${resource.<id>.<export>}` takes the value of that requirement's export. An export
+  that is already a value (`${env.cosmos.endpoint}`) is resolved at expansion, so preview shows it; one that reads a node output
+  (`${container.containerName}`) stays pending and adds an edge from the runtime node to that node (see Security and the depends-on
+  field). An unknown id or export is an error naming the variable (`variables.<NAME>`).
+- A value that reads a secret output makes the whole `variables` entry secret (the existing rule), so it is masked in the backend's
+  config and state. In the Container App it still appears as plain text in `env`; `secrets` + `secretRef` are a later slice.
 
 A workload names no runtime yet (one runtime for the MVP); the `runtime` match key (`runtime: container-app`) stays reserved for
 when a second runtime exists, and a mapping that uses it is never selected. The runtime node gets its own phase (`runtime`) and
@@ -293,8 +314,8 @@ path       := segment { '.' segment }          # segment: letters, digits, '_' a
 | `env.<path>` | `EnvironmentDescriptor.TryGet`; an unknown path is an error |
 | `role.<name>` | role GUID from the catalog `Roles`; unknown is an error |
 | `workload.name`, `workload.team` | the workload being resolved |
-| `workload.image`, `workload.port` | `container.image`, and the first of `container.ports`; a workload with no ports makes `workload.port` an error naming the workload. Like every expression result it is text (`"8080"`): Pulumi config values are strings, and the template's `Integer` input parses it. Meant for runtime mappings: the orchestrator's second pass has neither, so a requirement node that mixes them with a pending reference fails at deploy with the same error |
-| `resource.<id>.<export>` | **pending** reference to a requirement's export |
+| `workload.image`, `workload.port` | `container.image`, and the first of `container.ports`; a workload with no ports makes `workload.port` an error naming the workload. Like every expression result it is text (`"8080"`): Pulumi config values are strings, and the template's `Integer` input parses it. Meant for runtime mappings; the graph carries both (`WorkloadImage`, `WorkloadPort`), so the orchestrator's second pass evaluates them like the first |
+| `resource.<id>.<export>` | reference to a requirement's export: **pending** unless the caller knows its value. Allowed in the workload's own nodes (runtime mapping, policy-added nodes) and in workload variables, never in a requirement's node config |
 | `runtime.<output>` | **pending** reference to the runtime node (an edge to it); an environment definition has no runtime, so there it is an error |
 | `<node>.<output>` | **pending** reference to an output of a node in scope; unknown node is an error |
 
@@ -322,8 +343,8 @@ Every invalid expression in a string is reported (file, location, message) and t
 | Matching | A mapping matches when every `match` key equals the requirement's value. A requirement provides only `type`, `class` (default `standard`) and `tier` (from the environment); a mapping using any other key (`kind`, `runtime`) never matches a requirement. Specificity = number of `match` keys. A tie at the top is an error naming the tied files, never file order; no match is an error naming the requirement's type, class and tier. **Runtime:** each workload gets exactly one runtime mapping by the same rules, providing only `kind: runtime` and `tier`; a tie names the files, none names the tier; an environment definition (substrate owner) gets none. |
 | Type contract | A mapping's `exports` keys must equal its type's `exports` exactly; the catalog loader rejects a mismatch (missing or extra) at the mapping file, location `exports`. |
 | Expansion | Each node of the selected mapping becomes an expanded node (name, template, kind, config); config strings and mapping `exports` are evaluated with the effective requirement id as the current id and the mapping's node names in scope, other scalars pass through, objects and arrays recurse, and catalog tokens are cloned. Result per requirement: id, type, class, mapping file, nodes, exports (`Resolved` or `Pending`). Errors from all requirements are collected; a requirement with an error is left out of the result. |
-| Policy scope | **Node scope:** `match` uses only `type`, `class`, `tier`, `template`; a policy applies to a node when every key equals the node's value (`type`/`class` from its requirement, `tier` from the environment, `template` from the node). A node added by a policy has no type or class. All matching policies apply (no specificity). A `match` with `kind` or `runtime` is never node scope. **Workload scope:** `match` has `kind: runtime`, optionally `runtime` and `tier`; only its `add` is applied, creating its nodes once per workload. Its `set`/`default` entries target `runtime.*`, which belongs to the runtime node (S15c); until then they are neither applied nor stored, and the `runtime` key is not matched until a workload names a runtime. The catalog loader rejects a policy that fits neither scope, since it would silently do nothing: `runtime` without `kind: runtime`; a `kind` other than `runtime`; `kind: runtime` together with `type`, `class` or `template`; `add` on a node-scope policy; a workload-scope `set`/`default` path not starting with `runtime.` (a bare `runtime` with no dot is rejected too). |
-| Single pass | Requirement nodes, the runtime mapping's nodes and workload-scope added nodes receive node-scope policies once; an added node never triggers further adds. Added nodes are evaluated with their own name as the current id and the same policy's added nodes in scope. |
+| Policy scope | **Node scope:** `match` uses only `type`, `class`, `tier`, `template`; a policy applies to a node when every key equals the node's value (`type`/`class` from its requirement, `tier` from the environment, `template` from the node). A node added by a policy has no type or class. All matching policies apply (no specificity). A `match` with `kind` or `runtime` is never node scope. **Workload scope:** `match` has `kind: runtime`, optionally `runtime` and `tier`; its `add` creates its nodes once per workload, and its `set`/`default` entries target `runtime.<path>`, a field of the runtime node (`runtime.variables.<NAME>` sets or defaults one workload variable), with the existing layer, conflict and provenance rules: `set` wins over a workload variable of that name, `default` only fills a variable the workload does not define. Their values may read the nodes workload-scope policies add (`${appinsights.connectionString}`), which makes the runtime node wait for them. The `runtime` key is not matched until a workload names a runtime. The catalog loader rejects a policy that fits neither scope, since it would silently do nothing: `runtime` without `kind: runtime`; a `kind` other than `runtime`; `kind: runtime` together with `type`, `class` or `template`; `add` on a node-scope policy; a workload-scope `set`/`default` path not starting with `runtime.` (a bare `runtime` with no dot is rejected too). |
+| Single pass | Requirement nodes, the runtime mapping's nodes and workload-scope added nodes receive node-scope policies once; an added node never triggers further adds. Added nodes are evaluated with their own name as the current id and the same policy's added nodes in scope; so is every runtime mapping node (the second pass uses the node's own name too, so `name()` agrees between the passes). |
 | Layering | Template default (not known to the resolver) < mapping < team override (only `overridable` fields, validated; post-MVP) < policy `set`. A policy `default` fills a field only when neither the mapping nor any `set` provides it. Fixes the old algorithm applying overrides after policies. |
 | Policy paths | `set`/`default` keys are dotted paths into a node's config; missing intermediate objects are created; a parent that exists but is not an object is an error. Values are evaluated like mapping config. A `set` of an object replaces the whole subtree: the old leaves' provenance is dropped and the policy becomes the source of every leaf of the new value. Config keys that contain `.` cannot be addressed by a policy path. |
 | Policy conflicts | Within the `set` layer, and separately within `default`, these are errors naming the policies (and their files): two policies giving the same field of the same node different values (compared as written); two policies whose paths overlap, where one is a strict prefix of the other (`a` and `a.b`), regardless of values, because the result would depend on application order. The same value on the same path is fine; provenance names the first policy in name order. Inside a single policy, a `set` or `default` path that is a strict prefix of another of its own paths (`a: {b: 1}` with `a.b: 2`) is rejected at load for the same reason. Two workload-scope policies adding a node with the same name is also an error, as is one adding a node the runtime mapping declares. A requirement dropped by expansion keeps its errors in the policy result. |
@@ -331,7 +352,7 @@ Every invalid expression in a string is reported (file, location, message) and t
 | References | Static values resolve immediately. `${node.output}` stays a pending reference ([Expressions](#expressions)) and becomes a graph edge. |
 | Phases | Derived from edges, never listed per template: `runtime` for the runtime node itself; `after-runtime` when a node depends on the runtime node (it references `runtime.*`) directly or through a node that does; `infrastructure` otherwise. |
 | Built-ins | `name(kind)` and `guid(...)` as defined in [Expressions](#expressions) ([C14](../open-questions.md)). Role GUIDs come from `roles.yaml`. Nothing else. |
-| Security | References may target only the workload's own nodes and `env.*` resources the [environment descriptor](#environment-descriptor) lists as grantable. Cross-workload references are rejected by the engine. The graph builder enforces it statically ([D19](../open-questions.md)): every `env.<path>` a `grant` node's config reads, including inside functions and added or overridden by a policy, must be in `grantable`, otherwise an error names the node, the field and the path. Other nodes may read any `env.*` value. A `resource.<id>.<export>` reference in node config is an error: edges come only from references to nodes in the same scope. |
+| Security | References may target only the workload's own nodes and `env.*` resources the [environment descriptor](#environment-descriptor) lists as grantable. Cross-workload references are rejected by the engine. The graph builder enforces it statically ([D19](../open-questions.md)): every `env.<path>` a `grant` node's config reads, including inside functions and added or overridden by a policy, must be in `grantable`, otherwise an error names the node, the field and the path. Other nodes may read any `env.*` value. A `resource.<id>.<export>` reference in a requirement's node config is an error (requirement scopes must not read each other): edges there come only from references to nodes in the same scope. The `@workload` scope (the runtime mapping and the nodes workload-scope policies add) may read any requirement's exports. |
 
 ## Output: ResolvedGraph
 
@@ -348,13 +369,13 @@ Per node:
 | stack | The id with `/` replaced by `.` and `@` by `_` (Pulumi stack names allow `[A-Za-z0-9_.-]`), for example `shop.dev.orders.database` and `shop.dev._workload.appinsights`: one backend stack per node, so workloads never share a stack. Unique by construction: ids contain no `.` or `_`, and `_workload` cannot be a requirement id. Node names (mapping `nodes:` keys and policy `add:` keys) must match `^[a-z]([a-z0-9-]*[a-z0-9])?$`; the catalog loader enforces it in code, since the schema validator ignores `propertyNames`. Length limits of the backend are the adapter's concern. |
 | scope, name, template, kind | As expanded (`kind`: `create` or `grant`). |
 | config, provenance | Values (`Resolved` or `Pending`) and where each leaf came from. |
-| depends-on | Ids of nodes in the same scope referenced by a pending `${node.output}`, and the runtime node's id when the config references `runtime.*`; sorted. |
+| depends-on | Ids of nodes in the same scope referenced by a pending `${node.output}`, the runtime node's id when the config references `runtime.*`, and, for a `@workload` node reading `${resource.<id>.<export>}`, the nodes that export waits on (its own `${node.output}` references, in the requirement's scope); sorted. |
 | phase | `infrastructure`, `runtime` or `after-runtime`, derived (see [Engine rules](#engine-rules-generic-code-written-once)). |
 | probe | On the runtime node only: the runtime mapping's `probe` (`path`, `expectedStatus`). Not part of the hash. |
 | hash | Lowercase hex SHA-256 of the UTF-8 bytes of the JSON object `{"template":…,"kind":"create"\|"grant","config":…}` in that key order, written by Newtonsoft `JToken.ToString(Formatting.None)` with default string escaping; config is the canonical form below. YAML date-like values stay strings, so the hash does not depend on the machine's time zone. |
 
 **Canonical config** (`ConfigJson`): objects with keys in ordinal order, arrays in order, non-string scalars as
-written, a resolved string as its value, a pending string as its original text. Changing this form changes every
+written, a resolved string as its value, a pending string as its original text, an `fn::entries` map as its sorted list of `{name, value}` items. Changing this form changes every
 hash, so it is part of the contract. The hash lets the orchestrator skip unchanged stacks ([H47](../open-questions.md)).
 
 **Order:** topological (dependencies first), always taking the smallest ready id, so it never depends on input order.

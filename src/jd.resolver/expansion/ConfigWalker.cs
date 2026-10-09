@@ -6,6 +6,12 @@ namespace jd.resolver.expansion;
 /// <summary>Evaluates catalog config (mapping nodes, policy values and added nodes) into <see cref="ConfigValue"/>s; shared by expansion and policies.</summary>
 internal static class ConfigWalker
 {
+    /// <summary>The one config-level form: <c>{ fn::entries: &lt;map&gt; }</c> is that map, deployed as a sorted list of <c>{name, value}</c>.</summary>
+    internal const string EntriesKey = "fn::entries";
+
+    /// <summary>The source <see cref="EntriesKey"/> names in a mapping; the Expander replaces it with the workload's <c>container.variables</c>.</summary>
+    internal const string EntriesSource = "workload.variables";
+
     /// <summary>Walks each top-level field of a node's config; a field that failed to evaluate is omitted (see <see cref="Walk"/>).</summary>
     internal static ConfigObject WalkConfig(IReadOnlyDictionary<string, JToken> config, ExpressionEvaluator evaluator, string file, string location, ICollection<LoadError> errors)
     {
@@ -27,6 +33,14 @@ internal static class ConfigWalker
     {
         switch (token)
         {
+            case JObject { Count: 1 } wrapper when wrapper.Property(EntriesKey) is { } entries:
+                var walked = Walk(entries.Value, evaluator, file, $"{location}.{EntriesKey}", errors);
+                if (walked is not (null or ConfigObject))
+                {
+                    errors.Add(new LoadError(file, location, $"{EntriesKey} takes a map, but its source '{entries.Value}' is not one; the only source is {EntriesSource}, in a mapping's node config."));
+                }
+
+                return walked is ConfigObject map ? map with { AsEntries = true } : null;
             case JObject obj:
                 var properties = new Dictionary<string, ConfigValue>();
                 foreach (var property in obj.Properties())

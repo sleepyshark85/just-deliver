@@ -4,6 +4,8 @@ using jd.definitionvalidator;
 using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
+using jd.resolver.expansion;
+using jd.resolver.expressions;
 using jd.resolver.graph;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -45,6 +47,7 @@ public class OrchestratorTests
               appId: ${app.id}
         exports:
           out: x
+          key: y
         """;
 
     // The runtime is not deployed by the walk; it is reported, first, because its id sorts before any requirement's.
@@ -53,13 +56,22 @@ public class OrchestratorTests
     private const string DefaultRequires = "  - type: thing\n";
 
     // The orchestrator gets the catalog the graph was resolved with.
-    private static async Task<(ResolvedGraph Graph, Catalog Catalog)> ResolveAsync(string requires = DefaultRequires, string mapping = Mapping, string workloadName = "shop")
+    private static async Task<(ResolvedGraph Graph, Catalog Catalog)> ResolveAsync(
+        string requires = DefaultRequires, string mapping = Mapping, string workloadName = "shop", string runtimeMapping = RuntimeMapping, string policy = "", string container = "")
     {
-        var files = new[] { "kind: Catalog\nversion: \"1\"\n", "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n", mapping, RuntimeMapping }
+        var files = new[]
+            {
+                "kind: Catalog\nversion: \"1\"\n",
+                "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out, key]\n",
+                "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
+                mapping,
+                runtimeMapping,
+            }
+            .Concat(policy.Length > 0 ? [policy] : [])
             .Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: {workloadName}, team: crew }}\nrequires:\n{requires}");
+        var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: {workloadName}, team: crew }}\n{container}requires:\n{requires}");
         var graph = Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, Env);
         Assert.Empty(graph.Errors);
         return (graph, loaded.Catalog!);
@@ -378,7 +390,7 @@ public class OrchestratorTests
     public async Task A_null_config_value_fails_naming_node_and_field_and_is_never_sent_as_text()
     {
         var backend = new FakeBackend();
-        var mapping = "kind: Mapping\nmatch: { type: thing }\nnodes:\n  n:\n    template: t/n\n    config: { a: { b: ~ } }\nexports:\n  out: x\n";
+        var mapping = "kind: Mapping\nmatch: { type: thing }\nnodes:\n  n:\n    template: t/n\n    config: { a: { b: ~ } }\nexports:\n  out: x\n  key: y\n";
 
         var report = await DeployAsync(backend, mapping: mapping);
 
@@ -386,5 +398,116 @@ public class OrchestratorTests
         Assert.Equal(NodeOutcome.Failed, failed.Outcome);
         Assert.Contains("node 'shop/dev/thing/n': field 'a.b' is null", failed.Message);
         Assert.Empty(backend.Calls);
+    }
+
+    // The two mappings below make the runtime's variables, and a node of the workload reading an export, wait for a deployed output.
+    private const string ExportingMapping = """
+        kind: Mapping
+        match: { type: thing }
+        nodes:
+          group:
+            template: t/group
+            config: { owner: '${workload.team}' }
+        exports:
+          out: pre-${group.id}
+          key: ${group.key}
+        """;
+
+    // 'wiring' is a node of the runtime mapping that is not the runtime: it is deployed by the walk, which the runtime itself is not yet.
+    private const string WiringRuntimeMapping = """
+        kind: Mapping
+        match: { kind: runtime }
+        nodes:
+          runtime:
+            template: t/runtime
+            config: { k: 1 }
+          wiring:
+            template: t/wiring
+            config:
+              settled: ${name('thing')}
+              variables:
+                fn::entries: workload.variables
+        """;
+
+    private static Task<RunReport> DeployWiringAsync(FakeBackend backend, string variables) =>
+        DeployResolvedAsync(backend, ExportingMapping, WiringRuntimeMapping, container: $"container:\n  image: reg/app:1\n  variables:\n{variables}");
+
+    private static async Task<RunReport> DeployResolvedAsync(FakeBackend backend, string mapping, string runtimeMapping, string policy = "", string container = "")
+    {
+        var (graph, catalog) = await ResolveAsync(DefaultRequires, mapping, runtimeMapping: runtimeMapping, policy: policy, container: container);
+        return await new Orchestrator(backend, backend, catalog, Env).DeployAsync(graph, null, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task A_pending_workload_variable_is_resolved_in_the_second_pass_and_the_variables_are_a_list_sorted_by_name()
+    {
+        var backend = new FakeBackend();
+
+        var report = await DeployWiringAsync(backend, "    ZED: '${resource.thing.out}'\n    ALPHA: lit\n    MID: 'x-${resource.thing.out}'\n");
+
+        Assert.True(report.Succeeded);
+        var wiring = backend.Calls.Single(c => c.Package.StackName == "shop.dev._workload.wiring").Package.DeploymentParameters;
+        const string deployed = "pre-id-shop.dev.thing.group";
+        Assert.Equal($$"""[{"name":"ALPHA","value":"lit"},{"name":"MID","value":"x-{{deployed}}"},{"name":"ZED","value":"{{deployed}}"}]""", wiring["variables"].Value);
+        Assert.False(wiring["variables"].IsSecret);
+        // The export was deployed first: the wiring node comes after the requirement's node in the walk.
+        Assert.True(backend.Calls.FindIndex(c => c.Package.StackName == "shop.dev.thing.group") < backend.Calls.FindIndex(c => c.Package.StackName == "shop.dev._workload.wiring"));
+    }
+
+    [Fact]
+    public async Task A_variable_that_reads_a_secret_output_makes_the_variables_entry_secret()
+    {
+        var backend = new FakeBackend();
+
+        var report = await DeployWiringAsync(backend, "    PLAIN: lit\n    CONNECTION: '${resource.thing.key}'\n");
+
+        Assert.True(report.Succeeded);
+        var wiring = backend.Calls.Single(c => c.Package.StackName == "shop.dev._workload.wiring").Package.DeploymentParameters;
+        Assert.True(wiring["variables"].IsSecret);
+        Assert.Contains("k-shop.dev.thing.group", wiring["variables"].Value);
+        Assert.False(wiring["settled"].IsSecret);
+    }
+
+    [Fact]
+    public async Task A_runtime_node_that_is_not_called_runtime_evaluates_the_same_in_both_passes()
+    {
+        var backend = new FakeBackend();
+
+        await DeployWiringAsync(backend, "    A: lit\n");
+
+        // 'settled' has no reference, so the resolver fixes it with the node's own name; the second pass must not disagree.
+        var (graph, _) = await ResolveAsync(mapping: ExportingMapping, runtimeMapping: WiringRuntimeMapping, container: "container:\n  image: reg/app:1\n");
+        var resolved = Assert.IsType<Resolved>(Assert.IsType<ConfigText>(graph.Nodes.Single(n => n.Name == "wiring").Config["settled"]).Result);
+        Assert.Equal("shop-wiring", resolved.Value);
+        Assert.Equal("shop-wiring", backend.Calls.Single(c => c.Package.StackName == "shop.dev._workload.wiring").Package.DeploymentParameters["settled"].Value);
+    }
+
+    [Fact]
+    public async Task A_workload_node_reading_an_export_and_the_workload_image_and_port_resolves_in_the_second_pass()
+    {
+        var backend = new FakeBackend();
+        const string policy = """
+            kind: Policy
+            name: extra
+            reason: r
+            match: { kind: runtime }
+            add:
+              extra:
+                template: t/extra
+                config:
+                  fromExport: ${resource.thing.out}
+                  fromSecret: ${resource.thing.key}
+                  both: ${workload.image}:${workload.port}-${resource.thing.out}
+            """;
+
+        var report = await DeployResolvedAsync(backend, ExportingMapping, RuntimeMapping, policy, "container:\n  image: reg/app\n  ports:\n    - port: 8080\n");
+
+        Assert.True(report.Succeeded);
+        var extra = backend.Calls.Single(c => c.Package.StackName == "shop.dev._workload.extra").Package.DeploymentParameters;
+        Assert.Equal("pre-id-shop.dev.thing.group", extra["fromExport"].Value);
+        Assert.False(extra["fromExport"].IsSecret);
+        Assert.Equal("k-shop.dev.thing.group", extra["fromSecret"].Value);
+        Assert.True(extra["fromSecret"].IsSecret);
+        Assert.Equal("reg/app:8080-pre-id-shop.dev.thing.group", extra["both"].Value);
     }
 }

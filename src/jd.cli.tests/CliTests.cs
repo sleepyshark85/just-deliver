@@ -123,6 +123,11 @@ public sealed class CliTests : IDisposable
         Assert.Contains("template: azure/container-app  kind: Create  phase: Runtime", stdout);
         Assert.Contains("  probe: GET /health expects 200", stdout);
         Assert.Contains("  targetPort = 8080   [Mapping: mappings/runtime/container-app.yaml]", stdout);
+        // The env wiring: each variable with its source, and whether it still waits for a deployed output.
+        Assert.Contains("  variables.LOG_LEVEL = info   [Workload: container.variables]", stdout);
+        Assert.Contains("  variables.COSMOS_ENDPOINT = https://cosmos-dev.documents.azure.com:443/   [Workload: container.variables]", stdout);
+        Assert.Contains("  variables.COSMOS_CONTAINER = pending: ${resource.database.container}   [Workload: container.variables]", stdout);
+        Assert.Contains("  variables.APPLICATIONINSIGHTS_CONNECTION_STRING = pending: ${appinsights.connectionString}   [PolicySet: enforce-monitoring (policies/enforce-monitoring.yaml)]", stdout);
     }
 
     [Fact]
