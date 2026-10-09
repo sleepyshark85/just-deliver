@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S01 — Workload schema v2
+- **Next slice:** S02 — Catalog formats + loader
 - **In progress:** —
 - **Blocked:** —
 
@@ -16,7 +16,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | ID | Slice | State | Branch / PR | Rounds | Notes |
 |---|---|---|---|---|---|
 | S00 | Repo baseline + team setup | done | `main` | | Strict build, verify gate, hook, CI, agents, standards, sandbox |
-| S01 | Workload schema v2 | todo | | | |
+| S01 | Workload schema v2 | done | PR #2 | 1 + suggestions | APPROVE first round; non-blocking test/doc gaps fixed before merge. `id` pattern widened vs ADR 0011 (hyphens, ≤16) — recorded under C13/C14 |
 | S02 | Catalog formats + loader | todo | | | |
 | S03 | Environment descriptor | todo | | | |
 | S04 | Expression evaluator | todo | | | |
@@ -49,7 +49,13 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
 
 - **2026-10-09** — Models switched to Sonnet 5.5 (developer) / Opus 5.5 (reviewer) on trial; ask the
-  user to re-choose if PR quality is poor. Baseline pushed to GitHub. Starting S01.
+  user to re-choose if PR quality is poor. Baseline pushed to GitHub. S01 done (PR #2).
+  GitHub: repo is private on the free plan, so branch protection is unavailable and Actions is blocked
+  by account billing — local pre-push hook blocks pushes to main; lead runs `tools/verify.sh` before
+  each merge. User asked to choose: GitHub Pro + fix billing, make public, or stay local-only.
+  Workflow note: developer runs in an isolated worktree; reviewer verifies in a temporary detached
+  worktree; the lead commits the status update on the slice branch before merging.
+  Trial so far (Sonnet dev / Opus review): S01 approved first round, good quality.
 - **2026-10-08** — Repo baseline and team setup (S00). Docs reorganised; sandbox subscription
   prepared and guardrails verified; strict build, `tools/verify.sh`, commit hook, CI; developer
   and reviewer agents; standards and review checklist; MVP sliced into S01–S18.

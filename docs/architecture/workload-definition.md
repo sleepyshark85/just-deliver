@@ -28,17 +28,16 @@ kind: Workload
 metadata:
   name: just-deliver-sample-app       # ^[a-z][a-z0-9-]{1,38}[a-z0-9]$ (3-40 chars, DNS-safe)
   team: platform-team
-  environment: dev                    # dev | staging | production  (to be removed, see H50)
 container:                            # SCORE-compatible subset
   image: myregistry.azurecr.io/just-deliver-sample-app:1.0.0
   variables:
     LOG_LEVEL: info
-    COSMOS_ENDPOINT: ${resource.database.endpoint}   # endpoint only; app uses its managed identity
+    COSMOS_ENDPOINT: ${resource.cosmos-sql.endpoint}   # endpoint only; app uses its managed identity
   ports:
     - port: 8080
       protocol: TCP
 requires:
-  - type: database
+  - type: cosmos-sql
 ```
 
 | Field | Required | Notes |
@@ -47,33 +46,37 @@ requires:
 | `kind` | yes | enum `Workload` |
 | `metadata.name` | yes | Feeds generated resource names, so it must survive prefixes/suffixes (C14) |
 | `metadata.team` | yes | Drives approval routing and cost attribution |
-| `metadata.environment` | yes (today) | enum `dev`, `staging`, `production`; scheduled for removal |
 | `container.image` | yes | Fully qualified, including tag |
-| `container.variables` | no | String map; may contain resource references |
+| `container.variables` | no | String map; may contain `${resource.<id>.<output>}` references |
 | `container.ports[]` | no | `port` 1-65535 (required), `protocol` `TCP`/`UDP` |
-| `requires[].type` | yes | enum `database`, `cache`, `queue`, `storage`, `secrets`, `cdn` — each must have a platform mapping; extend as mappings are added |
-| `requires[].overrides` | no | Object, min 1 property; whitelisted fields only |
-| `requires[].override_reason` | when `overrides` present | Enforced via `anyOf`/`not`, because NJsonSchema silently ignores draft-07 `dependencies` |
+| `requires[].type` | yes | Lowercase kebab-case, `^[a-z][a-z0-9-]{1,14}[a-z0-9]$`. Whether the type exists is the resolver's job (catalog), not the schema's |
+| `requires[].id` | no | Same pattern as `type`; effective id defaults to `type` |
+| `requires[].class` | no | Same pattern; defaults to `standard` |
+
+Overrides (`overrides`, `override_reason`) are out of MVP scope and rejected by the schema.
 
 `additionalProperties: false` at every level; top-level required: `apiVersion`, `kind`, `metadata`, `container`. Validation is implemented in `src/jd.definitionvalidator` (YamlDotNet with unquoted-scalar type inference so
-`port: 8080` stays an integer, then NJsonSchema).
+`port: 8080` stays an integer, then NJsonSchema). Rules JSON Schema cannot express run afterwards in code
+(`WorkloadRules`), only on a document that passed the schema: effective ids are unique within the workload,
+and every `${resource.<id>.<output>}` in `container.variables` names a declared effective id.
 
-### Requirements: `id` and `class` (C12, C13 — not yet in the schema)
+### Requirements: `id` and `class` (C12, C13)
 
 ```yaml
 requires:
-  - type: database                 # id defaults to "database", environment's shared server
-  - type: database
+  - type: cosmos-sql               # id defaults to "cosmos-sql", environment's shared server
+  - type: cosmos-sql
     id: reporting                  # second database, same shared server
-  - type: database
+  - type: cosmos-sql
     id: ledger
     class: dedicated               # its own server: a different substrate tier
 ```
 
 - **`id`** ([0011](../decisions/0011-requirement-id.md)): optional, defaults to the type name. Unique within the
-  workload, validated by schema pre-upload (two id-less requirements of one type collide and fail with a
-  "name them" message). Lowercase alphanumeric, roughly 12 characters, because it feeds generated names
-  (storage accounts cap at 24 lowercase alphanumerics). `id` is an **identity, not a label**: renaming
+  workload, validated pre-upload by the validator (two id-less requirements of one type collide and fail
+  with a "set distinct ids" message). Lowercase kebab-case, 3-16 characters (`^[a-z][a-z0-9-]{1,14}[a-z0-9]$`);
+  the tighter ~12-character alphanumeric budget for generated names (storage accounts cap at 24 lowercase
+  alphanumerics) is still open under C14. `id` is an **identity, not a label**: renaming
   `db` to `primary` is delete + create of an empty database; `protect` (C11) and the destructive-diff
   gate (C16) make this fail safe, but it must be documented.
 - **`class`**: how isolated / which operational shape. "Dedicated" means its own server (noisy neighbour,
@@ -85,8 +88,8 @@ requires:
 
 ### Resource references
 
-`${resource.<id>.<output>}`, with `id` defaulting to `<type>`, so `${resource.database.host}` keeps working
-(the schema description still says `<type>`). Substituted at deployment time; some outputs (principal ids,
+`${resource.<id>.<output>}`, with `id` defaulting to `<type>`, so a requirement without an id is referenced
+as `${resource.<type>.<output>}`. Substituted at deployment time; some outputs (principal ids,
 endpoints) only exist after earlier steps run, so references resolve in phases — see [resolver.md](resolver.md).
 
 ## What teams do not specify
@@ -123,14 +126,14 @@ requires:
 | Rule | Detail |
 |---|---|
 | Whitelist | Platform defines overridable fields per type, e.g. `database: [backup_retention_days, connection_timeout]`, `cache: [sku, eviction_policy, persistence]`, `queue: [max_message_size, default_ttl]`. Protects encryption, compliance tags etc. |
-| Reason | `override_reason` mandatory (schema-enforced) |
+| Reason | `override_reason` mandatory (to be enforced when overrides return; the MVP schema rejects overrides altogether) |
 | Approval | dev: no; staging: no; production: yes (ops must approve deviations). Since the platform diffs against the previous definition, a new override is a sensitive-field change routed to the gate (0007) |
 | Precedence | Overrides must **not** beat compliance policies — the old algorithm applied them after policies; see [provisioning.md](provisioning.md#precedence) |
 | Non-persistence | Not carried to the next deployment unless re-specified; prevents hidden drift. A permanent need belongs in the mapping |
 | Logging | `override_reason`, resource type, field, requested value, environment, deployment id, timestamp |
 | Feedback loop | Weekly review, e.g. `cache.sku=Premium_P1` x5 → add `high-performance` class; `database.backup_retention_days=90` x3 → `compliance` class; one-off experiments → monitor |
 
-Current MVP state: the schema accepts overrides; nothing applies the whitelist or the approval gate yet.
+Current MVP state: overrides are out of MVP scope and the schema rejects them.
 
 ## Evolution path
 
@@ -143,15 +146,15 @@ Current MVP state: the schema accepts overrides; nothing applies the whitelist o
 **Type naming rule (C52):** the type names the *interface the code binds to*; the class names the
 *operational shape the code cannot see*. `type: database` breaks the moment it resolves to an engine the
 team's driver does not expect, so expect `type: postgres` / `cosmos`, `class: dedicated` — abstract SKU, HA,
-backup and size, never the wire protocol. This would change the current `database`/`cache`/`queue` enum.
+backup and size, never the wire protocol.
 
 ## Pending schema changes (H50)
 
-Decided but not yet applied to `workload.schema.json`:
+Decided; items 1 and 2 are applied to `workload.schema.json`, the rest are not yet:
 
-1. **Remove `metadata.environment`** (A1, A2) — the environment is a deployment parameter. Same argument,
-   weaker, for `name` and `team` (registration identity that can drift if duplicated in the file).
-2. **Add `id` and `class`** to `requires` items (C12, C13), with the constraints above.
+1. ~~Remove `metadata.environment`~~ (A1, A2) — done (S01). The same argument, weaker, applies to `name`
+   and `team` (registration identity that can drift if duplicated in the file).
+2. ~~Add `id` and `class`~~ to `requires` items (C12, C13) — done (S01).
 3. **Add a `hooks` block** (E28, E33; [0014](../decisions/0014-hook-points.md), [0015](../decisions/0015-database-migrations.md)):
    `preDeploy`, `verify`, `postDeploy`, each with `command`, optional `image` (defaults to the workload
    image for `preDeploy`), `timeout` (default 10 minutes), optional tier restriction, and `destructive` on

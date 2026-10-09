@@ -14,8 +14,15 @@ public class YamlSchemaValidator
         .WithAttemptingUnquotedStringTypeDeserialization()
         .Build();
 
-    public YamlSchemaValidator()
+    private readonly Func<JToken, IReadOnlyList<string>>? _rules;
+
+    /// <param name="rules">
+    /// Checks for what the schema cannot express, run only on a document that passed the schema
+    /// (for workloads: <see cref="WorkloadRules.Check"/>). Each returned string is one error.
+    /// </param>
+    public YamlSchemaValidator(Func<JToken, IReadOnlyList<string>>? rules = null)
     {
+        _rules = rules;
     }
 
     public async Task<ValidationResult> ValidateAsync(string schemaFilePath, string yamlFilePath)
@@ -49,7 +56,10 @@ public class YamlSchemaValidator
 
             if (validationErrors.Count == 0)
             {
-                return new ValidationResult(true, Array.Empty<string>());
+                var ruleErrors = _rules?.Invoke(instance) ?? Array.Empty<string>();
+                return ruleErrors.Count == 0
+                    ? new ValidationResult(true, Array.Empty<string>())
+                    : new ValidationResult(false, ruleErrors.ToArray());
             }
 
             var errors = validationErrors

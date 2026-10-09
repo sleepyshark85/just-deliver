@@ -17,7 +17,7 @@
     "metadata": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "team", "environment"],
+      "required": ["name", "team"],
       "properties": {
         "name": {
           "description": "Workload identifier. Used to generate resource names, so it must be DNS-safe and short enough to survive per-resource prefixes and suffixes.",
@@ -28,10 +28,6 @@
           "description": "Owning team. Drives approval routing and cost attribution.",
           "type": "string",
           "minLength": 1
-        },
-        "environment": {
-          "description": "Target environment. The same definition deploys to every environment; the platform mapping adjusts sizing per environment.",
-          "enum": ["dev", "staging", "production"]
         }
       }
     },
@@ -47,7 +43,7 @@
           "minLength": 1
         },
         "variables": {
-          "description": "Environment variables. Values may reference provisioned resources with ${resource.<type>.<output>}, substituted at deployment time.",
+          "description": "Environment variables. Values may reference provisioned resources with ${resource.<id>.<output>}, where <id> is the requirement's effective id (its id, or its type when no id is set). Substituted at deployment time.",
           "type": "object",
           "additionalProperties": { "type": "string" }
         },
@@ -72,31 +68,28 @@
       }
     },
     "requires": {
-      "description": "Infrastructure the workload needs, declared by type only. The platform picks the concrete resource and its configuration.",
+      "description": "Infrastructure the workload needs, declared by type only. The platform picks the concrete resource and its configuration. Effective ids (id, or type when id is absent) must be unique within the workload, and every ${resource.<id>.<output>} reference must name a declared id; the validator checks both, this schema cannot.",
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["type"],
-        "$comment": "Overrides must carry a reason. Expressed as anyOf/not rather than draft-07 'dependencies', which NJsonSchema silently ignores.",
-        "anyOf": [
-          { "not": { "required": ["overrides"] } },
-          { "required": ["override_reason"] }
-        ],
         "properties": {
           "type": {
-            "description": "Resource type. Must have a corresponding platform mapping - extend this list as mappings are added.",
-            "enum": ["database", "cache", "queue", "storage", "secrets", "cdn"]
-          },
-          "overrides": {
-            "description": "Escape hatch for edge cases the platform mapping does not yet cover. Only fields on the platform's override whitelist are accepted, and overrides do not persist across deployments.",
-            "type": "object",
-            "minProperties": 1
-          },
-          "override_reason": {
-            "description": "Why the override is needed. Required whenever overrides are present - this feeds the platform team's review of which mappings need to change.",
+            "description": "Resource type, lowercase kebab-case. Whether the type exists is checked against the platform catalog by the resolver, not by this schema.",
             "type": "string",
-            "minLength": 1
+            "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$"
+          },
+          "id": {
+            "description": "Identity of this requirement within the workload, referenced as ${resource.<id>.<output>}. Optional; the effective id defaults to the value of type. It is an identity, not a label: renaming it deletes the old resource and provisions a new one.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$"
+          },
+          "class": {
+            "description": "Operational shape of the resource, such as how isolated it is. Optional; defaults to standard.",
+            "type": "string",
+            "default": "standard",
+            "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$"
           }
         }
       }

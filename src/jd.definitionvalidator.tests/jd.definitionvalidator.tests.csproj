@@ -13,6 +13,12 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- The real schema and sample are the fixtures, so the tests break when either drifts. -->
+  <ItemGroup>
+    <Content Include="../../schemas/workload.schema.json" Link="workload.schema.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../samples/provisioner/workload.yaml" Link="sample-workload.yaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../jd.definitionvalidator/jd.definitionvalidator.csproj" />
   </ItemGroup>

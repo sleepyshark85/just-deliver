@@ -145,3 +145,6 @@ yarn-error.log
 # Secrets and local Pulumi state — never commit
 *.env
 .pulumi/
+
+# Agent worktrees
+.claude/worktrees/
