@@ -10,8 +10,8 @@ public abstract record ConfigValue;
 /// <summary>A non-string scalar, copied from the catalog.</summary>
 public sealed record ConfigScalar(JToken Value) : ConfigValue;
 
-/// <summary>A string, evaluated: <see cref="Resolved"/> or <see cref="Pending"/> on references.</summary>
-public sealed record ConfigText(EvalResult Result) : ConfigValue;
+/// <summary>A string, evaluated: <see cref="Resolved"/> or <see cref="Pending"/> on references. EnvPaths are the <c>env.</c> paths it read.</summary>
+public sealed record ConfigText(EvalResult Result, IReadOnlySet<string> EnvPaths) : ConfigValue;
 
 public sealed record ConfigObject(IReadOnlyDictionary<string, ConfigValue> Properties) : ConfigValue;
 

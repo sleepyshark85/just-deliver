@@ -10,12 +10,14 @@ namespace jd.resolver.expressions;
 /// </summary>
 public sealed partial class ExpressionEvaluator(ExpressionContext context)
 {
+    /// <summary>The reserved node name of the runtime: always in scope, never declared by a mapping.</summary>
+    public const string RuntimeNode = "runtime";
+
     // Namespaces (first path segment) and the node they reference; part of the expression format.
     private const string EnvNamespace = "env";
     private const string RoleNamespace = "role";
     private const string WorkloadNamespace = "workload";
     private const string ResourceNamespace = "resource";
-    private const string RuntimeNode = "runtime";
     private const string WorkloadNameField = "name";
     private const string WorkloadTeamField = "team";
 
@@ -26,6 +28,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     };
 
     private static readonly IReadOnlySet<Reference> NoReferences = new HashSet<Reference>();
+    private static readonly IReadOnlySet<string> NoEnvPaths = new HashSet<string>();
 
     [GeneratedRegex(@"^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$")]
     private static partial Regex PathPattern();
@@ -33,14 +36,16 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     [GeneratedRegex(@"^[a-z][a-z0-9]*$")]
     private static partial Regex FunctionNamePattern();
 
-    // Text is null while the value waits on References.
-    private sealed record Value(string? Text, IReadOnlySet<Reference> References);
+    // Text is null while the value waits on References. EnvPaths are the env.<path> values read to produce it.
+    private sealed record Value(string? Text, IReadOnlySet<Reference> References, IReadOnlySet<string> EnvPaths);
 
     /// <summary>
     /// Evaluates every expression in <paramref name="text"/>. Returns null, with every problem added to
     /// <paramref name="errors"/> at <paramref name="file"/>/<paramref name="location"/>, when any expression is invalid.
+    /// The environment paths read (<c>env.&lt;path&gt;</c>, without <c>env.</c>) are added to <paramref name="envPaths"/>:
+    /// a resolved value no longer shows where it came from, and the grant check needs to know.
     /// </summary>
-    public EvalResult? Evaluate(string text, string file, string location, ICollection<LoadError> errors)
+    public EvalResult? Evaluate(string text, string file, string location, ICollection<LoadError> errors, ISet<string>? envPaths = null)
     {
         void Fail(string message) => errors.Add(new LoadError(file, location, message));
 
@@ -73,6 +78,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
             else
             {
                 references.UnionWith(value.References);
+                envPaths?.UnionWith(value.EnvPaths);
                 output.Append(value.Text);
             }
 
@@ -148,15 +154,16 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
             return null;
         }
 
+        var envs = values.SelectMany(v => v.EnvPaths).ToHashSet();
         var pending = values.Where(v => v.Text is null).SelectMany(v => v.References).ToHashSet();
         if (pending.Count > 0)
         {
-            return new Value(null, pending);
+            return new Value(null, pending, envs);
         }
 
         var texts = values.Select(v => v.Text ?? throw new UnreachableException("pending arguments are handled above")).ToList();
         var result = function == BuiltIns.NameFunction ? BuiltIns.Name(context, texts[0], fail) : BuiltIns.Guid(texts);
-        return result is null ? null : Known(result);
+        return result is null ? null : new Value(result, NoReferences, envs);
     }
 
     private static List<string> SplitArguments(string inner)
@@ -208,9 +215,10 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
         switch (segments[0])
         {
             case EnvNamespace:
-                if (segments.Length > 1 && context.Environment.TryGet(string.Join('.', segments[1..]), out var envValue))
+                var envPath = string.Join('.', segments[1..]);
+                if (segments.Length > 1 && context.Environment.TryGet(envPath, out var envValue))
                 {
-                    return Known(envValue);
+                    return new Value(envValue, NoReferences, new HashSet<string> { envPath });
                 }
 
                 fail($"'{path}' is not a value of environment '{context.Environment.Name}'.");
@@ -266,7 +274,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
 
     // A deploy-time value: resolved if the caller already knows it, otherwise pending on it.
     private Value Await(Reference reference) =>
-        context.KnownOutputs.TryGetValue(reference, out var known) ? Known(known) : new Value(null, new HashSet<Reference> { reference });
+        context.KnownOutputs.TryGetValue(reference, out var known) ? Known(known) : new Value(null, new HashSet<Reference> { reference }, NoEnvPaths);
 
-    private static Value Known(string text) => new(text, NoReferences);
+    private static Value Known(string text) => new(text, NoReferences, NoEnvPaths);
 }
