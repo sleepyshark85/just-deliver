@@ -17,6 +17,9 @@ Terraform and Bicep can only be driven by a CLI subprocess. HCL is awkward for v
 - Self-hosted execution: no Pulumi Cloud account and no Pulumi Deployments.
 - Keep state self-hosted in **Azure Blob Storage**, with no dependency on the Pulumi Cloud SaaS.
 
+**User direction, 2026-10-09:** Pulumi stays the infrastructure engine. A Bicep backend (raised by the
+[Viedoc use case](../use-cases/viedoc-daybreak.md)) is not pursued.
+
 ## Consequences
 - **"No shelling out" holds only partly.** Self-hosted Automation API still runs the `pulumi` CLI as a subprocess. The rule therefore means **never shell out from the API request path**: the worker does start the CLI, and the Automation API wraps it with typed results and events.
 - Every worker host needs the `pulumi` CLI and provider plugins. Each stack operation pays a fixed startup cost (CLI process plus provider plugins; `azure-native` is slow to initialise), so a warm plugin cache or a worker image with the plugins baked in matters.

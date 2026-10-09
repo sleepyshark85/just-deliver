@@ -19,6 +19,12 @@ Teams provision their own environments and own everything inside them. The landi
 
 The full read/write matrix is in [architecture/landing-zone.md](../architecture/landing-zone.md).
 
+**User direction, 2026-10-09 (to fold in on review).** Every environment has exactly one owner: a team or
+the platform. A team may own several environments (its dev and test environments, for example).
+**Stage and production are platform-owned shared environments** that host many teams' workloads; teams own
+their workloads inside them but not the environment. The dividing line above applies unchanged: in a
+platform-owned environment, everything outside a team's workloads is the platform's.
+
 ## Consequences
 Accepted:
 - Resource locks are an accident guard in team environments (the team can remove their own) and a genuine control in stage/prod (they cannot). Same mechanism, different force.

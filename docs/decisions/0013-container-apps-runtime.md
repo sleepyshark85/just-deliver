@@ -16,6 +16,10 @@ Something has to run the container. Each runtime brings its own deployment mecha
 
 **Not supported, stated rather than discovered:** stateful workloads, DaemonSet-style patterns, custom operators, service mesh. These are the teams who will ask for AKS.
 
+**User direction, 2026-10-09:** App Service may be supported later as a second implementation of the runtime
+port (raised by the [Viedoc use case](../use-cases/viedoc-daybreak.md)); Container Apps remains the runtime
+for now and for the MVP.
+
 ## Consequences
 - Hooks ([0014](0014-hook-points.md)) largely fall out: a Job is exactly "run this image, as this identity, in this environment, with a timeout", with retry and timeout built in, running inside the environment so it reaches private-endpointed databases.
 - Rollback (E32) is a traffic-weight switch against a warm previous revision, not a redeploy. Single-revision mode would make rollback a redeploy of the old image. Multiple-revision mode also enables deployment strategies (E35) later.
