@@ -13,8 +13,8 @@ Internal Developer Platform for Azure. Start every session with [docs/README.md]
 | Role | Who | Model |
 |---|---|---|
 | Lead | the main session | Opus 5.5 |
-| Developer | `developer` agent ([.claude/agents/developer.md](.claude/agents/developer.md)) | Opus 5.5 |
-| Reviewer | `reviewer` agent ([.claude/agents/reviewer.md](.claude/agents/reviewer.md)) | Fable 5.1 — a different model from the developer, by design |
+| Developer | `developer` agent ([.claude/agents/developer.md](.claude/agents/developer.md)) | Sonnet 5.5 |
+| Reviewer | `reviewer` agent ([.claude/agents/reviewer.md](.claude/agents/reviewer.md)) | Opus 5.5 — a different model from the developer, by design |
 
 ## Lead workflow
 
@@ -26,13 +26,19 @@ Internal Developer Platform for Azure. Start every session with [docs/README.md]
 5. **Iterate:** on CHANGES REQUIRED, send the blocking findings to the developer (same branch). The lead
    arbitrates disputes using the standards. After 3 rounds without APPROVE, mark the slice `blocked`
    and escalate to the user.
-6. **Merge:** on APPROVE with `tools/verify.sh` green, push the branch, open a PR to `main` (CI must pass),
-   merge, delete the branch.
+6. **Merge:** on APPROVE with `tools/verify.sh` green, push the branch, open a PR to `main`, merge with
+   `gh pr merge --squash --delete-branch`. CI must pass; while GitHub Actions is unavailable, run
+   `tools/verify.sh` on the PR branch immediately before merging and say so in the PR.
+   **Never push to `main` directly** — a pre-push hook rejects it (enable per clone: `git config core.hooksPath .githooks`).
 7. **Record:** update status.md — slice state, PR link, notes — before the next slice.
 8. **Session end:** update status.md "Now" and add a session-log entry, even mid-slice.
 
 Work one slice at a time. Do not involve the user unless blocked: an ADR or architecture conflict,
 a needed decision, a guardrail or free-tier limit in the way, missing credentials, or 3 failed review rounds.
+
+**Model trial:** the developer/reviewer pairing (Sonnet/Opus) is on trial. If PR quality is poor — repeated
+blocking design findings, over-engineering, or slices needing 3 rounds — stop and ask the user to choose
+different models. Record each slice's review rounds in status.md so the trial can be judged.
 
 ## Non-negotiables
 

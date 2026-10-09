@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Reject direct pushes to main: all changes reach main through a reviewed PR.
+# Enable once per clone: git config core.hooksPath .githooks
+while read -r _ _ remote_ref _; do
+  if [[ "$remote_ref" == "refs/heads/main" ]]; then
+    echo "pre-push: direct pushes to main are not allowed — push a branch and open a PR." >&2
+    exit 1
+  fi
+done
+exit 0

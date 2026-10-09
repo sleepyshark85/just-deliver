@@ -13,27 +13,27 @@
 
 States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` · `blocked`
 
-| ID | Slice | State | Branch / PR | Notes |
-|---|---|---|---|---|
-| S00 | Repo baseline + team setup | done | `main` | Strict build, verify gate, hook, CI, agents, standards, sandbox |
-| S01 | Workload schema v2 | todo | | |
-| S02 | Catalog formats + loader | todo | | |
-| S03 | Environment descriptor | todo | | |
-| S04 | Expression evaluator | todo | | |
-| S05 | Matching + expansion | todo | | |
-| S06 | Policies + provenance | todo | | |
-| S07 | Graph builder | todo | | |
-| S08 | CLI skeleton | todo | | |
-| S09 | Template library | todo | | |
-| S10 | Provider fixes | todo | | |
-| S11 | Orchestrator (infra nodes) | todo | | |
-| S12 | Substrate from data | todo | | |
-| S13 | Second workload | todo | | |
-| S14 | Sample app | todo | | |
-| S15 | Runtime mapping + container-app | todo | | |
-| S16 | Deploy steps | todo | | |
-| S17 | jd deploy + record | todo | | |
-| S18 | E2E run and docs | todo | | |
+| ID | Slice | State | Branch / PR | Rounds | Notes |
+|---|---|---|---|---|---|
+| S00 | Repo baseline + team setup | done | `main` | | Strict build, verify gate, hook, CI, agents, standards, sandbox |
+| S01 | Workload schema v2 | todo | | | |
+| S02 | Catalog formats + loader | todo | | | |
+| S03 | Environment descriptor | todo | | | |
+| S04 | Expression evaluator | todo | | | |
+| S05 | Matching + expansion | todo | | | |
+| S06 | Policies + provenance | todo | | | |
+| S07 | Graph builder | todo | | | |
+| S08 | CLI skeleton | todo | | | |
+| S09 | Template library | todo | | | |
+| S10 | Provider fixes | todo | | | |
+| S11 | Orchestrator (infra nodes) | todo | | | |
+| S12 | Substrate from data | todo | | | |
+| S13 | Second workload | todo | | | |
+| S14 | Sample app | todo | | | |
+| S15 | Runtime mapping + container-app | todo | | | |
+| S16 | Deploy steps | todo | | | |
+| S17 | jd deploy + record | todo | | | |
+| S18 | E2E run and docs | todo | | | |
 
 ## Environment
 
@@ -48,6 +48,8 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
 
+- **2026-10-09** — Models switched to Sonnet 5.5 (developer) / Opus 5.5 (reviewer) on trial; ask the
+  user to re-choose if PR quality is poor. Baseline pushed to GitHub. Starting S01.
 - **2026-10-08** — Repo baseline and team setup (S00). Docs reorganised; sandbox subscription
   prepared and guardrails verified; strict build, `tools/verify.sh`, commit hook, CI; developer
-  (Opus 5.5) and reviewer (Fable 5.1) agents; standards and review checklist; MVP sliced into S01–S18.
+  and reviewer agents; standards and review checklist; MVP sliced into S01–S18.
