@@ -29,7 +29,7 @@ approvals, so the MVP proves the shape of that early, when it is cheap to change
 |---|---|
 | Two environments, `dev` (tier team) and `stage` (tier protected), one subscription ([sandbox](../../tools/sandbox/README.md)), one region from `JD_REGION` | Landing zone, platform identity model (D19), more environments, multi-region (E53) |
 | Substrate from data per environment: resource group, Container Apps Environment, a Cosmos SQL database (400 RU/s shared throughput); one Log Analytics workspace and one free-tier Cosmos account shared by both environments | Substrate versioning (B7) |
-| One resource type `cosmos-sql`: a container per workload in its environment's database, grant scoped to that container (free tier: 2 environments × 400 RU/s ≤ 1,000) | Other types, `class` values beyond default, applying overrides (rejected for now) |
+| One resource type `database` (platform maps it to Cosmos SQL): a container per workload in its environment's database, grant scoped to that container (free tier: 2 environments × 400 RU/s ≤ 1,000) | Other types, `class` values beyond default, applying overrides (rejected for now) |
 | One policy `enforce-monitoring`: per-workload App Insights | More policies — adding one is a test of goal 1, not scope |
 | Container App, system-assigned identity, multiple-revision mode; image on a public registry | ACR and the ACR-pull identity (0012 follow-up) |
 | Release set: label + pinned workload definitions + image digests + workload-level `dependsOn` | Work-item scope, build-evidence contract (F56) |
@@ -88,6 +88,7 @@ with file-level detail at dispatch time.
 | S10 | **Provider fixes** in `jd.core`/`jd.bp.pulumi`: stack name separate from template, preview with unknowns (no fake values), cancellation | S07 | Unit tests; existing behaviour kept |
 | S11 | **Orchestrator (infra nodes)**: walk graph in order, pass outputs into dependants' config, capture outputs | S09, S10 | Azure test: sample workload infra up, re-run = zero changes, cleanup |
 | S12 | **Substrate from data**: `jd env up dev` resolves an environment definition through the same engine and writes the descriptor from outputs | S11 | Azure test: substrate up; descriptor written; free-tier rules met |
+| S12a | **`database` type (user decision)**: rename the `cosmos-sql` type to `database`; the platform's mapping decides the engine (today Cosmos SQL); add an `engine` export; sample workloads, golden snapshots, docs and C52 updated. An engine change for an existing workload must later route to approval (F54) | S12 | Golden graphs show `database` resolving to the Cosmos container; `engine` exported |
 | S13 | **Release set (offline)**: format + schema + loader (label, workloads: definition ref + image digest + `dependsOn`), validation (unknown workload, cycles, duplicate ids), resolve each workload, deploy order; `jd release create` writes the set | S08 | Tests: order, cycle, unknown dependency; golden set for two sample workloads |
 | S13b | **Deploy a release set (infra)**: orchestrator walks the set in order on `dev` | S12, S13 | Azure test: two workloads, no collisions, RU/s budget respected |
 
