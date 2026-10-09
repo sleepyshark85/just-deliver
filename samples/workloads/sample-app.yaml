@@ -6,7 +6,7 @@ metadata:
   team: platform-team
 
 container:
-  image: myregistry.azurecr.io/just-deliver-sample-app:1.0.0
+  image: ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9
   variables:
     LOG_LEVEL: info
     # The app authenticates with its managed identity, so only addresses are
