@@ -76,6 +76,10 @@ Picked up by the slice named; remove once done.
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
 
+- **2026-10-09 (repo public)** — The user made the repository public. GitHub Actions now runs (`verify` green) and
+  `main` is protected server-side: PR only, `verify` required and up to date, no force-push, admins included,
+  linear history. Merges wait for CI (`gh pr checks --watch`).
+
 - **2026-10-09 (user direction)** — Pulumi stays (no Bicep backend); App Service possible later, Container
   Apps now; environments have one owner (team or platform), a team may own several, stage/production are
   platform-owned shared. Recorded in ADRs 0002, 0013, 0008 (status unchanged, folded in on review).

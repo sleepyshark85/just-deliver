@@ -26,12 +26,11 @@ Internal Developer Platform for Azure. Start every session with [docs/README.md]
 5. **Iterate:** on CHANGES REQUIRED, send the blocking findings to the developer (same branch). The lead
    arbitrates disputes using the standards. After 3 rounds without APPROVE, mark the slice `blocked`
    and escalate to the user.
-6. **Merge:** on APPROVE with `tools/verify.sh` green, push the branch, open a PR to `main`, merge with
-   `gh pr merge --squash --delete-branch`. CI must pass; while GitHub Actions is unavailable, run
-   `tools/verify.sh` on the PR branch immediately before merging and say so in the PR.
-   Delete the branch only after `gh pr view --json state` reports `MERGED` — a failed merge must not
-   trigger cleanup (deleting the remote branch closes the PR).
-   **Never push to `main` directly** — a pre-push hook rejects it (enable per clone: `git config core.hooksPath .githooks`).
+6. **Merge:** on APPROVE, put the status update on the slice branch, push it, open a PR to `main` and wait for CI
+   (`gh pr checks <n> --watch`). `main` is protected on GitHub: changes only via PR, the `verify` check must pass
+   with the branch up to date, no force-push, admins included. Merge with `gh pr merge --squash`; delete the branch only
+   after `gh pr view --json state` reports `MERGED` (deleting the remote branch of an open PR closes it). A local
+   pre-push hook also rejects pushes to `main` (enable per clone: `git config core.hooksPath .githooks`).
 7. **Record:** update status.md — slice state, PR link, notes — before the next slice.
 8. **Session end:** update status.md "Now" and add a session-log entry, even mid-slice.
 
