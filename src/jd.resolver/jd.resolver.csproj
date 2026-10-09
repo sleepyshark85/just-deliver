@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The catalog formats are part of the code, so their schemas ship inside the assembly. -->
+  <!-- The catalog and environment formats are part of the code, so their schemas ship inside the assembly. -->
   <ItemGroup>
     <EmbeddedResource Include="../../schemas/catalog/*.schema.json" LogicalName="schemas/catalog/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../schemas/environment.schema.json" LogicalName="schemas/environment.schema.json" />
   </ItemGroup>
 
   <ItemGroup>

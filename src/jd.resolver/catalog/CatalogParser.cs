@@ -126,7 +126,7 @@ public static partial class CatalogParser
         return new Document(source.Path, kind, body, result.IsValid);
     }
 
-    private static CatalogError ToSchemaError(string file, string schemaError)
+    internal static CatalogError ToSchemaError(string file, string schemaError)
     {
         var path = SchemaErrorRegex().Match(schemaError).Groups["path"].Value;
         var location = path.Trim('/');
