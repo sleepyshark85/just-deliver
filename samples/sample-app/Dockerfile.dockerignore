@@ -1,0 +1,6 @@
+*
+!Directory.Build.props
+!Directory.Packages.props
+!samples/sample-app/
+**/bin
+**/obj
