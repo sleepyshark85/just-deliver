@@ -45,3 +45,7 @@ Builds the multi-stage `linux/amd64` image (non-root, port 8080), logs in to GHC
 `ghcr.io/<owner>/just-deliver-sample-app:<git short sha>` and prints the image reference and **digest**. Deployments
 should pin the digest. GHCR packages start private: make the package public in GitHub (Package settings, Change
 visibility) so Container Apps can pull without credentials.
+
+The script refuses a working tree with uncommitted changes (the tag must match what was built) and runs
+`docker logout ghcr.io` on exit so the `gh` token is not left in `~/.docker/config.json` — this also ends any GHCR
+login you had before running it.
