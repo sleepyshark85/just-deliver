@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using jd.definitionvalidator;
+using jd.resolver.expressions;
 using Newtonsoft.Json.Linq;
 
 namespace jd.resolver.catalog;
@@ -66,6 +67,7 @@ public static class CatalogParser
         CheckPolicyScopes(policies, errors);
         CheckPolicyPaths(policies, errors);
         CheckNodeNames(mappings, policies, errors);
+        CheckRuntimeNode(mappings, policies, errors);
         CheckExportsContract(mappings, types, errors);
 
         if (errors.Count > 0)
@@ -183,6 +185,45 @@ public static class CatalogParser
             {
                 errors.Add(new LoadError(source, $"{field}.{name}", $"'{name}' is not a valid node name; use lowercase letters, digits and hyphens, starting with a letter and not ending in a hyphen."));
             }
+        }
+    }
+
+    // The node named 'runtime' is the workload's runtime: a runtime mapping must declare it, nothing else may (the mapping's
+    // other nodes and the policy-added nodes share its scope, and every ${runtime.<output>} points to it).
+    private static void CheckRuntimeNode(List<Mapping> mappings, List<Policy> policies, List<LoadError> errors)
+    {
+        const string reserved = ExpressionEvaluator.RuntimeNode;
+        foreach (var mapping in mappings)
+        {
+            if (!mapping.IsRuntime)
+            {
+                if (mapping.Nodes.ContainsKey(reserved))
+                {
+                    errors.Add(new LoadError(mapping.Source, $"nodes.{reserved}", $"'{reserved}' is the runtime node, declared only by a runtime mapping ('{MatchCriteria.KindKey}: {MatchCriteria.RuntimeKind}')."));
+                }
+
+                if (mapping.Probe is not null)
+                {
+                    errors.Add(new LoadError(mapping.Source, "probe", "only a runtime mapping has a probe."));
+                }
+
+                continue;
+            }
+
+            if (!mapping.Nodes.ContainsKey(reserved))
+            {
+                errors.Add(new LoadError(mapping.Source, "nodes", $"a runtime mapping must declare a node named '{reserved}'."));
+            }
+
+            if (mapping.Exports.Count > 0)
+            {
+                errors.Add(new LoadError(mapping.Source, "exports", "a runtime mapping has no exports."));
+            }
+        }
+
+        foreach (var policy in policies.Where(p => p.Add.ContainsKey(reserved)))
+        {
+            errors.Add(new LoadError(policy.Source, $"add.{reserved}", $"'{reserved}' is the runtime node, declared only by a runtime mapping."));
         }
     }
 
@@ -334,7 +375,8 @@ public static class CatalogParser
         d.Source,
         ToMatch(d.Body["match"]),
         Map(d.Body["nodes"]).ToDictionary(e => e.Key, e => ToNode(e.Value)),
-        Map(d.Body["exports"]).ToDictionary(e => e.Key, e => Text(e.Value)));
+        Map(d.Body["exports"]).ToDictionary(e => e.Key, e => Text(e.Value)),
+        d.Body["probe"] is { } probe ? new Probe(Text(probe["path"]), (int?)probe["expectedStatus"] ?? 0) : null);
 
     private static Policy ToPolicy(Document d) => new(
         d.Source,

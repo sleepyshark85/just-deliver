@@ -19,6 +19,7 @@ public sealed class ReleaseResolverTests
             "kind: Catalog\nversion: \"1\"\n",
             "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n",
             "kind: Mapping\nmatch: { type: thing }\nnodes:\n  n:\n    template: t/n\n    config: { k: 1 }\nexports:\n  out: x\n",
+            TestCatalog.RuntimeMapping,
         };
         var loaded = await CatalogParser.ParseAsync(files.Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
         Assert.Empty(loaded.Errors);

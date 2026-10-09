@@ -17,12 +17,16 @@ public static class PreviewFormatter
         text.AppendLine($"{graph.Workload} in {graph.Environment} (catalog {graph.CatalogVersion}): {graph.Nodes.Count} nodes");
         foreach (var node in graph.Nodes)
         {
-            var dependsOn = node.DependsOn.Concat(node.DependsOnRuntime ? ["runtime"] : []).ToList();
             text.AppendLine();
             text.AppendLine(node.Id);
             text.AppendLine($"  template: {node.Template}  kind: {node.Kind}  phase: {node.Phase}");
             text.AppendLine($"  stack: {node.Stack}  hash: {node.Hash[..ShortHashLength]}");
-            text.AppendLine($"  depends on: {(dependsOn.Count == 0 ? "nothing" : string.Join(", ", dependsOn))}");
+            if (node.Probe is { } probe)
+            {
+                text.AppendLine($"  probe: GET {probe.Path} expects {probe.ExpectedStatus}");
+            }
+
+            text.AppendLine($"  depends on: {(node.DependsOn.Count == 0 ? "nothing" : string.Join(", ", node.DependsOn))}");
             foreach (var (path, value) in ConfigLeaves.Of(string.Empty, new ConfigObject(node.Config)))
             {
                 var provenance = node.Provenance.TryGetValue(path, out var source) ? source.Describe() : "no provenance";

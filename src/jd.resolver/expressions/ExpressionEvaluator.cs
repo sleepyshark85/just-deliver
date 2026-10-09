@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -20,6 +21,8 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     private const string ResourceNamespace = "resource";
     private const string WorkloadNameField = "name";
     private const string WorkloadTeamField = "team";
+    private const string WorkloadImageField = "image";
+    private const string WorkloadPortField = "port";
 
     private static readonly Dictionary<string, (int Min, int Max)> Arity = new()
     {
@@ -234,15 +237,25 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
                 return null;
 
             case WorkloadNamespace:
-                var field = segments.Length == 2
-                    ? segments[1] switch { WorkloadNameField => context.WorkloadName, WorkloadTeamField => context.WorkloadTeam, _ => null }
-                    : null;
+                if (segments.Length != 2 || segments[1] is not (WorkloadNameField or WorkloadTeamField or WorkloadImageField or WorkloadPortField))
+                {
+                    fail($"'{path}' is not a workload field; expected {WorkloadNamespace}.{WorkloadNameField}, {WorkloadTeamField}, {WorkloadImageField} or {WorkloadPortField}.");
+                    return null;
+                }
+
+                var field = segments[1] switch
+                {
+                    WorkloadNameField => context.WorkloadName,
+                    WorkloadTeamField => context.WorkloadTeam,
+                    WorkloadImageField => context.WorkloadImage,
+                    _ => context.WorkloadPort?.ToString(CultureInfo.InvariantCulture),
+                };
                 if (field is not null)
                 {
                     return Known(field);
                 }
 
-                fail($"'{path}' is not a workload field; expected {WorkloadNamespace}.{WorkloadNameField} or {WorkloadNamespace}.{WorkloadTeamField}.");
+                fail($"'{path}' has no value: workload '{context.WorkloadName}' declares no {segments[1]}.");
                 return null;
 
             case ResourceNamespace:

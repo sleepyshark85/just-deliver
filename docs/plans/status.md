@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S15b — runtime mapping and the `runtime` node (then S15c — variables and `runtime.*` policies).
+- **Next slice:** S15c — variables and `runtime.*` policies (brief drafted: design note first).
 - **In progress:** —
 - **Blocked:** —
 
@@ -34,7 +34,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S13b | Deploy a release set (infra) | done | PR #24 | 2 | `jd release deploy`: resolve + template-check every workload first, then deploy in set order, stop at the first failing workload. Round 1: 1 blocking (one-pass error reporting untested); lead also required a shared argument reader (size), deduped template errors, and an Azure run guard (`JD_AZURE_TESTS=1` + per-host `flock` in `verify.sh --azure`) after an agent's unfiltered `dotnet test` reached Azure and collided with the lead's gate. Azure gate green (CLI 83/83, 49 min, nothing left). |
 | S14 | Sample app | done | PR #16 | 2 | Done ahead of S11–S13 (independent). Round 1: 2 blocking (`/health` false-healthy on a missing container; unsynchronised shared Cosmos client → leaks/flapping). Image `ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385…` — public (anonymous pull verified 2026-10-09). |
 | S15a | `container-app` template | done | PR #25 | 1 | Split from S15. Developer stopped at the risk as briefed: Pulumi YAML cannot turn a map into a list, so the template takes `variables` as `List<Map<String>>` (`{name, value}`) and the engine converts (S15c). APPROVE first round. Azure gate green (CLI 84/84, real Container App: Multiple, SystemAssigned, min 0). |
-| S15b | Runtime mapping + `runtime` node | todo | | | Runtime mapping (`kind: runtime`), `workload.image`/`workload.port`, probe as data, phase `runtime` (not deployed until S16). |
+| S15b | Runtime mapping + `runtime` node | done | PR #26 | 1 | APPROVE first round. Runtime mapping from data, reserved `runtime` node at `@workload`, phase `Runtime` (not deployed until S16), grants now edge to it, probe as data. Review hazards (image/port missing in the second pass; runtime-mapping node current id; `runtime.*` refs unchecked by TemplateLibrary) moved into S15c Part 0. Azure gate: all green except `DeployAzureTests`, which failed under memory pressure (an unrelated 8.8 GB process + a parallel review run) and passed alone (2 min, nothing left) — treated as load-related, cause unconfirmed. |
 | S15c | Variables + `runtime.*` policies | todo | | | `${resource.*}` in workload variables, map→list for the template, enforce-monitoring sets the App Insights connection string. |
 | S16 | Deploy steps | todo | | | |
 | S17 | Release record + qualification | todo | | | |
@@ -50,7 +50,7 @@ Picked up by the slice named; remove once done.
   exception message.
 - **S10/S12:** template `fn::invoke`s (e.g. `getSharedKeys`) run during preview, so previewing a brand-new
   environment fails until its workspace exists — preview substrate in dependency order, or tolerate it.
-- **S15c:** the runtime mapping sends `runtime.appInsightsConnectionString` to the app's `APPLICATIONINSIGHTS_CONNECTION_STRING`
+- **S15c:** Part 0 = S15b review hazards (see S15b row). The runtime mapping sends `runtime.appInsightsConnectionString` to the app's `APPLICATIONINSIGHTS_CONNECTION_STRING`
   (Azure Monitor SDK's own name, not in the workload's variables). The app assumes partition key `/id`.
 - **S15c/S16 (S15a review):** a secret value in `variables` stays encrypted in Pulumi state but is plain text in the
   Container App's `env` (readable with Reader) — secret values should become Container App `secrets` + `secretRef`
@@ -89,6 +89,8 @@ Newest first. One entry per session: what moved, decisions taken, anything the n
   added (Azure tests only via `tools/verify.sh --azure`, one run per host). Agents must not run Azure tests.
   S15 split into S15a/b/c; S15a merged (PR #25, 1 round). A developer experiment with the Pulumi CLI created an
   ephemeral Pulumi Cloud agent account (unclaimed, expires ~3 days); our state stays on the file backend.
+  S15b merged (PR #26, 1 round). Don't run the reviewer's offline gate and the Azure gate at the same time on this
+  16 GB host when other heavy jobs run — it slowed Pulumi tests 30× and likely caused one Azure test failure.
 
 - **2026-10-09 (before restart)** — User decisions: workloads ask for `database`, the platform team's catalog mappings
   decide the engine (Cosmos today) → S12a; Kubernetes (cloud or on-prem) is possible later via a runtime adapter +

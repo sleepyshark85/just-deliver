@@ -29,7 +29,7 @@ public partial class TemplateLibraryTests
 
     private static GraphNode Node(string name, string template, Dictionary<string, ConfigValue> config) =>
         new($"w/dev/s/{name}", "s", name, template, NodeKind.Create, $"w.dev.s.{name}", Phase.Infrastructure,
-            config, new Dictionary<string, Provenance>(), "hash", [], false);
+            config, new Dictionary<string, Provenance>(), "hash", []);
 
     private static ResolvedGraph Graph(IEnumerable<GraphNode> nodes, IReadOnlyDictionary<string, IReadOnlyDictionary<string, EvalResult>>? exports = null) =>
         new("1", "dev", "w", "crew", nodes.ToList(), exports ?? new Dictionary<string, IReadOnlyDictionary<string, EvalResult>>(), []);

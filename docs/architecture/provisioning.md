@@ -189,7 +189,10 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   reference. Config becomes backend entries: strings as they are, numbers and booleans in invariant form (`0.15`,
   `true`), objects and arrays as compact JSON (a Pulumi config value is always a string; templates read maps and lists
   as JSON). A value built from a secret output is a secret. The walk stops at the first failure and reports what was deployed.
-- **After-runtime nodes** (phase `after-runtime`) are not deployed by this walk: they are reported "waiting for runtime".
+- **The runtime node** (phase `runtime`, the Container App from the runtime mapping) and the **after-runtime nodes** (phase `after-runtime`:
+  grants that reference `runtime.*`) are not deployed by this walk: each is reported "waiting for runtime", the runtime
+  node as "the runtime is deployed in a later step" (the release flow deploys it, S16). Workload-scope nodes (`@workload/…`,
+  the runtime among them) are reported before the requirements' nodes, since their ids sort first.
 - **Preview.** Same order, nothing is created. A reference to a node this run has not deployed is filled from
   `GetOutputsAsync` (state of an earlier deploy); if the node was never deployed the value is missing and the node is
   reported "pending upstream" and not previewed (never a fake value). Template `fn::invoke`s still run during preview, so

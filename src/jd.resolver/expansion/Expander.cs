@@ -15,16 +15,27 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
     /// <summary>Owner-name prefix of environment definitions. A workload name cannot start with it, so substrate and workload ids, stacks and <c>name()</c> hashes never collide.</summary>
     public const string EnvironmentOwnerPrefix = "@";
 
+    private sealed record Owner(OwnerKind Kind, string Name, string Team, string? Image, int? Port);
+
     /// <param name="workload">The parsed workload definition, already schema-validated.</param>
     /// <param name="workloadFile">Name reported in errors about the workload itself.</param>
-    public ExpansionResult Expand(JObject workload, string workloadFile) =>
-        Expand(OwnerKind.Workload, (string?)workload["metadata"]?["name"] ?? string.Empty, (string?)workload["metadata"]?["team"] ?? string.Empty, workload["requires"] as JArray ?? [], workloadFile);
+    public ExpansionResult Expand(JObject workload, string workloadFile)
+    {
+        var container = workload["container"];
+        var owner = new Owner(
+            OwnerKind.Workload,
+            (string?)workload["metadata"]?["name"] ?? string.Empty,
+            (string?)workload["metadata"]?["team"] ?? string.Empty,
+            (string?)container?["image"],
+            (int?)(container?["ports"] as JArray)?.FirstOrDefault()?["port"]);
+        return Expand(owner, workload["requires"] as JArray ?? [], workloadFile);
+    }
 
-    /// <summary>Expands the substrate <paramref name="requires"/> (entries with <c>type</c>, optional <c>id</c> and <c>class</c>) of the environment definition <paramref name="name"/>; it has no team.</summary>
+    /// <summary>Expands the substrate <paramref name="requires"/> (entries with <c>type</c>, optional <c>id</c> and <c>class</c>) of the environment definition <paramref name="name"/>; it has no team and no runtime.</summary>
     public ExpansionResult ExpandEnvironment(string name, JArray requires, string ownerFile) =>
-        Expand(OwnerKind.Environment, EnvironmentOwnerPrefix + name, string.Empty, requires, ownerFile);
+        Expand(new Owner(OwnerKind.Environment, EnvironmentOwnerPrefix + name, string.Empty, null, null), requires, ownerFile);
 
-    private ExpansionResult Expand(OwnerKind kind, string name, string team, JArray requires, string ownerFile)
+    private ExpansionResult Expand(Owner owner, JArray requires, string ownerFile)
     {
         var requirements = new List<ExpandedRequirement>();
         var errors = new List<LoadError>();
@@ -37,16 +48,20 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
                 type,
                 (string?)entry["class"] ?? Requirement.DefaultClass);
             var location = $"requires[{index++}]";
-            if (ExpandOne(requirement, name, team, ownerFile, location, errors) is { } expanded)
+            if (ExpandOne(requirement, owner, ownerFile, location, errors) is { } expanded)
             {
                 requirements.Add(expanded);
             }
         }
 
-        return new ExpansionResult(kind, name, team, requirements, errors);
+        var runtime = owner.Kind == OwnerKind.Workload ? ExpandRuntime(owner, ownerFile, errors) : null;
+        return new ExpansionResult(owner.Kind, owner.Name, owner.Team, owner.Image, owner.Port, requirements, runtime, errors);
     }
 
-    private ExpandedRequirement? ExpandOne(Requirement requirement, string workloadName, string workloadTeam, string ownerFile, string location, List<LoadError> errors)
+    private ExpressionEvaluator EvaluatorFor(Owner owner, string currentId, IEnumerable<string> nodeNames) => new(new ExpressionContext(
+        catalog.Roles, catalog.Naming, environment, owner.Name, owner.Team, currentId, nodeNames.ToHashSet(), new Dictionary<Reference, string>(), owner.Image, owner.Port));
+
+    private ExpandedRequirement? ExpandOne(Requirement requirement, Owner owner, string ownerFile, string location, List<LoadError> errors)
     {
         var mapping = MappingMatcher.Select(catalog.Mappings, requirement, environment.Tier, ownerFile, location, errors);
         if (mapping is null)
@@ -54,19 +69,40 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             return null;
         }
 
-        var context = new ExpressionContext(
-            catalog.Roles,
-            catalog.Naming,
-            environment,
-            workloadName,
-            workloadTeam,
-            requirement.Id,
-            mapping.Nodes.Keys.ToHashSet(),
-            new Dictionary<Reference, string>());
-        var evaluator = new ExpressionEvaluator(context);
-
         // Mapping problems are reported against the mapping file; the prefix says which requirement exposed them.
         var found = new List<LoadError>();
+        var (nodes, exports) = Evaluate(mapping, EvaluatorFor(owner, requirement.Id, mapping.Nodes.Keys), found);
+        if (found.Count > 0)
+        {
+            errors.AddRange(found.Select(e => e with { Message = $"for {location} ('{requirement.Id}'): {e.Message}" }));
+            return null;
+        }
+
+        return new ExpandedRequirement(requirement.Id, requirement.Type, requirement.Class, mapping.Source, nodes, exports);
+    }
+
+    // The runtime is a mapping like any other, selected by its kind; it belongs to the workload, so its current id is the runtime node.
+    private ExpandedRuntime? ExpandRuntime(Owner owner, string ownerFile, List<LoadError> errors)
+    {
+        var mapping = MappingMatcher.SelectRuntime(catalog.Mappings, environment.Tier, ownerFile, errors);
+        if (mapping is null)
+        {
+            return null;
+        }
+
+        var found = new List<LoadError>();
+        var (nodes, _) = Evaluate(mapping, EvaluatorFor(owner, ExpressionEvaluator.RuntimeNode, mapping.Nodes.Keys), found);
+        if (found.Count > 0)
+        {
+            errors.AddRange(found.Select(e => e with { Message = $"for the runtime: {e.Message}" }));
+            return null;
+        }
+
+        return new ExpandedRuntime(mapping.Source, nodes, mapping.Probe);
+    }
+
+    private static (List<ExpandedNode> Nodes, Dictionary<string, EvalResult> Exports) Evaluate(Mapping mapping, ExpressionEvaluator evaluator, List<LoadError> found)
+    {
         var nodes = new List<ExpandedNode>();
         foreach (var (nodeName, node) in mapping.Nodes)
         {
@@ -83,12 +119,6 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             }
         }
 
-        if (found.Count > 0)
-        {
-            errors.AddRange(found.Select(e => e with { Message = $"for {location} ('{requirement.Id}'): {e.Message}" }));
-            return null;
-        }
-
-        return new ExpandedRequirement(requirement.Id, requirement.Type, requirement.Class, mapping.Source, nodes, exports);
+        return (nodes, exports);
     }
 }

@@ -16,7 +16,19 @@ public static class GraphJson
         ["catalogVersion"] = graph.CatalogVersion,
         ["environment"] = graph.Environment,
         ["workload"] = graph.Workload,
-        ["nodes"] = new JArray(graph.Nodes.Select(n => new JObject
+        ["nodes"] = new JArray(graph.Nodes.Select(Node)),
+        ["exports"] = new JObject(graph.Exports.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => new JProperty(r.Key,
+            new JObject(r.Value.OrderBy(e => e.Key, StringComparer.Ordinal).Select(e => new JProperty(e.Key, e.Value switch
+            {
+                Resolved resolved => resolved.Value,
+                Pending pending => pending.Original,
+                _ => throw new InvalidOperationException("unknown result"),
+            })))))),
+    }.ToString(Formatting.Indented) + "\n";
+
+    private static JObject Node(GraphNode n)
+    {
+        var node = new JObject
         {
             ["id"] = n.Id,
             ["scope"] = n.Scope,
@@ -27,17 +39,15 @@ public static class GraphJson
             ["phase"] = n.Phase.ToString(),
             ["hash"] = n.Hash,
             ["dependsOn"] = new JArray(n.DependsOn),
-            ["dependsOnRuntime"] = n.DependsOnRuntime,
             ["config"] = ConfigJson.ToToken(new ConfigObject(n.Config)),
             ["provenance"] = new JObject(n.Provenance.OrderBy(p => p.Key, StringComparer.Ordinal)
                 .Select(p => new JProperty(p.Key, p.Value.Describe()))),
-        })),
-        ["exports"] = new JObject(graph.Exports.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => new JProperty(r.Key,
-            new JObject(r.Value.OrderBy(e => e.Key, StringComparer.Ordinal).Select(e => new JProperty(e.Key, e.Value switch
-            {
-                Resolved resolved => resolved.Value,
-                Pending pending => pending.Original,
-                _ => throw new InvalidOperationException("unknown result"),
-            })))))),
-    }.ToString(Formatting.Indented) + "\n";
+        };
+        if (n.Probe is { } probe)
+        {
+            node["probe"] = new JObject { ["path"] = probe.Path, ["expectedStatus"] = probe.ExpectedStatus };
+        }
+
+        return node;
+    }
 }

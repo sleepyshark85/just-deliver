@@ -23,7 +23,8 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         // A requirement the expansion dropped is not in the result, so its errors must carry through.
         var errors = new List<LoadError>(expansion.Errors);
         ExpressionEvaluator EvaluatorFor(string currentId, IEnumerable<string> nodeNames) => new(new ExpressionContext(
-            catalog.Roles, catalog.Naming, environment, expansion.WorkloadName, expansion.WorkloadTeam, currentId, nodeNames.ToHashSet(), new Dictionary<Reference, string>()));
+            catalog.Roles, catalog.Naming, environment, expansion.WorkloadName, expansion.WorkloadTeam, currentId, nodeNames.ToHashSet(), new Dictionary<Reference, string>(),
+            expansion.WorkloadImage, expansion.WorkloadPort));
 
         var requirements = new List<ResolvedRequirement>();
         foreach (var requirement in expansion.Requirements)
@@ -37,12 +38,33 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             requirements.Add(new ResolvedRequirement(requirement.Id, requirement.Type, requirement.Class, requirement.Mapping, requirement.Exports, nodes));
         }
 
+        // The runtime mapping's nodes get node-scope policies like any mapping node.
+        var runtimeNodes = new List<ResolvedNode>();
+        var runtimeNames = expansion.Runtime?.Nodes.Select(n => n.Name).ToHashSet() ?? [];
+        if (expansion.Runtime is { } runtime)
+        {
+            var evaluator = EvaluatorFor(ExpressionEvaluator.RuntimeNode, runtimeNames);
+            foreach (var n in runtime.Nodes)
+            {
+                var node = ApplyNodePolicies(
+                    n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(runtime.Mapping, runtime.Mapping, Layer.Mapping),
+                    null, null, evaluator, n.Name, errors);
+                runtimeNodes.Add(n.Name == ExpressionEvaluator.RuntimeNode ? node with { Probe = runtime.Probe } : node);
+            }
+        }
+
         var workloadNodes = new List<ResolvedNode>();
         var addedBy = new Dictionary<string, Policy>();
         foreach (var policy in _policies.Where(p => expansion.Owner == OwnerKind.Workload && IsWorkloadScope(p)))
         {
             foreach (var (name, node) in policy.Add)
             {
+                if (runtimeNames.Contains(name))
+                {
+                    errors.Add(new LoadError(policy.Source, $"add.{name}", $"policy '{policy.Name}' adds a node named '{name}', which the runtime mapping already declares."));
+                    continue;
+                }
+
                 if (!addedBy.TryAdd(name, policy))
                 {
                     errors.Add(new LoadError(policy.Source, $"add.{name}", $"policies '{addedBy[name].Name}' ({addedBy[name].Source}) and '{policy.Name}' ({policy.Source}) both add a node named '{name}'."));
@@ -56,11 +78,11 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             }
         }
 
-        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, requirements, workloadNodes, errors);
+        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, requirements, runtimeNodes, workloadNodes, errors);
     }
 
     // Workload scope is kind: runtime, optionally narrowed by tier. The 'runtime' key is accepted but not matched yet:
-    // the definition names no runtime until the runtime-mapping slice.
+    // a workload names no runtime (see MappingMatcher.SelectRuntime).
     private bool IsWorkloadScope(Policy policy)
     {
         var criteria = policy.Match.Criteria;

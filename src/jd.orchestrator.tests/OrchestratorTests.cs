@@ -47,12 +47,15 @@ public class OrchestratorTests
           out: x
         """;
 
+    // The runtime is not deployed by the walk; it is reported, first, because its id sorts before any requirement's.
+    private const string RuntimeMapping = "kind: Mapping\nmatch: { kind: runtime }\nnodes:\n  runtime:\n    template: t/runtime\n    config: { k: 1 }\n";
+
     private const string DefaultRequires = "  - type: thing\n";
 
     // The orchestrator gets the catalog the graph was resolved with.
     private static async Task<(ResolvedGraph Graph, Catalog Catalog)> ResolveAsync(string requires = DefaultRequires, string mapping = Mapping, string workloadName = "shop")
     {
-        var files = new[] { "kind: Catalog\nversion: \"1\"\n", "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n", mapping }
+        var files = new[] { "kind: Catalog\nversion: \"1\"\n", "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n", mapping, RuntimeMapping }
             .Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
@@ -62,17 +65,25 @@ public class OrchestratorTests
         return (graph, loaded.Catalog!);
     }
 
-    private static async Task<RunReport> DeployAsync(FakeBackend backend, string requires = DefaultRequires, Action<NodeReport>? progress = null, string mapping = Mapping)
+    private static async Task<RunReport> DeployRawAsync(FakeBackend backend, string requires = DefaultRequires, Action<NodeReport>? progress = null, string mapping = Mapping)
     {
         var (graph, catalog) = await ResolveAsync(requires, mapping);
         return await new Orchestrator(backend, backend, catalog, Env).DeployAsync(graph, progress, CancellationToken.None);
     }
 
-    private static async Task<RunReport> PreviewAsync(FakeBackend backend)
+    private static async Task<RunReport> PreviewRawAsync(FakeBackend backend)
     {
         var (graph, catalog) = await ResolveAsync();
         return await new Orchestrator(backend, backend, catalog, Env).PreviewAsync(graph, null, CancellationToken.None);
     }
+
+    // Most tests are about the requirement's nodes; the runtime node, reported first, has its own test.
+    private static RunReport WithoutRuntime(RunReport report) => new(report.Nodes.Where(n => !n.NodeId.EndsWith("/@workload/runtime", StringComparison.Ordinal)).ToList());
+
+    private static async Task<RunReport> DeployAsync(FakeBackend backend, string requires = DefaultRequires, Action<NodeReport>? progress = null, string mapping = Mapping) =>
+        WithoutRuntime(await DeployRawAsync(backend, requires, progress, mapping));
+
+    private static async Task<RunReport> PreviewAsync(FakeBackend backend) => WithoutRuntime(await PreviewRawAsync(backend));
 
     private sealed class FakeBackend : IBackEndProvider, ITemplateStore
     {
@@ -281,9 +292,9 @@ public class OrchestratorTests
     {
         var seen = new List<string>();
 
-        await DeployAsync(new FakeBackend(), progress: r => seen.Add(r.NodeId));
+        await DeployRawAsync(new FakeBackend(), progress: r => seen.Add(r.NodeId));
 
-        Assert.Equal(4, seen.Count);
+        Assert.Equal(5, seen.Count);
     }
 
     [Fact]
@@ -312,6 +323,21 @@ public class OrchestratorTests
         Assert.True(report.Succeeded);
         Assert.Contains("field 'groupId' references group.id", report.Nodes[1].Message);
         Assert.Equal(["shop.dev.thing.group"], backend.Calls.Where(c => c.Op == "preview").Select(c => c.Package.StackName));
+    }
+
+    [Fact]
+    public async Task The_runtime_node_is_reported_first_as_not_deployed_by_the_walk_in_deploy_and_preview()
+    {
+        var backend = new FakeBackend();
+
+        var deployed = await DeployRawAsync(backend);
+        var previewed = await PreviewRawAsync(backend);
+
+        Assert.Equal("shop/dev/@workload/runtime", deployed.Nodes[0].NodeId);
+        Assert.Equal(NodeOutcome.WaitingForRuntime, deployed.Nodes[0].Outcome);
+        Assert.Equal(NodeOutcome.WaitingForRuntime, previewed.Nodes[0].Outcome);
+        Assert.Contains("the runtime is deployed in a later step", deployed.Nodes[0].Message);
+        Assert.DoesNotContain(backend.Calls, c => c.Package.StackName.EndsWith("._workload.runtime", StringComparison.Ordinal));
     }
 
     [Fact]

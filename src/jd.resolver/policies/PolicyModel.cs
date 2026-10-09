@@ -21,12 +21,14 @@ public sealed record Provenance(string Source, string Rule, Layer Layer)
 }
 
 // Provenance: one entry per leaf config field, keyed by dotted path (consistencyPolicy.level); an array is one leaf.
+// Probe is the runtime mapping's probe, on the runtime node only.
 public sealed record ResolvedNode(
     string Name,
     string Template,
     NodeKind Kind,
     IReadOnlyDictionary<string, ConfigValue> Config,
-    IReadOnlyDictionary<string, Provenance> Provenance);
+    IReadOnlyDictionary<string, Provenance> Provenance,
+    Probe? Probe = null);
 
 // The expanded requirement without its pre-policy nodes: Nodes are the ones to use.
 public sealed record ResolvedRequirement(
@@ -38,13 +40,14 @@ public sealed record ResolvedRequirement(
     IReadOnlyList<ResolvedNode> Nodes);
 
 /// <summary>
-/// WorkloadNodes are the nodes added once per workload by workload-scope policies. The result is
-/// usable only when Errors is empty.
+/// RuntimeNodes are the nodes of the workload's runtime mapping (none for an environment definition); WorkloadNodes are
+/// the nodes added once per workload by workload-scope policies. The result is usable only when Errors is empty.
 /// </summary>
 public sealed record PolicyResult(
     string CatalogVersion,
     string WorkloadName,
     string WorkloadTeam,
     IReadOnlyList<ResolvedRequirement> Requirements,
+    IReadOnlyList<ResolvedNode> RuntimeNodes,
     IReadOnlyList<ResolvedNode> WorkloadNodes,
     IReadOnlyList<LoadError> Errors);

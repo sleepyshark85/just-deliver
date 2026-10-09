@@ -13,7 +13,6 @@
       "phase": "Infrastructure",
       "hash": "91b949bc7db071da87b6911110c9f8506280e8e8d615d50d07becf8e48b1960d",
       "dependsOn": [],
-      "dependsOnRuntime": false,
       "config": {
         "appInsightsName": "appi-just-deliver-sample-app-dev-1c8d23",
         "location": "southeastasia",
@@ -28,6 +27,49 @@
       }
     },
     {
+      "id": "just-deliver-sample-app/dev/@workload/runtime",
+      "scope": "@workload",
+      "name": "runtime",
+      "template": "azure/container-app",
+      "kind": "Create",
+      "stack": "just-deliver-sample-app.dev._workload.runtime",
+      "phase": "Runtime",
+      "hash": "d57bcef9175cf7094df84c812b400c75c7efeeb53ad1c8513a3268834efc0ba2",
+      "dependsOn": [],
+      "config": {
+        "containerAppName": "ca-just-deliver-sample-appc15e1b",
+        "containerAppsEnvironmentId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.App/managedEnvironments/cae-dev",
+        "cpu": 0.25,
+        "externalIngress": true,
+        "image": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
+        "location": "southeastasia",
+        "maxReplicas": 1,
+        "memory": "0.5Gi",
+        "minReplicas": 0,
+        "resourceGroupName": "rg-dev",
+        "targetPort": "8080",
+        "variables": []
+      },
+      "provenance": {
+        "containerAppName": "Mapping: mappings/runtime/container-app.yaml",
+        "containerAppsEnvironmentId": "Mapping: mappings/runtime/container-app.yaml",
+        "cpu": "Mapping: mappings/runtime/container-app.yaml",
+        "externalIngress": "Mapping: mappings/runtime/container-app.yaml",
+        "image": "Mapping: mappings/runtime/container-app.yaml",
+        "location": "Mapping: mappings/runtime/container-app.yaml",
+        "maxReplicas": "Mapping: mappings/runtime/container-app.yaml",
+        "memory": "Mapping: mappings/runtime/container-app.yaml",
+        "minReplicas": "Mapping: mappings/runtime/container-app.yaml",
+        "resourceGroupName": "Mapping: mappings/runtime/container-app.yaml",
+        "targetPort": "Mapping: mappings/runtime/container-app.yaml",
+        "variables": "Mapping: mappings/runtime/container-app.yaml"
+      },
+      "probe": {
+        "path": "/health",
+        "expectedStatus": 200
+      }
+    },
+    {
       "id": "just-deliver-sample-app/dev/@workload/appinsights-access",
       "scope": "@workload",
       "name": "appinsights-access",
@@ -37,9 +79,9 @@
       "phase": "AfterRuntime",
       "hash": "e1c8d629f9a7c7ebfea72317026a9975c9ccab5d46afdee03963dbb200637570",
       "dependsOn": [
-        "just-deliver-sample-app/dev/@workload/appinsights"
+        "just-deliver-sample-app/dev/@workload/appinsights",
+        "just-deliver-sample-app/dev/@workload/runtime"
       ],
-      "dependsOnRuntime": true,
       "config": {
         "principalId": "${runtime.principalId}",
         "roleAssignmentId": "${guid(appinsights.appInsightsId, runtime.principalId, 'metrics-publisher')}",
@@ -63,7 +105,6 @@
       "phase": "Infrastructure",
       "hash": "00fae051387801ff00f46f3cfac991230cfb6030f635ff22fd8bd5d61d6bf067",
       "dependsOn": [],
-      "dependsOnRuntime": false,
       "config": {
         "accountId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev",
         "containerName": "just-deliver-sample-app-database-623014",
@@ -87,9 +128,9 @@
       "phase": "AfterRuntime",
       "hash": "26e30b16b6baf8ffdb9d8d6b651162443298e5a6d4e2ebcc49bea1453d8faa0e",
       "dependsOn": [
+        "just-deliver-sample-app/dev/@workload/runtime",
         "just-deliver-sample-app/dev/database/container"
       ],
-      "dependsOnRuntime": true,
       "config": {
         "accountId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev",
         "principalId": "${runtime.principalId}",

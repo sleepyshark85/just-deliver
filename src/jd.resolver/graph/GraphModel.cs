@@ -11,6 +11,9 @@ public enum Phase
     /// <summary>No transitive dependency on the runtime.</summary>
     Infrastructure,
 
+    /// <summary>The runtime node itself; deployed by its own step, not by the infrastructure walk.</summary>
+    Runtime,
+
     /// <summary>Depends on the runtime directly or through another node.</summary>
     AfterRuntime,
 }
@@ -19,8 +22,8 @@ public enum Phase
 // Stack is the id with '/' replaced by '.' and '@' by '_' (Pulumi stack names allow [A-Za-z0-9_.-]): one backend stack
 // per node, unique because ids contain neither '.' nor '_'.
 // Hash is lowercase hex SHA-256 of the node's template, kind and canonical config (ConfigJson).
-// DependsOn holds the ids of the nodes whose outputs this node references, sorted. DependsOnRuntime means it references
-// runtime.*; the runtime node itself arrives with the runtime mapping.
+// DependsOn holds the ids of the nodes whose outputs this node references, sorted; a runtime.* reference is an edge to the
+// runtime node (scope GraphBuilder.WorkloadScope, name ExpressionEvaluator.RuntimeNode). Probe is set on the runtime node only.
 public sealed record GraphNode(
     string Id,
     string Scope,
@@ -33,7 +36,7 @@ public sealed record GraphNode(
     IReadOnlyDictionary<string, Provenance> Provenance,
     string Hash,
     IReadOnlyList<string> DependsOn,
-    bool DependsOnRuntime);
+    Probe? Probe = null);
 
 /// <summary>
 /// The resolver's output. <see cref="Nodes"/> are in topological order (dependencies first, ties broken by id);

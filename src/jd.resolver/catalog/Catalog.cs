@@ -44,11 +44,19 @@ public sealed record MatchCriteria(IReadOnlyDictionary<string, string> Criteria)
     public const string RuntimeKind = "runtime";
 }
 
+/// <summary>How the platform checks a deployed runtime is healthy: GET <see cref="Path"/> must answer <see cref="ExpectedStatus"/>. Data only; nothing executes it yet.</summary>
+public sealed record Probe(string Path, int ExpectedStatus);
+
+/// <summary>A runtime mapping (<c>kind: runtime</c>) has no exports and may have a <see cref="Probe"/>.</summary>
 public sealed record Mapping(
     string Source,
     MatchCriteria Match,
     IReadOnlyDictionary<string, Node> Nodes,
-    IReadOnlyDictionary<string, string> Exports);
+    IReadOnlyDictionary<string, string> Exports,
+    Probe? Probe = null)
+{
+    public bool IsRuntime => Match.Criteria.GetValueOrDefault(MatchCriteria.KindKey) == MatchCriteria.RuntimeKind;
+}
 
 public sealed record Policy(
     string Source,

@@ -14,6 +14,9 @@ container:
     COSMOS_ENDPOINT: ${resource.database.endpoint}
     COSMOS_DATABASE: ${resource.database.database}
     COSMOS_CONTAINER: ${resource.database.container}
+  ports:
+    - port: 8080
+      protocol: TCP
 
 requires:
   - type: database

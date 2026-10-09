@@ -5,7 +5,7 @@
   "description": "Turns a matching requirement into graph nodes. Selected by matching criteria, never by conditionals. Expressions (${...}) are kept as raw strings by the loader and evaluated later.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "match", "nodes", "exports"],
+  "required": ["kind", "match", "nodes"],
   "properties": {
     "kind": { "enum": ["Mapping"] },
     "match": {
@@ -28,9 +28,19 @@
       "additionalProperties": { "$ref": "#/definitions/node" }
     },
     "exports": {
-      "description": "Export name -> expression producing it. Must equal the type's exports exactly.",
+      "description": "Export name -> expression producing it. Must equal the type's exports exactly; a runtime mapping (kind: runtime) has none.",
       "type": "object",
       "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "probe": {
+      "description": "Runtime mappings only: how to check the deployed runtime is healthy. The graph carries it on the runtime node.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "expectedStatus"],
+      "properties": {
+        "path": { "description": "Request path, starting with /.", "type": "string", "pattern": "^/" },
+        "expectedStatus": { "description": "HTTP status that means healthy.", "type": "integer", "minimum": 100, "maximum": 599 }
+      }
     }
   },
   "definitions": {

@@ -13,7 +13,6 @@
       "phase": "Infrastructure",
       "hash": "bc8aa56509941dd243bcc73f72f0aa0b957d207103f976e843b39383534a022c",
       "dependsOn": [],
-      "dependsOnRuntime": false,
       "config": {
         "location": "region-1",
         "resourceGroupName": "rg-shared-5d9b60",
@@ -41,7 +40,6 @@
       "dependsOn": [
         "@shared/shared/substrate/group"
       ],
-      "dependsOnRuntime": false,
       "config": {
         "accountName": "cosmos-shared-39d0b1",
         "enableFreeTier": true,
@@ -69,7 +67,6 @@
       "dependsOn": [
         "@shared/shared/substrate/group"
       ],
-      "dependsOnRuntime": false,
       "config": {
         "dailyQuotaGb": 0.15,
         "location": "${group.location}",

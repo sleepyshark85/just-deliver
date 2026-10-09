@@ -38,7 +38,7 @@ public class GraphBuilderTests
     private static async Task<ResolvedGraph> BuildAsync(string nodes, string requires = "  - type: sqldb\n", params string[] policies)
     {
         var mapping = $"kind: Mapping\nmatch: {{ type: sqldb }}\nnodes:\n{nodes}exports:\n  endpoint: x\n";
-        var files = BaseFiles.Append(mapping).Concat(policies).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
+        var files = BaseFiles.Append(mapping).Concat(policies).Append(TestCatalog.RuntimeMapping).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
@@ -63,7 +63,7 @@ public class GraphBuilderTests
         Assert.Equal("shop.dev.users.n", Node(graph, "users", "n").Stack);
         var extra = Node(graph, "@workload", "extra");
         Assert.Equal(("@workload", "shop.dev._workload.extra"), (extra.Scope, extra.Stack));
-        Assert.Equal(3, graph.Nodes.Select(n => n.Stack).Distinct().Count());
+        Assert.Equal(4, graph.Nodes.Select(n => n.Stack).Distinct().Count());
         Assert.Equal(["orders", "users"], graph.Exports.Keys);
         Assert.Equal("x", Assert.IsType<Resolved>(graph.Exports["orders"]["endpoint"]).Value);
     }
@@ -78,7 +78,7 @@ public class GraphBuilderTests
 
         Assert.Empty(graph.Errors);
         Assert.All(graph.Nodes, n => Assert.Matches("^[a-z0-9._-]+$", n.Stack));
-        Assert.Equal(5, graph.Nodes.Select(n => n.Stack).Distinct().Count());
+        Assert.Equal(6, graph.Nodes.Select(n => n.Stack).Distinct().Count());
     }
 
     [Fact]
@@ -95,17 +95,45 @@ public class GraphBuilderTests
     }
 
     [Fact]
-    public async Task Runtime_dependency_puts_a_node_and_its_dependents_after_the_runtime()
+    public async Task A_runtime_reference_is_an_edge_to_the_runtime_node_and_puts_the_node_and_its_dependents_after_it()
     {
         var graph = await BuildAsync(N("a", "who: '${runtime.principalId}'") + N("b", "v: '${a.out}'") + N("c", "k: 1"));
 
+        var runtime = Node(graph, "@workload", "runtime");
         var a = Node(graph, "sqldb", "a");
         var b = Node(graph, "sqldb", "b");
         var c = Node(graph, "sqldb", "c");
-        Assert.Equal((Phase.AfterRuntime, true), (a.Phase, a.DependsOnRuntime));
-        Assert.Equal((Phase.AfterRuntime, false), (b.Phase, b.DependsOnRuntime));
-        Assert.Equal((Phase.Infrastructure, false), (c.Phase, c.DependsOnRuntime));
-        Assert.Empty(a.DependsOn);
+        Assert.Empty(graph.Errors);
+        Assert.Equal(Phase.Runtime, runtime.Phase);
+        Assert.Equal(Phase.AfterRuntime, a.Phase);
+        Assert.Equal(Phase.AfterRuntime, b.Phase);
+        Assert.Equal(Phase.Infrastructure, c.Phase);
+        Assert.Equal([runtime.Id], a.DependsOn);
+        Assert.True(graph.Nodes.ToList().IndexOf(runtime) < graph.Nodes.ToList().IndexOf(a));
+    }
+
+    [Fact]
+    public async Task The_runtime_node_carries_the_probe_and_no_other_node_does()
+    {
+        var graph = await BuildAsync(N("a", "k: 1"));
+
+        Assert.Equal(new Probe("/health", 200), Node(graph, "@workload", "runtime").Probe);
+        Assert.All(graph.Nodes.Where(n => n.Name != "runtime"), n => Assert.Null(n.Probe));
+    }
+
+    [Fact]
+    public async Task A_runtime_reference_in_an_environment_definition_is_an_error_because_it_has_no_runtime()
+    {
+        var mapping = $"kind: Mapping\nmatch: {{ type: sqldb }}\nnodes:\n{N("a", "who: '${runtime.principalId}'")}exports:\n  endpoint: x\n";
+        var loaded = await CatalogParser.ParseAsync(BaseFiles.Append(mapping).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
+        Assert.Empty(loaded.Errors);
+        var expansion = new Expander(loaded.Catalog!, Env).ExpandEnvironment("dev", (JArray)YamlSchemaValidator.ParseYaml("- type: sqldb\n"), "definition.yaml");
+
+        var graph = new GraphBuilder(Env).Build(new PolicyApplier(loaded.Catalog!, Env).Apply(expansion));
+
+        var error = Assert.Single(graph.Errors);
+        Assert.Equal((MappingFile, "who"), (error.File, error.Location));
+        Assert.Contains("references runtime.principalId, but there is no runtime", error.Message);
     }
 
     [Fact]
@@ -114,7 +142,7 @@ public class GraphBuilderTests
         var forward = await BuildAsync(N("z", "k: 1") + N("a", "k: 1") + N("m", "k: 1") + N("b", "v: '${z.out}'"));
         var reversed = await BuildAsync(N("b", "v: '${z.out}'") + N("m", "k: 1") + N("a", "k: 1") + N("z", "k: 1"));
 
-        string[] expected = [Id("sqldb", "a"), Id("sqldb", "m"), Id("sqldb", "z"), Id("sqldb", "b")];
+        string[] expected = [Id("@workload", "runtime"), Id("sqldb", "a"), Id("sqldb", "m"), Id("sqldb", "z"), Id("sqldb", "b")];
         Assert.Equal(expected, forward.Nodes.Select(n => n.Id));
         Assert.Equal(expected, reversed.Nodes.Select(n => n.Id));
     }
@@ -193,7 +221,7 @@ public class GraphBuilderTests
             N("g", "v: '${env.grant.ok}', w: \"${guid(env.grant.ok, 'x')}\"", kind: "grant") + N("c", "v: '${env.host}'"));
 
         Assert.Empty(graph.Errors);
-        Assert.Equal(2, graph.Nodes.Count);
+        Assert.Equal(3, graph.Nodes.Count);
     }
 
     [Fact]
@@ -226,6 +254,6 @@ public class GraphBuilderTests
 
         var error = Assert.Single(graph.Errors);
         Assert.Contains("other", error.Message);
-        Assert.Empty(graph.Nodes);
+        Assert.Equal([Id("@workload", "runtime")], graph.Nodes.Select(n => n.Id));
     }
 }
