@@ -115,6 +115,7 @@ Picked up by the slice named; remove once done.
 | Subscription | `MVPLandingZone` (`ca89cbcc-e368-4e81-9e80-6686b4d9f3b9`), Pay-As-You-Go, guardrails applied |
 | Credentials | `~/.just-deliver/ca89cbcc-e368-4e81-9e80-6686b4d9f3b9.env` — secret expires **2026-11-07** (renew: `tools/sandbox/sandbox.sh apply … --rotate-secret`, needs the user as Owner) |
 | Region | `southeastasia` (`JD_REGION`) |
+| Session start | Start Claude Code with the team identity loaded: `set -a; source ~/.just-deliver/ca89cbcc-e368-4e81-9e80-6686b4d9f3b9.env; set +a; claude`. Keep the personal Owner login out of the default `az` config (`AZURE_CONFIG_DIR=~/.azure-owner az login` for Owner tasks). Azure tests run only via `tools/verify.sh --azure` (lead only, ~55 min, one at a time). |
 | Live Azure resources | none |
 
 ## Session log
