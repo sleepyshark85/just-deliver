@@ -5,8 +5,7 @@
 
 ## Now
 
-- **Next slice:** S16 — deploy steps (briefs now enumerate every security boundary as a required test; see the
-  2026-10-10 session log).
+- **Next slice:** S16b — deploy steps in the orchestrator, offline (brief drafted; design note first), then S16c.
 - **In progress:** —
 - **Blocked:** —
 
@@ -37,7 +36,9 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S15a | `container-app` template | done | PR #25 | 1 | Split from S15. Developer stopped at the risk as briefed: Pulumi YAML cannot turn a map into a list, so the template takes `variables` as `List<Map<String>>` (`{name, value}`) and the engine converts (S15c). APPROVE first round. Azure gate green (CLI 84/84, real Container App: Multiple, SystemAssigned, min 0). |
 | S15b | Runtime mapping + `runtime` node | done | PR #26 | 1 | APPROVE first round. Runtime mapping from data, reserved `runtime` node at `@workload`, phase `Runtime` (not deployed until S16), grants now edge to it, probe as data. Review hazards (image/port missing in the second pass; runtime-mapping node current id; `runtime.*` refs unchecked by TemplateLibrary) moved into S15c Part 0. Azure gate: all green except `DeployAzureTests`, which failed under memory pressure (an unrelated 8.8 GB process + a parallel review run) and passed alone (2 min, nothing left) — treated as load-related, cause unconfirmed. |
 | S15c | Variables + `runtime.*` policies | done | PR #28 | 5 | Design note approved first. Rounds 1–3: 7 blocking, all security/correctness edges of a cross-scope export mechanism broader than the contract (full expression language in variables; grant bypass of the grantable check via exports, static and pending; `fn::entries` anywhere; same-name outputs across scopes; export crash path). Escalated after round 3; user kept Sonnet/Opus with stricter briefs and narrowed the design (only `runtime` reads `${resource.*}`; exports cannot; `fn::entries` top-level only; string values; second pass by scope). Round 4: second regex grammar → round 5: one grammar. APPROVE. Production +390/−125, over the cap (defensive checks, accepted). Azure gate green (CLI 85/85, nothing left). **S15 complete.** |
-| S16 | Deploy steps | todo | | | |
+| S16a | `container-app` revision + traffic inputs | done | PR #29 | 1 | Spike first: a JSON list keeps its types through Pulumi config (`weight` integer, `latestRevision` boolean; provider rejects text). `traffic` (`List<Object>`), `revisionSuffix`, `maxInactiveRevisions` are inputs; mapping placeholders until S16b. Azure test shared setup (`ProbeAzureTest`). APPROVE first round; Azure gate green (CLI 86/86, dark revision got 0%, shift created no revision). |
+| S16b | Deploy steps (orchestrator, offline) | todo | | | Dark → grants → probe (port) → shift; suffix from config hash; live revision from a traffic echo output; re-entrant. |
+| S16c | HTTP probe + E2E Azure test | todo | | | Sample release set live on dev; a revision failing `/health` never gets traffic. |
 | S17 | Release record + qualification | todo | | | |
 | S18 | Second environment + approvals | todo | | | |
 | S19 | Promotion | todo | | | |
@@ -55,6 +56,10 @@ Picked up by the slice named; remove once done.
 - **S15c review (minor):** errors GraphBuilder raises on a policy-set value point at the node field, not the policy path
   as written; a second-pass export failure names the node id instead of the mapping file; runtime-mapping nodes other than
   `runtime` get policy-added node names in scope (only `runtime` needs them).
+- **S16b (S16a review):** Multiple mode never deactivates 0%-traffic revisions; `maxInactiveRevisions` only bounds
+  deactivated ones. Decided: no deactivation in the MVP (Pulumi YAML cannot express the action; they scale to zero) —
+  document as a known limitation. Add an offline assertion that the `traffic` backend parameter keeps its types.
+  `ContainerAppAzureTests` builds two stacks; fold the dark/shift steps into one test when next touched; neutral tag.
 - **S16:** repeat the second-pass assertions (pending variable, secret masking) on the real deployed `runtime` node.
 - **S15c/S16 (S15a review):** a secret value in `variables` stays encrypted in Pulumi state but is plain text in the
   Container App's `env` (readable with Reader) — secret values should become Container App `secrets` + `secretRef`
@@ -93,7 +98,7 @@ Newest first. One entry per session: what moved, decisions taken, anything the n
   mutation-testing job uses ~8.8 GB of 16 GB; run review and Azure gates one at a time.
   **User decision:** keep Sonnet developer / Opus reviewer with stricter briefs (every security boundary listed as a
   required test; narrowest surface stated, everything else an error); narrow the S15c design. Rounds 4–5 under the
-  narrowed design → APPROVE; S15c merged (PR #28). S15 complete.
+  narrowed design → APPROVE; S15c merged (PR #28). S15 complete. S16 split a/b/c; S16a merged (PR #29, 1 round).
 
 - **2026-10-09 (team identity)** — Restarted with the `ARM_*` team identity; personal `az` session logged out. S12 Azure
   gate re-run as the team identity: green, nothing left behind. Azure test runs take ~50 min, mostly Cosmos account

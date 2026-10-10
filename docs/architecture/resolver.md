@@ -176,7 +176,11 @@ a node's `template` is `<provider>/<name>`.
 - Pulumi config values are strings; structured inputs (`Map<String>` tags) are passed as JSON.
 - Pulumi YAML has no loop, no map-to-list function and no `fromJSON`, so a template cannot reshape a map into the list a
   resource wants. List-shaped inputs are built by the engine and declared as lists: `container-app` takes `variables` as
-  `List<Map<String>>`, items `{name, value}`, the shape of the container's `env`.
+  `List<Map<String>>`, items `{name, value}`, the shape of the container's `env`, and `traffic` as `List<Object>`, items
+  `{revisionName, weight}` or `{latestRevision: true, weight}`. The engine builds both: the template cannot choose between the latest
+  and a named revision, so it has no traffic or revision opinion. The type of a list item is documentation only, since Pulumi YAML
+  does not check it; the provider does, and rejects a text `weight` or `latestRevision`. A value that is a number or boolean in the
+  mapping stays one in the config JSON.
 - Templates declare inputs under `configuration:`, which current Pulumi reports as deprecated in favour of `config:`.
   They stay on `configuration:` because project-level `config:` cannot declare the `number` type the Log Analytics
   daily cap needs. When that changes, rename the block in each template and change the block name `TemplateLibrary`
@@ -190,7 +194,8 @@ The seed library: substrate `resource-group`, `log-analytics` (daily cap), `cont
 (Consumption only), `cosmos-account` (with a throughput hard cap), `cosmos-sql-database` (shared throughput); workload `cosmos-sql-container`,
 `cosmos-sql-role-assignment`, `application-insights`, `role-assignment`, and the runtime template `container-app` (a Container App
 revision on Consumption with a system-assigned identity, `Multiple` active revisions and ingress on `targetPort`; size, replicas,
-image and variables are inputs; all traffic goes to the latest revision until the release flow adds traffic control).
+image, variables, the revision suffix, the traffic and the number of inactive revisions kept are inputs, so the release flow can deploy a dark
+revision and shift traffic to it; [provisioning.md](provisioning.md)).
 
 ### Runtime is a mapping too
 
@@ -218,6 +223,10 @@ nodes:
       memory: 0.5Gi
       minReplicas: 0
       maxReplicas: 1
+      revisionSuffix: initial                     # placeholders until the release flow owns them
+      traffic:
+        - { latestRevision: true, weight: 100 }
+      maxInactiveRevisions: 5
       variables:                                  # the workload's variables, deployed as a list of {name, value}
         fn::entries: workload.variables
 ```

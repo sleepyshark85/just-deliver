@@ -1,6 +1,6 @@
 name: container-app
 runtime: yaml
-description: Provisions a Container App in a Container Apps environment, with a system-assigned identity and multiple active revisions
+description: Provisions a Container App in a Container Apps environment, with a system-assigned identity, multiple active revisions and traffic set by the caller
 
 configuration:
   # Resource group of the container app
@@ -40,6 +40,21 @@ configuration:
   # (Pulumi YAML cannot turn a name-to-value map into it, so the engine builds the list)
   variables:
     type: List<Map<String>>
+  # Name suffix of the revision this deploy creates; the revision is named <containerAppName>--<revisionSuffix>, so its name is
+  # known before it exists. Azure: lowercase letters, digits and '-', starts with a letter, ends with a letter or digit, no '--', and
+  # the whole revision name at most 54 characters. A suffix that already names a revision of the app is an error, so a new
+  # revision needs a new suffix.
+  revisionSuffix:
+    type: String
+  # Where ingress sends traffic: a list of {revisionName, weight} or {latestRevision: true, weight} items, weights summing to 100.
+  # Items mix text, boolean and integer values, which no Pulumi YAML item type expresses, so the type is Object; the provider checks
+  # the types (weight an integer, latestRevision a boolean). The engine builds the list: Pulumi YAML has no conditional or loop to
+  # choose between the latest and a named revision.
+  traffic:
+    type: List<Object>
+  # Most inactive revisions Azure keeps; older ones are deleted
+  maxInactiveRevisions:
+    type: Integer
 
 resources:
   containerApp:
@@ -54,14 +69,13 @@ resources:
         type: SystemAssigned
       configuration:
         activeRevisionsMode: Multiple
+        maxInactiveRevisions: ${maxInactiveRevisions}
         ingress:
           external: ${externalIngress}
           targetPort: ${targetPort}
-          # All traffic to the latest revision for now; dark revisions and traffic control come with the release flow.
-          traffic:
-            - latestRevision: true
-              weight: 100
+          traffic: ${traffic}
       template:
+        revisionSuffix: ${revisionSuffix}
         containers:
           - name: ${containerAppName}
             image: ${image}
