@@ -196,4 +196,52 @@ public partial class TemplateLibraryTests
 
         Assert.Contains("not found", Assert.Single(library.Errors).Message);
     }
+
+    private static readonly RuntimeRelease Release = new("suffix", "traffic", "traffic", "revision", "fqdn", "revisionName", "latestRevision", "weight");
+
+    // A runtime template with the inputs and outputs Release names, except the one given (an input or an output name).
+    private static TemplateLibrary RuntimeLibrary(string omit = "")
+    {
+        var inputs = new[] { "suffix", "traffic" }.Where(n => n != omit).Select(n => $"  {n}:\n    type: String\n");
+        var outputs = new[] { "traffic", "revision", "fqdn" }.Where(n => n != omit).Select(n => $"  {n}: x\n");
+        return TemplateLibrary.Parse([("t/rt", $"name: rt\nconfiguration:\n  image:\n    type: String\n{string.Concat(inputs)}outputs:\n{string.Concat(outputs)}")]);
+    }
+
+    private static GraphNode RuntimeNode(RuntimeRelease? release) =>
+        new("w/dev/@workload/runtime", "@workload", "runtime", "t/rt", NodeKind.Create, "w.dev._workload.runtime", Phase.Runtime,
+            new Dictionary<string, ConfigValue> { ["image"] = Text("i") }, new Dictionary<string, Provenance>(), "hash", [], null, release);
+
+    [Fact]
+    public void The_release_flow_sets_the_suffix_and_traffic_inputs_so_the_runtime_node_need_not()
+    {
+        var library = RuntimeLibrary();
+
+        Assert.Empty(library.Check(Graph([RuntimeNode(Release)])));
+        // Without the release block the inputs are required like any other.
+        Assert.Equal(["suffix", "traffic"], library.Check(Graph([RuntimeNode(null)])).Select(e => e.Location));
+    }
+
+    [Theory]
+    [InlineData("suffix")]
+    [InlineData("traffic")]
+    public void A_runtime_template_without_a_release_input_is_an_error(string input)
+    {
+        // "traffic" is also an output, which the same call omits; only the input error is asserted.
+        var errors = RuntimeLibrary(input).Check(Graph([RuntimeNode(Release)]));
+
+        var error = Assert.Single(errors, e => e.Message.Contains("does not declare the input", StringComparison.Ordinal));
+        Assert.Equal(("w/dev/@workload/runtime", input), (error.File, error.Location));
+    }
+
+    [Theory]
+    [InlineData("traffic")]
+    [InlineData("revision")]
+    [InlineData("fqdn")]
+    public void A_runtime_template_without_a_release_output_is_an_error(string output)
+    {
+        var errors = RuntimeLibrary(output).Check(Graph([RuntimeNode(Release)]));
+
+        var error = Assert.Single(errors, e => e.Message.Contains("declares no output", StringComparison.Ordinal));
+        Assert.Equal(("w/dev/@workload/runtime", output), (error.File, error.Location));
+    }
 }

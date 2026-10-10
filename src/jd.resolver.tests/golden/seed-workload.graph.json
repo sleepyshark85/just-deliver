@@ -57,7 +57,7 @@
       "kind": "Create",
       "stack": "just-deliver-sample-app.dev._workload.runtime",
       "phase": "Runtime",
-      "hash": "826f5377a83d2851e89d7c9d4f3e82a125b68a995c787db9d49e9d6955234f43",
+      "hash": "71e8954d482d7a100466578c36aba177b7533c6e3e7738ec4d37f0925ad0ab8f",
       "dependsOn": [
         "just-deliver-sample-app/dev/@workload/appinsights",
         "just-deliver-sample-app/dev/database/container"
@@ -74,14 +74,7 @@
         "memory": "0.5Gi",
         "minReplicas": 0,
         "resourceGroupName": "rg-dev",
-        "revisionSuffix": "initial",
         "targetPort": "8080",
-        "traffic": [
-          {
-            "latestRevision": true,
-            "weight": 100
-          }
-        ],
         "variables": [
           {
             "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
@@ -117,9 +110,7 @@
         "memory": "Mapping: mappings/runtime/container-app.yaml",
         "minReplicas": "Mapping: mappings/runtime/container-app.yaml",
         "resourceGroupName": "Mapping: mappings/runtime/container-app.yaml",
-        "revisionSuffix": "Mapping: mappings/runtime/container-app.yaml",
         "targetPort": "Mapping: mappings/runtime/container-app.yaml",
-        "traffic": "Mapping: mappings/runtime/container-app.yaml",
         "variables.APPLICATIONINSIGHTS_CONNECTION_STRING": "PolicySet: enforce-monitoring (policies/enforce-monitoring.yaml)",
         "variables.COSMOS_CONTAINER": "Workload: container.variables",
         "variables.COSMOS_DATABASE": "Workload: container.variables",
@@ -128,7 +119,19 @@
       },
       "probe": {
         "path": "/health",
-        "expectedStatus": 200
+        "expectedStatus": 200,
+        "timeoutSeconds": 300,
+        "intervalSeconds": 5
+      },
+      "release": {
+        "suffixInput": "revisionSuffix",
+        "trafficInput": "traffic",
+        "trafficOutput": "traffic",
+        "revisionOutput": "latestRevisionName",
+        "fqdnOutput": "latestRevisionFqdn",
+        "revisionKey": "revisionName",
+        "latestKey": "latestRevision",
+        "weightKey": "weight"
       }
     },
     {

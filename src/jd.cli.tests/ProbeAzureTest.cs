@@ -71,6 +71,37 @@ public abstract class ProbeAzureTest : IDisposable
         return path;
     }
 
+    /// <summary>
+    /// Every workload needs a runtime mapping. This test-only one points at a template with no resources, so a runtime deploy
+    /// never reaches Azure; it declares the inputs and outputs the release block names.
+    /// </summary>
+    protected void WriteRuntimeStandIn()
+    {
+        Write("catalog/mappings/runtime.yaml", """
+            kind: Mapping
+            match: { kind: runtime }
+            probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
+            release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }
+            nodes:
+              runtime:
+                template: test/runtime-stand-in
+                config: {}
+            """);
+        Write("catalog/templates/test/runtime-stand-in/Pulumi.yaml", """
+            name: runtime-stand-in
+            runtime: yaml
+            configuration:
+              suffix:
+                type: String
+              traffic:
+                type: List<Object>
+            outputs:
+              traffic: ${traffic}
+              revision: stand-in
+              fqdn: example.invalid
+            """);
+    }
+
     /// <summary>Copies the named templates from the catalog under test into the test catalog.</summary>
     protected void CopyTemplates(params string[] templates)
     {

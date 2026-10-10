@@ -36,10 +36,28 @@
       "description": "Runtime mappings only: how to check the deployed runtime is healthy. The graph carries it on the runtime node.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "expectedStatus"],
+      "required": ["path", "expectedStatus", "timeoutSeconds", "intervalSeconds"],
       "properties": {
         "path": { "description": "Request path, starting with /.", "type": "string", "pattern": "^/" },
-        "expectedStatus": { "description": "HTTP status that means healthy.", "type": "integer", "minimum": 100, "maximum": 599 }
+        "expectedStatus": { "description": "HTTP status that means healthy.", "type": "integer", "minimum": 100, "maximum": 599 },
+        "timeoutSeconds": { "description": "How long to keep trying before the revision counts as unhealthy (grants may take minutes to propagate).", "type": "integer", "minimum": 1 },
+        "intervalSeconds": { "description": "Wait between attempts; at most timeoutSeconds.", "type": "integer", "minimum": 1 }
+      }
+    },
+    "release": {
+      "description": "Runtime mappings only: which inputs and outputs of the runtime node's template the release flow (dark revision, grants, probe, traffic shift) uses. The engine sets the two inputs, so the runtime node must not.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suffixInput", "trafficInput", "trafficOutput", "revisionOutput", "fqdnOutput", "revisionKey", "latestKey", "weightKey"],
+      "properties": {
+        "suffixInput": { "description": "Template input that receives the revision suffix.", "type": "string", "minLength": 1 },
+        "trafficInput": { "description": "Template input that receives the traffic list.", "type": "string", "minLength": 1 },
+        "trafficOutput": { "description": "Output echoing the traffic last deployed; names the live revision.", "type": "string", "minLength": 1 },
+        "revisionOutput": { "description": "Output naming the revision a deploy created.", "type": "string", "minLength": 1 },
+        "fqdnOutput": { "description": "Output with that revision's address, the probe target.", "type": "string", "minLength": 1 },
+        "revisionKey": { "description": "Key of a traffic item that names a revision.", "type": "string", "minLength": 1 },
+        "latestKey": { "description": "Key of a traffic item that means the latest revision.", "type": "string", "minLength": 1 },
+        "weightKey": { "description": "Key of a traffic item's weight.", "type": "string", "minLength": 1 }
       }
     }
   },

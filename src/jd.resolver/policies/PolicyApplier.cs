@@ -55,7 +55,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
                 var node = ApplyNodePolicies(
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(runtime.Mapping, runtime.Mapping, Layer.Mapping),
                     null, null, EvaluatorFor(n.Name, inScope), n.Name, n.Name == ExpressionEvaluator.RuntimeNode ? workloadPolicies : [], runtime.WorkloadFile, errors);
-                runtimeNodes.Add(n.Name == ExpressionEvaluator.RuntimeNode ? node with { Probe = runtime.Probe } : node);
+                runtimeNodes.Add(n.Name == ExpressionEvaluator.RuntimeNode ? node with { Probe = runtime.Probe, Release = runtime.Release } : node);
             }
         }
 

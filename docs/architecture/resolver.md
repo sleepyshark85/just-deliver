@@ -69,7 +69,7 @@ loader; the expression evaluator interprets them later.
 |---|---|---|
 | `Catalog` | `version` | exactly one |
 | `ResourceType` | `name`, `classes`, `exports`, `description` | `name` unique |
-| `Mapping` | `match`, `nodes`; `exports` for a requirement mapping | `match` has `type` (a requirement mapping, naming a declared type) or `kind: runtime` (a runtime mapping, [below](#runtime-is-a-mapping-too)); one with neither would match every type and skip the exports contract, so it is rejected; a requirement mapping's `exports` keys equal the type's `exports`. A runtime mapping must declare a node named `runtime`, has no `exports`, and may have a `probe`; `runtime` is reserved, so no requirement mapping or policy `add` declares a node of that name, and only a runtime mapping has a `probe` (`path` starting with `/`, `expectedStatus` 100-599). |
+| `Mapping` | `match`, `nodes`; `exports` for a requirement mapping | `match` has `type` (a requirement mapping, naming a declared type) or `kind: runtime` (a runtime mapping, [below](#runtime-is-a-mapping-too)); one with neither would match every type and skip the exports contract, so it is rejected; a requirement mapping's `exports` keys equal the type's `exports`. A runtime mapping must declare a node named `runtime`, has no `exports`, and must have a `probe` and a `release` block ([below](#runtime-is-a-mapping-too)); `runtime` is reserved, so no requirement mapping or policy `add` declares a node of that name, and only a runtime mapping has a `probe` (`path` starting with `/`, `expectedStatus` 100-599, `timeoutSeconds` and `intervalSeconds` at least 1 with the interval not above the timeout) or a `release`. The `runtime` node's config must not set the two inputs `release` names, since the release flow sets them. |
 | `Policy` | `name`, `reason`, `match`, and at least one of `set` / `default` / `add` | `name` unique |
 | `Naming` | `rules` (resource kind → `pattern`, `maxLength`, `allowed`) | files merge; a rule is defined once; `allowed` must be a valid regex character class that accepts every hex digit `0-9a-f` |
 | `Roles` | `roles` (name → role-definition GUID) | files merge; a role is defined once |
@@ -207,7 +207,16 @@ the app is not special-cased:
 # mappings/runtime/container-app.yaml
 kind: Mapping
 match: { kind: runtime }
-probe: { path: /health, expectedStatus: 200 }     # data for the release flow; the resolver only carries it
+probe: { path: /health, expectedStatus: 200, timeoutSeconds: 300, intervalSeconds: 5 }   # data for the release flow; the resolver only carries it
+release:                                          # which template inputs/outputs the release flow uses; the resolver only carries it
+  suffixInput: revisionSuffix                     # inputs the flow sets per step, so the runtime node sets neither
+  trafficInput: traffic
+  trafficOutput: traffic                          # output echoing the traffic last deployed; names the live revision
+  revisionOutput: latestRevisionName              # output naming the revision a deploy created
+  fqdnOutput: latestRevisionFqdn                  # its address, the probe target
+  revisionKey: revisionName                       # traffic item key naming a revision
+  latestKey: latestRevision                       # traffic item key meaning the latest revision
+  weightKey: weight
 nodes:
   runtime:
     template: azure/container-app
@@ -223,9 +232,6 @@ nodes:
       memory: 0.5Gi
       minReplicas: 0
       maxReplicas: 1
-      revisionSuffix: initial                     # placeholders until the release flow owns them
-      traffic:
-        - { latestRevision: true, weight: 100 }
       maxInactiveRevisions: 5
       variables:                                  # the workload's variables, deployed as a list of {name, value}
         fn::entries: workload.variables
@@ -387,7 +393,7 @@ Per node:
 | config, provenance | Values (`Resolved` or `Pending`) and where each leaf came from. |
 | depends-on | Ids of nodes in the same scope referenced by a pending `${node.output}`, the runtime node's id when the config references `runtime.*`, and, for the runtime node reading `${resource.<id>.<export>}`, the nodes that export waits on (its own `${node.output}` references, in the requirement's scope); sorted. |
 | phase | `infrastructure`, `runtime` or `after-runtime`, derived (see [Engine rules](#engine-rules-generic-code-written-once)). |
-| probe | On the runtime node only: the runtime mapping's `probe` (`path`, `expectedStatus`). Not part of the hash. |
+| probe, release | On the runtime node only: the runtime mapping's `probe` (`path`, `expectedStatus`, `timeoutSeconds`, `intervalSeconds`) and `release` block (the eight names above). Not part of the hash. |
 | hash | Lowercase hex SHA-256 of the UTF-8 bytes of the JSON object `{"template":…,"kind":"create"\|"grant","config":…}` in that key order, written by Newtonsoft `JToken.ToString(Formatting.None)` with default string escaping; config is the canonical form below. YAML date-like values stay strings, so the hash does not depend on the machine's time zone. |
 
 **Canonical config** (`ConfigJson`): objects with keys in ordinal order, arrays in order, non-string scalars as

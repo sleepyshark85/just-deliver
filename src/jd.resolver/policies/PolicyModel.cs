@@ -24,14 +24,15 @@ public sealed record Provenance(string Source, string Rule, Layer Layer)
 }
 
 // Provenance: one entry per leaf config field, keyed by dotted path (consistencyPolicy.level); an array is one leaf.
-// Probe is the runtime mapping's probe, on the runtime node only.
+// Probe and Release are the runtime mapping's, on the runtime node only.
 public sealed record ResolvedNode(
     string Name,
     string Template,
     NodeKind Kind,
     IReadOnlyDictionary<string, ConfigValue> Config,
     IReadOnlyDictionary<string, Provenance> Provenance,
-    Probe? Probe = null);
+    Probe? Probe = null,
+    RuntimeRelease? Release = null);
 
 // The expanded requirement without its pre-policy nodes: Nodes are the ones to use.
 public sealed record ResolvedRequirement(

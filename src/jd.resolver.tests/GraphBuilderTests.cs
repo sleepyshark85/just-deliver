@@ -113,12 +113,12 @@ public class GraphBuilderTests
     }
 
     [Fact]
-    public async Task The_runtime_node_carries_the_probe_and_no_other_node_does()
+    public async Task The_runtime_node_carries_the_probe_and_release_and_no_other_node_does()
     {
         var graph = await BuildAsync(N("a", "k: 1"));
 
-        Assert.Equal(new Probe("/health", 200), Node(graph, "@workload", "runtime").Probe);
-        Assert.All(graph.Nodes.Where(n => n.Name != "runtime"), n => Assert.Null(n.Probe));
+        Assert.Equal((TestCatalog.Probe, TestCatalog.Release), (Node(graph, "@workload", "runtime").Probe, Node(graph, "@workload", "runtime").Release));
+        Assert.All(graph.Nodes.Where(n => n.Name != "runtime"), n => Assert.Equal((null, null), (n.Probe, n.Release)));
     }
 
     [Fact]

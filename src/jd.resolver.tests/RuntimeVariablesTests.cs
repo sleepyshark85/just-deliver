@@ -19,6 +19,8 @@ public class RuntimeVariablesTests
     private const string RuntimeMapping = """
         kind: Mapping
         match: { kind: runtime }
+        probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
+        release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }
         nodes:
           runtime:
             template: t/runtime
@@ -142,10 +144,10 @@ public class RuntimeVariablesTests
 
     // A runtime mapping with a second node, 'granter' or 'sidecar', whose config is the given body.
     private static string RuntimeWith(string node, string kind, string body) =>
-        $"kind: Mapping\nmatch: {{ kind: runtime }}\nnodes:\n  runtime:\n    template: t/runtime\n    config: {{ k: 1 }}\n  {node}:\n    kind: {kind}\n    template: t/x\n    config: {{ {body} }}\n";
+        $"kind: Mapping\nmatch: {{ kind: runtime }}\n{TestCatalog.ProbeAndRelease}nodes:\n  runtime:\n    template: t/runtime\n    config: {{ k: 1 }}\n  {node}:\n    kind: {kind}\n    template: t/x\n    config: {{ {body} }}\n";
 
     private static string RuntimeConfig(string body) =>
-        $"kind: Mapping\nmatch: {{ kind: runtime }}\nnodes:\n  runtime:\n    template: t/runtime\n    config: {{ {body} }}\n";
+        $"kind: Mapping\nmatch: {{ kind: runtime }}\n{TestCatalog.ProbeAndRelease}nodes:\n  runtime:\n    template: t/runtime\n    config: {{ {body} }}\n";
 
     [Theory]
     [InlineData("a requirement node")]
@@ -378,6 +380,8 @@ public class RuntimeVariablesTests
         const string mapping = """
             kind: Mapping
             match: { kind: runtime }
+            probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
+            release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }
             nodes:
               runtime:
                 template: t/runtime

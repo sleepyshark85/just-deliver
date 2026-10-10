@@ -191,7 +191,7 @@ public class PolicyApplierTests
         var result = await ApplyAsync([Policy("size", "{ template: t/runtime }", "set: { k: 2 }\n")]);
 
         var runtime = Assert.Single(result.RuntimeNodes);
-        Assert.Equal(("runtime", new Probe("/health", 200)), (runtime.Name, runtime.Probe));
+        Assert.Equal(("runtime", TestCatalog.Probe, TestCatalog.Release), (runtime.Name, runtime.Probe, runtime.Release));
         Assert.Equal(2, Number(runtime.Config["k"]));
         Assert.Equal(new Provenance("f5.yaml", "size", Layer.PolicySet), runtime.Provenance["k"]);
         Assert.Empty(result.WorkloadNodes);
@@ -200,7 +200,7 @@ public class PolicyApplierTests
     [Fact]
     public async Task A_policy_cannot_add_a_node_the_runtime_mapping_already_declares()
     {
-        var runtimeMapping = "kind: Mapping\nmatch: { kind: runtime }\nnodes:\n  runtime:\n    template: t/rt\n    config: {}\n  sidecar:\n    template: t/s\n    config: {}\n";
+        var runtimeMapping = "kind: Mapping\nmatch: { kind: runtime }\n" + TestCatalog.ProbeAndRelease + "nodes:\n  runtime:\n    template: t/rt\n    config: {}\n  sidecar:\n    template: t/s\n    config: {}\n";
         var policy = Policy("pol", "{ kind: runtime }", "add:\n  sidecar:\n    template: t/x\n    config: {}\n");
         var loaded = await CatalogParser.ParseAsync(BaseFiles.Append(runtimeMapping).Append(policy).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
         Assert.Empty(loaded.Errors);
