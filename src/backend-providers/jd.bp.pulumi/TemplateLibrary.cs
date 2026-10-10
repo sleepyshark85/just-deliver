@@ -110,7 +110,23 @@ public sealed class TemplateLibrary : ITemplateStore
                 errors.Add(new LoadError(node.Id, key, $"template '{node.Template}' does not declare the input '{key}'."));
             }
 
-            foreach (var key in template.RequiredInputs.Where(k => !node.Config.ContainsKey(k)).Order(StringComparer.Ordinal))
+            // The release flow sets the runtime node's suffix and traffic inputs, so the node need not; the template must have them and
+            // the outputs the flow reads.
+            string[] engineInputs = node.Release is { } release ? [release.SuffixInput, release.TrafficInput] : [];
+            if (node.Release is { } named)
+            {
+                foreach (var input in engineInputs.Where(i => !template.Inputs.Contains(i)).Order(StringComparer.Ordinal))
+                {
+                    errors.Add(new LoadError(node.Id, input, $"template '{node.Template}' does not declare the input '{input}' that the runtime mapping's release block names."));
+                }
+
+                foreach (var output in new[] { named.TrafficOutput, named.RevisionOutput, named.FqdnOutput }.Where(o => !template.Outputs.Contains(o)))
+                {
+                    errors.Add(new LoadError(node.Id, output, $"template '{node.Template}' declares no output '{output}' that the runtime mapping's release block names."));
+                }
+            }
+
+            foreach (var key in template.RequiredInputs.Except(engineInputs).Where(k => !node.Config.ContainsKey(k)).Order(StringComparer.Ordinal))
             {
                 errors.Add(new LoadError(node.Id, key, $"template '{node.Template}' requires the input '{key}' and the node does not set it."));
             }

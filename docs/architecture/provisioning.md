@@ -205,9 +205,14 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   weight: 100}]`, so the new revision `<app>--<suffix>` exists and the previous keeps 100%; the first deploy has no previous revision and
   passes `[{latestRevision: true, weight: 100}]`; (2) grants, then the OQ probe against the new revision with retry; (3) **shift**: the same
   suffix, `traffic` = `[{revisionName: <app>--<suffix>, weight: 100}]`, which changes traffic only and creates no revision. On a failed
-  step traffic stays on the previous revision and dependants stop. Which revision is live is S16b's own state (the suffix it last
-  shifted to); the template adds no output for it, because the app's `latestReadyRevisionName` is the newest revision, not the live one.
-  Until S16b the runtime mapping holds placeholders (suffix `initial`, traffic to the latest revision).
+  step traffic stays on the previous revision and dependants stop. Which revision is live is read from the stack: the template echoes
+  the traffic it was last given as an output (`traffic`), and the live revision is the last `revisionName` in it (none on a first deploy or
+  with `latestRevision`); the app's `latestReadyRevisionName` is the newest revision, not the live one, so it cannot tell. The runtime
+  mapping's `release` block names these inputs and outputs and the shape of a traffic item, so none is in code, and its `probe` carries
+  the retry bound (`timeoutSeconds`, `intervalSeconds`). The runtime node's config sets neither the suffix nor the traffic.
+  **Known limitation:** old revisions are not deactivated. Container Apps keeps a 0%-traffic revision active in multiple-revision mode,
+  where it scales to zero and costs nothing; deactivating one is an API action Pulumi YAML cannot express. `maxInactiveRevisions` bounds
+  only revisions that are already inactive (open question E32).
 - **Preview.** Same order, nothing is created. A reference to a node this run has not deployed is filled from
   `GetOutputsAsync` (state of an earlier deploy); if the node was never deployed the value is missing and the node is
   reported "pending upstream" and not previewed (never a fake value). Template `fn::invoke`s still run during preview, so

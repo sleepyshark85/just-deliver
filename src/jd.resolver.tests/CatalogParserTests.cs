@@ -208,7 +208,7 @@ public class CatalogParserTests
     [InlineData("a@b")]
     public async Task Node_names_in_mappings_and_policy_adds_must_be_lowercase_kebab(string name)
     {
-        var mapping = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ kind: runtime }}\nnodes:\n  runtime:\n    template: t/x\n    config: {{}}\n  \"{name}\":\n    template: t/x\n    config: {{}}\n"));
+        var mapping = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ kind: runtime }}\n{TestCatalog.ProbeAndRelease}nodes:\n  runtime:\n    template: t/x\n    config: {{}}\n  \"{name}\":\n    template: t/x\n    config: {{}}\n"));
         var policy = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {{ kind: runtime }}\nadd:\n  \"{name}\":\n    template: t/x\n    config: {{}}\n"));
 
         var mappingError = Assert.Single(mapping.Errors);
@@ -221,7 +221,7 @@ public class CatalogParserTests
     [Fact]
     public async Task Kebab_node_names_load()
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime }\nnodes:\n  runtime:\n    template: t/x\n    config: {}\n  app-insights-2:\n    template: t/x\n    config: {}\n"));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime }\n" + TestCatalog.ProbeAndRelease + "nodes:\n  runtime:\n    template: t/x\n    config: {}\n  app-insights-2:\n    template: t/x\n    config: {}\n"));
 
         Assert.Empty(result.Errors);
     }
@@ -231,31 +231,40 @@ public class CatalogParserTests
     {
         const string body = "nodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: x\n";
         var neither = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ class: standard }}\n{body}"));
-        var runtime = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime, runtime: container-app }\nnodes:\n  runtime:\n    template: t/db\n    config: {}\n"));
+        var runtime = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime, runtime: container-app }\n" + TestCatalog.ProbeAndRelease + "nodes:\n  runtime:\n    template: t/db\n    config: {}\n"));
 
         var error = Assert.Single(neither.Errors);
         Assert.Equal(("m.yaml", "match"), (error.File, error.Location));
         Assert.Empty(runtime.Errors);
     }
 
+    private const string RuntimeHead = "kind: Mapping\nmatch: { kind: runtime }\n";
     private const string RuntimeNode = "nodes:\n  runtime:\n    template: t/rt\n    config: {}\n";
+    private const string Probe = "probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n";
+    private const string Release = "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }\n";
 
     [Fact]
-    public async Task A_runtime_mapping_loads_with_its_probe_and_no_exports()
+    public async Task A_runtime_mapping_loads_with_its_probe_and_release_and_no_exports()
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime }\nprobe: { path: /health, expectedStatus: 200 }\n" + RuntimeNode));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + Probe + Release + RuntimeNode));
 
         Assert.Empty(result.Errors);
         var mapping = Assert.Single(result.Catalog!.Mappings);
         Assert.True(mapping.IsRuntime);
-        Assert.Equal(new Probe("/health", 200), mapping.Probe);
+        Assert.Equal((TestCatalog.Probe, TestCatalog.Release), (mapping.Probe, mapping.Release));
     }
 
     [Theory]
-    [InlineData("kind: Mapping\nmatch: { kind: runtime }\nnodes:\n  other:\n    template: t/rt\n    config: {}\n", "nodes", "must declare a node named 'runtime'")]
-    [InlineData("kind: Mapping\nmatch: { kind: runtime }\n" + RuntimeNode + "exports:\n  endpoint: x\n", "exports", "has no exports")]
+    [InlineData(RuntimeHead + Probe + Release + "nodes:\n  other:\n    template: t/rt\n    config: {}\n", "nodes", "must declare a node named 'runtime'")]
+    [InlineData(RuntimeHead + Probe + Release + RuntimeNode + "exports:\n  endpoint: x\n", "exports", "has no exports")]
     [InlineData("kind: Mapping\nmatch: { type: alpha-db }\nnodes:\n  runtime:\n    template: t/rt\n    config: {}\nexports:\n  endpoint: x\n", "nodes.runtime", "declared only by a runtime mapping")]
-    [InlineData("kind: Mapping\nmatch: { type: alpha-db }\nprobe: { path: /health, expectedStatus: 200 }\nnodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: x\n", "probe", "only a runtime mapping has a probe")]
+    [InlineData("kind: Mapping\nmatch: { type: alpha-db }\n" + Probe + "nodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: x\n", "probe", "only a runtime mapping has a probe")]
+    [InlineData("kind: Mapping\nmatch: { type: alpha-db }\n" + Release + "nodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: x\n", "release", "only a runtime mapping has a release block")]
+    [InlineData(RuntimeHead + Probe + RuntimeNode, "release", "must have a release block")]
+    [InlineData(RuntimeHead + Release + RuntimeNode, "probe", "must have a probe")]
+    [InlineData(RuntimeHead + "probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 6 }\n" + Release + RuntimeNode, "probe.intervalSeconds", "must not exceed timeoutSeconds")]
+    [InlineData(RuntimeHead + Probe + Release + "nodes:\n  runtime:\n    template: t/rt\n    config: { suffix: x }\n", "nodes.runtime.config.suffix", "the release flow sets this input")]
+    [InlineData(RuntimeHead + Probe + Release + "nodes:\n  runtime:\n    template: t/rt\n    config: { traffic: [] }\n", "nodes.runtime.config.traffic", "the release flow sets this input")]
     public async Task The_runtime_mapping_rules_are_enforced(string mapping, string location, string message)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("types/a.yaml", TypeFile("alpha-db")), ("m.yaml", mapping));
@@ -266,19 +275,44 @@ public class CatalogParserTests
     }
 
     [Theory]
-    [InlineData("{ path: health, expectedStatus: 200 }", "probe.path")]
-    [InlineData("{ path: /health, expectedStatus: 99 }", "probe.expectedStatus")]
-    [InlineData("{ path: /health, expectedStatus: 600 }", "probe.expectedStatus")]
-    [InlineData("{ path: /health, expectedStatus: ok }", "probe.expectedStatus")]
-    [InlineData("{ path: /health }", "probe.expectedStatus")]
-    [InlineData("{ expectedStatus: 200 }", "probe.path")]
-    [InlineData("{ path: /health, expectedStatus: 200, method: POST }", "probe.method")]
+    [InlineData("{ path: health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.path")]
+    [InlineData("{ path: /health, expectedStatus: 99, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.expectedStatus")]
+    [InlineData("{ path: /health, expectedStatus: 600, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.expectedStatus")]
+    [InlineData("{ path: /health, expectedStatus: ok, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.expectedStatus")]
+    [InlineData("{ path: /health, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.expectedStatus")]
+    [InlineData("{ expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.path")]
+    [InlineData("{ path: /health, expectedStatus: 200, intervalSeconds: 5 }", "probe.timeoutSeconds")]
+    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 60 }", "probe.intervalSeconds")]
+    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 0, intervalSeconds: 5 }", "probe.timeoutSeconds")]
+    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 0 }", "probe.intervalSeconds")]
+    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, method: POST }", "probe.method")]
     public async Task A_bad_probe_is_an_error(string probe, string location)
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ kind: runtime }}\nprobe: {probe}\n" + RuntimeNode));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + $"probe: {probe}\n" + Release + RuntimeNode));
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("m.yaml", location), (error.File, error.Location));
+    }
+
+    [Theory]
+    [InlineData("suffixInput")]
+    [InlineData("trafficInput")]
+    [InlineData("trafficOutput")]
+    [InlineData("revisionOutput")]
+    [InlineData("fqdnOutput")]
+    [InlineData("revisionKey")]
+    [InlineData("latestKey")]
+    [InlineData("weightKey")]
+    public async Task A_release_block_missing_a_name_or_naming_it_empty_is_an_error(string name)
+    {
+        var without = Release.Replace($"{name}: ", $"x{name}: ");
+        var empty = System.Text.RegularExpressions.Regex.Replace(Release, $"{name}: [A-Za-z]+", $"{name}: ''");
+
+        var missing = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + Probe + without + RuntimeNode));
+        var blank = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + Probe + empty + RuntimeNode));
+
+        Assert.Contains(missing.Errors, e => e.Location == $"release.{name}" || e.Location == $"release.x{name}");
+        Assert.Equal($"release.{name}", Assert.Single(blank.Errors).Location);
     }
 
     [Fact]

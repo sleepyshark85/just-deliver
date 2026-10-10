@@ -51,7 +51,11 @@ public class OrchestratorTests
         """;
 
     // The runtime is not deployed by the walk; it is reported, first, because its id sorts before any requirement's.
-    private const string RuntimeMapping = "kind: Mapping\nmatch: { kind: runtime }\nnodes:\n  runtime:\n    template: t/runtime\n    config: { k: 1 }\n";
+    private const string RuntimeMapping = "kind: Mapping\nmatch: { kind: runtime }\n" + ProbeAndRelease + "nodes:\n  runtime:\n    template: t/runtime\n    config: { k: 1 }\n";
+
+    private const string ProbeAndRelease =
+        "probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
+        + "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }\n";
 
     private const string DefaultRequires = "  - type: thing\n";
 
@@ -418,6 +422,8 @@ public class OrchestratorTests
     private const string RuntimeReadingMapping = """
         kind: Mapping
         match: { kind: runtime }
+        probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
+        release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }
         nodes:
           group:
             template: t/group

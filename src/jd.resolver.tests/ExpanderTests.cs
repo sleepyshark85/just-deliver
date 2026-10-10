@@ -124,7 +124,7 @@ public class ExpanderTests
     private const string RuntimeNodeYaml = "  runtime:\n    template: t/rt\n    config: { image: '${workload.image}', port: '${workload.port}', name: \"${name('thing')}\" }\n";
 
     private static string RuntimeMapping(string match = "{ kind: runtime }", string extra = "") =>
-        $"kind: Mapping\nmatch: {match}\n{extra}nodes:\n{RuntimeNodeYaml}";
+        $"kind: Mapping\nmatch: {match}\n{TestCatalog.ProbeAndRelease}{extra}nodes:\n{RuntimeNodeYaml}";
 
     private static JObject WorkloadWith(string container) =>
         (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\ncontainer:\n{container}requires: []\n");
@@ -143,7 +143,7 @@ public class ExpanderTests
     public async Task A_workload_gets_the_runtime_nodes_of_the_matching_runtime_mapping_with_image_port_and_probe()
     {
         var result = await ExpandRuntimeAsync("  image: reg.example/app:1\n  ports:\n    - port: 8080\n    - port: 9090\n", "team",
-            RuntimeMapping(extra: "probe: { path: /health, expectedStatus: 200 }\n"));
+            RuntimeMapping());
 
         Assert.Empty(result.Errors);
         var runtime = Assert.IsType<ExpandedRuntime>(result.Runtime);
@@ -152,7 +152,7 @@ public class ExpanderTests
         Assert.Equal("reg.example/app:1", Text(node.Config["image"]));
         Assert.Equal("8080", Text(node.Config["port"]));
         Assert.StartsWith("shop-", Text(node.Config["name"]));
-        Assert.Equal(new Probe("/health", 200), runtime.Probe);
+        Assert.Equal((TestCatalog.Probe, TestCatalog.Release), (runtime.Probe, runtime.Release));
     }
 
     [Fact]

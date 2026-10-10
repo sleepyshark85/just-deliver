@@ -45,7 +45,28 @@ public static class GraphJson
         };
         if (n.Probe is { } probe)
         {
-            node["probe"] = new JObject { ["path"] = probe.Path, ["expectedStatus"] = probe.ExpectedStatus };
+            node["probe"] = new JObject
+            {
+                ["path"] = probe.Path,
+                ["expectedStatus"] = probe.ExpectedStatus,
+                ["timeoutSeconds"] = probe.TimeoutSeconds,
+                ["intervalSeconds"] = probe.IntervalSeconds,
+            };
+        }
+
+        if (n.Release is { } release)
+        {
+            node["release"] = new JObject
+            {
+                ["suffixInput"] = release.SuffixInput,
+                ["trafficInput"] = release.TrafficInput,
+                ["trafficOutput"] = release.TrafficOutput,
+                ["revisionOutput"] = release.RevisionOutput,
+                ["fqdnOutput"] = release.FqdnOutput,
+                ["revisionKey"] = release.RevisionKey,
+                ["latestKey"] = release.LatestKey,
+                ["weightKey"] = release.WeightKey,
+            };
         }
 
         return node;

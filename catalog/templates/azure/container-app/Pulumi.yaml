@@ -88,6 +88,8 @@ resources:
           maxReplicas: ${maxReplicas}
 
 outputs:
+  # The traffic as configured by the last deploy; the release flow reads the live revision from it
+  traffic: ${traffic}
   containerAppId: ${containerApp.id}
   principalId: ${containerApp.identity.principalId}
   latestRevisionName: ${containerApp.latestRevisionName}

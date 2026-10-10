@@ -44,16 +44,36 @@ public sealed record MatchCriteria(IReadOnlyDictionary<string, string> Criteria)
     public const string RuntimeKind = "runtime";
 }
 
-/// <summary>How the platform checks a deployed runtime is healthy: GET <see cref="Path"/> must answer <see cref="ExpectedStatus"/>. Data only; nothing executes it yet.</summary>
-public sealed record Probe(string Path, int ExpectedStatus);
+/// <summary>
+/// How the platform checks a deployed runtime is healthy: GET <see cref="Path"/> must answer <see cref="ExpectedStatus"/>, tried every
+/// <see cref="IntervalSeconds"/> for at most <see cref="TimeoutSeconds"/>. Data only; the release flow executes it.
+/// </summary>
+public sealed record Probe(string Path, int ExpectedStatus, int TimeoutSeconds, int IntervalSeconds);
 
-/// <summary>A runtime mapping (<c>kind: runtime</c>) has no exports and may have a <see cref="Probe"/>.</summary>
+/// <summary>
+/// What the release flow needs to know about the runtime node's template, so no template names are in code. Inputs the engine sets
+/// per step: <see cref="SuffixInput"/>, <see cref="TrafficInput"/>. Outputs it reads: <see cref="TrafficOutput"/> (the traffic last
+/// deployed, naming the live revision), <see cref="RevisionOutput"/> (the revision this deploy created), <see cref="FqdnOutput"/> (its
+/// address, the probe target). Traffic items: <see cref="RevisionKey"/> names a revision, <see cref="LatestKey"/> means the latest one.
+/// </summary>
+public sealed record RuntimeRelease(
+    string SuffixInput,
+    string TrafficInput,
+    string TrafficOutput,
+    string RevisionOutput,
+    string FqdnOutput,
+    string RevisionKey,
+    string LatestKey,
+    string WeightKey);
+
+/// <summary>A runtime mapping (<c>kind: runtime</c>) has no exports, and a <see cref="Probe"/> and a <see cref="Release"/>.</summary>
 public sealed record Mapping(
     string Source,
     MatchCriteria Match,
     IReadOnlyDictionary<string, Node> Nodes,
     IReadOnlyDictionary<string, string> Exports,
-    Probe? Probe = null)
+    Probe? Probe = null,
+    RuntimeRelease? Release = null)
 {
     public bool IsRuntime => Match.Criteria.GetValueOrDefault(MatchCriteria.KindKey) == MatchCriteria.RuntimeKind;
 }

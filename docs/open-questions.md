@@ -205,6 +205,7 @@ Residual open point: Key Vault secret-reference refresh without a new revision (
 - **Leaning so far:** rollback reverts the app only, via a revision switch; infra is forward-only (ADR 0006 rider 2). Mechanism: multiple-revision mode, so rollback is a traffic-weight change to a warm previous revision (ADR 0013). Migrations are not rolled back, hence expand/contract (ADR 0015).
 - **Open:** infra provisioned by a deployment that then failed at the app step — left in place (consistent with forward-only) or cleaned up?
 - **Open:** how the UI communicates that a rollback restored the app but not the infrastructure deployed alongside it.
+- **Known limitation (S16):** the release flow never deactivates old revisions. In multiple-revision mode a 0%-traffic revision stays active (scaled to zero, no cost) and deactivation is an API action Pulumi YAML cannot express, so rollback targets any retained revision but the active set only shrinks through `maxInactiveRevisions` once revisions become inactive. See [provisioning.md](architecture/provisioning.md).
 
 ### E33. Database migrations — see [ADR 0015](decisions/0015-database-migrations.md)
 Residual open points: `timeout` ceiling in protected environments; verifying PITR retention before destructive migrations.

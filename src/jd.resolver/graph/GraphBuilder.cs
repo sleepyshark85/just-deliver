@@ -55,7 +55,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
             phases[draft.Id] = draft.Id == runtimeId ? Phase.Runtime : draft.DependsOn.Any(d => phases[d] != Phase.Infrastructure) ? Phase.AfterRuntime : Phase.Infrastructure;
             nodes.Add(new GraphNode(
                 draft.Id, draft.Scope, draft.Node.Name, draft.Node.Template, draft.Node.Kind, draft.Stack, phases[draft.Id],
-                draft.Node.Config, draft.Node.Provenance, Hash(draft.Node), draft.DependsOn, draft.Node.Probe));
+                draft.Node.Config, draft.Node.Provenance, Hash(draft.Node), draft.DependsOn, draft.Node.Probe, draft.Node.Release));
         }
 
         return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, policy.WorkloadImage, policy.WorkloadPort, nodes, exports, errors);

@@ -2,8 +2,18 @@ kind: Mapping
 match: { kind: runtime }
 # Every workload runs as a Container App on Consumption in the environment's Container Apps environment, sized for the free
 # tier (standards section 6). The image and first port come from the workload's definition. This is the runtime node (phase
-# runtime): the infrastructure walk does not deploy it, the release flow does.
-probe: { path: /health, expectedStatus: 200 }
+# runtime): the infrastructure walk does not deploy it, the release flow does. The release flow owns the revision suffix and the
+# traffic, so the node sets neither; `release` names the template's inputs and outputs it uses, and the shape of a traffic item.
+probe: { path: /health, expectedStatus: 200, timeoutSeconds: 300, intervalSeconds: 5 }   # grants may take minutes to propagate
+release:
+  suffixInput: revisionSuffix
+  trafficInput: traffic
+  trafficOutput: traffic
+  revisionOutput: latestRevisionName
+  fqdnOutput: latestRevisionFqdn
+  revisionKey: revisionName
+  latestKey: latestRevision
+  weightKey: weight
 nodes:
   runtime:
     template: azure/container-app
@@ -19,11 +29,6 @@ nodes:
       memory: 0.5Gi
       minReplicas: 0
       maxReplicas: 1
-      # Placeholders until the release flow (S16b) owns them: the engine will set the suffix, derived from the node's config, and the
-      # traffic. A fixed suffix is valid for one deploy only, since Azure rejects a second revision with the same suffix.
-      revisionSuffix: initial
-      traffic:
-        - { latestRevision: true, weight: 100 }
       maxInactiveRevisions: 5                     # free tier hygiene: inactive revisions are kept to a few
       variables:                                  # the workload's variables, deployed as a list of {name, value} sorted by name
         fn::entries: workload.variables

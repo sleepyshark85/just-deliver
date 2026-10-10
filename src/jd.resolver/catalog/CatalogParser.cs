@@ -173,6 +173,34 @@ public static class CatalogParser
         }
     }
 
+    // A runtime mapping is deployed in steps (dark revision, grants, probe, traffic shift): it must say how to probe and which template
+    // inputs and outputs the steps use, and the engine owns those inputs, so the runtime node must not set them.
+    private static void CheckRelease(Mapping mapping, List<LoadError> errors)
+    {
+        if (mapping.Probe is null)
+        {
+            errors.Add(new LoadError(mapping.Source, "probe", "a runtime mapping must have a probe."));
+        }
+        else if (mapping.Probe.IntervalSeconds > mapping.Probe.TimeoutSeconds)
+        {
+            errors.Add(new LoadError(mapping.Source, "probe.intervalSeconds", "must not exceed timeoutSeconds."));
+        }
+
+        if (mapping.Release is not { } release)
+        {
+            errors.Add(new LoadError(mapping.Source, "release", "a runtime mapping must have a release block."));
+            return;
+        }
+
+        if (mapping.Nodes.TryGetValue(ExpressionEvaluator.RuntimeNode, out var runtime))
+        {
+            foreach (var input in new[] { release.SuffixInput, release.TrafficInput }.Where(runtime.Config.ContainsKey))
+            {
+                errors.Add(new LoadError(mapping.Source, $"nodes.{ExpressionEvaluator.RuntimeNode}.config.{input}", "the release flow sets this input; the runtime node must not."));
+            }
+        }
+    }
+
     // Node names become parts of graph node ids and backend stack names, so they are lowercase kebab. Enforced here, not in the
     // schema: the schema validator ignores the propertyNames keyword.
     private static void CheckNodeNames(List<Mapping> mappings, List<Policy> policies, List<LoadError> errors)
@@ -207,6 +235,11 @@ public static class CatalogParser
                     errors.Add(new LoadError(mapping.Source, "probe", "only a runtime mapping has a probe."));
                 }
 
+                if (mapping.Release is not null)
+                {
+                    errors.Add(new LoadError(mapping.Source, "release", "only a runtime mapping has a release block."));
+                }
+
                 continue;
             }
 
@@ -219,6 +252,8 @@ public static class CatalogParser
             {
                 errors.Add(new LoadError(mapping.Source, "exports", "a runtime mapping has no exports."));
             }
+
+            CheckRelease(mapping, errors);
         }
 
         foreach (var policy in policies.Where(p => p.Add.ContainsKey(reserved)))
@@ -382,7 +417,10 @@ public static class CatalogParser
         ToMatch(d.Body["match"]),
         Map(d.Body["nodes"]).ToDictionary(e => e.Key, e => ToNode(e.Value)),
         Map(d.Body["exports"]).ToDictionary(e => e.Key, e => Text(e.Value)),
-        d.Body["probe"] is { } probe ? new Probe(Text(probe["path"]), (int?)probe["expectedStatus"] ?? 0) : null);
+        d.Body["probe"] is { } probe ? new Probe(Text(probe["path"]), (int?)probe["expectedStatus"] ?? 0, (int?)probe["timeoutSeconds"] ?? 0, (int?)probe["intervalSeconds"] ?? 0) : null,
+        d.Body["release"] is { } release ? new RuntimeRelease(
+            Text(release["suffixInput"]), Text(release["trafficInput"]), Text(release["trafficOutput"]), Text(release["revisionOutput"]),
+            Text(release["fqdnOutput"]), Text(release["revisionKey"]), Text(release["latestKey"]), Text(release["weightKey"])) : null);
 
     private static Policy ToPolicy(Document d) => new(
         d.Source,

@@ -85,18 +85,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
             exports:
               app: ${app.containerAppId}
             """);
-        // The walk does not deploy the runtime node, so this test-only stand-in never reaches Azure; every workload needs a runtime mapping.
-        Write("catalog/mappings/runtime.yaml", """
-            kind: Mapping
-            match: { kind: runtime }
-            nodes:
-              runtime:
-                template: azure/resource-group
-                config:
-                  resourceGroupName: ${env.probeGroup}
-                  location: ${env.region}
-                  tags: { project: just-deliver-mvp }
-            """);
+        WriteRuntimeStandIn();
         CopyTemplates("resource-group", "log-analytics", "container-apps-environment", "container-app");
     }
 

@@ -114,7 +114,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             return null;
         }
 
-        return new ExpandedRuntime(mapping.Source, nodes, mapping.Probe, ownerFile);
+        return new ExpandedRuntime(mapping.Source, nodes, mapping.Probe, mapping.Release, ownerFile);
     }
 
     // Only the runtime node (never a grant) reads the workload's variables and the requirements' exports; any other node that tries is
