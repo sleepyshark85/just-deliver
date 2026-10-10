@@ -184,11 +184,16 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
 
 - **Deploy.** Per infrastructure-phase node: evaluate the node's pending config again with the same
   `ExpressionEvaluator` and a context whose known outputs are the outputs captured from the nodes deployed before it (the
-  workload name and team, the current id and the node names in scope are the node's scope, as in the first pass).
+  workload name, team, image and port, the current id and the node names in scope are the node's scope, as in the first pass).
+  Node outputs are read by node name and only from the node's own scope and from the runtime, since two scopes may share a node name;
+  what another scope exports arrives through its exports: `${resource.<id>.<export>}` (read only by the runtime node, e.g. a workload
+  variable) is known once its requirement's nodes are deployed, the exports being evaluated with those nodes' outputs by `ExportValues`,
+  the helper `DescriptorComposer` uses too.
   Every value must be resolved before the node is deployed; otherwise the walk stops and the error names node, field and
   reference. Config becomes backend entries: strings as they are, numbers and booleans in invariant form (`0.15`,
   `true`), objects and arrays as compact JSON (a Pulumi config value is always a string; templates read maps and lists
-  as JSON). A value built from a secret output is a secret. The walk stops at the first failure and reports what was deployed.
+  as JSON; an `fn::entries` object, the workload's variables, as a list of `{name, value}` items sorted by name). A value built
+  from a secret output, directly or through an export, is a secret; a secret variable makes the whole `variables` entry secret. The walk stops at the first failure and reports what was deployed.
 - **The runtime node** (phase `runtime`, the Container App from the runtime mapping) and the **after-runtime nodes** (phase `after-runtime`:
   grants that reference `runtime.*`) are not deployed by this walk: each is reported "waiting for runtime", the runtime
   node as "the runtime is deployed in a later step" (the release flow deploys it, S16). Workload-scope nodes (`@workload/…`,
@@ -228,7 +233,7 @@ group, Container Apps environment (Consumption) on the shared workspace, and a C
 in the shared account. Two environments use 800 of the 1,000 free RU/s. These values live in the catalog mappings, not in code.
 
 After the deploy, `DescriptorComposer` evaluates the definition's `values` (each an expression over `${resource.<id>.<export>}`):
-an export is evaluated with its requirement's node outputs (`NodeReport.Outputs` holds only non-secret outputs; null ones are dropped by the composer), which makes
+an export is evaluated with its requirement's node outputs (`NodeReport.Outputs` holds only non-secret outputs; null and secret ones are dropped by `ExportValues`, which the orchestrator's second pass shares), which makes
 `${resource.…}` resolve. The values are merged into the base descriptor's (new keys only), and the result is validated with the
 descriptor loader before it is written. The same composition runs once **before** the deploy with the values still pending, so
 every error that does not need an output is found while nothing exists yet.

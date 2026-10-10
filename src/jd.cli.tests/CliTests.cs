@@ -123,6 +123,11 @@ public sealed class CliTests : IDisposable
         Assert.Contains("template: azure/container-app  kind: Create  phase: Runtime", stdout);
         Assert.Contains("  probe: GET /health expects 200", stdout);
         Assert.Contains("  targetPort = 8080   [Mapping: mappings/runtime/container-app.yaml]", stdout);
+        // The env wiring: each variable with its source, and whether it still waits for a deployed output.
+        Assert.Contains("  variables.LOG_LEVEL = info   [Workload: container.variables]", stdout);
+        Assert.Contains("  variables.COSMOS_ENDPOINT = https://cosmos-dev.documents.azure.com:443/   [Workload: container.variables]", stdout);
+        Assert.Contains("  variables.COSMOS_CONTAINER = pending: ${resource.database.container}   [Workload: container.variables]", stdout);
+        Assert.Contains("  variables.APPLICATIONINSIGHTS_CONNECTION_STRING = pending: ${appinsights.connectionString}   [PolicySet: enforce-monitoring (policies/enforce-monitoring.yaml)]", stdout);
     }
 
     [Fact]
@@ -147,6 +152,23 @@ public sealed class CliTests : IDisposable
         Assert.Contains(path, stderr);
         // An empty catalog is itself an error; seeing none proves the catalog was never loaded.
         Assert.DoesNotContain("kind Catalog", stderr);
+    }
+
+    [Fact]
+    public async Task Preview_reports_a_mapping_export_that_references_a_resource_instead_of_failing()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\n");
+        WriteTemp("catalog/types/database.yaml", "kind: ResourceType\nname: database\ndescription: d\nclasses: [standard]\nexports: [endpoint]\n");
+        WriteTemp("catalog/mappings/database.yaml", "kind: Mapping\nmatch: { type: database }\nnodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.endpoint}\n");
+
+        var (code, stdout, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Empty(stdout);
+        Assert.Contains(Path.Combine(catalog, "mappings/database.yaml"), stderr);
+        Assert.Contains("exports.endpoint", stderr);
+        Assert.Contains("an export cannot reference", stderr);
     }
 
     [Fact]

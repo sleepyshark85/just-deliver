@@ -8,16 +8,19 @@ namespace jd.resolver.policies;
 public enum Layer
 {
     Mapping,
+
+    /// <summary>The workload's own definition: its <c>container.variables</c>.</summary>
+    Workload,
     PolicySet,
     PolicyDefault,
     PolicyAdd,
 }
 
-/// <summary>Where a config field's value came from: the catalog file and its rule (the mapping file, or the policy name).</summary>
+/// <summary>Where a config field's value came from: the file and its rule (the mapping file, or the policy name and its file; for the workload's variables, the workload file and `container.variables`).</summary>
 public sealed record Provenance(string Source, string Rule, Layer Layer)
 {
     /// <summary>The one-line form used by the graph JSON and the preview listing; the file is left out when it is the rule itself (mappings).</summary>
-    public string Describe() => Source == Rule ? $"{Layer}: {Rule}" : $"{Layer}: {Rule} ({Source})";
+    public string Describe() => Source == Rule || Layer == Layer.Workload ? $"{Layer}: {Rule}" : $"{Layer}: {Rule} ({Source})";
 }
 
 // Provenance: one entry per leaf config field, keyed by dotted path (consistencyPolicy.level); an array is one leaf.
@@ -47,6 +50,8 @@ public sealed record PolicyResult(
     string CatalogVersion,
     string WorkloadName,
     string WorkloadTeam,
+    string? WorkloadImage,
+    int? WorkloadPort,
     IReadOnlyList<ResolvedRequirement> Requirements,
     IReadOnlyList<ResolvedNode> RuntimeNodes,
     IReadOnlyList<ResolvedNode> WorkloadNodes,

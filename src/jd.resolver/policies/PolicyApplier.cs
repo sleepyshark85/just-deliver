@@ -15,6 +15,9 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
 {
     private const char PathSeparator = '.';
 
+    // The source shown for the runtime's variables that come from the workload's definition (the file is the workload being resolved).
+    private const string WorkloadVariablesRule = "container.variables";
+
     // Policy name order makes conflict reports and "same value" provenance independent of file order.
     private readonly IReadOnlyList<Policy> _policies = catalog.Policies.OrderBy(p => p.Name, StringComparer.Ordinal).ToList();
 
@@ -33,29 +36,32 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             var nodes = requirement.Nodes
                 .Select(n => ApplyNodePolicies(
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(requirement.Mapping, requirement.Mapping, Layer.Mapping),
-                    requirement.Type, requirement.Class, evaluator, $"{requirement.Id}/{n.Name}", errors))
+                    requirement.Type, requirement.Class, evaluator, $"{requirement.Id}/{n.Name}", [], string.Empty, errors))
                 .ToList();
             requirements.Add(new ResolvedRequirement(requirement.Id, requirement.Type, requirement.Class, requirement.Mapping, requirement.Exports, nodes));
         }
 
-        // The runtime mapping's nodes get node-scope policies like any mapping node.
+        // The runtime mapping's nodes get node-scope policies like any mapping node; the runtime node also gets the workload-scope
+        // policies' set and default (their paths start with 'runtime.', which the catalog loader enforces). A node added by a
+        // workload-scope policy may be read by those values.
+        var workloadPolicies = _policies.Where(p => expansion.Owner == OwnerKind.Workload && IsWorkloadScope(p)).ToList();
         var runtimeNodes = new List<ResolvedNode>();
         var runtimeNames = expansion.Runtime?.Nodes.Select(n => n.Name).ToHashSet() ?? [];
         if (expansion.Runtime is { } runtime)
         {
-            var evaluator = EvaluatorFor(ExpressionEvaluator.RuntimeNode, runtimeNames);
+            var inScope = runtimeNames.Concat(workloadPolicies.SelectMany(p => p.Add.Keys)).ToList();
             foreach (var n in runtime.Nodes)
             {
                 var node = ApplyNodePolicies(
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(runtime.Mapping, runtime.Mapping, Layer.Mapping),
-                    null, null, evaluator, n.Name, errors);
+                    null, null, EvaluatorFor(n.Name, inScope), n.Name, n.Name == ExpressionEvaluator.RuntimeNode ? workloadPolicies : [], runtime.WorkloadFile, errors);
                 runtimeNodes.Add(n.Name == ExpressionEvaluator.RuntimeNode ? node with { Probe = runtime.Probe } : node);
             }
         }
 
         var workloadNodes = new List<ResolvedNode>();
         var addedBy = new Dictionary<string, Policy>();
-        foreach (var policy in _policies.Where(p => expansion.Owner == OwnerKind.Workload && IsWorkloadScope(p)))
+        foreach (var policy in workloadPolicies)
         {
             foreach (var (name, node) in policy.Add)
             {
@@ -74,11 +80,11 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
                 var evaluator = EvaluatorFor(name, policy.Add.Keys);
                 var config = ConfigWalker.WalkConfig(node.Config, evaluator, policy.Source, $"add.{name}.config", errors);
                 workloadNodes.Add(ApplyNodePolicies(
-                    name, node.Template, node.Kind, config, new Provenance(policy.Source, policy.Name, Layer.PolicyAdd), null, null, evaluator, name, errors));
+                    name, node.Template, node.Kind, config, new Provenance(policy.Source, policy.Name, Layer.PolicyAdd), null, null, evaluator, name, [], string.Empty, errors));
             }
         }
 
-        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, requirements, runtimeNodes, workloadNodes, errors);
+        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, expansion.WorkloadImage, expansion.WorkloadPort, requirements, runtimeNodes, workloadNodes, errors);
     }
 
     // Workload scope is kind: runtime, optionally narrowed by tier. The 'runtime' key is accepted but not matched yet:
@@ -109,26 +115,37 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
 
     private ResolvedNode ApplyNodePolicies(
         string name, string template, NodeKind kind, ConfigObject config, Provenance origin,
-        string? type, string? cls, ExpressionEvaluator evaluator, string label, List<LoadError> errors)
+        string? type, string? cls, ExpressionEvaluator evaluator, string label, List<Policy> workloadPolicies, string workloadFile, List<LoadError> errors)
     {
         var provenance = new Dictionary<string, Provenance>();
         Record(provenance, string.Empty, config, origin);
-        var matching = _policies.Where(p => MatchesNode(p, template, type, cls)).ToList();
+        foreach (var (field, entries) in config.Properties.Where(p => p.Value is ConfigObject { AsEntries: true }))
+        {
+            Record(provenance, field, entries, new Provenance(workloadFile, WorkloadVariablesRule, Layer.Workload));
+        }
+
+        var matching = _policies.Where(p => MatchesNode(p, template, type, cls)).Concat(workloadPolicies).ToList();
+
+        // A workload-scope policy addresses the runtime node by name: its paths here have that name removed, but are reported as written.
+        Func<Policy, IEnumerable<(string Path, string Shown, JToken Value)>> Scoped(Func<Policy, IReadOnlyDictionary<string, JToken>> entries) =>
+            p => workloadPolicies.Contains(p)
+                ? entries(p).Where(e => e.Key.StartsWith(name + PathSeparator, StringComparison.Ordinal)).Select(e => (e.Key[(name.Length + 1)..], e.Key, e.Value))
+                : entries(p).Select(e => (e.Key, e.Key, e.Value));
 
         // Sets replace whatever is there; defaults only fill what is absent after the sets.
-        config = ApplyLayer(config, provenance, matching, p => p.Set, Layer.PolicySet, evaluator, label, errors);
-        config = ApplyLayer(config, provenance, matching, p => p.Default, Layer.PolicyDefault, evaluator, label, errors);
+        config = ApplyLayer(config, provenance, matching, Scoped(p => p.Set), Layer.PolicySet, evaluator, label, errors);
+        config = ApplyLayer(config, provenance, matching, Scoped(p => p.Default), Layer.PolicyDefault, evaluator, label, errors);
         return new ResolvedNode(name, template, kind, config.Properties, provenance);
     }
 
     private static ConfigObject ApplyLayer(
         ConfigObject config, Dictionary<string, Provenance> provenance, List<Policy> matching,
-        Func<Policy, IReadOnlyDictionary<string, JToken>> entries, Layer layer,
+        Func<Policy, IEnumerable<(string Path, string Shown, JToken Value)>> entries, Layer layer,
         ExpressionEvaluator evaluator, string label, List<LoadError> errors)
     {
         var isDefault = layer == Layer.PolicyDefault;
         var field = isDefault ? "default" : "set";
-        var all = matching.SelectMany(p => entries(p).Select(e => (Policy: p, Path: e.Key, Value: e.Value))).ToList();
+        var all = matching.SelectMany(p => entries(p).Select(e => (Policy: p, e.Path, e.Shown, e.Value))).ToList();
 
         // A path that is a strict prefix of another policy's path would make one policy's value depend on application order.
         var overlapping = new HashSet<string>();
@@ -136,8 +153,8 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         {
             foreach (var inner in all.Where(i => i.Policy.Name != outer.Policy.Name && i.Path.StartsWith(outer.Path + PathSeparator, StringComparison.Ordinal)))
             {
-                errors.Add(new LoadError(outer.Policy.Source, $"{field}.{outer.Path}",
-                    $"policies '{outer.Policy.Name}' ({outer.Policy.Source}) and '{inner.Policy.Name}' ({inner.Policy.Source}) give overlapping {field} fields '{outer.Path}' and '{inner.Path}' of node '{label}'."));
+                errors.Add(new LoadError(outer.Policy.Source, $"{field}.{outer.Shown}",
+                    $"policies '{outer.Policy.Name}' ({outer.Policy.Source}) and '{inner.Policy.Name}' ({inner.Policy.Source}) give overlapping {field} fields '{outer.Shown}' and '{inner.Shown}' of node '{label}'."));
                 overlapping.UnionWith([outer.Path, inner.Path]);
             }
         }
@@ -148,25 +165,31 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             var first = group.First();
             if (group.FirstOrDefault(e => !JToken.DeepEquals(e.Value, first.Value)) is { Policy: { } other })
             {
-                errors.Add(new LoadError(first.Policy.Source, $"{field}.{first.Path}",
-                    $"policies '{first.Policy.Name}' ({first.Policy.Source}) and '{other.Name}' ({other.Source}) give field '{first.Path}' of node '{label}' different {field} values."));
+                errors.Add(new LoadError(first.Policy.Source, $"{field}.{first.Shown}",
+                    $"policies '{first.Policy.Name}' ({first.Policy.Source}) and '{other.Name}' ({other.Source}) give field '{first.Shown}' of node '{label}' different {field} values."));
                 continue;
             }
 
             var path = first.Path.Split(PathSeparator);
-            if (isDefault && IsPresent(config, path))
+            if (EntriesMisuse(config, path, first.Value) is { } misuse)
+            {
+                errors.Add(new LoadError(first.Policy.Source, $"{field}.{first.Shown}", $"policy '{first.Policy.Name}' gives '{first.Shown}' of node '{label}': {misuse}"));
+                continue;
+            }
+
+            if (isDefault && Get(config, path) is not null)
             {
                 continue;
             }
 
-            if (ConfigWalker.Walk(first.Value, evaluator, first.Policy.Source, $"{field}.{first.Path}", errors) is not { } value)
+            if (ConfigWalker.Walk(first.Value, evaluator, first.Policy.Source, $"{field}.{first.Shown}", errors) is not { } value)
             {
                 continue;
             }
 
             if (Put(config, path, 0, value) is not { } updated)
             {
-                errors.Add(new LoadError(first.Policy.Source, $"{field}.{first.Path}", $"cannot create field '{first.Path}' of node '{label}': a parent on the path is not an object."));
+                errors.Add(new LoadError(first.Policy.Source, $"{field}.{first.Shown}", $"cannot create field '{first.Shown}' of node '{label}': a parent on the path is not an object."));
                 continue;
             }
 
@@ -182,20 +205,38 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         return config;
     }
 
-    private static bool IsPresent(ConfigObject config, string[] path)
+    // An entries field (the workload's variables) takes one key per name, each a string (an expression string is fine): not the field as a whole,
+    // which would drop its list form, not a path below a key, and not another kind of value.
+    private static string? EntriesMisuse(ConfigObject config, string[] path, JToken value)
+    {
+        for (var length = 1; length <= path.Length; length++)
+        {
+            if (Get(config, path[..length]) is ConfigObject { AsEntries: true })
+            {
+                return length == path.Length
+                    ? "it is the list built from a map of entries; give its keys instead."
+                    : length < path.Length - 1 ? "an entry is a single value; give a key of the entries, not a path below it."
+                    : value is JValue { Type: JTokenType.String } ? null : "an entry is a string.";
+            }
+        }
+
+        return null;
+    }
+
+    private static ConfigValue? Get(ConfigObject config, string[] path)
     {
         ConfigValue current = config;
         foreach (var segment in path)
         {
             if (current is not ConfigObject obj || !obj.Properties.TryGetValue(segment, out var next))
             {
-                return false;
+                return null;
             }
 
             current = next;
         }
 
-        return true;
+        return current;
     }
 
     // Copy-on-write: returns the updated object, creating missing intermediate objects; null when a parent is not an object.
@@ -205,7 +246,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         if (index == path.Length - 1)
         {
             properties[path[index]] = value;
-            return new ConfigObject(properties);
+            return obj with { Properties = properties };
         }
 
         var child = properties.GetValueOrDefault(path[index]) ?? new ConfigObject(new Dictionary<string, ConfigValue>());
@@ -215,7 +256,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         }
 
         properties[path[index]] = updated;
-        return new ConfigObject(properties);
+        return obj with { Properties = properties };
     }
 
     // Records the provenance of every leaf under value, keyed by dotted path.

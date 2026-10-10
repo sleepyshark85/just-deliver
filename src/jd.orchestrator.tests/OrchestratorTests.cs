@@ -4,6 +4,8 @@ using jd.definitionvalidator;
 using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
+using jd.resolver.expansion;
+using jd.resolver.expressions;
 using jd.resolver.graph;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -45,6 +47,7 @@ public class OrchestratorTests
               appId: ${app.id}
         exports:
           out: x
+          key: y
         """;
 
     // The runtime is not deployed by the walk; it is reported, first, because its id sorts before any requirement's.
@@ -53,13 +56,22 @@ public class OrchestratorTests
     private const string DefaultRequires = "  - type: thing\n";
 
     // The orchestrator gets the catalog the graph was resolved with.
-    private static async Task<(ResolvedGraph Graph, Catalog Catalog)> ResolveAsync(string requires = DefaultRequires, string mapping = Mapping, string workloadName = "shop")
+    private static async Task<(ResolvedGraph Graph, Catalog Catalog)> ResolveAsync(
+        string requires = DefaultRequires, string mapping = Mapping, string workloadName = "shop", string runtimeMapping = RuntimeMapping, string policy = "", string container = "")
     {
-        var files = new[] { "kind: Catalog\nversion: \"1\"\n", "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n", mapping, RuntimeMapping }
+        var files = new[]
+            {
+                "kind: Catalog\nversion: \"1\"\n",
+                "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out, key]\n",
+                "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
+                mapping,
+                runtimeMapping,
+            }
+            .Concat(policy.Length > 0 ? [policy] : [])
             .Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: {workloadName}, team: crew }}\nrequires:\n{requires}");
+        var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: {workloadName}, team: crew }}\n{container}requires:\n{requires}");
         var graph = Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, Env);
         Assert.Empty(graph.Errors);
         return (graph, loaded.Catalog!);
@@ -378,7 +390,7 @@ public class OrchestratorTests
     public async Task A_null_config_value_fails_naming_node_and_field_and_is_never_sent_as_text()
     {
         var backend = new FakeBackend();
-        var mapping = "kind: Mapping\nmatch: { type: thing }\nnodes:\n  n:\n    template: t/n\n    config: { a: { b: ~ } }\nexports:\n  out: x\n";
+        var mapping = "kind: Mapping\nmatch: { type: thing }\nnodes:\n  n:\n    template: t/n\n    config: { a: { b: ~ } }\nexports:\n  out: x\n  key: y\n";
 
         var report = await DeployAsync(backend, mapping: mapping);
 
@@ -386,5 +398,126 @@ public class OrchestratorTests
         Assert.Equal(NodeOutcome.Failed, failed.Outcome);
         Assert.Contains("node 'shop/dev/thing/n': field 'a.b' is null", failed.Message);
         Assert.Empty(backend.Calls);
+    }
+
+    // Only the runtime node reads the workload's variables and the requirements' exports, and the walk does not deploy it until S16. These
+    // tests make it a node of the infrastructure phase, as the release flow will see it, and check the second pass on it. 'group' is a
+    // node name in two scopes (the runtime mapping declares one too): the runtime reads its own scope's by name and the requirement's only through an export.
+    private const string ExportingMapping = """
+        kind: Mapping
+        match: { type: thing }
+        nodes:
+          group:
+            template: t/group
+            config: { owner: '${workload.team}' }
+        exports:
+          out: pre-${group.id}
+          key: ${group.key}
+        """;
+
+    private const string RuntimeReadingMapping = """
+        kind: Mapping
+        match: { kind: runtime }
+        nodes:
+          group:
+            template: t/group
+            config: { owner: x }
+          runtime:
+            template: t/runtime
+            config:
+              own: ${group.name}
+              label: ${name('thing')}-${resource.thing.out}
+              image: ${workload.image}:${workload.port}-${resource.thing.out}
+              settled: ${name('thing')}
+              variables:
+                fn::entries: workload.variables
+        """;
+
+    private static async Task<(RunReport Report, ResolvedGraph Graph)> DeployRuntimeAsync(FakeBackend backend, string variables)
+    {
+        var (graph, catalog) = await ResolveAsync(
+            DefaultRequires, ExportingMapping, runtimeMapping: RuntimeReadingMapping,
+            container: $"container:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n{variables}");
+        var asDeployed = graph with { Nodes = graph.Nodes.Select(n => n.Name == "runtime" ? n with { Phase = Phase.Infrastructure } : n).ToList() };
+        return (await new Orchestrator(backend, backend, catalog, Env).DeployAsync(asDeployed, null, CancellationToken.None), graph);
+    }
+
+    private static Dictionary<string, ConfigEntry> Deployed(FakeBackend backend, string stack) =>
+        backend.Calls.Single(c => c.Package.StackName == stack).Package.DeploymentParameters;
+
+    [Fact]
+    public async Task A_pending_workload_variable_is_resolved_in_the_second_pass_and_the_variables_are_a_list_sorted_by_name()
+    {
+        var backend = new FakeBackend();
+
+        var (report, _) = await DeployRuntimeAsync(backend, "    ZED: '${resource.thing.out}'\n    ALPHA: lit\n    MID: 'x-${resource.thing.out}'\n");
+
+        Assert.True(report.Succeeded);
+        var runtime = Deployed(backend, "shop.dev._workload.runtime");
+        const string exported = "pre-id-shop.dev.thing.group";
+        Assert.Equal($$"""[{"name":"ALPHA","value":"lit"},{"name":"MID","value":"x-{{exported}}"},{"name":"ZED","value":"{{exported}}"}]""", runtime["variables"].Value);
+        Assert.False(runtime["variables"].IsSecret);
+        // The export is deployed first, and the runtime comes after both nodes it reads.
+        var order = backend.Calls.Select(c => c.Package.StackName).ToList();
+        Assert.True(order.IndexOf("shop.dev.thing.group") < order.IndexOf("shop.dev._workload.runtime"));
+        Assert.True(order.IndexOf("shop.dev._workload.group") < order.IndexOf("shop.dev._workload.runtime"));
+    }
+
+    [Fact]
+    public async Task A_node_that_reads_no_export_does_not_fail_on_an_export_it_cannot_evaluate()
+    {
+        var (graph, catalog) = await ResolveAsync();
+        var broken = new Pending("${env.nope}-${group.id}", new HashSet<Reference> { new(ReferenceKind.Node, "group", "id") });
+        var withBrokenExport = graph with { Exports = new Dictionary<string, IReadOnlyDictionary<string, EvalResult>> { ["thing"] = new Dictionary<string, EvalResult> { ["out"] = broken } } };
+        var backend = new FakeBackend();
+
+        var report = await new Orchestrator(backend, backend, catalog, Env).DeployAsync(withBrokenExport, null, CancellationToken.None);
+
+        Assert.True(report.Succeeded);
+    }
+
+    [Fact]
+    public async Task Each_scope_gives_the_runtime_its_own_value_for_a_node_name_they_share()
+    {
+        var backend = new FakeBackend();
+
+        await DeployRuntimeAsync(backend, "    A: '${resource.thing.out}'\n");
+
+        var runtime = Deployed(backend, "shop.dev._workload.runtime");
+        // ${group.name}: the workload's group. The variable reads thing's group, only through its export.
+        Assert.Equal("n-shop.dev._workload.group", runtime["own"].Value);
+        Assert.Contains("pre-id-shop.dev.thing.group", runtime["variables"].Value);
+        Assert.DoesNotContain("_workload.group", runtime["variables"].Value);
+    }
+
+    [Fact]
+    public async Task A_variable_that_reads_a_secret_output_makes_the_variables_entry_secret()
+    {
+        var backend = new FakeBackend();
+
+        var (report, _) = await DeployRuntimeAsync(backend, "    PLAIN: lit\n    CONNECTION: '${resource.thing.key}'\n");
+
+        Assert.True(report.Succeeded);
+        var runtime = Deployed(backend, "shop.dev._workload.runtime");
+        Assert.True(runtime["variables"].IsSecret);
+        Assert.Contains("k-shop.dev.thing.group", runtime["variables"].Value);
+        Assert.False(runtime["own"].IsSecret);
+    }
+
+    [Fact]
+    public async Task The_second_pass_evaluates_name_image_and_port_of_the_runtime_node_as_the_first_did()
+    {
+        var backend = new FakeBackend();
+
+        var (_, graph) = await DeployRuntimeAsync(backend, "    A: lit\n");
+
+        // 'settled' has no reference, so the resolver fixed it with the node's own name; 'label' waits for an output, so the second
+        // pass evaluates name() again and must use the same name. The image and port are the graph's.
+        var runtimeNode = graph.Nodes.Single(n => n.Name == "runtime");
+        var settled = Assert.IsType<Resolved>(Assert.IsType<ConfigText>(runtimeNode.Config["settled"]).Result).Value;
+        Assert.IsType<Pending>(Assert.IsType<ConfigText>(runtimeNode.Config["label"]).Result);
+        var runtime = Deployed(backend, "shop.dev._workload.runtime");
+        Assert.Equal(("shop-runtime", "shop-runtime-pre-id-shop.dev.thing.group"), (settled, runtime["label"].Value));
+        Assert.Equal("reg/app:1:8080-pre-id-shop.dev.thing.group", runtime["image"].Value);
     }
 }

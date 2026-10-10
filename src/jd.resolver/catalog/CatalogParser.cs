@@ -298,6 +298,12 @@ public static class CatalogParser
     {
         foreach (var mapping in mappings)
         {
+            // An export is evaluated in its own requirement's scope, where another requirement's exports are out of reach.
+            foreach (var export in mapping.Exports.Where(e => ExpressionEvaluator.ReadsResource(e.Value)).Select(e => e.Key))
+            {
+                errors.Add(new LoadError(mapping.Source, $"exports.{export}", "an export cannot reference ${resource.<id>.<export>}; it may read env.*, its own nodes' outputs and runtime.*."));
+            }
+
             if (!mapping.Match.Criteria.TryGetValue(MatchCriteria.TypeKey, out var name) || types.FirstOrDefault(t => t.Name == name) is not { } type)
             {
                 continue;

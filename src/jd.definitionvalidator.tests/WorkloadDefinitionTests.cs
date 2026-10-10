@@ -117,6 +117,26 @@ metadata:
         Assert.Contains("container.variables.DB", Assert.Single(result.Errors));
     }
 
+    [Theory]
+    [InlineData("${env.cosmos.accountId}")]
+    [InlineData("${name('ca')}")]
+    [InlineData("${workload.team}")]
+    [InlineData("${runtime.principalId}")]
+    [InlineData("${role.cosmos-data-contributor}")]
+    [InlineData("${appinsights.connectionString}")]
+    [InlineData("ok-${resource.database.endpoint}-${env.name}")]
+    public async Task AVariableMayOnlyReferenceARequirementsOutput(string value)
+    {
+        var result = await ValidateAsync(Workload(
+            $"  variables:\n    BAD: \"{value}\"\n",
+            "  - type: database\n"));
+
+        Assert.False(result.IsValid);
+        var error = Assert.Single(result.Errors);
+        Assert.Contains("container.variables.BAD", error);
+        Assert.Contains("${resource.<id>.<output>}", error);
+    }
+
     [Fact]
     public async Task MetadataEnvironment_IsRejected()
     {

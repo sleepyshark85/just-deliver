@@ -32,7 +32,7 @@ public partial class TemplateLibraryTests
             config, new Dictionary<string, Provenance>(), "hash", []);
 
     private static ResolvedGraph Graph(IEnumerable<GraphNode> nodes, IReadOnlyDictionary<string, IReadOnlyDictionary<string, EvalResult>>? exports = null) =>
-        new("1", "dev", "w", "crew", nodes.ToList(), exports ?? new Dictionary<string, IReadOnlyDictionary<string, EvalResult>>(), []);
+        new("1", "dev", "w", "crew", null, null, nodes.ToList(), exports ?? new Dictionary<string, IReadOnlyDictionary<string, EvalResult>>(), []);
 
     [Fact]
     public async Task The_seed_catalog_and_sample_workload_fit_the_template_library()
@@ -151,7 +151,21 @@ public partial class TemplateLibraryTests
     }
 
     [Fact]
-    public void A_runtime_reference_is_not_checked_against_a_template()
+    public void A_runtime_reference_is_checked_against_the_outputs_of_the_runtime_nodes_template()
+    {
+        GraphNode Runtime() => Node("runtime", "t/b", new() { ["other"] = Text("o") }) with { Scope = GraphBuilder.WorkloadScope, Id = "w/dev/@workload/runtime" };
+        GraphNode Reader(string output) => Node("x", "t/a", new() { ["name"] = Ref(ExpressionEvaluator.RuntimeNode, output) });
+
+        var typo = Assert.Single(Library.Check(Graph([Runtime(), Reader("principalID")])));
+
+        Assert.Equal(("w/dev/s/x", "name"), (typo.File, typo.Location));
+        Assert.Contains("runtime.principalID", typo.Message);
+        Assert.Contains("'t/b'", typo.Message);
+        Assert.Empty(Library.Check(Graph([Runtime(), Reader("id")])));
+    }
+
+    [Fact]
+    public void A_runtime_reference_without_a_runtime_node_is_left_to_the_graph_builder()
     {
         var graph = Graph([Node("x", "t/a", new() { ["name"] = Ref(ExpressionEvaluator.RuntimeNode, "principalId") })]);
 

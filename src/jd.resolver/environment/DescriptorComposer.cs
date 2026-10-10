@@ -25,7 +25,7 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
     public async Task<ComposedDescriptor> ComposeAsync(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>>? outputs, CancellationToken cancellationToken = default)
     {
         var errors = new List<LoadError>();
-        var evaluator = new ExpressionEvaluator(Context(outputs is null ? new Dictionary<Reference, string>() : ExportValues(outputs, errors)));
+        var evaluator = new ExpressionEvaluator(Context(outputs is null ? new Dictionary<Reference, string>() : ExportValues.Evaluate(graph, catalog, environment, outputs, includeSecrets: false, definitionFile, errors).Values));
         var added = Evaluate(definition.Values, "values", evaluator, outputs is null, errors);
         var merged = Nest(environment.Values);
         Merge(merged, added, string.Empty, errors);
@@ -47,33 +47,8 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
         return new ComposedDescriptor(errors.Count == 0 ? yaml : null, errors);
     }
 
-    private ExpressionContext Context(IReadOnlyDictionary<Reference, string> known, string currentId = "", IReadOnlySet<string>? nodeNames = null) =>
-        new(catalog.Roles, catalog.Naming, environment, graph.Workload, graph.WorkloadTeam, currentId, nodeNames ?? new HashSet<string>(), known);
-
-    // Each export, evaluated with the outputs of its requirement's nodes, is the value of ${resource.<id>.<export>}.
-    private Dictionary<Reference, string> ExportValues(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>> outputs, List<LoadError> errors)
-    {
-        var known = new Dictionary<Reference, string>();
-        foreach (var (scope, exports) in graph.Exports)
-        {
-            var nodes = graph.Nodes.Where(n => n.Scope == scope).ToList();
-            // The filter keeps only entries with a value, so the ! below is safe.
-            var nodeOutputs = nodes.Where(n => outputs.ContainsKey(n.Id))
-                .SelectMany(n => outputs[n.Id].Where(o => o.Value is { IsSecret: false, Value: not null }).Select(o => (new Reference(ReferenceKind.Node, n.Name, o.Key), o.Value.Value!)))
-                .ToDictionary(o => o.Item1, o => o.Item2);
-            var evaluator = new ExpressionEvaluator(Context(nodeOutputs, scope, nodes.Select(n => n.Name).ToHashSet()));
-            foreach (var (export, result) in exports)
-            {
-                var resolved = result is Pending pending ? evaluator.Evaluate(pending.Original, definitionFile, $"exports.{export}", errors) : result;
-                if (resolved is Resolved value)
-                {
-                    known[new Reference(ReferenceKind.Resource, scope, export)] = value.Value;
-                }
-            }
-        }
-
-        return known;
-    }
+    private ExpressionContext Context(IReadOnlyDictionary<Reference, string> known) =>
+        new(catalog.Roles, catalog.Naming, environment, graph.Workload, graph.WorkloadTeam, string.Empty, new HashSet<string>(), known, graph.WorkloadImage, graph.WorkloadPort);
 
     // Same shape as the definition's values with every leaf evaluated. A leaf still waiting is an error after the deploy; before it,
     // it must name an export of a declared requirement (the text stays, as a placeholder the descriptor rules are checked on).

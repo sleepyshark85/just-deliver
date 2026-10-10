@@ -19,4 +19,4 @@ add:
       roleGuid: ${role.monitoring-metrics-publisher}
       roleAssignmentId: ${guid(appinsights.appInsightsId, runtime.principalId, 'metrics-publisher')}
 set:
-  runtime.appInsightsConnectionString: ${appinsights.connectionString}
+  runtime.variables.APPLICATIONINSIGHTS_CONNECTION_STRING: ${appinsights.connectionString}

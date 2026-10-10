@@ -26,6 +26,17 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
     public ResolvedGraph Build(PolicyResult policy)
     {
         var errors = new List<LoadError>(policy.Errors);
+
+        // An export is evaluated in its requirement's scope, where another requirement's exports are out of reach. The catalog loader
+        // rejects it; a graph built from anything else is still refused here, at the mapping's export.
+        foreach (var requirement in policy.Requirements)
+        {
+            foreach (var (name, result) in requirement.Exports.Where(e => e.Value is Pending { References: var refs } && refs.Any(r => r.Kind == ReferenceKind.Resource)))
+            {
+                errors.Add(new LoadError(requirement.Mapping, $"exports.{name}", $"requirement '{requirement.Id}': an export cannot reference ${{resource.<id>.<export>}}."));
+            }
+        }
+
         var exports = policy.Requirements.OrderBy(r => r.Id, StringComparer.Ordinal).ToDictionary(r => r.Id, r => r.Exports);
         var entries = policy.Requirements.SelectMany(r => r.Nodes.Select(n => (Scope: r.Id, Node: n)))
             .Concat(policy.RuntimeNodes.Concat(policy.WorkloadNodes).Select(n => (Scope: WorkloadScope, Node: n)))
@@ -33,8 +44,9 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
             .ToList();
 
         var runtimeId = entries.Where(e => e.Scope == WorkloadScope && e.Node.Name == ExpressionEvaluator.RuntimeNode).Select(e => e.Id).FirstOrDefault();
+        var ids = entries.ToDictionary(e => (e.Scope, e.Node.Name), e => e.Id);
         var drafts = entries
-            .Select(e => Analyse(e.Scope, e.Node, e.Id, entries.Where(x => x.Scope == e.Scope).ToDictionary(x => x.Node.Name, x => x.Id), runtimeId, errors))
+            .Select(e => Analyse(e.Scope, e.Node, e.Id, ids, exports, runtimeId, errors))
             .ToDictionary(d => d.Id);
         var phases = new Dictionary<string, Phase>();
         var nodes = new List<GraphNode>();
@@ -46,7 +58,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
                 draft.Node.Config, draft.Node.Provenance, Hash(draft.Node), draft.DependsOn, draft.Node.Probe));
         }
 
-        return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, nodes, exports, errors);
+        return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, policy.WorkloadImage, policy.WorkloadPort, nodes, exports, errors);
     }
 
     // Pulumi stack names allow [A-Za-z0-9_.-]. Ids contain no '.' or '_' (names are kebab; the owner and the scope may start
@@ -55,12 +67,18 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
 
     // Finds a node's dependencies from its pending references and applies the security check to its environment reads.
     // runtimeId is the workload's runtime node, or null for an environment definition, which has none.
-    private Draft Analyse(string scope, ResolvedNode node, string id, Dictionary<string, string> idsInScope, string? runtimeId, List<LoadError> errors)
+    private Draft Analyse(
+        string scope, ResolvedNode node, string id, Dictionary<(string Scope, string Name), string> ids,
+        Dictionary<string, IReadOnlyDictionary<string, EvalResult>> exports, string? runtimeId, List<LoadError> errors)
     {
         var dependsOn = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var (field, text) in Texts(new ConfigObject(node.Config), string.Empty))
         {
-            void Fail(string message) => errors.Add(new LoadError(node.Provenance.GetValueOrDefault(field)?.Source ?? id, field, $"node '{id}': {message}"));
+            // A workload variable is reported against the workload's definition, where its author wrote it.
+            var origin = node.Provenance.GetValueOrDefault(field);
+            // A workload entry's provenance key is <field>.<NAME> (the config walk makes it so), hence the dot.
+            var location = origin?.Layer == Layer.Workload && field.IndexOf('.') is var dot and > 0 ? origin.Rule + field[dot..] : field;
+            void Fail(string message) => errors.Add(new LoadError(origin?.Source ?? id, location, $"node '{id}': {message}"));
 
             if (node.Kind == NodeKind.Grant)
             {
@@ -73,30 +91,62 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
 
             foreach (var reference in (text.Result as Pending)?.References ?? (IEnumerable<Reference>)[])
             {
-                if (reference.Kind == ReferenceKind.Resource)
+                // Only the runtime node reads requirements' exports (workload variables). Elsewhere an export could carry environment values
+                // past the grantable check, or one requirement could read another (D19).
+                if (reference.Kind == ReferenceKind.Resource && !(scope == WorkloadScope && node.Name == ExpressionEvaluator.RuntimeNode && node.Kind != NodeKind.Grant))
                 {
-                    Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}; node config cannot reference another requirement.");
+                    Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}; only the runtime node may read a requirement's export.");
                 }
-                else if (reference.Target == ExpressionEvaluator.RuntimeNode)
+                else if (reference.Kind == ReferenceKind.Resource)
                 {
-                    if (runtimeId is null)
+                    // The export waits on the nodes of its requirement, so this node does too.
+                    if (!exports.TryGetValue(reference.Target, out var requirementExports) || !requirementExports.TryGetValue(reference.Output, out var export))
                     {
-                        Fail($"field '{field}' references runtime.{reference.Output}, but there is no runtime.");
+                        Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which is not an export of a requirement of this workload.");
+                        continue;
                     }
-                    else
+
+                    foreach (var inner in (export as Pending)?.References.Where(r => r.Kind == ReferenceKind.Node) ?? [])
                     {
-                        dependsOn.Add(runtimeId);
+                        if (inner.Target == ExpressionEvaluator.RuntimeNode)
+                        {
+                            Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which waits on the runtime; the runtime cannot read an export that waits on the runtime.");
+                        }
+                        else
+                        {
+                            AddDependency(inner, reference.Target, field, Fail);
+                        }
                     }
-                }
-                else if (idsInScope.TryGetValue(reference.Target, out var target))
-                {
-                    dependsOn.Add(target);
                 }
                 else
                 {
-                    // The evaluator rejects names outside the scope it was given, which is this node's scope.
-                    throw new UnreachableException($"node '{id}' references '{reference.Target}', which the evaluator should have rejected.");
+                    AddDependency(reference, scope, field, Fail);
                 }
+            }
+        }
+
+        // A reference to a node output, in the scope its expression was written in, is an edge to that node.
+        void AddDependency(Reference reference, string inScope, string field, Action<string> fail)
+        {
+            if (reference.Target == ExpressionEvaluator.RuntimeNode)
+            {
+                if (runtimeId is null)
+                {
+                    fail($"field '{field}' references runtime.{reference.Output}, but there is no runtime.");
+                }
+                else
+                {
+                    dependsOn.Add(runtimeId);
+                }
+            }
+            else if (ids.TryGetValue((inScope, reference.Target), out var target))
+            {
+                dependsOn.Add(target);
+            }
+            else
+            {
+                // The evaluator rejects names outside the scope it was given.
+                throw new UnreachableException($"node '{id}' references '{reference.Target}', which the evaluator should have rejected.");
             }
         }
 
