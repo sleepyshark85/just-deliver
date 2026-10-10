@@ -5,13 +5,10 @@
 
 ## Now
 
-- **Next slice:** — (waiting on the user: S15c blocked, model trial decision).
-- **In progress:** S15c — branch `mvp/s15c-runtime-variables` (ff9401f), 3 rounds without APPROVE → **blocked**.
-- **Blocked:** S15c — escalated to the user 2026-10-10. Round 3 open findings: (1) the orchestrator stores dependency
-  outputs by bare node name, so with cross-scope edges a same-named node in another scope overwrites a value; (2) an
-  export containing `${resource.…}` crashes resolution (UnreachableException) instead of a LoadError; (3) `fn::entries`
-  accepted at any depth but handled only at top level. Suggestion: reject non-string values under an entries field.
-  User to decide: model trial (developer model) and whether to narrow the design (lead proposal in the session log).
+- **Next slice:** S16 — deploy steps (briefs now enumerate every security boundary as a required test; see the
+  2026-10-10 session log).
+- **In progress:** —
+- **Blocked:** —
 
 ## Slices
 
@@ -39,7 +36,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S14 | Sample app | done | PR #16 | 2 | Done ahead of S11–S13 (independent). Round 1: 2 blocking (`/health` false-healthy on a missing container; unsynchronised shared Cosmos client → leaks/flapping). Image `ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385…` — public (anonymous pull verified 2026-10-09). |
 | S15a | `container-app` template | done | PR #25 | 1 | Split from S15. Developer stopped at the risk as briefed: Pulumi YAML cannot turn a map into a list, so the template takes `variables` as `List<Map<String>>` (`{name, value}`) and the engine converts (S15c). APPROVE first round. Azure gate green (CLI 84/84, real Container App: Multiple, SystemAssigned, min 0). |
 | S15b | Runtime mapping + `runtime` node | done | PR #26 | 1 | APPROVE first round. Runtime mapping from data, reserved `runtime` node at `@workload`, phase `Runtime` (not deployed until S16), grants now edge to it, probe as data. Review hazards (image/port missing in the second pass; runtime-mapping node current id; `runtime.*` refs unchecked by TemplateLibrary) moved into S15c Part 0. Azure gate: all green except `DeployAzureTests`, which failed under memory pressure (an unrelated 8.8 GB process + a parallel review run) and passed alone (2 min, nothing left) — treated as load-related, cause unconfirmed. |
-| S15c | Variables + `runtime.*` policies | blocked | `mvp/s15c-runtime-variables` | 3 | Design note approved first. Round 1: 2 blocking (variables accepted the whole expression language — contract is `${resource.*}` only; grants could read exports, bypassing the grantable check). Round 2: 2 blocking (grant bypass via statically substituted exports; `fn::entries` accepted with any source anywhere). Round 3: 3 blocking (see Now). All security/correctness edge cases of the new cross-scope export mechanism; production +335/−121, over the cap. Escalated. |
+| S15c | Variables + `runtime.*` policies | done | PR #28 | 5 | Design note approved first. Rounds 1–3: 7 blocking, all security/correctness edges of a cross-scope export mechanism broader than the contract (full expression language in variables; grant bypass of the grantable check via exports, static and pending; `fn::entries` anywhere; same-name outputs across scopes; export crash path). Escalated after round 3; user kept Sonnet/Opus with stricter briefs and narrowed the design (only `runtime` reads `${resource.*}`; exports cannot; `fn::entries` top-level only; string values; second pass by scope). Round 4: second regex grammar → round 5: one grammar. APPROVE. Production +390/−125, over the cap (defensive checks, accepted). Azure gate green (CLI 85/85, nothing left). **S15 complete.** |
 | S16 | Deploy steps | todo | | | |
 | S17 | Release record + qualification | todo | | | |
 | S18 | Second environment + approvals | todo | | | |
@@ -54,8 +51,11 @@ Picked up by the slice named; remove once done.
   exception message.
 - **S10/S12:** template `fn::invoke`s (e.g. `getSharedKeys`) run during preview, so previewing a brand-new
   environment fails until its workspace exists — preview substrate in dependency order, or tolerate it.
-- **S15c:** resolved: enforce-monitoring sets `runtime.variables.APPLICATIONINSIGHTS_CONNECTION_STRING` (Azure Monitor SDK's own
-  name, not in the workload's variables) as a workload-scope policy on the runtime node. The app assumes partition key `/id`.
+- **S16:** the sample app assumes partition key `/id` (the database mapping provides it).
+- **S15c review (minor):** errors GraphBuilder raises on a policy-set value point at the node field, not the policy path
+  as written; a second-pass export failure names the node id instead of the mapping file; runtime-mapping nodes other than
+  `runtime` get policy-added node names in scope (only `runtime` needs them).
+- **S16:** repeat the second-pass assertions (pending variable, secret masking) on the real deployed `runtime` node.
 - **S15c/S16 (S15a review):** a secret value in `variables` stays encrypted in Pulumi state but is plain text in the
   Container App's `env` (readable with Reader) — secret values should become Container App `secrets` + `secretRef`
   (ADR 0013 runtime port). Add an offline check that a secret `variables` entry is masked in preview.
@@ -91,6 +91,9 @@ Newest first. One entry per session: what moved, decisions taken, anything the n
   `fn::entries` only as a top-level field and only string values beneath it; the orchestrator keys known outputs by
   scope — and run the fix round (and S16+) with a different developer model. Host note: an unrelated `gremlins`
   mutation-testing job uses ~8.8 GB of 16 GB; run review and Azure gates one at a time.
+  **User decision:** keep Sonnet developer / Opus reviewer with stricter briefs (every security boundary listed as a
+  required test; narrowest surface stated, everything else an error); narrow the S15c design. Rounds 4–5 under the
+  narrowed design → APPROVE; S15c merged (PR #28). S15 complete.
 
 - **2026-10-09 (team identity)** — Restarted with the `ARM_*` team identity; personal `az` session logged out. S12 Azure
   gate re-run as the team identity: green, nothing left behind. Azure test runs take ~50 min, mostly Cosmos account
