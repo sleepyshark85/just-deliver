@@ -5,7 +5,8 @@
 
 ## Now
 
-- **Next slice:** S16b — deploy steps in the orchestrator, offline (brief drafted; design note first), then S16c.
+- **Next slice:** S16b2 — deploy steps in the orchestrator + HTTP probe adapter (design approved; see the S16b2
+  carry-forward note for the full plan). Then S16c.
 - **In progress:** —
 - **Blocked:** —
 
@@ -37,7 +38,8 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S15b | Runtime mapping + `runtime` node | done | PR #26 | 1 | APPROVE first round. Runtime mapping from data, reserved `runtime` node at `@workload`, phase `Runtime` (not deployed until S16), grants now edge to it, probe as data. Review hazards (image/port missing in the second pass; runtime-mapping node current id; `runtime.*` refs unchecked by TemplateLibrary) moved into S15c Part 0. Azure gate: all green except `DeployAzureTests`, which failed under memory pressure (an unrelated 8.8 GB process + a parallel review run) and passed alone (2 min, nothing left) — treated as load-related, cause unconfirmed. |
 | S15c | Variables + `runtime.*` policies | done | PR #28 | 5 | Design note approved first. Rounds 1–3: 7 blocking, all security/correctness edges of a cross-scope export mechanism broader than the contract (full expression language in variables; grant bypass of the grantable check via exports, static and pending; `fn::entries` anywhere; same-name outputs across scopes; export crash path). Escalated after round 3; user kept Sonnet/Opus with stricter briefs and narrowed the design (only `runtime` reads `${resource.*}`; exports cannot; `fn::entries` top-level only; string values; second pass by scope). Round 4: second regex grammar → round 5: one grammar. APPROVE. Production +390/−125, over the cap (defensive checks, accepted). Azure gate green (CLI 85/85, nothing left). **S15 complete.** |
 | S16a | `container-app` revision + traffic inputs | done | PR #29 | 1 | Spike first: a JSON list keeps its types through Pulumi config (`weight` integer, `latestRevision` boolean; provider rejects text). `traffic` (`List<Object>`), `revisionSuffix`, `maxInactiveRevisions` are inputs; mapping placeholders until S16b. Azure test shared setup (`ProbeAzureTest`). APPROVE first round; Azure gate green (CLI 86/86, dark revision got 0%, shift created no revision). |
-| S16b | Deploy steps (orchestrator, offline) | todo | | | Dark → grants → probe (port) → shift; suffix from config hash; live revision from a traffic echo output; re-entrant. |
+| S16b1 | Release data for the deploy steps | done | PR #30 | 1 | Split from S16b after a design note (est. 330 lines). Runtime mapping `release:` block (8 names: engine-driven inputs, read outputs, traffic-item keys), probe `timeoutSeconds`/`intervalSeconds`, load validation, template `traffic` echo output, `TemplateLibrary` waiver + checks. Walk still never deploys the runtime. APPROVE first round; Azure gate green. |
+| S16b2 | Deploy steps (orchestrator) + HTTP probe | todo | | | See carry-forward note. |
 | S16c | HTTP probe + E2E Azure test | todo | | | Sample release set live on dev; a revision failing `/health` never gets traffic. |
 | S17 | Release record + qualification | todo | | | |
 | S18 | Second environment + approvals | todo | | | |
@@ -56,6 +58,36 @@ Picked up by the slice named; remove once done.
 - **S15c review (minor):** errors GraphBuilder raises on a policy-set value point at the node field, not the policy path
   as written; a second-pass export failure names the node id instead of the mapping file; runtime-mapping nodes other than
   `runtime` get policy-added node names in scope (only `runtime` needs them).
+- **S16b2 (approved design, from the S16b design note):**
+  - New internal `src/jd.orchestrator/RuntimeRelease.cs` used by `Walk`; walk order becomes infrastructure nodes →
+    runtime → after-runtime nodes (topological order can put the runtime before unrelated infra). `WaitingForRuntime`
+    goes away unless still used. The runtime `NodeReport` is last and carries `Steps` (`StepReport(Dark|Grants|Probe|Shift,
+    Done|Planned|Skipped|Failed, Detail)`); a failed step makes it `Failed` with `<step>: <reason>`; `DeployFormatter`
+    prints one line per step.
+  - Suffix: `"r"` + first 10 hex of SHA-256 over the canonical filled runtime parameters (key, value, secret flag,
+    ordinal), excluding `suffixInput`/`trafficInput`; named consts citing Azure's suffix rule.
+  - Live revision: `GetOutputsAsync(runtime stack)` → last `trafficOutput` item with `revisionKey`; none / only
+    `latestKey` → no live revision. New revision name: the dark deploy's `revisionOutput` (verify live in S16c).
+  - Unchanged: dark deploy reports no changes AND new revision == live → runtime `Unchanged`, no probe/shift; after-runtime
+    nodes still deploy. (A re-run right after a first deploy re-probes once — accepted.)
+  - Steps: dark (traffic = live at 100, or latest at 100 on first deploy) → grants → probe via `IRevisionProbe.ProbeAsync(fqdn,
+    probe, ct)` → `ProbeResult(Passed, Detail)`, orchestrator retries up to `1 + timeout/interval` with an injected delay
+    (fixed interval) → shift (new revision at 100; skipped on first deploy). Preview: dark package preview only, steps
+    `Planned`, probe never called.
+  - **HTTP probe adapter in S16b2** (~20 lines, CLI composition root): once the runtime deploys, `EnvUpAzureTests` really
+    deploys the sample apps via `jd release deploy`, so a refusing probe would break the gate. Azure tests must pass in
+    the lead's gate; `WriteRuntimeStandIn()` (no-resource template, fqdn `example.invalid`) must change accordingly.
+  - Required tests (all in the S16b brief, kept here): dark never sends traffic to the new revision when a live one exists;
+    no shift after a probe failure (attempts = 1 + timeout/interval, delays = interval); probe target only the FQDN output
+    + mapping path; order dark → grants → probe → shift and a grant failure stops before probe/shift; same-config re-run
+    unchanged; re-run after probe failure probes and shifts with no duplicate revision; first deploy latest, probe, no
+    shift; release set stops after a probe failure; preview deploys/probes nothing; suffix changes with image/variable
+    and ignores suffix/traffic entries.
+  - **S16b1 review:** a workload-scope policy can still `set`/`default` `revisionSuffix`/`traffic` on the runtime node
+    after load → make `TemplateLibrary.Check` reject engine-owned keys in a resolved runtime node's config (test). Minor:
+    double pattern match in `TemplateLibrary.cs:115-116`; the missing-name test in `CatalogParserTests.cs:314` should
+    remove the key and assert `release.<name>` only.
+  - Cap ~215 production lines; design note already approved.
 - **S16b (S16a review):** Multiple mode never deactivates 0%-traffic revisions; `maxInactiveRevisions` only bounds
   deactivated ones. Decided: no deactivation in the MVP (Pulumi YAML cannot express the action; they scale to zero) —
   document as a known limitation. Add an offline assertion that the `traffic` backend parameter keeps its types.
@@ -99,6 +131,9 @@ Newest first. One entry per session: what moved, decisions taken, anything the n
   **User decision:** keep Sonnet developer / Opus reviewer with stricter briefs (every security boundary listed as a
   required test; narrowest surface stated, everything else an error); narrow the S15c design. Rounds 4–5 under the
   narrowed design → APPROVE; S15c merged (PR #28). S15 complete. S16 split a/b/c; S16a merged (PR #29, 1 round).
+  S16b design note → split into S16b1/S16b2; S16b1 merged (PR #30, 1 round). Session stopped at the user's request
+  after S16b1. Agent worktrees sometimes vanish mid-task (the harness removes them); developers recreate one — check
+  the main checkout is on `main` before each merge.
 
 - **2026-10-09 (team identity)** — Restarted with the `ARM_*` team identity; personal `az` session logged out. S12 Azure
   gate re-run as the team identity: green, nothing left behind. Azure test runs take ~50 min, mostly Cosmos account
