@@ -65,7 +65,7 @@ public partial class TemplateLibraryTests
     public async Task The_container_app_template_declares_its_inputs_and_outputs()
     {
         var library = await TemplateLibrary.LoadAsync(Templates);
-        string[] inputs = ["resourceGroupName", "location", "containerAppsEnvironmentId", "containerAppName", "image", "targetPort", "externalIngress", "cpu", "memory", "minReplicas", "maxReplicas", "variables"];
+        string[] inputs = ["resourceGroupName", "location", "containerAppsEnvironmentId", "containerAppName", "image", "targetPort", "externalIngress", "cpu", "memory", "minReplicas", "maxReplicas", "variables", "revisionSuffix", "traffic", "maxInactiveRevisions"];
         string[] outputs = ["containerAppId", "principalId", "latestRevisionName", "latestRevisionFqdn", "fqdn"];
         var app = Node("app", "azure/container-app", inputs.ToDictionary(i => i, i => (ConfigValue)Text("x")));
         // One consumer per output: a reference to an output the template does not declare is an error.

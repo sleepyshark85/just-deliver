@@ -15,6 +15,8 @@ public sealed class ContainerAppTemplateTests : IDisposable
 {
     private const string Placeholder = "00000000-0000-0000-0000-000000000000";
 
+    private const string LatestTraffic = """[{"latestRevision":true,"weight":100}]""";
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jd-pulumi-" + Guid.NewGuid().ToString("N"));
 
     public void Dispose()
@@ -26,7 +28,7 @@ public sealed class ContainerAppTemplateTests : IDisposable
     }
 
     // The inputs of the one Container App the preview would create, as JSON.
-    private async Task<JsonElement> PreviewInputsAsync(string variables)
+    private async Task<JsonElement> PreviewInputsAsync(string variables = "[]", string traffic = LatestTraffic, string revisionSuffix = "a")
     {
         var work = Path.Combine(_root, "work");
         var state = Path.Combine(_root, "state");
@@ -61,6 +63,9 @@ public sealed class ContainerAppTemplateTests : IDisposable
             ["minReplicas"] = new("0"),
             ["maxReplicas"] = new("1"),
             ["variables"] = new(variables),
+            ["revisionSuffix"] = new(revisionSuffix),
+            ["traffic"] = new(traffic),
+            ["maxInactiveRevisions"] = new("5"),
         });
 
         object? inputs = null;
@@ -81,16 +86,15 @@ public sealed class ContainerAppTemplateTests : IDisposable
     [Fact]
     public async Task The_preview_creates_a_multi_revision_app_with_a_system_identity_scale_resources_and_the_env_list()
     {
-        var inputs = await PreviewInputsAsync("""[{"name":"A","value":"1"},{"name":"B","value":"x,\"q\""}]""");
+        var inputs = await PreviewInputsAsync(variables: """[{"name":"A","value":"1"},{"name":"B","value":"x,\"q\""}]""");
 
         Assert.Equal("Multiple", inputs.GetProperty("configuration").GetProperty("activeRevisionsMode").GetString());
         Assert.Equal("SystemAssigned", inputs.GetProperty("identity").GetProperty("type").GetString());
         var ingress = inputs.GetProperty("configuration").GetProperty("ingress");
         Assert.Equal(8080, ingress.GetProperty("targetPort").GetInt32());
         Assert.True(ingress.GetProperty("external").GetBoolean());
-        var traffic = Assert.Single(ingress.GetProperty("traffic").EnumerateArray());
-        Assert.True(traffic.GetProperty("latestRevision").GetBoolean());
-        Assert.Equal(100, traffic.GetProperty("weight").GetInt32());
+        Assert.Equal("a", inputs.GetProperty("template").GetProperty("revisionSuffix").GetString());
+        Assert.Equal(5, inputs.GetProperty("configuration").GetProperty("maxInactiveRevisions").GetInt32());
         Assert.False(inputs.TryGetProperty("workloadProfileName", out _));
 
         var template = inputs.GetProperty("template");
@@ -107,9 +111,63 @@ public sealed class ContainerAppTemplateTests : IDisposable
     [Fact]
     public async Task No_variables_gives_an_empty_env_list()
     {
-        var inputs = await PreviewInputsAsync("[]");
+        var inputs = await PreviewInputsAsync();
 
         var container = Assert.Single(inputs.GetProperty("template").GetProperty("containers").EnumerateArray());
         Assert.Empty(container.GetProperty("env").EnumerateArray());
+    }
+
+    // The traffic items of the planned Container App as (revisionName, latestRevision, weight), the types checked: the weight is an
+    // integer and latestRevision a boolean, or the getters throw.
+    private static List<(string? Revision, bool? Latest, int Weight)> Traffic(JsonElement inputs) =>
+        inputs.GetProperty("configuration").GetProperty("ingress").GetProperty("traffic").EnumerateArray()
+            .Select(item => (
+                item.TryGetProperty("revisionName", out var name) ? name.GetString() : null,
+                item.TryGetProperty("latestRevision", out var latest) ? (bool?)latest.GetBoolean() : null,
+                item.GetProperty("weight").GetInt32()))
+            .ToList();
+
+    [Fact]
+    public async Task A_dark_revision_names_the_new_suffix_and_sends_all_traffic_to_the_previous_revision()
+    {
+        var inputs = await PreviewInputsAsync(traffic: """[{"revisionName":"orders--a","weight":100}]""", revisionSuffix: "b");
+
+        Assert.Equal("b", inputs.GetProperty("template").GetProperty("revisionSuffix").GetString());
+        Assert.Equal([("orders--a", (bool?)null, 100)], Traffic(inputs));
+    }
+
+    [Fact]
+    public async Task A_shift_sends_all_traffic_to_the_named_new_revision()
+    {
+        var inputs = await PreviewInputsAsync(traffic: """[{"revisionName":"orders--b","weight":100}]""", revisionSuffix: "b");
+
+        Assert.Equal([("orders--b", (bool?)null, 100)], Traffic(inputs));
+    }
+
+    [Fact]
+    public async Task Latest_revision_traffic_arrives_as_a_boolean_and_an_integer()
+    {
+        var inputs = await PreviewInputsAsync();
+
+        Assert.Equal([((string?)null, (bool?)true, 100)], Traffic(inputs));
+    }
+
+    [Theory]
+    [InlineData("""[{"latestRevision":true,"weight":"100"}]""", "weight")]
+    [InlineData("""[{"latestRevision":"true","weight":100}]""", "latestRevision")]
+    public async Task Traffic_with_a_text_weight_or_text_latest_revision_is_rejected_by_the_provider(string traffic, string field)
+    {
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => PreviewInputsAsync(traffic: traffic));
+
+        Assert.Contains(field, error.Message);
+    }
+
+    [Fact]
+    public async Task The_template_holds_no_traffic_or_revision_opinion()
+    {
+        var text = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "catalog", "templates", "azure", "container-app", "Pulumi.yaml"));
+
+        Assert.DoesNotMatch(@"(?m)^\s*-?\s*(latestRevision|revisionName|weight):", text);
+        Assert.DoesNotMatch(@"(?m)^\s*revisionSuffix:[ \t]*[^$\s]", text);
     }
 }

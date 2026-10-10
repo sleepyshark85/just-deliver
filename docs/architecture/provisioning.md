@@ -198,6 +198,16 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   grants that reference `runtime.*`) are not deployed by this walk: each is reported "waiting for runtime", the runtime
   node as "the runtime is deployed in a later step" (the release flow deploys it, S16). Workload-scope nodes (`@workload/…`,
   the runtime among them) are reported before the requirements' nodes, since their ids sort first.
+- **Revisions and traffic (what S16b builds on S16a).** The `container-app` template takes `revisionSuffix` and `traffic` as inputs and
+  owns no opinion on either, so one template deploys all three moves of the release flow. S16b sets them per step from the runtime
+  node's config and its own state, and runs the steps in order: (1) **dark**: a revision suffix derived deterministically from the node's
+  config hash with `traffic` excluded (unchanged config creates no revision), and `traffic` = `[{revisionName: <app>--<previous suffix>,
+  weight: 100}]`, so the new revision `<app>--<suffix>` exists and the previous keeps 100%; the first deploy has no previous revision and
+  passes `[{latestRevision: true, weight: 100}]`; (2) grants, then the OQ probe against the new revision with retry; (3) **shift**: the same
+  suffix, `traffic` = `[{revisionName: <app>--<suffix>, weight: 100}]`, which changes traffic only and creates no revision. On a failed
+  step traffic stays on the previous revision and dependants stop. Which revision is live is S16b's own state (the suffix it last
+  shifted to); the template adds no output for it, because the app's `latestReadyRevisionName` is the newest revision, not the live one.
+  Until S16b the runtime mapping holds placeholders (suffix `initial`, traffic to the latest revision).
 - **Preview.** Same order, nothing is created. A reference to a node this run has not deployed is filled from
   `GetOutputsAsync` (state of an earlier deploy); if the node was never deployed the value is missing and the node is
   reported "pending upstream" and not previewed (never a fake value). Template `fn::invoke`s still run during preview, so

@@ -57,7 +57,7 @@
       "kind": "Create",
       "stack": "just-deliver-sample-app.dev._workload.runtime",
       "phase": "Runtime",
-      "hash": "877b8a49ec136b99a1de8077c57bbb6cc1818639e48fcf4db353d0b8915e0781",
+      "hash": "826f5377a83d2851e89d7c9d4f3e82a125b68a995c787db9d49e9d6955234f43",
       "dependsOn": [
         "just-deliver-sample-app/dev/@workload/appinsights",
         "just-deliver-sample-app/dev/database/container"
@@ -69,11 +69,19 @@
         "externalIngress": true,
         "image": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
         "location": "southeastasia",
+        "maxInactiveRevisions": 5,
         "maxReplicas": 1,
         "memory": "0.5Gi",
         "minReplicas": 0,
         "resourceGroupName": "rg-dev",
+        "revisionSuffix": "initial",
         "targetPort": "8080",
+        "traffic": [
+          {
+            "latestRevision": true,
+            "weight": 100
+          }
+        ],
         "variables": [
           {
             "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
@@ -104,11 +112,14 @@
         "externalIngress": "Mapping: mappings/runtime/container-app.yaml",
         "image": "Mapping: mappings/runtime/container-app.yaml",
         "location": "Mapping: mappings/runtime/container-app.yaml",
+        "maxInactiveRevisions": "Mapping: mappings/runtime/container-app.yaml",
         "maxReplicas": "Mapping: mappings/runtime/container-app.yaml",
         "memory": "Mapping: mappings/runtime/container-app.yaml",
         "minReplicas": "Mapping: mappings/runtime/container-app.yaml",
         "resourceGroupName": "Mapping: mappings/runtime/container-app.yaml",
+        "revisionSuffix": "Mapping: mappings/runtime/container-app.yaml",
         "targetPort": "Mapping: mappings/runtime/container-app.yaml",
+        "traffic": "Mapping: mappings/runtime/container-app.yaml",
         "variables.APPLICATIONINSIGHTS_CONNECTION_STRING": "PolicySet: enforce-monitoring (policies/enforce-monitoring.yaml)",
         "variables.COSMOS_CONTAINER": "Workload: container.variables",
         "variables.COSMOS_DATABASE": "Workload: container.variables",
