@@ -5,8 +5,8 @@
 
 ## Now
 
-- **Next slice:** S16c — after S16b2 merges (needs the suffix decision in the S16c carry-forward note first).
-- **In progress:** S16b2 — APPROVE in round 3; waiting for the lead's Azure gate (session started without the team identity).
+- **Next slice:** S16c — suffix decision in the S16c carry-forward note first.
+- **In progress:** —
 - **Blocked:** —
 
 ## Slices
@@ -38,7 +38,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S15c | Variables + `runtime.*` policies | done | PR #28 | 5 | Design note approved first. Rounds 1–3: 7 blocking, all security/correctness edges of a cross-scope export mechanism broader than the contract (full expression language in variables; grant bypass of the grantable check via exports, static and pending; `fn::entries` anywhere; same-name outputs across scopes; export crash path). Escalated after round 3; user kept Sonnet/Opus with stricter briefs and narrowed the design (only `runtime` reads `${resource.*}`; exports cannot; `fn::entries` top-level only; string values; second pass by scope). Round 4: second regex grammar → round 5: one grammar. APPROVE. Production +390/−125, over the cap (defensive checks, accepted). Azure gate green (CLI 85/85, nothing left). **S15 complete.** |
 | S16a | `container-app` revision + traffic inputs | done | PR #29 | 1 | Spike first: a JSON list keeps its types through Pulumi config (`weight` integer, `latestRevision` boolean; provider rejects text). `traffic` (`List<Object>`), `revisionSuffix`, `maxInactiveRevisions` are inputs; mapping placeholders until S16b. Azure test shared setup (`ProbeAzureTest`). APPROVE first round; Azure gate green (CLI 86/86, dark revision got 0%, shift created no revision). |
 | S16b1 | Release data for the deploy steps | done | PR #30 | 1 | Split from S16b after a design note (est. 330 lines). Runtime mapping `release:` block (8 names: engine-driven inputs, read outputs, traffic-item keys), probe `timeoutSeconds`/`intervalSeconds`, load validation, template `traffic` echo output, `TemplateLibrary` waiver + checks. Walk still never deploys the runtime. APPROVE first round; Azure gate green. |
-| S16b2 | Deploy steps (orchestrator) + HTTP probe | in-review | PR TBD | 3 | Round 1: 1 blocking — **design gap the lead approved**: the first deploy left traffic as `latestRevision`, so state never named a revision and every later deploy sent all traffic to the unprobed revision; fixed by always shifting after a passed probe (first deploy included; first deploy is the documented exception). Round 2: 1 blocking — the HTTP probe followed redirects (a revision could pass via a 302 elsewhere). APPROVE round 3. Production ≈ +390/−85 raw, ~210 net code lines (rest doc comments). Azure stand-in tests use a passing probe; `EnvUpAzureTests` runs the real probe. |
+| S16b2 | Deploy steps (orchestrator) + HTTP probe | done | PR #32 | 3 | Round 1: 1 blocking — **design gap the lead approved**: the first deploy left traffic as `latestRevision`, so state never named a revision and every later deploy sent all traffic to the unprobed revision; fixed by always shifting after a passed probe (first deploy included; first deploy is the documented exception). Round 2: 1 blocking — the HTTP probe followed redirects (a revision could pass via a 302 elsewhere). APPROVE round 3. Production ≈ +390/−85 raw, ~210 net code lines (rest doc comments). Azure stand-in tests use a passing probe; `EnvUpAzureTests` runs the real probe. Azure gate green (CLI 96/96, 1 h 7 min, sample apps deployed and probed over HTTP; nothing left). |
 | S16c | HTTP probe + E2E Azure test | todo | | | Sample release set live on dev; a revision failing `/health` never gets traffic. |
 | S17 | Release record + qualification | todo | | | |
 | S18 | Second environment + approvals | todo | | | |
@@ -101,6 +101,8 @@ Newest first. One entry per session: what moved, decisions taken, anything the n
   design (no live revision ever recorded after a first deploy); lead amended the design: Shift always runs after a passed
   probe. Round 2: probe followed redirects. Session was started without the team identity (`ARM_*` absent), so the Azure
   gate is pending; merge only after `tools/verify.sh --azure` is green. Trial: 3 rounds, both blocking findings real.
+  Second session (team identity): a parallel S16b2 dispatch was superseded (no code); the user closed the other session.
+  Azure gate green (CLI 96/96, 1 h 7 min, subscription empty after); S16b2 merged (PR #32).
 
 - **2026-10-10 (S15c blocked)** — S15c hit 3 review rounds without APPROVE; each round the Opus reviewer found new
   edge cases (probe-confirmed) in the cross-scope export mechanism the Sonnet developer built. Model-trial trigger met
