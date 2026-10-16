@@ -97,15 +97,12 @@ public sealed class EnvUpAzureTests : IDisposable
         return (code, stdout + stderr.ToString());
     }
 
-    // Every node line reports no changes: the second run found everything as the first left it. A runtime whose first deploy left the
-    // traffic on the latest revision has no live revision to compare with, so the flow probes it again and reports it "deployed"
-    // with no changes; `runtimes` of those are expected.
-    private static void AssertNothingChanged(string output, int nodes, int runtimes = 0)
+    // Every node line reports no changes: the second run found everything as the first left it (a runtime whose live revision is
+    // the one just deployed is unchanged too, with no probe or shift).
+    private static void AssertNothingChanged(string output, int nodes)
     {
-        var lines = output.Split('\n');
-        Assert.Equal(nodes, lines.Count(line => line.Contains(": unchanged (no changes", StringComparison.Ordinal)));
-        Assert.Equal(runtimes, lines.Count(line => line.Contains("@workload/runtime: deployed (no changes", StringComparison.Ordinal)));
-        Assert.Equal(runtimes, lines.Count(line => line.Contains(": deployed", StringComparison.Ordinal)));
+        Assert.Equal(nodes, output.Split('\n').Count(line => line.Contains(": unchanged (no changes", StringComparison.Ordinal)));
+        Assert.DoesNotContain(": deployed", output);
     }
 
     private static async Task<(int Code, string Output)> ReleaseAsync(IBackEndProvider backend, params string[] args)
@@ -171,8 +168,8 @@ public sealed class EnvUpAzureTests : IDisposable
         var (releaseCode, releaseOutput) = await ReleaseAsync(backend, deploy);
         Assert.True(releaseCode == 0, releaseOutput);
         // Each workload's runtime is deployed through the release flow, a real Container App: the grants (a database role assignment and a
-        // metrics-publisher assignment) are deployed in its Grants step, and the real HTTP probe finds the new revision healthy. It is a first
-        // deploy, so the latest revision already has all traffic and there is nothing to shift.
+        // metrics-publisher assignment) are deployed in its Grants step, the real HTTP probe finds the new revision healthy, and the shift
+        // names it (also on a first deploy), so the next run finds it live.
         var releaseLines = releaseOutput.Split('\n');
         foreach (var grant in new[] { "/database/access", "/@workload/appinsights-access" })
         {
@@ -181,7 +178,7 @@ public sealed class EnvUpAzureTests : IDisposable
 
         Assert.Equal(2, releaseLines.Count(line => line.Contains("/@workload/runtime: deployed", StringComparison.Ordinal)));
         Assert.Equal(2, releaseLines.Count(line => line.Trim() == "probe: done (HTTP 200)"));
-        Assert.Equal(2, releaseLines.Count(line => line.Trim().StartsWith("shift: skipped", StringComparison.Ordinal)));
+        Assert.Equal(2, releaseLines.Count(line => line.Trim().StartsWith("shift: done", StringComparison.Ordinal)));
 
         var containers = Az("cosmosdb", "sql", "container", "list", "--account-name", account, "--resource-group", sharedGroup, "--database-name", database, "--query", "[].name")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -203,6 +200,6 @@ public sealed class EnvUpAzureTests : IDisposable
 
         var (againReleaseCode, againRelease) = await ReleaseAsync(backend, deploy);
         Assert.True(againReleaseCode == 0, againRelease);
-        AssertNothingChanged(againRelease, 8, runtimes: 2); // four nodes per workload besides the runtime
+        AssertNothingChanged(againRelease, 10); // five nodes per workload: the runtime and four others
     }
 }

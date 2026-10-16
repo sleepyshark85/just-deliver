@@ -43,7 +43,7 @@ public enum StepOutcome
     /// <summary>Preview only: the step would run.</summary>
     Planned,
 
-    /// <summary>Nothing to do: the revision is unchanged, or a first deploy has no traffic to shift.</summary>
+    /// <summary>Nothing to do: the revision is unchanged.</summary>
     Skipped,
 
     Failed,

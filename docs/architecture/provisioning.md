@@ -208,16 +208,18 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   after-runtime nodes, deployed with the dark deploy's outputs. (3) **Probe**: GET the new revision's `fqdnOutput` + the mapping's `probe.path`
   through `IRevisionProbe`; the orchestrator retries up to `1 + timeoutSeconds / intervalSeconds` times, waiting `intervalSeconds` between
   attempts, because grants may take minutes to propagate. (4) **Shift**: the same suffix with `traffic` = `[{revisionName: <new revision>,
-  weight: 100}]`, which changes traffic only and creates no revision; skipped on a first deploy, where the latest revision already has all
-  traffic. Traffic goes to the new revision only here, after a passed probe. A failed step makes the runtime `failed` with `<step>: <reason>`;
-  later steps do not run, so traffic stays on the live revision. The probe target is built only from the dark deploy's FQDN output and the
+  weight: 100}]`, which changes traffic only and creates no revision; it also runs on a first deploy, so the stack's traffic names the
+  revision from then on (the template echoes the traffic it was given, and `[{latestRevision: true}]` would never name one). Traffic goes to
+  the new revision only here, after a passed probe. A failed step makes the runtime `failed` with `<step>: <reason>`; later steps do not
+  run, so traffic stays on the live revision. **First-deploy exception:** there is no live revision to keep, so the dark deploy puts the
+  latest revision at 100% and it serves before it is probed; a failed probe is still reported `failed`, but nothing protects the traffic.
+  The probe target is built only from the dark deploy's FQDN output and the
   mapping's path (a missing or empty FQDN output fails the Probe step without a probe), never from workload data or another node.
   **Live revision:** read from the stack before the dark deploy: the template echoes the traffic it was last given as an output (the
-  mapping's `trafficOutput`), and the live revision is the last item with a `revisionKey` (none on a first deploy, or with only `latestKey`
-  items); the app's `latestReadyRevisionName` is the newest revision, not the live one, so it cannot tell. **Unchanged:** the dark deploy
+  mapping's `trafficOutput`), and the live revision is the last item with a `revisionKey` (none on a first deploy, or when only
+  `latestKey` items are there); the app's `latestReadyRevisionName` is the newest revision, not the live one, so it cannot tell. **Unchanged:** the dark deploy
   reports no changes and the new revision is the live one: the runtime is `unchanged`, Probe and Shift are `skipped`, and the grants still
-  deploy. (A re-run right after a first deploy has no live revision to compare with, so it probes once more and reports `deployed`
-  with no changes.) The runtime mapping's `release` block names the inputs, outputs and the shape of a traffic item, so none is in code, and
+  deploy; this holds for a same-config re-run after a first deploy too, since that deploy's shift named the revision. The runtime mapping's `release` block names the inputs, outputs and the shape of a traffic item, so none is in code, and
   its `probe` carries the retry bound. The engine alone sets the suffix and the traffic: `TemplateLibrary.Check` rejects a runtime node whose
   config sets either (a workload-scope policy could otherwise), and the engine's values replace any that reach the walk.
   **Known limitation:** old revisions are not deactivated. Container Apps keeps a 0%-traffic revision active in multiple-revision mode,

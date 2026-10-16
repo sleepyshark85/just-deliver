@@ -122,7 +122,7 @@ public partial class OrchestratorTests
         Assert.True(report.Succeeded);
         Assert.Equal(["shop/dev/thing/group", "shop/dev/thing/app", "shop/dev/thing/app2", "shop/dev/thing/rt"], report.Nodes.Select(n => n.NodeId));
         Assert.All(report.Nodes, n => Assert.Equal(NodeOutcome.Deployed, n.Outcome));
-        Assert.Equal(["shop.dev.thing.group", "shop.dev.thing.app", "shop.dev.thing.app2", "shop.dev._workload.runtime", "shop.dev.thing.rt"], backend.Calls.Where(c => c.Op == "deploy").Select(c => c.Package.StackName));
+        Assert.Equal(["shop.dev.thing.group", "shop.dev.thing.app", "shop.dev.thing.app2", "shop.dev._workload.runtime", "shop.dev.thing.rt", "shop.dev._workload.runtime"], backend.Calls.Where(c => c.Op == "deploy").Select(c => c.Package.StackName));
         Assert.Equal("template:t/app", backend.Calls[1].Package.DeploymentContent);
         var app = backend.Calls[1].Package.DeploymentParameters;
         Assert.Equal("id-shop.dev.thing.group", app["groupId"].Value);
@@ -145,7 +145,7 @@ public partial class OrchestratorTests
         Assert.Equal(["beta", "alpha"], runs.Select(r => r.Workload));
         Assert.All(runs, r => Assert.True(r.Run.Succeeded));
         Assert.Equal(
-            ["beta.dev.thing.group", "beta.dev.thing.app", "beta.dev.thing.app2", "beta.dev._workload.runtime", "beta.dev.thing.rt", "alpha.dev.thing.group", "alpha.dev.thing.app", "alpha.dev.thing.app2", "alpha.dev._workload.runtime", "alpha.dev.thing.rt"],
+            ["beta.dev.thing.group", "beta.dev.thing.app", "beta.dev.thing.app2", "beta.dev._workload.runtime", "beta.dev.thing.rt", "beta.dev._workload.runtime", "alpha.dev.thing.group", "alpha.dev.thing.app", "alpha.dev.thing.app2", "alpha.dev._workload.runtime", "alpha.dev.thing.rt", "alpha.dev._workload.runtime"],
             backend.Calls.Where(c => c.Op == "deploy").Select(c => c.Package.StackName));
     }
 
@@ -391,7 +391,7 @@ public partial class OrchestratorTests
     }
 
     private static Dictionary<string, ConfigEntry> Deployed(FakeBackend backend, string stack) =>
-        backend.Calls.Single(c => c.Op == "deploy" && c.Package.StackName == stack).Package.DeploymentParameters;
+        backend.Calls.First(c => c.Op == "deploy" && c.Package.StackName == stack).Package.DeploymentParameters;
 
     [Fact]
     public async Task A_pending_workload_variable_is_resolved_in_the_second_pass_and_the_variables_are_a_list_sorted_by_name()

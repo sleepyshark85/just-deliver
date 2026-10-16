@@ -221,7 +221,7 @@ public partial class OrchestratorTests
     [Theory]
     [InlineData(null)]
     [InlineData("""[{"latestRevision":true,"weight":100}]""")]
-    public async Task A_first_deploy_darks_on_the_latest_revision_probes_and_has_nothing_to_shift(string? previousTraffic)
+    public async Task A_first_deploy_darks_on_the_latest_revision_probes_and_shifts_so_the_stack_names_the_revision(string? previousTraffic)
     {
         var backend = new FakeBackend();
         if (previousTraffic is not null)
@@ -233,10 +233,66 @@ public partial class OrchestratorTests
 
         var runtime = Runtime(report);
         Assert.Equal(NodeOutcome.Deployed, runtime.Outcome);
-        var dark = Assert.Single(RuntimeDeploys(backend));
-        Assert.Equal("""[{"latestRevision":true,"weight":100}]""", Parameter(dark, "traffic"));
+        var deploys = RuntimeDeploys(backend);
+        Assert.Equal("""[{"latestRevision":true,"weight":100}]""", Parameter(deploys[0], "traffic"));
         Assert.Contains("probe", backend.Log);
-        Assert.Equal([StepOutcome.Done, StepOutcome.Done, StepOutcome.Done, StepOutcome.Skipped], runtime.Steps?.Select(s => s.Outcome));
+        Assert.All(runtime.Steps ?? [], s => Assert.Equal(StepOutcome.Done, s.Outcome));
+        Assert.Equal(Step.Shift, runtime.Steps?[^1].Step);
+        Assert.Equal(2, deploys.Count);
+        var revision = $"app--{Parameter(deploys[0], "suffix")}";
+        Assert.Equal($$"""[{"revisionName":"{{revision}}","weight":100}]""", Parameter(deploys[1], "traffic"));
+        Assert.Equal(revision, runtime.Steps?[^1].Detail);
+    }
+
+    [Fact]
+    public async Task A_first_deploy_that_fails_its_probe_is_failed_and_not_shifted()
+    {
+        var backend = new FakeBackend();
+
+        var report = await ReleaseAsync(backend, Failing(backend)); // no prior revision exists: the latest one serves, and the run says it failed
+
+        Assert.Equal(NodeOutcome.Failed, Runtime(report).Outcome);
+        Assert.StartsWith("probe: HTTP 503", Runtime(report).Message, StringComparison.Ordinal);
+        Assert.Single(RuntimeDeploys(backend));
+    }
+
+    [Fact]
+    public async Task A_same_config_rerun_after_a_first_deploy_is_unchanged_without_probe_or_shift()
+    {
+        var backend = new FakeBackend { DetectChanges = true };
+        var probe = new FakeProbe(backend.Log);
+        var (graph, catalog) = await ResolveAsync();
+        var orchestrator = Create(backend, catalog, probe);
+        await orchestrator.DeployAsync(graph, null, CancellationToken.None);
+
+        var report = await orchestrator.DeployAsync(graph, null, CancellationToken.None);
+
+        Assert.Equal(NodeOutcome.Unchanged, Runtime(report).Outcome);
+        Assert.Equal([StepOutcome.Done, StepOutcome.Done, StepOutcome.Skipped, StepOutcome.Skipped], Runtime(report).Steps?.Select(s => s.Outcome));
+        Assert.Single(probe.Calls);
+        Assert.Equal(3, RuntimeDeploys(backend).Count); // dark and shift of the first run, the dark of the second
+    }
+
+    [Fact]
+    public async Task A_changed_config_after_a_first_deploy_darks_with_the_first_revision_live_and_shifts_only_after_the_probe()
+    {
+        var backend = new FakeBackend { DetectChanges = true };
+        foreach (var value in new[] { "one", "two" })
+        {
+            var (graph, catalog) = await ResolveAsync(
+                DefaultRequires, ExportingMapping, runtimeMapping: RuntimeReadingMapping,
+                container: $"container:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n    A: {value}\n");
+            Assert.True((await Create(backend, catalog).DeployAsync(graph, null, CancellationToken.None)).Succeeded);
+        }
+
+        var deploys = RuntimeDeploys(backend); // dark and shift of the first release, then of the second
+        Assert.Equal(4, deploys.Count);
+        var (first, second) = ($"app--{Parameter(deploys[0], "suffix")}", $"app--{Parameter(deploys[2], "suffix")}");
+        Assert.NotEqual(first, second);
+        Assert.Equal($$"""[{"revisionName":"{{first}}","weight":100}]""", Parameter(deploys[2], "traffic"));
+        Assert.Equal($$"""[{"revisionName":"{{second}}","weight":100}]""", Parameter(deploys[3], "traffic"));
+        var log = backend.Log.Where(e => e == "probe" || e == $"deploy {RuntimeStack}").ToList();
+        Assert.Equal(["deploy " + RuntimeStack, "probe", "deploy " + RuntimeStack, "deploy " + RuntimeStack, "probe", "deploy " + RuntimeStack], log);
     }
 
     [Fact]

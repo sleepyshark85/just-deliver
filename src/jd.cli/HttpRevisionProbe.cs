@@ -1,3 +1,4 @@
+using System.Globalization;
 using jd.orchestrator;
 using jd.resolver.catalog;
 
@@ -18,9 +19,13 @@ public sealed class HttpRevisionProbe(HttpClient client) : IRevisionProbe
             using var response = await client.GetAsync(new Uri($"https://{fqdn}{probe.Path}"), attempt.Token);
             return new ProbeResult((int)response.StatusCode == probe.ExpectedStatus, $"HTTP {(int)response.StatusCode}");
         }
-        catch (Exception ex) when (ex is HttpRequestException or UriFormatException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is HttpRequestException or UriFormatException)
         {
             return new ProbeResult(false, ex.Message);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new ProbeResult(false, $"no answer within {probe.IntervalSeconds.ToString(CultureInfo.InvariantCulture)}s");
         }
     }
 }

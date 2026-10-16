@@ -69,7 +69,7 @@ public sealed class HttpRevisionProbeTests
 
         var result = await ProbeOver(handler).ProbeAsync("app.example.test", Spec, CancellationToken.None);
 
-        Assert.False(result.Passed);
+        Assert.Equal(new ProbeResult(false, "no answer within 1s"), result);
     }
 
     [Fact]

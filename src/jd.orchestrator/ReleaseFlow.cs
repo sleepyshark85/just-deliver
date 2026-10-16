@@ -108,15 +108,9 @@ internal sealed class ReleaseFlow(
             steps.Add(new StepReport(Step.Probe, StepOutcome.Done, result.Detail));
 
             step = Step.Shift;
-            if (live is null)
-            {
-                steps.Add(new StepReport(Step.Shift, StepOutcome.Skipped, "first deploy: the latest revision already has all traffic"));
-            }
-            else
-            {
-                await provider.DeployAsync(With(Traffic(release, revision)), cancellationToken);
-                steps.Add(new StepReport(Step.Shift, StepOutcome.Done, revision));
-            }
+            // Also on a first deploy: it makes the stack's traffic name the revision, which is how the next run finds the live one.
+            await provider.DeployAsync(With(Traffic(release, revision)), cancellationToken);
+            steps.Add(new StepReport(Step.Shift, StepOutcome.Done, revision));
 
             return NodeReport.For(node, NodeOutcome.Deployed, string.Empty, dark, steps);
         }
@@ -153,7 +147,7 @@ internal sealed class ReleaseFlow(
         var canonical = new JArray(parameters
             .Where(p => p.Key != release.SuffixInput && p.Key != release.TrafficInput)
             .OrderBy(p => p.Key, StringComparer.Ordinal)
-            .Select(p => new JArray(p.Key, p.Value.Value ?? string.Empty, p.Value.IsSecret)));
+            .Select(p => new JArray(new JValue(p.Key), new JValue(p.Value.Value), new JValue(p.Value.IsSecret))));
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString(Formatting.None)));
         return SuffixPrefix + Convert.ToHexStringLower(hash)[..SuffixHexLength];
     }

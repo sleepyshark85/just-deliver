@@ -220,14 +220,15 @@ public sealed class CliTests : IDisposable
         Assert.Equal([$"deploy {app}.dev._workload.appinsights", $"deploy {app}.dev.database.container", $"deploy {app}.dev._workload.runtime"], backend.Calls.Take(3));
         Assert.Equal([$"deploy {app}.dev._workload.appinsights-access", $"deploy {app}.dev.database.access"], backend.Calls.Skip(3).Take(2).Order(StringComparer.Ordinal));
         Assert.Equal("probe out-latestRevisionFqdn/health", backend.Calls[5]);
-        Assert.Equal(6, backend.Calls.Count); // a first deploy has no live revision, so there is no shift
+        Assert.Equal($"deploy {app}.dev._workload.runtime", backend.Calls[6]); // the shift, also on a first deploy
+        Assert.Equal(7, backend.Calls.Count);
         Assert.Contains($"{app}/dev/database/container: deployed (create 1, ", stdout);
         Assert.Contains($"{app}/dev/database/access: deployed (create 1, ", stdout);
         // The runtime is reported last, one line per step.
         var lines = stdout.ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
         var runtime = Array.FindIndex(lines, l => l.StartsWith($"{app}/dev/@workload/runtime: deployed (create 1, ", StringComparison.Ordinal));
         Assert.Equal(
-            ["  create azure-native:t:T", "  dark: done (out-latestRevisionName)", "  grants: done", "  probe: done (HTTP 200)", "  shift: skipped (first deploy: the latest revision already has all traffic)"],
+            ["  create azure-native:t:T", "  dark: done (out-latestRevisionName)", "  grants: done", "  probe: done (HTTP 200)", "  shift: done (out-latestRevisionName)"],
             lines[(runtime + 1)..].ToList());
     }
 

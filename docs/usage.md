@@ -32,8 +32,10 @@ and the Azure credentials in the environment (`source ~/.just-deliver/<subscript
   value from a node that is not deployed yet is missing), `failed`. The runtime node comes last and is released in steps, one
   line each under it: `dark` (the new revision, with no traffic when a live revision exists), `grants` (the nodes that depend on
   the runtime are deployed here), `probe` (`GET https://<revision fqdn><path>` must answer the expected status, retried up to the
-  mapping's timeout) and `shift` (all traffic to the new revision; `skipped` on a first deploy). A revision that fails its probe
-  never gets traffic when a live one exists; fix the cause and run again.
+  mapping's timeout) and `shift` (all traffic to the new revision, also on a first deploy). A revision that fails its probe
+  never gets traffic when a live one exists; fix the cause and run again. The first deploy of a workload has no live revision,
+  so its revision serves before it is probed: a failed probe is reported but cannot protect traffic. A re-run with unchanged
+  config reports the runtime `unchanged`, with probe and shift `skipped`.
 - The first failure stops the run (exit 1) and names the node and reason; nodes already deployed stay deployed. Running
   the command again resumes: deployed nodes report `unchanged`.
 - `--preview` shows what would change and creates nothing; nodes whose upstream outputs are not in state yet are `pending upstream`.

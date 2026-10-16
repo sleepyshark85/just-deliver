@@ -55,13 +55,14 @@ public sealed class ReleaseDeployCliTests : IDisposable
 
         Assert.Equal(0, code);
         Assert.Empty(stderr);
-        // Per workload: its infrastructure, its runtime, the grants (inside the runtime's Grants step), then the probe of the new revision.
-        Assert.Equal(12, backend.Calls.Count);
-        foreach (var (name, first) in new[] { (Worker, 0), (App, 6) })
+        // Per workload: its infrastructure, its runtime, the grants (inside the runtime's Grants step), then the probe of the new revision and the shift.
+        Assert.Equal(14, backend.Calls.Count);
+        foreach (var (name, first) in new[] { (Worker, 0), (App, 7) })
         {
             Assert.Equal([$"deploy {name}.dev._workload.appinsights", $"deploy {name}.dev.database.container", $"deploy {name}.dev._workload.runtime"], backend.Calls.Skip(first).Take(3));
             Assert.Equal([$"deploy {name}.dev._workload.appinsights-access", $"deploy {name}.dev.database.access"], backend.Calls.Skip(first + 3).Take(2).Order(StringComparer.Ordinal));
             Assert.Equal("probe out-latestRevisionFqdn/health", backend.Calls[first + 5]);
+            Assert.Equal($"deploy {name}.dev._workload.runtime", backend.Calls[first + 6]); // the shift
         }
 
         var lines = stdout.ReplaceLineEndings("\n");
