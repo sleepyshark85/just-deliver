@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Azure adapters: the only project besides the Pulumi backend that references an Azure SDK (standards §3). -->
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../jd.core/jd.core.csproj" />
+  </ItemGroup>
+
+</Project>

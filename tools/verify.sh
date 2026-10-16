@@ -36,10 +36,14 @@ inner=(src/jd.core/jd.core.csproj)
 [[ -f src/jd.resolver/jd.resolver.csproj ]] && inner+=(src/jd.resolver/jd.resolver.csproj)
 [[ -f src/jd.orchestrator/jd.orchestrator.csproj ]] && inner+=(src/jd.orchestrator/jd.orchestrator.csproj)
 for p in "${inner[@]}"; do
-  if grep -E -q 'Include="(Pulumi|Azure)[^"]*"|backend-providers' "$p"; then
+  if grep -E -q 'Include="(Pulumi|Azure)[^"]*"|backend-providers|jd\.azure' "$p"; then
     fail "$p must not reference Pulumi, Azure SDKs or backend providers (see docs/engineering/standards.md)"
   fi
 done
+# The Azure adapter sits next to the core: it implements ports from jd.core and nothing else of ours.
+if [[ -f src/jd.azure/jd.azure.csproj ]] && grep -E -q 'Include="Pulumi[^"]*"|backend-providers|jd\.resolver|jd\.orchestrator|jd\.cli' src/jd.azure/jd.azure.csproj; then
+  fail "src/jd.azure/jd.azure.csproj may reference only jd.core and Azure SDKs (see docs/engineering/standards.md)"
+fi
 echo "ok"
 
 step "Secrets"

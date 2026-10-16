@@ -5,7 +5,10 @@
 
 ## Now
 
-- **Next slice:** S17 — release record + qualification. **S16 complete.**
+- **Next slice:** S17b — release record + OQ + timings (plan: [release-record.md](../architecture/release-record.md) §8). Then S17c (IQ).
+- **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
+  required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
+  leaves the deployment live; ADR 0007 kept (the set file's bytes are stored write-once as `set.yaml` per label).
 - **In progress:** —
 - **Blocked:** —
 
@@ -40,7 +43,9 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S16b1 | Release data for the deploy steps | done | PR #30 | 1 | Split from S16b after a design note (est. 330 lines). Runtime mapping `release:` block (8 names: engine-driven inputs, read outputs, traffic-item keys), probe `timeoutSeconds`/`intervalSeconds`, load validation, template `traffic` echo output, `TemplateLibrary` waiver + checks. Walk still never deploys the runtime. APPROVE first round; Azure gate green. |
 | S16b2 | Deploy steps (orchestrator) + HTTP probe | done | PR #32 | 3 | Round 1: 1 blocking — **design gap the lead approved**: the first deploy left traffic as `latestRevision`, so state never named a revision and every later deploy sent all traffic to the unprobed revision; fixed by always shifting after a passed probe (first deploy included; first deploy is the documented exception). Round 2: 1 blocking — the HTTP probe followed redirects (a revision could pass via a 302 elsewhere). APPROVE round 3. Production ≈ +390/−85 raw, ~210 net code lines (rest doc comments). Azure stand-in tests use a passing probe; `EnvUpAzureTests` runs the real probe. Azure gate green (CLI 96/96, 1 h 7 min, sample apps deployed and probed over HTTP; nothing left). |
 | S16c | Revert-safe suffix + E2E Azure test | done | PR #33 | 1 + suggestions | Lead spike first (Azure rejects any template change reusing an existing revision suffix, even a revert). Lead decision: suffix = `r` + 8 hex over params + template content + 6 hex salt from the previous suffix (reused when the config part matches); `release.suffixOutput` from data. Azure test: a bad `sample-worker` (missing container → 503) fails its probe, traffic stays 100% on the good revision, the app behind it is untouched; revert deploys a new revision. ~40 production lines. APPROVE first round; 3 suggestions applied. Azure gate green (CLI 96/96, 1 h 2 min, nothing left). **S16 complete.** |
-| S17 | Release record + qualification | todo | | | |
+| S17a | Design note + deployer identity | done | PR #34 | 2 | Design note `release-record.md` (split S17a/b/c, ~550 lines). Lead decisions recorded in Now. Identity port in `jd.core`, adapter `jd.azure` reads `tid`/`appid`/`oid` from the ARM token. Round 1: 1 blocking — port in `jd.orchestrator` made `jd.azure` depend on `jd.resolver` transitively, against its own standards row; plus secret in a record's `ToString`, ARM scope URL vs §1, 5 design-note gaps (OQ `unchanged` evidence chain, refusal order, IQ time apart from deploy time). Azure gate green (CLI 98/98, 1 h 3 min, identity test live, nothing left). |
+| S17b | Release record + OQ + timings | todo | | | See release-record.md §8. |
+| S17c | IQ + `jd release qualify` | todo | | | See release-record.md §8. |
 | S18 | Second environment + approvals | todo | | | |
 | S19 | Promotion | todo | | | |
 | S20 | E2E run and docs | todo | | | |
@@ -61,6 +66,9 @@ Picked up by the slice named; remove once done.
 - **S16b2/S16c review (minor, left):** pin "suffix distinguishes null from empty" with a test; the suffix hashes secret values into
   a public suffix (fine until secret variables become Container App secrets); `ContainerAppAzureTests.cs:180` hard-codes the ARM host
   (use a resource-id URL as `EnvUpAzureTests` does).
+- **S17b (S17a review):** a wrong secret fails inside the token call as the SDK's `AuthenticationFailedException` — turn it into a
+  CLI error before the backend is called (test). **S17c:** make `verify.sh`'s `jd.azure` reference check an allowlist (`jd.core` +
+  `Azure.*` packages only).
 - **Release flow residual (S16c, documented):** a dark deploy that fails after Azure created the revision (unpullable image) leaves
   the old suffix in outputs, so a same-config re-run is rejected until the config changes; traffic unaffected.
 - **S16a review (left):** `ContainerAppAzureTests` builds two stacks; fold the dark/shift steps into one test when next
@@ -93,6 +101,10 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-17 (S17a)** — S17 design note written by the developer, reviewed with S17a; lead took the five open choices (recorded in
+  Now for the user's review; no ADR deviation). S17a: 2 rounds, APPROVE; Azure gate green. Trial: design-level finding in round 1
+  was real (transitive dependency), fixed cleanly.
 
 - **2026-10-16/17 (S16b2 merged, S16c)** — S16b2 Azure gate green, merged (PR #32). Lead spike on Azure: a suffix naming an
   existing revision is rejected even for a revert, so the hash-only suffix broke recovery from a bad release; lead designed the

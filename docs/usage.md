@@ -22,6 +22,9 @@ dotnet run --project src/jd.cli -- --help
 
 ### `jd deploy`
 
+The unrecorded development path for one workload: it has no release label, so it leaves no release record. What is deployed and promoted is a
+release set (`jd release deploy`); the evidence of a deploy comes from there ([release-record.md](architecture/release-record.md)).
+
 Resolves like `preview`, checks the graph against the templates in `<catalog>/templates`, then provisions the
 infrastructure nodes through the Pulumi backend in graph order, then releases the runtime ([Orchestrator](architecture/provisioning.md#orchestrator)).
 This **creates real Azure resources**: use a subscription with the guardrails of [tools/sandbox](../tools/sandbox/README.md)
