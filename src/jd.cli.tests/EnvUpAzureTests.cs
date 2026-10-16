@@ -348,15 +348,15 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), qualified.GetProperty("identity").GetProperty("clientId").GetString());
 
         // The image of the worker's app is changed out of band, and that revision is given all the traffic. The quickstart image is a small public
-        // Microsoft image that needs no registry login; it listens on port 80, so the app's ingress is pointed there for the revision to serve.
+        // Microsoft image that needs no registry login; it listens on port 80, so the app's ingress is pointed there first, for the new revision to start serving.
         const string OtherImage = "mcr.microsoft.com/k8se/quickstart:latest";
         var workerName = _az.Run("resource", "show", "--ids", workerApp, "--query", "name", "-o", "tsv").Output.Trim();
         Assert.NotEmpty(workerName);
         var oob = $"{workerName}--oob1";
         foreach (var command in new[]
         {
-            new[] { "containerapp", "update", "--ids", workerApp, "--image", OtherImage, "--revision-suffix", "oob1" },
-            ["containerapp", "ingress", "update", "--ids", workerApp, "--target-port", "80"],
+            new[] { "containerapp", "ingress", "update", "--ids", workerApp, "--target-port", "80" },
+            ["containerapp", "update", "--ids", workerApp, "--image", OtherImage, "--revision-suffix", "oob1"],
             ["containerapp", "ingress", "traffic", "set", "--ids", workerApp, "--revision-weight", $"{oob}=100"],
         })
         {

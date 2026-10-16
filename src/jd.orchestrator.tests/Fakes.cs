@@ -38,6 +38,7 @@ internal sealed class FakeBackend : IBackEndProvider, ITemplateStore
     public Dictionary<string, List<ResourceChange>> PreviewChanges { get; } = [];
     public bool DetectChanges { get; set; }
     public string? FailOn { get; set; }
+    public string? PreviewFailOn { get; set; }
     public bool OmitIdOutput { get; set; }
     public string? Fqdn { get; set; } = "app.example.test";
 
@@ -88,6 +89,11 @@ internal sealed class FakeBackend : IBackEndProvider, ITemplateStore
     {
         Calls.Add(("preview", package));
         Log.Add("preview " + package.StackName);
+        if (package.StackName == PreviewFailOn)
+        {
+            throw new InvalidOperationException("provider exploded");
+        }
+
         return Task.FromResult(new DeploymentResult { Outputs = [], Summary = PreviewSummaries.GetValueOrDefault(package.StackName) ?? Summary, Changes = PreviewChanges.GetValueOrDefault(package.StackName) ?? [] });
     }
 

@@ -104,6 +104,7 @@ internal static class ReleaseDeployCli
 
         if (options.Qualify)
         {
+            // recordsDirectory is null only for a --preview, which qualify refuses at parse time, so a qualification always has a recording here.
             return await QualifyAsync(recording!, set, catalog, environment, graphs, templates, backend, probe, liveRevisions, started, time, environmentVariable, stdout, stderr, cancellationToken);
         }
 

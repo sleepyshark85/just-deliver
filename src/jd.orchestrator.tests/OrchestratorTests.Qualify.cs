@@ -225,6 +225,25 @@ public partial class OrchestratorTests
         Assert.DoesNotContain(backend.Calls, c => c.Op == "deploy");
     }
 
+    [Fact]
+    public async Task A_grant_whose_preview_fails_fails_the_runtime_node_at_the_grants_step_and_deploys_and_probes_nothing()
+    {
+        var (backend, _, catalog) = await DeployedAsync();
+        var (graph, _) = await ResolveAsync();
+        backend.PreviewFailOn = "shop.dev.thing.rt";
+        var probe = new FakeProbe(backend.Log);
+
+        var report = await new Orchestrator(backend, backend, catalog, Env, probe).PreviewAsync(graph, null, CancellationToken.None);
+
+        var runtime = Runtime(report);
+        Assert.False(report.Succeeded);
+        Assert.Equal(NodeOutcome.Failed, runtime.Outcome);
+        Assert.StartsWith("grants: shop/dev/thing/rt: provider exploded", runtime.Message, StringComparison.Ordinal);
+        Assert.Equal((Step.Grants, StepOutcome.Failed), (runtime.Steps![^1].Step, runtime.Steps[^1].Outcome));
+        Assert.DoesNotContain(backend.Calls, c => c.Op == "deploy");
+        Assert.Empty(probe.Calls);
+    }
+
     // The record of a qualification of two workloads, one of them drifted and running another image; the time is fixed for the golden.
     private static async Task<(string Json, IqResult Iq)> QualifyRecordAsync()
     {
