@@ -109,10 +109,11 @@ internal sealed class ReleaseFlow(
 
             step = Step.Shift;
             // Also on a first deploy: it makes the stack's traffic name the revision, which is how the next run finds the live one.
-            await provider.DeployAsync(With(Traffic(release, revision)), cancellationToken);
+            var shifted = await provider.DeployAsync(With(Traffic(release, revision)), cancellationToken);
             steps.Add(new StepReport(Step.Shift, StepOutcome.Done, revision));
 
-            return NodeReport.For(node, NodeOutcome.Deployed, string.Empty, dark, steps);
+            // The last deploy's outputs name the live revision (the traffic), so the persisted report carries them.
+            return NodeReport.For(node, NodeOutcome.Deployed, string.Empty, shifted, steps);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -155,7 +156,7 @@ internal sealed class ReleaseFlow(
     // The live revision is the last revision the traffic names; no outputs, or only the latest revision, is a first deploy.
     private static string? LiveRevision(Dictionary<string, ConfigEntry>? outputs, RuntimeRelease release) =>
         outputs?.GetValueOrDefault(release.TrafficOutput)?.Value is { } traffic
-            ? JArray.Parse(traffic).OfType<JObject>().Select(item => (string?)item[release.RevisionKey]).LastOrDefault(name => name is not null)
+            ? JArray.Parse(traffic).OfType<JObject>().Select(item => (string?)item[release.RevisionKey]).LastOrDefault(name => !string.IsNullOrEmpty(name))
             : null;
 
     // All traffic to the named revision, or to the latest one when none is named (a first deploy).

@@ -221,6 +221,7 @@ public partial class OrchestratorTests
     [Theory]
     [InlineData(null)]
     [InlineData("""[{"latestRevision":true,"weight":100}]""")]
+    [InlineData("""[{"revisionName":"","weight":100}]""")]
     public async Task A_first_deploy_darks_on_the_latest_revision_probes_and_shifts_so_the_stack_names_the_revision(string? previousTraffic)
     {
         var backend = new FakeBackend();
@@ -242,6 +243,19 @@ public partial class OrchestratorTests
         var revision = $"app--{Parameter(deploys[0], "suffix")}";
         Assert.Equal($$"""[{"revisionName":"{{revision}}","weight":100}]""", Parameter(deploys[1], "traffic"));
         Assert.Equal(revision, runtime.Steps?[^1].Detail);
+    }
+
+    [Fact]
+    public async Task The_runtime_report_carries_the_shifts_outputs_so_it_names_the_live_revision()
+    {
+        var backend = new FakeBackend();
+        SeedLive(backend);
+
+        var report = await ReleaseAsync(backend);
+
+        var deploys = RuntimeDeploys(backend);
+        Assert.Equal(Parameter(deploys[1], "traffic"), Runtime(report).Outputs["traffic"].Value);
+        Assert.Contains(Parameter(deploys[0], "suffix"), Runtime(report).Outputs["traffic"].Value);
     }
 
     [Fact]

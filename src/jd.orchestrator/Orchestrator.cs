@@ -13,11 +13,11 @@ namespace jd.orchestrator;
 /// Walks a <see cref="ResolvedGraph"/> in graph order and provisions its infrastructure-phase nodes through the backend,
 /// one at a time. Each node's pending config is evaluated again with the outputs of the nodes deployed before it, so a
 /// value is never guessed. The infrastructure nodes come first, then the runtime node through the release flow (dark revision, the nodes
-/// that depend on the runtime, probe, traffic shift). <c>probe</c> checks a new revision is healthy before it gets traffic; <c>delay</c> waits
+/// that depend on the runtime, probe, traffic shift). <c>probe</c> checks a new revision is healthy before it gets traffic (null is fine for a graph without a runtime); <c>delay</c> waits
 /// between probe attempts (<see cref="Task.Delay(TimeSpan, CancellationToken)"/> unless a test replaces it). Rules: docs/architecture/provisioning.md.
 /// </summary>
 public sealed class Orchestrator(
-    IBackEndProvider provider, ITemplateStore templates, Catalog catalog, EnvironmentDescriptor environment, IRevisionProbe probe, Func<TimeSpan, CancellationToken, Task>? delay = null)
+    IBackEndProvider provider, ITemplateStore templates, Catalog catalog, EnvironmentDescriptor environment, IRevisionProbe? probe, Func<TimeSpan, CancellationToken, Task>? delay = null)
 {
     private readonly Func<TimeSpan, CancellationToken, Task> _delay = delay ?? Task.Delay;
 
@@ -60,7 +60,7 @@ public sealed class Orchestrator(
     }
 
     private sealed class Walk(
-        IBackEndProvider provider, ITemplateStore templates, Catalog catalog, EnvironmentDescriptor environment, IRevisionProbe probe, Func<TimeSpan, CancellationToken, Task> delay,
+        IBackEndProvider provider, ITemplateStore templates, Catalog catalog, EnvironmentDescriptor environment, IRevisionProbe? probe, Func<TimeSpan, CancellationToken, Task> delay,
         ResolvedGraph graph, bool preview, Action<NodeReport>? progress)
     {
         private readonly Dictionary<string, GraphNode> _byId = graph.Nodes.ToDictionary(n => n.Id);
@@ -88,7 +88,7 @@ public sealed class Orchestrator(
 
             if (graph.Nodes.SingleOrDefault(n => n.Phase == Phase.Runtime) is { } runtime)
             {
-                var flow = new ReleaseFlow(provider, probe, delay, preview, node => PrepareAsync(node, cancellationToken), outputs => DeployDependantsAsync(runtime, outputs, cancellationToken));
+                var flow = new ReleaseFlow(provider, probe ?? throw new InvalidOperationException("the graph has a runtime to release, which needs a probe."), delay, preview, node => PrepareAsync(node, cancellationToken), outputs => DeployDependantsAsync(runtime, outputs, cancellationToken));
                 await RecordAsync(() => flow.RunAsync(runtime, cancellationToken));
             }
 

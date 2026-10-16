@@ -49,6 +49,55 @@ public sealed class HttpRevisionProbeTests
     }
 
     [Fact]
+    public async Task The_clients_the_cli_uses_does_not_follow_a_redirect_so_the_revisions_own_302_fails_the_probe()
+    {
+        // A local listener (no network): /health redirects to /elsewhere, which would answer 200 if the client followed.
+        using var listener = new HttpListener();
+        var port = FreePort();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+        var serving = Task.Run(async () =>
+        {
+            while (listener.IsListening)
+            {
+                var context = await listener.GetContextAsync();
+                var redirect = context.Request.Url?.AbsolutePath == "/health";
+                context.Response.StatusCode = redirect ? 302 : 200;
+                if (redirect)
+                {
+                    context.Response.RedirectLocation = $"http://127.0.0.1:{port}/elsewhere";
+                }
+
+                context.Response.Close();
+            }
+        });
+        using var client = HttpRevisionProbe.CreateClient();
+
+        using var response = await client.GetAsync(new Uri($"http://127.0.0.1:{port}/health"));
+        listener.Stop();
+
+        Assert.Equal(HttpStatusCode.Found, response.StatusCode);
+        await Assert.ThrowsAnyAsync<Exception>(() => serving).WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    private static int FreePort()
+    {
+        using var socket = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        socket.Start();
+        return ((IPEndPoint)socket.LocalEndpoint).Port;
+    }
+
+    [Fact]
+    public async Task A_302_is_a_failed_probe_with_its_status()
+    {
+        var handler = new StubHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Found)));
+
+        var result = await ProbeOver(handler).ProbeAsync("app.example.test", Spec, CancellationToken.None);
+
+        Assert.Equal(new ProbeResult(false, "HTTP 302"), result);
+    }
+
+    [Fact]
     public async Task It_fails_with_the_error_message_when_the_connection_fails()
     {
         var handler = new StubHandler((_, _) => throw new HttpRequestException("Name or service not known"));

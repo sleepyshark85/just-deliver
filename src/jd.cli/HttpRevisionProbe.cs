@@ -10,6 +10,9 @@ namespace jd.cli;
 /// </summary>
 public sealed class HttpRevisionProbe(HttpClient client) : IRevisionProbe
 {
+    /// <summary>The client the CLI uses. It does not follow redirects: the probe judges the revision's own answer, not another host's.</summary>
+    public static HttpClient CreateClient() => new(new SocketsHttpHandler { AllowAutoRedirect = false });
+
     public async Task<ProbeResult> ProbeAsync(string fqdn, Probe probe, CancellationToken cancellationToken)
     {
         using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

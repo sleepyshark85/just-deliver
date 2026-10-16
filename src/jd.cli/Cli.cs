@@ -155,7 +155,7 @@ public static class Cli
     private static async Task<int> DeployAsync(
         DeployOptions options, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend, IRevisionProbe? probe,
         Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken) =>
-        (await ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, options.DryRun, stdout, stderr, cancellationToken, probe)).Code;
+        (await ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, options.DryRun, stdout, stderr, probe ?? HttpProbe(), cancellationToken)).Code;
 
     // Catalog errors name files relative to the catalog root; the person needs the path they can open.
     // An error about the catalog as a whole names no real file and is left as it is.
@@ -177,13 +177,17 @@ public static class Cli
         return null;
     }
 
+    // The probe judges the revision's own answer, so a redirect is a failed probe, not a hop to some other host.
+    internal static IRevisionProbe HttpProbe() => new HttpRevisionProbe(HttpRevisionProbe.CreateClient());
+
+    // The probe is null for a substrate (no runtime to probe).
     internal static Orchestrator CreateOrchestrator(
         TemplateLibrary templates, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend, Func<string, string?> environmentVariable, IRevisionProbe? probe) =>
-        new(backend ?? CreatePulumiBackend(environmentVariable), templates, catalog, environment, probe ?? new HttpRevisionProbe(new HttpClient()));
+        new(backend ?? CreatePulumiBackend(environmentVariable), templates, catalog, environment, probe);
 
     internal static async Task<(int Code, RunReport? Run)> ProvisionAsync(
         string catalogDirectory, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend,
-        Func<string, string?> environmentVariable, bool dryRun, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken, IRevisionProbe? probe = null)
+        Func<string, string?> environmentVariable, bool dryRun, TextWriter stdout, TextWriter stderr, IRevisionProbe? probe, CancellationToken cancellationToken)
     {
         if (await CheckTemplatesAsync(catalogDirectory, [graph], stderr, cancellationToken) is not { } templates)
         {
