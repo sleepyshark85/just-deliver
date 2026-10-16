@@ -13,7 +13,7 @@ using Xunit;
 namespace jd.orchestrator.tests;
 
 // Real resolver, fake backend: the graph is what the resolver makes of a tiny catalog, the backend records what it is asked.
-public class OrchestratorTests
+public partial class OrchestratorTests
 {
     private static readonly EnvironmentDescriptor Env = new("dev", "region-1", "team", new Dictionary<string, string>(), []);
 
@@ -84,13 +84,13 @@ public class OrchestratorTests
     private static async Task<RunReport> DeployRawAsync(FakeBackend backend, string requires = DefaultRequires, Action<NodeReport>? progress = null, string mapping = Mapping)
     {
         var (graph, catalog) = await ResolveAsync(requires, mapping);
-        return await new Orchestrator(backend, backend, catalog, Env).DeployAsync(graph, progress, CancellationToken.None);
+        return await Create(backend, catalog).DeployAsync(graph, progress, CancellationToken.None);
     }
 
     private static async Task<RunReport> PreviewRawAsync(FakeBackend backend)
     {
         var (graph, catalog) = await ResolveAsync();
-        return await new Orchestrator(backend, backend, catalog, Env).PreviewAsync(graph, null, CancellationToken.None);
+        return await Create(backend, catalog).PreviewAsync(graph, null, CancellationToken.None);
     }
 
     // Most tests are about the requirement's nodes; the runtime node, reported first, has its own test.
@@ -101,45 +101,15 @@ public class OrchestratorTests
 
     private static async Task<RunReport> PreviewAsync(FakeBackend backend) => WithoutRuntime(await PreviewRawAsync(backend));
 
-    private sealed class FakeBackend : IBackEndProvider, ITemplateStore
+    // The delay is the probe's: it records the waits and returns at once.
+    private static Orchestrator Create(FakeBackend backend, Catalog catalog, FakeProbe? probe = null)
     {
-        public List<(string Op, DeploymentPackage Package)> Calls { get; } = [];
-        public Dictionary<string, Dictionary<string, ConfigEntry>> State { get; } = [];
-        public Dictionary<string, int> Summary { get; set; } = new() { ["Create"] = 1 };
-        public string? FailOn { get; set; }
-        public bool OmitIdOutput { get; set; }
-
-        public string GetContent(string templateName) => "template:" + templateName;
-
-        public Task<DeploymentResult> DeployAsync(DeploymentPackage package, CancellationToken cancellationToken)
+        probe ??= new FakeProbe(backend.Log);
+        return new Orchestrator(backend, backend, catalog, Env, probe, (span, _) =>
         {
-            Calls.Add(("deploy", package));
-            if (package.StackName == FailOn)
-            {
-                throw new InvalidOperationException("provider exploded");
-            }
-
-            var outputs = new Dictionary<string, ConfigEntry> { ["name"] = new("n-" + package.StackName), ["key"] = new("k-" + package.StackName, isSecret: true) };
-            if (!OmitIdOutput)
-            {
-                outputs["id"] = new("id-" + package.StackName);
-            }
-
-            State[package.StackName] = outputs;
-            return Task.FromResult(new DeploymentResult { Outputs = outputs, Summary = Summary });
-        }
-
-        public Task<DeploymentResult> PreviewAsync(DeploymentPackage package, CancellationToken cancellationToken)
-        {
-            Calls.Add(("preview", package));
-            return Task.FromResult(new DeploymentResult { Outputs = [], Summary = Summary });
-        }
-
-        public Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(string stackName, string deploymentContent, CancellationToken cancellationToken)
-        {
-            Calls.Add(("read", new DeploymentPackage { StackName = stackName, DeploymentContent = deploymentContent, DeploymentParameters = [] }));
-            return Task.FromResult(State.GetValueOrDefault(stackName));
-        }
+            probe.Delays.Add(span);
+            return Task.CompletedTask;
+        });
     }
 
     [Fact]
@@ -151,8 +121,8 @@ public class OrchestratorTests
 
         Assert.True(report.Succeeded);
         Assert.Equal(["shop/dev/thing/group", "shop/dev/thing/app", "shop/dev/thing/app2", "shop/dev/thing/rt"], report.Nodes.Select(n => n.NodeId));
-        Assert.Equal([NodeOutcome.Deployed, NodeOutcome.Deployed, NodeOutcome.Deployed, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
-        Assert.Equal(["shop.dev.thing.group", "shop.dev.thing.app", "shop.dev.thing.app2"], backend.Calls.Select(c => c.Package.StackName));
+        Assert.All(report.Nodes, n => Assert.Equal(NodeOutcome.Deployed, n.Outcome));
+        Assert.Equal(["shop.dev.thing.group", "shop.dev.thing.app", "shop.dev.thing.app2", "shop.dev._workload.runtime", "shop.dev.thing.rt", "shop.dev._workload.runtime"], backend.Calls.Where(c => c.Op == "deploy").Select(c => c.Package.StackName));
         Assert.Equal("template:t/app", backend.Calls[1].Package.DeploymentContent);
         var app = backend.Calls[1].Package.DeploymentParameters;
         Assert.Equal("id-shop.dev.thing.group", app["groupId"].Value);
@@ -169,12 +139,14 @@ public class OrchestratorTests
         var (beta, _) = await ResolveAsync(workloadName: "beta");
         var started = new List<string>();
 
-        var runs = await new Orchestrator(backend, backend, catalog, Env).DeployReleaseAsync([beta, alpha], preview: false, started.Add, null, CancellationToken.None);
+        var runs = await Create(backend, catalog).DeployReleaseAsync([beta, alpha], preview: false, started.Add, null, CancellationToken.None);
 
         Assert.Equal(["beta", "alpha"], started);
         Assert.Equal(["beta", "alpha"], runs.Select(r => r.Workload));
         Assert.All(runs, r => Assert.True(r.Run.Succeeded));
-        Assert.Equal(["beta.dev.thing.group", "beta.dev.thing.app", "beta.dev.thing.app2", "alpha.dev.thing.group", "alpha.dev.thing.app", "alpha.dev.thing.app2"], backend.Calls.Select(c => c.Package.StackName));
+        Assert.Equal(
+            ["beta.dev.thing.group", "beta.dev.thing.app", "beta.dev.thing.app2", "beta.dev._workload.runtime", "beta.dev.thing.rt", "beta.dev._workload.runtime", "alpha.dev.thing.group", "alpha.dev.thing.app", "alpha.dev.thing.app2", "alpha.dev._workload.runtime", "alpha.dev.thing.rt", "alpha.dev._workload.runtime"],
+            backend.Calls.Where(c => c.Op == "deploy").Select(c => c.Package.StackName));
     }
 
     [Fact]
@@ -185,7 +157,7 @@ public class OrchestratorTests
         var (beta, _) = await ResolveAsync(workloadName: "beta");
         var started = new List<string>();
 
-        var runs = await new Orchestrator(backend, backend, catalog, Env).DeployReleaseAsync([alpha, beta], preview: false, started.Add, null, CancellationToken.None);
+        var runs = await Create(backend, catalog).DeployReleaseAsync([alpha, beta], preview: false, started.Add, null, CancellationToken.None);
 
         var run = Assert.Single(runs);
         Assert.Equal("alpha", run.Workload);
@@ -201,7 +173,7 @@ public class OrchestratorTests
         var (alpha, catalog) = await ResolveAsync(workloadName: "alpha");
         var (beta, _) = await ResolveAsync(workloadName: "beta");
 
-        var runs = await new Orchestrator(backend, backend, catalog, Env).DeployReleaseAsync([alpha, beta], preview: true, null, null, CancellationToken.None);
+        var runs = await Create(backend, catalog).DeployReleaseAsync([alpha, beta], preview: true, null, null, CancellationToken.None);
 
         Assert.Equal(["alpha", "beta"], runs.Select(r => r.Workload));
         Assert.DoesNotContain(backend.Calls, c => c.Op == "deploy");
@@ -212,9 +184,9 @@ public class OrchestratorTests
     {
         var report = await DeployAsync(new FakeBackend());
 
-        Assert.Equal(["id", "name"], report.Nodes[0].Outputs.Keys.Order());
+        Assert.Equal(["id", "name", "principalId"], report.Nodes[0].Outputs.Keys.Order());
         Assert.Equal("id-shop.dev.thing.group", report.Nodes[0].Outputs["id"].Value);
-        Assert.Empty(report.Nodes[3].Outputs);
+        Assert.All(report.Nodes, n => Assert.DoesNotContain("key", n.Outputs.Keys));
     }
 
     [Fact]
@@ -259,7 +231,7 @@ public class OrchestratorTests
 
         var report = await DeployAsync(backend);
 
-        Assert.Equal([NodeOutcome.Unchanged, NodeOutcome.Unchanged, NodeOutcome.Unchanged, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
+        Assert.All(report.Nodes, n => Assert.Equal(NodeOutcome.Unchanged, n.Outcome));
     }
 
     [Fact]
@@ -321,7 +293,7 @@ public class OrchestratorTests
 
         var report = await PreviewAsync(backend);
 
-        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.Previewed, NodeOutcome.Previewed, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
+        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.Previewed, NodeOutcome.Previewed], report.Nodes.Select(n => n.Outcome));
         Assert.DoesNotContain(backend.Calls, c => c.Op == "deploy");
         var app = backend.Calls.Single(c => c.Op == "preview" && c.Package.StackName == "shop.dev.thing.app").Package.DeploymentParameters;
         Assert.Equal("id-from-state", app["groupId"].Value);
@@ -335,38 +307,10 @@ public class OrchestratorTests
 
         var report = await PreviewAsync(backend);
 
-        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.PendingUpstream, NodeOutcome.PendingUpstream, NodeOutcome.WaitingForRuntime], report.Nodes.Select(n => n.Outcome));
+        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.PendingUpstream, NodeOutcome.PendingUpstream], report.Nodes.Select(n => n.Outcome));
         Assert.True(report.Succeeded);
         Assert.Contains("field 'groupId' references group.id", report.Nodes[1].Message);
-        Assert.Equal(["shop.dev.thing.group"], backend.Calls.Where(c => c.Op == "preview").Select(c => c.Package.StackName));
-    }
-
-    [Fact]
-    public async Task The_runtime_node_is_reported_first_as_not_deployed_by_the_walk_in_deploy_and_preview()
-    {
-        var backend = new FakeBackend();
-
-        var deployed = await DeployRawAsync(backend);
-        var previewed = await PreviewRawAsync(backend);
-
-        Assert.Equal("shop/dev/@workload/runtime", deployed.Nodes[0].NodeId);
-        Assert.Equal(NodeOutcome.WaitingForRuntime, deployed.Nodes[0].Outcome);
-        Assert.Equal(NodeOutcome.WaitingForRuntime, previewed.Nodes[0].Outcome);
-        Assert.Contains("the runtime is deployed in a later step", deployed.Nodes[0].Message);
-        Assert.DoesNotContain(backend.Calls, c => c.Package.StackName.EndsWith("._workload.runtime", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task A_node_that_depends_on_the_runtime_is_neither_deployed_nor_previewed()
-    {
-        var backend = new FakeBackend();
-
-        var deployed = await DeployAsync(backend);
-        var previewed = await PreviewAsync(backend);
-
-        Assert.DoesNotContain(backend.Calls, c => c.Package.StackName.EndsWith(".rt", StringComparison.Ordinal));
-        Assert.Equal(NodeOutcome.WaitingForRuntime, deployed.Nodes[^1].Outcome);
-        Assert.Equal(NodeOutcome.WaitingForRuntime, previewed.Nodes[^1].Outcome);
+        Assert.Equal(["shop.dev.thing.group", "shop.dev._workload.runtime"], backend.Calls.Where(c => c.Op == "preview").Select(c => c.Package.StackName));
     }
 
     [Fact]
@@ -376,7 +320,7 @@ public class OrchestratorTests
 
         await PreviewAsync(backend); // app and app2 both depend on group, which is not deployed
 
-        Assert.Single(backend.Calls, c => c.Op == "read");
+        Assert.Single(backend.Calls, c => c.Op == "read" && c.Package.StackName == "shop.dev.thing.group");
     }
 
     [Fact]
@@ -385,8 +329,8 @@ public class OrchestratorTests
         var (graph, catalog) = await ResolveAsync();
         var backend = new FakeBackend();
 
-        await Assert.ThrowsAsync<ArgumentException>(() => new Orchestrator(backend, backend, catalog with { Version = "2" }, Env).DeployAsync(graph, null, CancellationToken.None));
-        await Assert.ThrowsAsync<ArgumentException>(() => new Orchestrator(backend, backend, catalog, Env with { Name = "prod" }).PreviewAsync(graph, null, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => Create(backend, catalog with { Version = "2" }).DeployAsync(graph, null, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => new Orchestrator(backend, backend, catalog, Env with { Name = "prod" }, new FakeProbe(backend.Log)).PreviewAsync(graph, null, CancellationToken.None));
         Assert.Empty(backend.Calls);
     }
 
@@ -404,9 +348,8 @@ public class OrchestratorTests
         Assert.Empty(backend.Calls);
     }
 
-    // Only the runtime node reads the workload's variables and the requirements' exports, and the walk does not deploy it until S16. These
-    // tests make it a node of the infrastructure phase, as the release flow will see it, and check the second pass on it. 'group' is a
-    // node name in two scopes (the runtime mapping declares one too): the runtime reads its own scope's by name and the requirement's only through an export.
+    // Only the runtime node reads the workload's variables and the requirements' exports; these tests check the second pass on it.
+    // 'group' is a node name in two scopes (the runtime mapping declares one too): the runtime reads its own scope's by name and the requirement's only through an export.
     private const string ExportingMapping = """
         kind: Mapping
         match: { type: thing }
@@ -444,12 +387,11 @@ public class OrchestratorTests
         var (graph, catalog) = await ResolveAsync(
             DefaultRequires, ExportingMapping, runtimeMapping: RuntimeReadingMapping,
             container: $"container:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n{variables}");
-        var asDeployed = graph with { Nodes = graph.Nodes.Select(n => n.Name == "runtime" ? n with { Phase = Phase.Infrastructure } : n).ToList() };
-        return (await new Orchestrator(backend, backend, catalog, Env).DeployAsync(asDeployed, null, CancellationToken.None), graph);
+        return (await Create(backend, catalog).DeployAsync(graph, null, CancellationToken.None), graph);
     }
 
     private static Dictionary<string, ConfigEntry> Deployed(FakeBackend backend, string stack) =>
-        backend.Calls.Single(c => c.Package.StackName == stack).Package.DeploymentParameters;
+        backend.Calls.First(c => c.Op == "deploy" && c.Package.StackName == stack).Package.DeploymentParameters;
 
     [Fact]
     public async Task A_pending_workload_variable_is_resolved_in_the_second_pass_and_the_variables_are_a_list_sorted_by_name()
@@ -464,7 +406,7 @@ public class OrchestratorTests
         Assert.Equal($$"""[{"name":"ALPHA","value":"lit"},{"name":"MID","value":"x-{{exported}}"},{"name":"ZED","value":"{{exported}}"}]""", runtime["variables"].Value);
         Assert.False(runtime["variables"].IsSecret);
         // The export is deployed first, and the runtime comes after both nodes it reads.
-        var order = backend.Calls.Select(c => c.Package.StackName).ToList();
+        var order = backend.Calls.Where(c => c.Op == "deploy").Select(c => c.Package.StackName).ToList();
         Assert.True(order.IndexOf("shop.dev.thing.group") < order.IndexOf("shop.dev._workload.runtime"));
         Assert.True(order.IndexOf("shop.dev._workload.group") < order.IndexOf("shop.dev._workload.runtime"));
     }
@@ -477,7 +419,7 @@ public class OrchestratorTests
         var withBrokenExport = graph with { Exports = new Dictionary<string, IReadOnlyDictionary<string, EvalResult>> { ["thing"] = new Dictionary<string, EvalResult> { ["out"] = broken } } };
         var backend = new FakeBackend();
 
-        var report = await new Orchestrator(backend, backend, catalog, Env).DeployAsync(withBrokenExport, null, CancellationToken.None);
+        var report = await Create(backend, catalog).DeployAsync(withBrokenExport, null, CancellationToken.None);
 
         Assert.True(report.Succeeded);
     }

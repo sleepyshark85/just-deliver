@@ -1,5 +1,7 @@
 using jd.bp.pulumi;
 using jd.core.bp;
+using jd.orchestrator;
+using jd.resolver.catalog;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace jd.cli.tests;
@@ -71,9 +73,16 @@ public abstract class ProbeAzureTest : IDisposable
         return path;
     }
 
+    /// <summary>The runtime stand-in has no revision to ask, so its probe passes; the real HTTP probe is exercised against a real app by <see cref="EnvUpAzureTests"/>.</summary>
+    private sealed class PassingProbe : IRevisionProbe
+    {
+        public Task<ProbeResult> ProbeAsync(string fqdn, Probe probe, CancellationToken cancellationToken) => Task.FromResult(new ProbeResult(true, "stand-in"));
+    }
+
     /// <summary>
-    /// Every workload needs a runtime mapping. This test-only one points at a template with no resources, so a runtime deploy
-    /// never reaches Azure; it declares the inputs and outputs the release block names.
+    /// Every workload needs a runtime mapping. This test-only one points at a template with no resources, so the release flow
+    /// deploys it without reaching Azure (<see cref="DeployAsync"/> gives the flow a probe that passes: there is no app behind the
+    /// stand-in's fqdn); it declares the inputs and outputs the release block names.
     /// </summary>
     protected void WriteRuntimeStandIn()
     {
@@ -131,7 +140,7 @@ public abstract class ProbeAzureTest : IDisposable
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(["deploy", workload, "--env", environment, "--catalog", catalog], stdout, stderr, CancellationToken.None, backend);
+        var code = await Cli.RunAsync(["deploy", workload, "--env", environment, "--catalog", catalog], stdout, stderr, CancellationToken.None, backend, probe: new PassingProbe());
         return (code, stdout + stderr.ToString());
     }
 }

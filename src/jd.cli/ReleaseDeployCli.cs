@@ -21,7 +21,7 @@ internal static class ReleaseDeployCli
 
     // args are the arguments after "release deploy".
     public static async Task<int> RunAsync(
-        string[] args, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, Func<string, string?> environmentVariable, CancellationToken cancellationToken)
+        string[] args, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe, Func<string, string?> environmentVariable, CancellationToken cancellationToken)
     {
         var (options, problem) = Parse(args);
         if (options is null)
@@ -40,7 +40,7 @@ internal static class ReleaseDeployCli
 
         try
         {
-            return await DeployAsync(options, backend, environmentVariable, stdout, stderr, cancellationToken);
+            return await DeployAsync(options, backend, probe, environmentVariable, stdout, stderr, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -50,7 +50,7 @@ internal static class ReleaseDeployCli
     }
 
     private static async Task<int> DeployAsync(
-        Options options, IBackEndProvider? backend, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        Options options, IBackEndProvider? backend, IRevisionProbe? probe, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var setResult = await ReleaseSetFile.LoadAsync(options.Set, cancellationToken);
         var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog, cancellationToken);
@@ -74,7 +74,7 @@ internal static class ReleaseDeployCli
             return Invalid;
         }
 
-        var orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, backend, environmentVariable);
+        var orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, backend, environmentVariable, probe ?? Cli.HttpProbe());
         var runs = await orchestrator.DeployReleaseAsync(
             graphs,
             options.DryRun,

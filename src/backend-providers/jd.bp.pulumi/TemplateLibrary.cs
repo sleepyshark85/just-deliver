@@ -110,17 +110,23 @@ public sealed class TemplateLibrary : ITemplateStore
                 errors.Add(new LoadError(node.Id, key, $"template '{node.Template}' does not declare the input '{key}'."));
             }
 
-            // The release flow sets the runtime node's suffix and traffic inputs, so the node need not; the template must have them and
-            // the outputs the flow reads.
-            string[] engineInputs = node.Release is { } release ? [release.SuffixInput, release.TrafficInput] : [];
-            if (node.Release is { } named)
+            // The release flow sets the runtime node's suffix and traffic inputs, so the node need not, and must not (a policy can still
+            // set one after the mapping loaded); the template must have them and the outputs the flow reads.
+            string[] engineInputs = [];
+            if (node.Release is { } release)
             {
+                engineInputs = [release.SuffixInput, release.TrafficInput];
                 foreach (var input in engineInputs.Where(i => !template.Inputs.Contains(i)).Order(StringComparer.Ordinal))
                 {
                     errors.Add(new LoadError(node.Id, input, $"template '{node.Template}' does not declare the input '{input}' that the runtime mapping's release block names."));
                 }
 
-                foreach (var output in new[] { named.TrafficOutput, named.RevisionOutput, named.FqdnOutput }.Where(o => !template.Outputs.Contains(o)))
+                foreach (var input in engineInputs.Where(node.Config.ContainsKey).Order(StringComparer.Ordinal))
+                {
+                    errors.Add(new LoadError(node.Id, input, $"the release flow sets the input '{input}'; the runtime node must not."));
+                }
+
+                foreach (var output in new[] { release.TrafficOutput, release.RevisionOutput, release.FqdnOutput }.Where(o => !template.Outputs.Contains(o)))
                 {
                     errors.Add(new LoadError(node.Id, output, $"template '{node.Template}' declares no output '{output}' that the runtime mapping's release block names."));
                 }

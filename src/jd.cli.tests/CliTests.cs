@@ -1,4 +1,3 @@
-using jd.core.bp;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -18,11 +17,11 @@ public sealed class CliTests : IDisposable
 
     private static Task<(int Code, string Out, string Err)> RunAsync(params string[] args) => RunWithAsync(null, args);
 
-    private static async Task<(int Code, string Out, string Err)> RunWithAsync(IBackEndProvider? backend, params string[] args)
+    private static async Task<(int Code, string Out, string Err)> RunWithAsync(RecordingBackend? backend, params string[] args)
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend);
+        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, probe: backend);
         return (code, stdout.ToString(), stderr.ToString());
     }
 
@@ -209,7 +208,7 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
-    public async Task Deploy_deploys_infrastructure_nodes_and_reports_the_rest_as_waiting_for_the_runtime()
+    public async Task Deploy_deploys_the_infrastructure_then_the_runtime_in_steps_with_its_grants_inside_the_grants_step()
     {
         var backend = new RecordingBackend();
 
@@ -217,12 +216,20 @@ public sealed class CliTests : IDisposable
 
         Assert.Equal(0, code);
         Assert.Empty(stderr);
-        Assert.Equal(["deploy just-deliver-sample-app.dev._workload.appinsights", "deploy just-deliver-sample-app.dev.database.container"], backend.Calls);
-        Assert.Contains("just-deliver-sample-app/dev/database/container: deployed (create 1, ", stdout);
-        Assert.Contains("  create azure-native:t:T", stdout);
-        Assert.Contains("just-deliver-sample-app/dev/database/access: waiting for runtime (no changes, ", stdout);
-        Assert.Contains("just-deliver-sample-app/dev/@workload/runtime: waiting for runtime (no changes, ", stdout);
-        Assert.Contains("the runtime is deployed in a later step", stdout);
+        var app = "just-deliver-sample-app";
+        Assert.Equal([$"deploy {app}.dev._workload.appinsights", $"deploy {app}.dev.database.container", $"deploy {app}.dev._workload.runtime"], backend.Calls.Take(3));
+        Assert.Equal([$"deploy {app}.dev._workload.appinsights-access", $"deploy {app}.dev.database.access"], backend.Calls.Skip(3).Take(2).Order(StringComparer.Ordinal));
+        Assert.Equal("probe out-latestRevisionFqdn/health", backend.Calls[5]);
+        Assert.Equal($"deploy {app}.dev._workload.runtime", backend.Calls[6]); // the shift, also on a first deploy
+        Assert.Equal(7, backend.Calls.Count);
+        Assert.Contains($"{app}/dev/database/container: deployed (create 1, ", stdout);
+        Assert.Contains($"{app}/dev/database/access: deployed (create 1, ", stdout);
+        // The runtime is reported last, one line per step.
+        var lines = stdout.ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var runtime = Array.FindIndex(lines, l => l.StartsWith($"{app}/dev/@workload/runtime: deployed (create 1, ", StringComparison.Ordinal));
+        Assert.Equal(
+            ["  create azure-native:t:T", "  dark: done (out-latestRevisionName)", "  grants: done", "  probe: done (HTTP 200)", "  shift: done (out-latestRevisionName)"],
+            lines[(runtime + 1)..].ToList());
     }
 
     [Fact]
@@ -235,6 +242,26 @@ public sealed class CliTests : IDisposable
         Assert.Equal(0, code);
         Assert.All(backend.Calls, call => Assert.StartsWith("preview ", call));
         Assert.Contains("database/container: previewed (create 1, ", stdout);
+        Assert.Contains("@workload/runtime: pending upstream", stdout); // it reads outputs of nodes a preview does not deploy
+    }
+
+    [Fact]
+    public async Task A_revision_that_fails_its_probe_exits_1_naming_the_probe_step_and_is_never_shifted()
+    {
+        // One second of retrying instead of the mapping's five minutes.
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        var mapping = Path.Combine(catalog, "mappings", "runtime", "container-app.yaml");
+        File.WriteAllText(mapping, File.ReadAllText(mapping).Replace("timeoutSeconds: 300, intervalSeconds: 5", "timeoutSeconds: 1, intervalSeconds: 1", StringComparison.Ordinal));
+        var backend = new RecordingBackend { ProbePasses = false };
+
+        var (code, stdout, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Contains("jd: stopped at just-deliver-sample-app/dev/@workload/runtime: probe: HTTP 503 after 2 attempts", stderr);
+        Assert.Contains("  probe: failed (HTTP 503 after 2 attempts)", stdout);
+        Assert.Single(backend.Calls, call => call == "deploy just-deliver-sample-app.dev._workload.runtime"); // the dark deploy only, no shift
+        Assert.Equal(2, backend.Calls.Count(call => call.StartsWith("probe ", StringComparison.Ordinal)));
     }
 
     [Fact]

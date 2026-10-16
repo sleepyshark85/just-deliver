@@ -79,7 +79,7 @@ internal static class EnvCli
             return Invalid;
         }
 
-        var (code, run) = await Cli.ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, dryRun: false, stdout, stderr, cancellationToken);
+        var (code, run) = await Cli.ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, dryRun: false, stdout, stderr, probe: null, cancellationToken);
         if (run is null || code != Success)
         {
             return code;
