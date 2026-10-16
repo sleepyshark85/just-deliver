@@ -52,7 +52,9 @@ public enum StepOutcome
 /// <param name="Step">Which step.</param>
 /// <param name="Outcome">What happened to it.</param>
 /// <param name="Detail">The new revision, the probe's last answer or the failure reason; empty when there is nothing to add.</param>
-public sealed record StepReport(Step Step, StepOutcome Outcome, string Detail);
+/// <param name="Elapsed">How long the step took; zero when it only was planned. The steps of a node add up to no more than the node's elapsed time.</param>
+/// <param name="Attempts">The probe's attempts; zero for every other step.</param>
+public sealed record StepReport(Step Step, StepOutcome Outcome, string Detail, TimeSpan Elapsed = default, int Attempts = 0);
 
 /// <param name="NodeId">The graph node's id.</param>
 /// <param name="Outcome">What happened to the node.</param>
@@ -84,4 +86,7 @@ public sealed record RunReport(IReadOnlyList<NodeReport> Nodes)
 }
 
 /// <summary>One workload's part of a release run.</summary>
-public sealed record WorkloadRun(string Workload, RunReport Run);
+/// <param name="Workload">The workload's name.</param>
+/// <param name="Run">Its nodes' reports.</param>
+/// <param name="Elapsed">How long the workload took, all its nodes.</param>
+public sealed record WorkloadRun(string Workload, RunReport Run, TimeSpan Elapsed);
