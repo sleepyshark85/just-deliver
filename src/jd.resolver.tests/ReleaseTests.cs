@@ -71,6 +71,19 @@ public sealed class ReleaseTests : IDisposable
     }
 
     [Fact]
+    public async Task Loading_a_set_hands_back_the_exact_bytes_it_verified()
+    {
+        var set = await BuildAsync(WriteManifest(("web-app", ["web-db"]), ("web-db", [])));
+        var path = Path.Combine(_temp, "set.yaml");
+        await ReleaseSetFile.WriteAsync(set, path);
+
+        var loaded = await ReleaseSetFile.LoadAsync(path);
+
+        Assert.Empty(loaded.Errors);
+        Assert.Equal(await File.ReadAllBytesAsync(path), loaded.Bytes.ToArray());
+    }
+
+    [Fact]
     public async Task A_manifest_that_breaks_its_schema_is_reported_with_the_file()
     {
         var path = Path.Combine(_temp, "manifest.yaml");
