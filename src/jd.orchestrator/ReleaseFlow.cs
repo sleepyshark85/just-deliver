@@ -147,7 +147,9 @@ internal sealed class ReleaseFlow(
     // The config part hashes the template and the filled config, secret flags included; the engine's own inputs are not config. Azure
     // rejects a suffix that names an existing revision, so the same config as the previous deploy reuses its suffix (it is that revision),
     // and any other config, a revert included, gets a salt derived from the previous suffix. Residual: a 24-bit salt collision on a
-    // config deployed before names an existing revision, which Azure rejects at the dark step.
+    // config deployed before names an existing revision, which Azure rejects at the dark step. So does a same-config re-run after a dark
+    // deploy that failed once Azure had created the revision (an image that cannot be pulled, a transient error): the outputs keep the old
+    // suffix, so the suffix repeats until the config changes. Traffic is unaffected.
     private static string Suffix(DeploymentPackage package, RuntimeRelease release, string previous)
     {
         var canonical = new JArray(package.DeploymentContent, new JArray(package.DeploymentParameters

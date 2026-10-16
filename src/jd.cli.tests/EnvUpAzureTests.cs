@@ -131,7 +131,7 @@ public sealed class EnvUpAzureTests : IDisposable
     // The revisions of the app by name with their traffic weight (a revision without traffic reports none).
     private Dictionary<string, int> Revisions(string appId)
     {
-        var result = _az.Run("rest", "--method", "get", "--url", $"https://management.azure.com{appId}/revisions?api-version=2024-03-01", "--query", "value[].{name:name,weight:properties.trafficWeight}", "-o", "json");
+        var result = _az.Run("rest", "--method", "get", "--url", $"{appId}/revisions?api-version=2024-03-01", "--query", "value[].{name:name,weight:properties.trafficWeight}", "-o", "json");
         return result.Code == 0
             ? System.Text.Json.JsonDocument.Parse(result.Output).RootElement.EnumerateArray().ToDictionary(
                 revision => revision.GetProperty("name").GetString()!,

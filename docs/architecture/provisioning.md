@@ -221,7 +221,9 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   and probes and shifts it, creating no other); otherwise (first deploy, changed config or template, a revert) the salt is the first 6 hex
   digits of the SHA-256 of the previous suffix (of the empty string when there is none), so A to B to A gives A a new suffix and the old
   config is redeployed as a new revision. Residual: a 24-bit salt collision on a config deployed before names an existing revision, and
-  Azure rejects it at the dark step.
+  Azure rejects it at the dark step. The salt depends only on the previous suffix, so if a dark deploy fails after Azure has created the
+  revision (an image that cannot be pulled, a transient ARM error), the outputs keep the old suffix and a same-config re-run computes the
+  same suffix and is rejected until the config changes, which a fixed image does; traffic is unaffected.
   **Live revision:** read from the stack before the dark deploy: the template echoes the traffic it was last given as an output (the
   mapping's `trafficOutput`), and the live revision is the last item with a `revisionKey` (none on a first deploy, or when only
   `latestKey` items are there); the app's `latestReadyRevisionName` is the newest revision, not the live one, so it cannot tell. **Unchanged:** the dark deploy
