@@ -48,8 +48,9 @@ public sealed class Orchestrator(
         foreach (var graph in graphs)
         {
             workloadStarted?.Invoke(graph.Workload);
+            var started = Stopwatch.GetTimestamp();
             var run = preview ? await PreviewAsync(graph, progress, cancellationToken) : await DeployAsync(graph, progress, cancellationToken);
-            runs.Add(new WorkloadRun(graph.Workload, run));
+            runs.Add(new WorkloadRun(graph.Workload, run, Stopwatch.GetElapsedTime(started)));
             if (!run.Succeeded)
             {
                 break;

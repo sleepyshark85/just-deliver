@@ -60,7 +60,10 @@ public static class ReleaseSetFile
             return new ReleaseSetResult(null, [new LoadError(path, string.Empty, "release set not found.")]);
         }
 
-        var (body, parseErrors) = await ReleaseDocument.ParseAsync(path, await File.ReadAllTextAsync(path, cancellationToken), ReleaseDocument.SetSchema, cancellationToken);
+        // One read: the text parsed here and the bytes handed back are the same file content.
+        var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+        using var reader = new StreamReader(new MemoryStream(bytes), detectEncodingFromByteOrderMarks: true);
+        var (body, parseErrors) = await ReleaseDocument.ParseAsync(path, await reader.ReadToEndAsync(cancellationToken), ReleaseDocument.SetSchema, cancellationToken);
         if (body is null)
         {
             return new ReleaseSetResult(null, parseErrors);
@@ -91,6 +94,6 @@ public static class ReleaseSetFile
 
         return errors.Count > 0
             ? new ReleaseSetResult(null, errors)
-            : await ReleaseBuilder.ComposeAsync(path, (string)body["label"]!, createdAt, sources, cancellationToken);
+            : await ReleaseBuilder.ComposeAsync(path, (string)body["label"]!, createdAt, sources, cancellationToken) with { Bytes = bytes };
     }
 }

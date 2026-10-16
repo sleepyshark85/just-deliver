@@ -19,4 +19,5 @@ public sealed record ReleaseSet(string Label, DateTimeOffset CreatedAt, IReadOnl
 /// <summary><see cref="Set"/> is set exactly when <see cref="Errors"/> is empty.</summary>
 /// <param name="Set">The release set, when there are no errors.</param>
 /// <param name="Errors">Every problem found.</param>
-public sealed record ReleaseSetResult(ReleaseSet? Set, IReadOnlyList<LoadError> Errors);
+/// <param name="Bytes">The exact bytes of the file <see cref="ReleaseSetFile.LoadAsync"/> verified (empty when the set was built from a manifest), so what is kept is what was checked.</param>
+public sealed record ReleaseSetResult(ReleaseSet? Set, IReadOnlyList<LoadError> Errors, ReadOnlyMemory<byte> Bytes = default);

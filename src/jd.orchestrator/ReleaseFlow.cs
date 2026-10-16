@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -37,9 +38,18 @@ internal sealed class ReleaseFlow(
         var steps = new List<StepReport>();
         var step = Step.Dark;
         DeploymentResult? dark = null;
-        NodeReport Stop(string reason)
+        // Each step is timed from the end of the one before (the first from the start of the flow), so the steps never add up to more than the node.
+        var clock = Stopwatch.StartNew();
+        StepReport Report(Step reported, StepOutcome outcome, string detail, int attempts = 0)
         {
-            steps.Add(new StepReport(step, StepOutcome.Failed, reason));
+            var report = new StepReport(reported, outcome, detail, clock.Elapsed, attempts);
+            clock.Restart();
+            return report;
+        }
+
+        NodeReport Stop(string reason, int attempts = 0)
+        {
+            steps.Add(Report(step, StepOutcome.Failed, reason, attempts));
             return NodeReport.For(node, NodeOutcome.Failed, $"{step.ToString().ToLowerInvariant()}: {reason}", dark, steps);
         }
 
@@ -76,7 +86,7 @@ internal sealed class ReleaseFlow(
                 return Stop($"the deploy exported no '{release.RevisionOutput}'.");
             }
 
-            steps.Add(new StepReport(Step.Dark, StepOutcome.Done, revision));
+            steps.Add(Report(Step.Dark, StepOutcome.Done, revision));
 
             step = Step.Grants;
             if (await deployDependants(dark.Outputs) is { } reason)
@@ -84,13 +94,13 @@ internal sealed class ReleaseFlow(
                 return Stop(reason);
             }
 
-            steps.Add(new StepReport(Step.Grants, StepOutcome.Done, string.Empty));
+            steps.Add(Report(Step.Grants, StepOutcome.Done, string.Empty));
 
             // Same config and the live revision is the one just deployed: nothing new to check or shift.
             if (!dark.HasChanges && revision == live)
             {
-                steps.Add(new StepReport(Step.Probe, StepOutcome.Skipped, string.Empty));
-                steps.Add(new StepReport(Step.Shift, StepOutcome.Skipped, string.Empty));
+                steps.Add(Report(Step.Probe, StepOutcome.Skipped, string.Empty));
+                steps.Add(Report(Step.Shift, StepOutcome.Skipped, string.Empty));
                 return NodeReport.For(node, NodeOutcome.Unchanged, string.Empty, dark, steps);
             }
 
@@ -101,18 +111,18 @@ internal sealed class ReleaseFlow(
                 return Stop($"the deploy exported no '{release.FqdnOutput}' to probe.");
             }
 
-            var result = await ProbeAsync(fqdn, spec, cancellationToken);
+            var (result, attempts) = await ProbeAsync(fqdn, spec, cancellationToken);
             if (!result.Passed)
             {
-                return Stop(result.Detail);
+                return Stop(result.Detail, attempts);
             }
 
-            steps.Add(new StepReport(Step.Probe, StepOutcome.Done, result.Detail));
+            steps.Add(Report(Step.Probe, StepOutcome.Done, result.Detail, attempts));
 
             step = Step.Shift;
             // Also on a first deploy: it makes the stack's traffic name the revision, which is how the next run finds the live one.
             var shifted = await provider.DeployAsync(With(Traffic(release, revision)), cancellationToken);
-            steps.Add(new StepReport(Step.Shift, StepOutcome.Done, revision));
+            steps.Add(Report(Step.Shift, StepOutcome.Done, revision));
 
             // The last deploy's outputs name the live revision (the traffic), so the persisted report carries them.
             return NodeReport.For(node, NodeOutcome.Deployed, string.Empty, shifted, steps);
@@ -124,7 +134,8 @@ internal sealed class ReleaseFlow(
     }
 
     // The probe is retried every interval until the timeout, so grants that take minutes to propagate do not fail a healthy revision.
-    private async Task<ProbeResult> ProbeAsync(string fqdn, Probe spec, CancellationToken cancellationToken)
+    // Returns the last answer and how many attempts were made.
+    private async Task<(ProbeResult Result, int Attempts)> ProbeAsync(string fqdn, Probe spec, CancellationToken cancellationToken)
     {
         var attempts = 1 + spec.TimeoutSeconds / spec.IntervalSeconds;
         for (var attempt = 1; ; attempt++)
@@ -132,12 +143,12 @@ internal sealed class ReleaseFlow(
             var result = await probe.ProbeAsync(fqdn, spec, cancellationToken);
             if (result.Passed)
             {
-                return result;
+                return (result, attempt);
             }
 
             if (attempt == attempts)
             {
-                return result with { Detail = $"{result.Detail} after {attempts.ToString(CultureInfo.InvariantCulture)} attempts" };
+                return (result with { Detail = $"{result.Detail} after {attempts.ToString(CultureInfo.InvariantCulture)} attempts" }, attempt);
             }
 
             await delay(TimeSpan.FromSeconds(spec.IntervalSeconds), cancellationToken);

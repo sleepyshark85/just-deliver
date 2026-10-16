@@ -69,8 +69,8 @@ public partial class OrchestratorTests
         Assert.All(probe.Delays, d => Assert.Equal(TimeSpan.FromSeconds(5), d));
         Assert.Equal("probe: HTTP 503 after 13 attempts", runtime.Message);
         Assert.Equal(
-            [new StepReport(Step.Dark, StepOutcome.Done, "app--" + Parameter(RuntimeDeploys(backend)[0], "suffix")), new StepReport(Step.Grants, StepOutcome.Done, string.Empty), new StepReport(Step.Probe, StepOutcome.Failed, "HTTP 503 after 13 attempts")],
-            runtime.Steps);
+            [(Step.Dark, StepOutcome.Done, "app--" + Parameter(RuntimeDeploys(backend)[0], "suffix"), 0), (Step.Grants, StepOutcome.Done, string.Empty, 0), (Step.Probe, StepOutcome.Failed, "HTTP 503 after 13 attempts", 13)],
+            runtime.Steps?.Select(s => (s.Step, s.Outcome, s.Detail, s.Attempts)));
         Assert.Single(RuntimeDeploys(backend)); // the dark deploy; no shift
         Assert.Equal(runtime, report.Nodes[^1]);
     }
@@ -168,7 +168,7 @@ public partial class OrchestratorTests
 
         var runtime = Runtime(report);
         Assert.Equal("dark: provider exploded", runtime.Message);
-        Assert.Equal([new StepReport(Step.Dark, StepOutcome.Failed, "provider exploded")], runtime.Steps);
+        Assert.Equal([(Step.Dark, StepOutcome.Failed, "provider exploded")], runtime.Steps?.Select(s => (s.Step, s.Outcome, s.Detail)));
         Assert.DoesNotContain(backend.Log, entry => entry.EndsWith(".rt", StringComparison.Ordinal));
     }
 

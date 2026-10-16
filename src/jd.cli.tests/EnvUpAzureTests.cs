@@ -1,3 +1,4 @@
+using System.Text.Json;
 using jd.bp.pulumi;
 using jd.core.bp;
 using jd.resolver.environment;
@@ -107,13 +108,28 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.DoesNotContain(": deployed", output);
     }
 
-    private static async Task<(int Code, string Output)> ReleaseAsync(IBackEndProvider backend, params string[] args)
+    // The directory of the release records (JD_RECORDS_DIR); the identity of a release deploy is the ARM_* principal of the process.
+    private string Records => Path.Combine(_root, "records");
+
+    private async Task<(int Code, string Output)> ReleaseAsync(IBackEndProvider backend, params string[] args)
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(["release", .. args], stdout, stderr, CancellationToken.None, backend);
+        Directory.CreateDirectory(Records);
+        var code = await Cli.RunAsync(
+            ["release", .. args], stdout, stderr, CancellationToken.None, backend, name => name == "JD_RECORDS_DIR" ? Records : System.Environment.GetEnvironmentVariable(name));
         return (code, stdout + stderr.ToString());
     }
+
+    // The records of a label on dev, oldest first.
+    private List<JsonElement> RecordsOf(string label) =>
+        Directory.GetFiles(Path.Combine(Records, DevName, label), "*-deploy.json").Order(StringComparer.Ordinal).Select(file =>
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(file));
+            return document.RootElement.Clone();
+        }).ToList();
+
+    private static string Oq(JsonElement record, int workload) => record.GetProperty("workloads")[workload].GetProperty("oq").GetProperty("status").GetString() ?? string.Empty;
 
     // The value of an environment variable of the Container App's container (its Azure resource id).
     private string AppEnv(string appId, string name)
@@ -139,11 +155,11 @@ public sealed class EnvUpAzureTests : IDisposable
             : throw new InvalidOperationException($"az rest revisions of {appId} failed: {result.Error}");
     }
 
-    // The sample manifest and workloads in a new folder, with the sample worker's container variable naming a container that does not
-    // exist: the worker's /health answers 503. The worker is first in the set; the app depends on it.
-    private async Task<string> BadReleaseSetAsync(IBackEndProvider backend)
+    // The sample manifest and workloads in a new folder under the given label, with the sample worker's container variable naming a
+    // container that does not exist: the worker's /health answers 503. The worker is first in the set; the app depends on it.
+    private async Task<string> BadReleaseSetAsync(IBackEndProvider backend, string label)
     {
-        var folder = Path.Combine(_root, "bad");
+        var folder = Path.Combine(_root, "bad-" + label);
         Directory.CreateDirectory(folder);
         var samples = Path.Combine(AppContext.BaseDirectory, "samples");
         foreach (var workload in new[] { "sample-app", "sample-worker" })
@@ -154,7 +170,9 @@ public sealed class EnvUpAzureTests : IDisposable
             File.WriteAllText(Path.Combine(folder, workload + ".yaml"), bad);
         }
 
-        File.WriteAllText(Path.Combine(folder, "manifest.yaml"), File.ReadAllText(Path.Combine(samples, "releases", "sample.manifest.yaml")).Replace("../workloads/", string.Empty, StringComparison.Ordinal));
+        File.WriteAllText(
+            Path.Combine(folder, "manifest.yaml"),
+            File.ReadAllText(Path.Combine(samples, "releases", "sample.manifest.yaml")).Replace("../workloads/", string.Empty, StringComparison.Ordinal).Replace("label: 1.0.0", $"label: {label}", StringComparison.Ordinal));
         var set = Path.Combine(folder, "release.yaml");
         var (code, output) = await ReleaseAsync(backend, "create", Path.Combine(folder, "manifest.yaml"), "--out", set);
         Assert.True(code == 0, output);
@@ -228,6 +246,13 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal(2, releaseLines.Count(line => line.Trim() == "probe: done (HTTP 200)"));
         Assert.Equal(2, releaseLines.Count(line => line.Trim().StartsWith("shift: done", StringComparison.Ordinal)));
 
+        // The deploy left a record naming the principal the run authenticated with (as Entra reports it) and a passed OQ for each workload.
+        var firstRecord = Assert.Single(RecordsOf("1.0.0"));
+        Assert.Equal("succeeded", firstRecord.GetProperty("outcome").GetString());
+        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), firstRecord.GetProperty("identity").GetProperty("clientId").GetString());
+        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_TENANT_ID"), firstRecord.GetProperty("identity").GetProperty("tenantId").GetString());
+        Assert.Equal(["passed", "passed"], [Oq(firstRecord, 0), Oq(firstRecord, 1)]);
+
         var containers = Az("cosmosdb", "sql", "container", "list", "--account-name", account, "--resource-group", sharedGroup, "--database-name", database, "--query", "[].name")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         Assert.Equal(2, containers.Length);
@@ -265,7 +290,12 @@ public sealed class EnvUpAzureTests : IDisposable
         var goodApp = Revisions(sampleApp);
         var good = Assert.Single(goodWorker);
         Assert.Equal(100, good.Value);
-        var (badCode, badOutput) = await ReleaseAsync(backend, "deploy", await BadReleaseSetAsync(backend), "--env", devDescriptor, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog"));
+        // A different set under the label of the good one is refused before anything is deployed (set.yaml keeps the first one).
+        var (refusedCode, refusedOutput) = await ReleaseAsync(backend, "deploy", await BadReleaseSetAsync(backend, "1.0.0"), "--env", devDescriptor, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog"));
+        Assert.NotEqual(0, refusedCode);
+        Assert.Contains("holds a different release set", refusedOutput, StringComparison.Ordinal);
+        Assert.Equal(2, RecordsOf("1.0.0").Count);
+        var (badCode, badOutput) = await ReleaseAsync(backend, "deploy", await BadReleaseSetAsync(backend, "1.0.1-bad"), "--env", devDescriptor, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog"));
         var badLines = badOutput.ReplaceLineEndings("\n").Split('\n').Select(line => line.Trim()).ToList();
         Assert.NotEqual(0, badCode);
         Assert.Contains(badLines, line => line.StartsWith("probe: failed", StringComparison.Ordinal));
@@ -276,6 +306,10 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal(100, afterBad[good.Key]);
         Assert.Equal(0, afterBad.Single(revision => revision.Key != good.Key).Value);
         Assert.Equal(goodApp, Revisions(sampleApp));
+        var badRecord = Assert.Single(RecordsOf("1.0.1-bad"));
+        Assert.Equal("failed", badRecord.GetProperty("outcome").GetString());
+        Assert.Equal(["failed", "notRun"], [Oq(badRecord, 0), Oq(badRecord, 1)]);
+        Assert.Equal(["just-deliver-sample-app"], badRecord.GetProperty("notStarted").EnumerateArray().Select(name => name.GetString()));
 
         // Going back to the good release deploys the old config as a new revision, probed and given all the traffic; the app is unchanged.
         var (revertCode, revertOutput) = await ReleaseAsync(backend, deploy);
@@ -285,5 +319,12 @@ public sealed class EnvUpAzureTests : IDisposable
         var live = Assert.Single(reverted, revision => revision.Value == 100).Key;
         Assert.DoesNotContain(live, afterBad.Keys);
         Assert.Equal(goodApp, Revisions(sampleApp));
+
+        // The good release's records: the first deploy, the re-run that changed nothing and the revert, each its own file.
+        var records = RecordsOf("1.0.0");
+        Assert.Equal(3, records.Count);
+        Assert.All(records, record => Assert.Equal("succeeded", record.GetProperty("outcome").GetString()));
+        Assert.Equal(["unchanged", "unchanged"], [Oq(records[1], 0), Oq(records[1], 1)]);
+        Assert.Equal("passed", Oq(records[2], 0));
     }
 }

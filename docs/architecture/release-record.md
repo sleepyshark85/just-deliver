@@ -1,6 +1,6 @@
 # Release record and qualification
 
-> Status: design note for S17 (MVP), not yet built. Addresses [E52](../open-questions.md); the audit store (F39) is out of scope.
+> Status: design note for S17 (MVP). S17a (identity) and S17b (record, OQ, timings, `set.yaml`) are built; IQ and `release qualify` (S17c) are not. Addresses [E52](../open-questions.md); the audit store (F39) is out of scope.
 > Builds on [release.md](release.md) (the set), [provisioning.md](provisioning.md) (the walk and release flow) and
 > [ADR 0007](../decisions/0007-definition-upload-snapshot.md). Approvals (S18, F54) and promotion (S19) will use the same records.
 
@@ -18,10 +18,13 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
   `deploy` or `qualify`. The environment name and the label are both format-restricted (they match the id and label patterns), and the store
   rejects anything with a separator or `..` anyway.
 - **Write-once:** the file is created with `FileMode.CreateNew` (as `ReleaseSetFile` does), so an existing path is an error and
-  nothing is ever opened for write twice. A re-run writes a **new** file; a failed run writes one too (outcome `failed`). A preview, a
+  nothing is ever opened for write twice. The time in the name is the **finish** time (when the file is written), so the newest file is the
+  last attempt to complete. A re-run writes a **new** file; a failed run writes one too (outcome `failed`). A preview, a
   usage error or a resolution error writes none (nothing was deployed). A killed process writes none: the file is written at the end.
   If the write itself fails after a deploy, the run exits 1 and says so; the deployment stays.
-- **Format:** JSON, `kind: ReleaseRecord`, contract in `schemas/release-record.schema.json` (as the set and manifest have), pinned by a test.
+- **Format:** JSON, `kind: ReleaseRecord`, contract in `schemas/release-record.schema.json` (as the set and manifest have), pinned by a test
+  (a committed golden record, validated against the schema). The schema has **no `iq` property yet**; S17c adds it as an optional one, so
+  records written before it stay valid.
 - **Finding it later (S18, S19; named, not built):** the records of label X on environment Y are the files in `<records>/Y/X/`.
   An approval is *another* file in that directory (`…-approve.json`) that names the record's file name and the SHA-256 of its bytes (a
   record cannot contain its own hash). "Qualified" is derived, never stored: the newest `deploy` record has outcome `succeeded` and, for every
@@ -30,10 +33,10 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 - **The set itself is kept beside the records, as ADR 0007 requires:** `<records>/<environment>/<label>/set.yaml` holds the set file's exact
   bytes (the definitions as received). It is created with `CreateNew` on the label's first attempt. On every later attempt the existing file
   must hash equal to the set being deployed; otherwise the run is refused before anything is deployed (a different set under the same label).
-  It is never overwritten. Records refer to it by `setSha256`.
+  It is never overwritten. Records refer to it by `setSha256`. *Residual:* it is written in place, not through a temp file and rename, so a crash in the middle of the write leaves a truncated `set.yaml`, which the next attempt reports as a different set; delete it by hand.
 - **Order of a recorded run (S17b):** parse and resolve everything (as today, no backend call); then obtain the deployer identity, token
   included; then check or create `set.yaml`; then the first backend call. A bad credential or a different set under the label therefore stops
-  the run before anything is deployed. `release qualify` follows the same order and also creates `set.yaml` when it is missing.
+  the run before anything is deployed (exit 1; a missing or invalid `JD_RECORDS_DIR` is a usage error, exit 2, checked first). `release qualify` follows the same order and also creates `set.yaml` when it is missing.
 - **`jd deploy <workload>` writes no record:** it has no label; the release is the unit that is deployed and promoted. It is the unrecorded
   development path ([usage.md](../usage.md)); the evidence of S20 comes from release sets.
 
@@ -51,6 +54,11 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 | `identity` | the identity port (section 3) |
 | `oq` per workload, `iq` | sections 4 to 6 |
 
+- **As built:** the record has `workloads` in deploy order, each with its pinned fields, `graph` (`sha256` and the nodes as `{id, template, stack,
+  phase, hash}`), `run` (absent when the workload was not started: `elapsedSeconds` and its nodes with outcome, change counts, message, elapsed
+  and, for the runtime node, the steps) and `oq`; at the top `outcome`, `failure` (`{workload, node}`, only when failed), `notStarted`, `identity`,
+  `environment`, `release` (`label`, `createdAt`, `setSha256`) and `deploySeconds`. `failure.node` is the last node of the failed workload's
+  report: the runtime node when one of its steps failed (its message reads `<step>: <reason>`).
 - **The graph is stored as hashes, not config.** The node hashes and `graphSha256` let anyone check that a graph resolved from the
   set, the catalog and the environment matches the one that was deployed (hashes are deterministic, S07); this also keeps config out of the record. The records carry the definitions' SHA-256
   and the set file's; the definition text itself is the verified `set.yaml` beside them (ADR 0007: the platform keeps what it receives), so
@@ -71,7 +79,9 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 The principal the run authenticated with, `{tenantId, clientId, objectId}`, from a port `IDeployerIdentity` in `jd.core` (`identity/`, beside the
 `IBackEndProvider` port). Its adapter (new project `jd.azure`, which references only `jd.core` and Azure SDKs; `HttpRevisionProbe` in the CLI
 is the precedent for adapters at the root, but an Azure SDK reference belongs behind a boundary, enforced by `tools/verify.sh`) builds a `ClientSecretCredential` from `ARM_TENANT_ID`, `ARM_CLIENT_ID` and
-`ARM_CLIENT_SECRET`, the variables Pulumi uses, gets an ARM token and reads `tid`, `appid` and `oid` from it. Reading the claims without validating the
+`ARM_CLIENT_SECRET`, the variables Pulumi uses, gets an ARM token and reads `tid`, `appid` and `oid` from it. A credential Entra refuses
+(`AuthenticationFailedException`) is turned into an `InvalidOperationException` that names the three variables and carries neither the SDK's
+text nor any value; the CLI prints it and stops (exit 1) before the backend is called. Reading the claims without validating the
 signature is sound: the token came straight from Entra over TLS in this call, and the claims are what Entra says the credential is, not
 what the environment says. The CLI refuses to deploy if the variables are missing (Pulumi would otherwise fall back to an ambient `az` login that
 the record could not name), and never prints the secret (`ArmCredentials` is a class, so no generated `ToString` can). The ARM token scope is a named constant in

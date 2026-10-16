@@ -125,7 +125,7 @@ workloads:
 | `release create <manifest> --out <set>` | Validates every listed workload definition, requires each image to be pinned by digest (`@sha256:` and 64 hex digits; a tag is rejected), checks names and dependencies, works out the deploy order and writes the release set. Refuses to overwrite an existing file: sets are immutable, so a changed release gets a new file. Prints every problem as `file: location: message`. |
 | `release show <set>` | Re-verifies each embedded definition against its recorded SHA-256 and re-applies the create rules, then prints (derived from the definitions) the label, the deploy order and, per workload, team, definition SHA-256, image and dependencies. A modified set, or one that breaks a rule, is an error (exit 1). |
 
-| `release deploy <set> --env <environment> --catalog <dir> [--preview]` | Loads the set (re-verifying it like `show`), resolves **every** workload on the environment and checks every graph against the templates, and only then deploys each workload (infrastructure, then the runtime release) in the set's deploy order. Same resolver, template check and orchestrator as `jd deploy`, and the same backend variables (`PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE`). **Creates real Azure resources.** |
+| `release deploy <set> --env <environment> --catalog <dir> [--preview]` | Loads the set (re-verifying it like `show`), resolves **every** workload on the environment and checks every graph against the templates, and only then deploys each workload (infrastructure, then the runtime release) in the set's deploy order. Same resolver, template check and orchestrator as `jd deploy`, and the same backend variables (`PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE`), plus `JD_RECORDS_DIR` and the `ARM_*` principal (below) unless `--preview`. **Creates real Azure resources.** |
 
 Exit codes are the same as above (a manifest, set or `--out` path problem is 2; invalid content is 1).
 
@@ -142,4 +142,17 @@ Exit codes are the same as above (a manifest, set or `--out` path problem is 2; 
   not started (listed in the summary), and what was already deployed stays. Running the command again resumes: deployed
   nodes report `unchanged`. Rolling earlier workloads back is not done (open question E31).
 - `--preview` walks the same order and creates nothing; the summary says `previewed`.
-- The release record and qualification are later slices (S17).
+- **The release record** (not with `--preview`): one JSON file per attempt, written at the end of the run (also when it failed), never edited:
+  `<JD_RECORDS_DIR>/<environment>/<label>/<UTC yyyyMMddTHHmmssfffZ>-deploy.json`; the line `record: <path>` names it. It holds the outcome
+  (and the failing workload and node, and the workloads not started), who deployed, what was pinned (hashes, not config), what ran with change
+  **counts**, timings, and the operational qualification (OQ) of each workload read from its probe: `passed`, `failed`, `unchanged` (the revision
+  was already live) or `notRun`. Contract: `schemas/release-record.schema.json`; design: [release-record.md](architecture/release-record.md).
+  Installation qualification (IQ) and `jd release qualify` are a later slice (S17c).
+  - `JD_RECORDS_DIR` is **required**: an existing directory (exit 2 and what to set otherwise, before anything is created). Keep it
+    somewhere durable; it is the evidence, and nothing in it is a secret.
+  - **Who deployed** is the service principal in `ARM_TENANT_ID`, `ARM_CLIENT_ID` and `ARM_CLIENT_SECRET` (the variables Pulumi uses too),
+    as Entra reports it for an access token obtained in this run. Missing variables or a refused credential stop the run (exit 1) before
+    anything is deployed; the secret is never printed.
+  - `<records>/<environment>/<label>/set.yaml` is the set file's exact bytes, kept on the label's first attempt. A later attempt under the same
+    label with a different set is refused (exit 1) before anything is deployed: use a new label. It is never overwritten.
+  - If the record itself cannot be written, the run exits 1 and says the release was deployed; the deployment stays.

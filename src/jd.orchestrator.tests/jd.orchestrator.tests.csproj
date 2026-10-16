@@ -13,6 +13,12 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- The release record's schema and its committed example. -->
+  <ItemGroup>
+    <Content Include="../../schemas/release-record.schema.json" Link="schemas/release-record.schema.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="golden/*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../jd.orchestrator/jd.orchestrator.csproj" />
   </ItemGroup>

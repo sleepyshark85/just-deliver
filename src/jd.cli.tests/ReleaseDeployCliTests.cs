@@ -1,10 +1,12 @@
+using jd.core.identity;
 using Xunit;
 
 namespace jd.cli.tests;
 
-// `jd release deploy` runs in-process against the seed catalog, the resolver's test environment and a fake backend.
-// The sample set deploys the worker first, then the app (see samples/releases).
-public sealed class ReleaseDeployCliTests : IDisposable
+// `jd release deploy` runs in-process against the seed catalog, the resolver's test environment, a fake backend, a fake principal and a
+// clock that moves one second per reading. The sample set deploys the worker first, then the app (see samples/releases).
+// The release record's tests are in ReleaseDeployCliTests.Records.cs.
+public sealed partial class ReleaseDeployCliTests : IDisposable
 {
     private const string Worker = "just-deliver-sample-worker";
     private const string App = "just-deliver-sample-app";
@@ -14,19 +16,36 @@ public sealed class ReleaseDeployCliTests : IDisposable
     private static readonly string Catalog = Path.Combine(AppContext.BaseDirectory, "catalog");
 
     private readonly string _temp = Directory.CreateTempSubdirectory("jd-release-deploy-tests").FullName;
+    private readonly FakeIdentity _identity = new();
+    private IDeployerIdentity? _port;
+    private StepClock _clock = new();
+
+    // JD_RECORDS_DIR as the run sees it: the temp records directory unless a test changes it.
+    private readonly string _records;
+    private string? _recordsVariable;
+
+    // Other variables a run sees (the ARM_* ones).
+    private readonly Dictionary<string, string> _variables = [];
+
+    public ReleaseDeployCliTests()
+    {
+        _port = _identity;
+        Directory.CreateDirectory(_records = Path.Combine(_temp, "records"));
+        _recordsVariable = _records;
+    }
 
     public void Dispose() => Directory.Delete(_temp, recursive: true);
 
-    private static async Task<(int Code, string Out, string Err)> RunAsync(RecordingBackend? backend, params string[] args)
+    private async Task<(int Code, string Out, string Err)> RunAsync(RecordingBackend? backend, params string[] args)
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, probe: backend);
+        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, name => name == "JD_RECORDS_DIR" ? _recordsVariable : _variables.GetValueOrDefault(name), backend, _port, _clock);
         return (code, stdout.ToString(), stderr.ToString());
     }
 
     // The sample set, built from copies of the sample files so a test can change a definition first.
-    private async Task<string> CreateSetAsync(Func<string, string>? changeApp = null)
+    private async Task<string> CreateSetAsync(Func<string, string>? changeApp = null, string fileName = "set.yaml", string label = "1.0.0")
     {
         Directory.CreateDirectory(Path.Combine(_temp, "workloads"));
         Directory.CreateDirectory(Path.Combine(_temp, "releases"));
@@ -35,9 +54,11 @@ public sealed class ReleaseDeployCliTests : IDisposable
             File.Copy(Path.Combine(Samples, file), Path.Combine(_temp, file), overwrite: true);
         }
 
+        var manifest = Path.Combine(_temp, "releases", "sample.manifest.yaml");
+        await File.WriteAllTextAsync(manifest, (await File.ReadAllTextAsync(manifest)).Replace("label: 1.0.0", $"label: {label}", StringComparison.Ordinal));
         var app = await File.ReadAllTextAsync(Path.Combine(Samples, "workloads", "sample-app.yaml"));
         await File.WriteAllTextAsync(Path.Combine(_temp, "workloads", "sample-app.yaml"), changeApp?.Invoke(app) ?? app);
-        var set = Path.Combine(_temp, "set.yaml");
+        var set = Path.Combine(_temp, fileName);
         var (code, _, stderr) = await RunAsync(null, "release", "create", Path.Combine(_temp, "releases", "sample.manifest.yaml"), "--out", set);
         Assert.True(code == 0, stderr);
         return set;

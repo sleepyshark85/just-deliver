@@ -32,5 +32,5 @@ internal static class ReleaseDocument
             : (null, result.Errors.Select(e => LoadError.FromSchema(source, e)).ToList());
     }
 
-    public static string Sha256(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
+    public static string Sha256(ReadOnlySpan<byte> bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 }
