@@ -36,7 +36,7 @@ inner=(src/jd.core/jd.core.csproj)
 [[ -f src/jd.resolver/jd.resolver.csproj ]] && inner+=(src/jd.resolver/jd.resolver.csproj)
 [[ -f src/jd.orchestrator/jd.orchestrator.csproj ]] && inner+=(src/jd.orchestrator/jd.orchestrator.csproj)
 for p in "${inner[@]}"; do
-  if grep -E -q 'Include="(Pulumi|Azure)[^"]*"|backend-providers' "$p"; then
+  if grep -E -q 'Include="(Pulumi|Azure)[^"]*"|backend-providers|jd\.azure' "$p"; then
     fail "$p must not reference Pulumi, Azure SDKs or backend providers (see docs/engineering/standards.md)"
   fi
 done

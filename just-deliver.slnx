@@ -4,6 +4,8 @@
     <Project Path="samples/sample-app/sample-app.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/jd.azure.tests/jd.azure.tests.csproj" />
+    <Project Path="src/jd.azure/jd.azure.csproj" />
     <Project Path="src/jd.cli/jd.cli.csproj" />
     <Project Path="src/jd.cli.tests/jd.cli.tests.csproj" />
     <Project Path="src/jd.core/jd.core.csproj" />

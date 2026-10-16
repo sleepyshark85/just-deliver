@@ -1,3 +1,4 @@
+using jd.azure;
 using jd.bp.pulumi;
 using jd.core.bp;
 using jd.orchestrator;
@@ -221,6 +222,11 @@ public static class Cli
             ? $"{PassphraseVariable} is not set. Set it (empty is acceptable for local/dev only), or set {PassphraseFileVariable}."
             : null;
     }
+
+    // The principal the run authenticates with, from the ARM_* variables Pulumi uses too. Throws InvalidOperationException naming the unset ones.
+    internal static IDeployerIdentity CreateDeployerIdentity(Func<string, string?> environmentVariable) =>
+        new ArmDeployerIdentity(new ArmCredentials(
+            environmentVariable(ArmCredentials.TenantVariable), environmentVariable(ArmCredentials.ClientVariable), environmentVariable(ArmCredentials.SecretVariable)).ToCredential());
 
     private static IBackEndProvider CreatePulumiBackend(Func<string, string?> environmentVariable)
     {
