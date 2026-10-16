@@ -1,0 +1,208 @@
+{
+  "kind": "ReleaseRecord",
+  "activity": "qualify",
+  "startedAt": "2026-10-17T08:00:00Z",
+  "finishedAt": "2026-10-17T08:01:30Z",
+  "identity": {
+    "tenantId": "tenant-1",
+    "clientId": "client-1",
+    "objectId": "object-1"
+  },
+  "environment": {
+    "name": "dev",
+    "tier": "team",
+    "region": "region-1",
+    "catalogVersion": "1"
+  },
+  "release": {
+    "label": "1.0.0",
+    "createdAt": "2026-10-17T07:00:00Z",
+    "setSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "workloads": [
+    {
+      "name": "shop",
+      "team": "crew",
+      "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dependsOn": [],
+      "image": "registry.example/app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "graph": {
+        "sha256": "7a8ec136d91c69b72ec2c60c59ab144103ab82ea0e587b1efbbdf05c5ddf778e",
+        "nodes": [
+          {
+            "id": "shop/dev/@workload/runtime",
+            "template": "t/runtime",
+            "stack": "shop.dev._workload.runtime",
+            "phase": "runtime",
+            "hash": "c7f236615de8a1a6015f15ba86b92488e505bbb3cbeddb6fdb71248f3294603c"
+          },
+          {
+            "id": "shop/dev/thing/group",
+            "template": "t/group",
+            "stack": "shop.dev.thing.group",
+            "phase": "infrastructure",
+            "hash": "501732be499c56fdae1d3948da3b192fe260b113d0f9eebe87ec77615dca3e26"
+          },
+          {
+            "id": "shop/dev/thing/app",
+            "template": "t/app",
+            "stack": "shop.dev.thing.app",
+            "phase": "infrastructure",
+            "hash": "31344f2390254fb60d29e19a9f1225d5ee44584a0a7227dc5349729e436e6078"
+          },
+          {
+            "id": "shop/dev/thing/app2",
+            "template": "t/app2",
+            "stack": "shop.dev.thing.app2",
+            "phase": "infrastructure",
+            "hash": "4402d63f0f9ccf778b6132ddb3fb88c4a22b8e4c9a5b0a727e61b9a87cfbfc3e"
+          },
+          {
+            "id": "shop/dev/thing/rt",
+            "template": "t/rt",
+            "stack": "shop.dev.thing.rt",
+            "phase": "afterRuntime",
+            "hash": "f1411dfd1702e6b074309aa5c8d162abaa2bb0ba8f040664baf7dcd2fc7f04c8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "cart",
+      "team": "crew",
+      "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dependsOn": [],
+      "image": "registry.example/app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "graph": {
+        "sha256": "837e12d36bdb02634007d4809efed53ad0672c49457062817ce07abf137734c6",
+        "nodes": [
+          {
+            "id": "cart/dev/@workload/runtime",
+            "template": "t/runtime",
+            "stack": "cart.dev._workload.runtime",
+            "phase": "runtime",
+            "hash": "c7f236615de8a1a6015f15ba86b92488e505bbb3cbeddb6fdb71248f3294603c"
+          },
+          {
+            "id": "cart/dev/thing/group",
+            "template": "t/group",
+            "stack": "cart.dev.thing.group",
+            "phase": "infrastructure",
+            "hash": "501732be499c56fdae1d3948da3b192fe260b113d0f9eebe87ec77615dca3e26"
+          },
+          {
+            "id": "cart/dev/thing/app",
+            "template": "t/app",
+            "stack": "cart.dev.thing.app",
+            "phase": "infrastructure",
+            "hash": "31344f2390254fb60d29e19a9f1225d5ee44584a0a7227dc5349729e436e6078"
+          },
+          {
+            "id": "cart/dev/thing/app2",
+            "template": "t/app2",
+            "stack": "cart.dev.thing.app2",
+            "phase": "infrastructure",
+            "hash": "4402d63f0f9ccf778b6132ddb3fb88c4a22b8e4c9a5b0a727e61b9a87cfbfc3e"
+          },
+          {
+            "id": "cart/dev/thing/rt",
+            "template": "t/rt",
+            "stack": "cart.dev.thing.rt",
+            "phase": "afterRuntime",
+            "hash": "f1411dfd1702e6b074309aa5c8d162abaa2bb0ba8f040664baf7dcd2fc7f04c8"
+          }
+        ]
+      }
+    }
+  ],
+  "iq": {
+    "status": "failed",
+    "elapsedSeconds": 12.5,
+    "checks": [
+      {
+        "workload": "shop",
+        "kind": "drift",
+        "subject": "shop/dev/@workload/runtime",
+        "status": "passed",
+        "detail": ""
+      },
+      {
+        "workload": "shop",
+        "kind": "drift",
+        "subject": "shop/dev/thing/group",
+        "status": "passed",
+        "detail": ""
+      },
+      {
+        "workload": "shop",
+        "kind": "drift",
+        "subject": "shop/dev/thing/app",
+        "status": "failed",
+        "detail": "node shop/dev/thing/app differs from what is deployed: Update 1"
+      },
+      {
+        "workload": "shop",
+        "kind": "drift",
+        "subject": "shop/dev/thing/app2",
+        "status": "passed",
+        "detail": ""
+      },
+      {
+        "workload": "shop",
+        "kind": "drift",
+        "subject": "shop/dev/thing/rt",
+        "status": "passed",
+        "detail": ""
+      },
+      {
+        "workload": "shop",
+        "kind": "image",
+        "subject": "app--r1",
+        "status": "failed",
+        "detail": "pinned registry.example/app@sha256:aaaa, live registry.example/other@sha256:bbbb on revision app--r1"
+      },
+      {
+        "workload": "cart",
+        "kind": "drift",
+        "subject": "cart/dev/@workload/runtime",
+        "status": "passed",
+        "detail": ""
+      },
+      {
+        "workload": "cart",
+        "kind": "drift",
+        "subject": "cart/dev/thing/group",
+        "status": "passed",
+        "detail": ""
+      },
+      {
+        "workload": "cart",
+        "kind": "drift",
+        "subject": "cart/dev/thing/app",
+        "status": "passed",
+        "detail": ""
+      },
+      {
+        "workload": "cart",
+        "kind": "drift",
+        "subject": "cart/dev/thing/app2",
+        "status": "passed",
+        "detail": ""
+      },
+      {
+        "workload": "cart",
+        "kind": "drift",
+        "subject": "cart/dev/thing/rt",
+        "status": "passed",
+        "detail": ""
+      },
+      {
+        "workload": "cart",
+        "kind": "image",
+        "subject": "app--r1",
+        "status": "passed",
+        "detail": ""
+      }
+    ]
+  }
+}

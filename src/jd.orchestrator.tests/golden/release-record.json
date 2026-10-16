@@ -3,7 +3,6 @@
   "activity": "deploy",
   "startedAt": "2026-10-17T08:00:00Z",
   "finishedAt": "2026-10-17T08:01:30Z",
-  "outcome": "succeeded",
   "identity": {
     "tenantId": "tenant-1",
     "clientId": "client-1",
@@ -20,8 +19,6 @@
     "createdAt": "2026-10-17T07:00:00Z",
     "setSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   },
-  "deploySeconds": 42.5,
-  "notStarted": [],
   "workloads": [
     {
       "name": "shop",
@@ -297,5 +294,8 @@
         "elapsedSeconds": 0.5
       }
     }
-  ]
+  ],
+  "outcome": "succeeded",
+  "deploySeconds": 42.5,
+  "notStarted": []
 }

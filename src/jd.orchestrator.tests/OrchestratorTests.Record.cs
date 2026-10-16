@@ -59,6 +59,12 @@ public partial class OrchestratorTests
         Assert.True(result.IsValid, string.Join("; ", result.Errors));
     }
 
+    private static async Task AssertInvalidAsync(string json)
+    {
+        var schema = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "schemas", "release-record.schema.json"));
+        Assert.False((await new YamlSchemaValidator().ValidateTokenAsync(schema, Parse(json))).IsValid);
+    }
+
     private static string OqStatus(string json, int workload) => (string?)Parse(json)["workloads"]![workload]!["oq"]!["status"] ?? string.Empty;
 
     // The times are the machine's; a golden record needs fixed ones.
