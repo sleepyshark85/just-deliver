@@ -132,7 +132,8 @@
         "fqdnOutput": "latestRevisionFqdn",
         "revisionKey": "revisionName",
         "latestKey": "latestRevision",
-        "weightKey": "weight"
+        "weightKey": "weight",
+        "resourceIdOutput": "containerAppId"
       }
     },
     {

@@ -197,13 +197,13 @@ public partial class TemplateLibraryTests
         Assert.Contains("not found", Assert.Single(library.Errors).Message);
     }
 
-    private static readonly RuntimeRelease Release = new("suffix", "traffic", "traffic", "suffixOut", "revision", "fqdn", "revisionName", "latestRevision", "weight");
+    private static readonly RuntimeRelease Release = new("suffix", "traffic", "traffic", "suffixOut", "revision", "fqdn", "revisionName", "latestRevision", "weight", "appId");
 
     // A runtime template with the inputs and outputs Release names, except the one given (an input or an output name).
     private static TemplateLibrary RuntimeLibrary(string omit = "")
     {
         var inputs = new[] { "suffix", "traffic" }.Where(n => n != omit).Select(n => $"  {n}:\n    type: String\n");
-        var outputs = new[] { "traffic", "suffixOut", "revision", "fqdn" }.Where(n => n != omit).Select(n => $"  {n}: x\n");
+        var outputs = new[] { "traffic", "suffixOut", "revision", "fqdn", "appId" }.Where(n => n != omit).Select(n => $"  {n}: x\n");
         return TemplateLibrary.Parse([("t/rt", $"name: rt\nconfiguration:\n  image:\n    type: String\n{string.Concat(inputs)}outputs:\n{string.Concat(outputs)}")]);
     }
 
@@ -238,6 +238,7 @@ public partial class TemplateLibraryTests
     [InlineData("suffixOut")]
     [InlineData("revision")]
     [InlineData("fqdn")]
+    [InlineData("appId")]
     public void A_runtime_template_without_a_release_output_is_an_error(string output)
     {
         var errors = RuntimeLibrary(output).Check(Graph([RuntimeNode(Release)]));
@@ -259,7 +260,7 @@ public partial class TemplateLibraryTests
         {
             "kind: Catalog\nversion: \"1\"\n",
             "kind: Mapping\nmatch: { kind: runtime }\nprobe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
-                + "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffixOut, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }\n"
+                + "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffixOut, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n"
                 + "nodes:\n  runtime:\n    template: t/rt\n    config: { image: i }\n",
             $"kind: Policy\nname: pol\nreason: r\nmatch: {{ kind: runtime }}\n{layer}: {{ runtime.{input}: from-policy }}\n",
         }.Select((content, i) => new CatalogSource($"f{i}.yaml", content));

@@ -15,6 +15,7 @@ release:
   revisionKey: revisionName
   latestKey: latestRevision
   weightKey: weight
+  resourceIdOutput: containerAppId
 nodes:
   runtime:
     template: azure/container-app

@@ -29,7 +29,8 @@ public sealed class Orchestrator(
         new Walk(provider, templates, catalog, environment, probe, _delay, graph, preview: false, progress).RunAsync(cancellationToken);
 
     /// <summary>
-    /// Previews every infrastructure node in order, then the runtime's dark revision; the probe is never called. Outputs of nodes the
+    /// Previews every infrastructure node in order, then the runtime's dark revision and the nodes after the runtime (with the runtime's
+    /// outputs from state); the probe is never called. Outputs of nodes the
     /// preview cannot deploy come from state (<see cref="IBackEndProvider.GetOutputsAsync"/>); a node whose references cannot be filled
     /// is reported, not previewed.
     /// </summary>

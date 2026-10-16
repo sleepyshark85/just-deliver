@@ -48,7 +48,7 @@
       "description": "Runtime mappings only: which inputs and outputs of the runtime node's template the release flow (dark revision, grants, probe, traffic shift) uses. The engine sets the two inputs, so the runtime node must not.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["suffixInput", "trafficInput", "trafficOutput", "suffixOutput", "revisionOutput", "fqdnOutput", "revisionKey", "latestKey", "weightKey"],
+      "required": ["suffixInput", "trafficInput", "trafficOutput", "suffixOutput", "revisionOutput", "fqdnOutput", "revisionKey", "latestKey", "weightKey", "resourceIdOutput"],
       "properties": {
         "suffixInput": { "description": "Template input that receives the revision suffix.", "type": "string", "minLength": 1 },
         "trafficInput": { "description": "Template input that receives the traffic list.", "type": "string", "minLength": 1 },
@@ -58,7 +58,8 @@
         "fqdnOutput": { "description": "Output with that revision's address, the probe target.", "type": "string", "minLength": 1 },
         "revisionKey": { "description": "Key of a traffic item that names a revision.", "type": "string", "minLength": 1 },
         "latestKey": { "description": "Key of a traffic item that means the latest revision.", "type": "string", "minLength": 1 },
-        "weightKey": { "description": "Key of a traffic item's weight.", "type": "string", "minLength": 1 }
+        "weightKey": { "description": "Key of a traffic item's weight.", "type": "string", "minLength": 1 },
+        "resourceIdOutput": { "description": "Output with the runtime resource's id; qualification looks up its live revisions by it.", "type": "string", "minLength": 1 }
       }
     }
   },

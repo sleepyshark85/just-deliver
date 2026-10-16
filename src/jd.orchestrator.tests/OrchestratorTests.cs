@@ -55,7 +55,7 @@ public partial class OrchestratorTests
 
     private const string ProbeAndRelease =
         "probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
-        + "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }\n";
+        + "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n";
 
     private const string DefaultRequires = "  - type: thing\n";
 
@@ -293,7 +293,8 @@ public partial class OrchestratorTests
 
         var report = await PreviewAsync(backend);
 
-        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.Previewed, NodeOutcome.Previewed], report.Nodes.Select(n => n.Outcome));
+        // rt, a grant, waits on the runtime and on app, neither of which is in state.
+        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.Previewed, NodeOutcome.Previewed, NodeOutcome.PendingUpstream], report.Nodes.Select(n => n.Outcome));
         Assert.DoesNotContain(backend.Calls, c => c.Op == "deploy");
         var app = backend.Calls.Single(c => c.Op == "preview" && c.Package.StackName == "shop.dev.thing.app").Package.DeploymentParameters;
         Assert.Equal("id-from-state", app["groupId"].Value);
@@ -307,7 +308,7 @@ public partial class OrchestratorTests
 
         var report = await PreviewAsync(backend);
 
-        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.PendingUpstream, NodeOutcome.PendingUpstream], report.Nodes.Select(n => n.Outcome));
+        Assert.Equal([NodeOutcome.Previewed, NodeOutcome.PendingUpstream, NodeOutcome.PendingUpstream, NodeOutcome.PendingUpstream], report.Nodes.Select(n => n.Outcome));
         Assert.True(report.Succeeded);
         Assert.Contains("field 'groupId' references group.id", report.Nodes[1].Message);
         Assert.Equal(["shop.dev.thing.group", "shop.dev._workload.runtime"], backend.Calls.Where(c => c.Op == "preview").Select(c => c.Package.StackName));
@@ -366,7 +367,7 @@ public partial class OrchestratorTests
         kind: Mapping
         match: { kind: runtime }
         probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
-        release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }
+        release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }
         nodes:
           group:
             template: t/group

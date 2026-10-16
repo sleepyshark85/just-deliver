@@ -76,7 +76,11 @@ internal sealed class ReleaseFlow(
             if (preview)
             {
                 var planned = await provider.PreviewAsync(darkPackage, cancellationToken);
-                return NodeReport.For(node, NodeOutcome.Previewed, string.Empty, planned, Enum.GetValues<Step>().Select(s => new StepReport(s, StepOutcome.Planned, string.Empty)).ToList());
+                // The grants are previewed with the runtime's outputs from state; a runtime never deployed has none, so they wait on it.
+                step = Step.Grants;
+                return await deployDependants(outputs ?? []) is { } blocked
+                    ? Stop(blocked)
+                    : NodeReport.For(node, NodeOutcome.Previewed, string.Empty, planned, Enum.GetValues<Step>().Select(s => new StepReport(s, StepOutcome.Planned, string.Empty)).ToList());
             }
 
             dark = await provider.DeployAsync(darkPackage, cancellationToken);
