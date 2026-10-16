@@ -36,12 +36,14 @@ public static class Cli
         validate  checks a workload against its schema and rules.
         preview   validates the workload, then prints the resolved graph (--json: as stable JSON).
         release   create writes an immutable release set (pinned workloads, deploy order) from a manifest; show prints one;
-                  deploy resolves every workload of a set, then deploys them in deploy order, stopping at the first failure.
+                  deploy resolves every workload of a set, then deploys them in deploy order, stopping at the first failure, and writes a release record
+                  (not with --preview).
         deploy    provisions the infrastructure nodes in order, then releases the runtime: dark revision, grants, probe, traffic shift (--preview: only shows the changes; nothing is created).
         env up    provisions an environment's substrate from its definition and writes the environment descriptor from the outputs.
                   --base: the descriptor of the layer below (the new values are added to it); --region defaults to JD_REGION;
                   --force: overwrite an existing --out.
         Backend (deploy, release deploy, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
+        Records (release deploy, not --preview): JD_RECORDS_DIR, an existing directory, and the deploying service principal in ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET.
         Exit codes: 0 success, 1 validation, resolution or deployment errors, 2 usage errors.
 
         """;
@@ -61,9 +63,11 @@ public static class Cli
     private const string PassphraseFileVariable = "PULUMI_CONFIG_PASSPHRASE_FILE";
 
     // backend is the one deploy uses; when null, the Pulumi backend configured from the process environment variables.
-    // environmentVariable reads them (null: the process environment). probe checks a new revision is healthy (null: an HTTP GET). All three are test seams.
+    // environmentVariable reads them (null: the process environment). probe checks a new revision is healthy (null: an HTTP GET).
+    // identity names the deploying principal (null: from the ARM_* variables); time stamps the release record (null: the system clock). All five are test seams.
     public static async Task<int> RunAsync(
-        string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, IBackEndProvider? backend = null, Func<string, string?>? environmentVariable = null, IRevisionProbe? probe = null)
+        string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, IBackEndProvider? backend = null, Func<string, string?>? environmentVariable = null,
+        IRevisionProbe? probe = null, IDeployerIdentity? identity = null, TimeProvider? time = null)
     {
         environmentVariable ??= System.Environment.GetEnvironmentVariable;
         if (args.Contains("--help") || args.Contains("-h"))
@@ -74,7 +78,7 @@ public static class Cli
 
         if (args.FirstOrDefault() == "release")
         {
-            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, backend, probe, environmentVariable, cancellationToken);
+            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, backend, probe, identity, time ?? TimeProvider.System, environmentVariable, cancellationToken);
         }
 
         if (args.FirstOrDefault() == "env")

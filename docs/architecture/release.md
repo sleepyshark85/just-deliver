@@ -80,5 +80,5 @@ Name and dependency checks run only when every definition loaded, since an unrea
 
 ## Not here yet
 
-The release record per environment (S17). Deploying a set (`jd release deploy`, infrastructure only) is described in
+The release record per environment is described in [release-record.md](release-record.md) (S17b writes it; IQ and `release qualify` are S17c). Deploying a set (`jd release deploy`) is described in
 [provisioning.md](provisioning.md#release-sets-jd-release-deploy). The resolved graph is not part of the set, so `GraphJson` does not carry the team.

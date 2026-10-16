@@ -1,8 +1,11 @@
+using System.Diagnostics;
 using System.Globalization;
 using jd.core.bp;
+using jd.core.identity;
 using jd.orchestrator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
+using jd.resolver.graph;
 using jd.resolver.release;
 
 namespace jd.cli;
@@ -17,11 +20,17 @@ internal static class ReleaseDeployCli
     private const int Invalid = 1;
     private const int UsageError = 2;
 
+    private const string RecordsDirectoryVariable = "JD_RECORDS_DIR";
+
     private sealed record Options(string Set, string Environment, string Catalog, bool DryRun);
+
+    // What a recorded run has before anything is deployed: where the records go, who deploys, and the kept set's hash.
+    private sealed record Recording(string Directory, DeployerIdentity Identity, string SetSha256);
 
     // args are the arguments after "release deploy".
     public static async Task<int> RunAsync(
-        string[] args, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe, Func<string, string?> environmentVariable, CancellationToken cancellationToken)
+        string[] args, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, TimeProvider time, Func<string, string?> environmentVariable,
+        CancellationToken cancellationToken)
     {
         var (options, problem) = Parse(args);
         if (options is null)
@@ -31,7 +40,10 @@ internal static class ReleaseDeployCli
             return UsageError;
         }
 
-        problem = Arguments.Unreadable(options.Set, options.Environment, options.Catalog) ?? (backend is null ? Cli.BackendSettingsProblem(environmentVariable) : null);
+        // A preview deploys nothing, so it records nothing and needs no directory.
+        var records = environmentVariable(RecordsDirectoryVariable);
+        problem = Arguments.Unreadable(options.Set, options.Environment, options.Catalog) ?? (backend is null ? Cli.BackendSettingsProblem(environmentVariable) : null)
+            ?? (options.DryRun || Directory.Exists(records) ? null : $"{RecordsDirectoryVariable} must name an existing directory where release records are kept (it is {(string.IsNullOrEmpty(records) ? "not set" : $"'{records}'")}).");
         if (problem is not null)
         {
             stderr.WriteLine($"jd: {problem}");
@@ -40,7 +52,7 @@ internal static class ReleaseDeployCli
 
         try
         {
-            return await DeployAsync(options, backend, probe, environmentVariable, stdout, stderr, cancellationToken);
+            return await DeployAsync(options, options.DryRun ? null : records, backend, probe, identity, time, environmentVariable, stdout, stderr, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -50,7 +62,8 @@ internal static class ReleaseDeployCli
     }
 
     private static async Task<int> DeployAsync(
-        Options options, IBackEndProvider? backend, IRevisionProbe? probe, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        Options options, string? recordsDirectory, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, TimeProvider time, Func<string, string?> environmentVariable,
+        TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var setResult = await ReleaseSetFile.LoadAsync(options.Set, cancellationToken);
         var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog, cancellationToken);
@@ -74,24 +87,73 @@ internal static class ReleaseDeployCli
             return Invalid;
         }
 
+        // A recorded run knows who deploys, and that no other set was deployed under this label, before it calls the backend.
+        var started = time.GetUtcNow();
+        Recording? recording = null;
+        if (recordsDirectory is not null)
+        {
+            try
+            {
+                var principal = await (identity ?? Cli.CreateDeployerIdentity(environmentVariable)).GetAsync(cancellationToken);
+                var (sha256, conflict) = await ReleaseRecordFile.KeepSetAsync(recordsDirectory, environment.Name, set.Label, setResult.Bytes, cancellationToken);
+                if (conflict is not null)
+                {
+                    stderr.WriteLine($"jd: {conflict}");
+                    return Invalid;
+                }
+
+                recording = new Recording(recordsDirectory, principal, sha256);
+            }
+            catch (InvalidOperationException ex)
+            {
+                stderr.WriteLine($"jd: cannot name the deploying principal: {ex.Message}");
+                return Invalid;
+            }
+        }
+
         var orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, backend, environmentVariable, probe);
+        var walk = Stopwatch.GetTimestamp();
         var runs = await orchestrator.DeployReleaseAsync(
             graphs,
             options.DryRun,
             name => stdout.WriteLine($"workload {name}"),
             report => stdout.Write(DeployFormatter.Format(report)),
             cancellationToken);
+        var walked = Stopwatch.GetElapsedTime(walk);
 
         stdout.WriteLine(Summarize(set, environment.Name, runs, options.DryRun));
         var failed = runs.FirstOrDefault(r => !r.Run.Succeeded);
-        if (failed is null)
+        if (failed is not null)
         {
-            return Success;
+            var node = failed.Run.Nodes[^1];
+            stderr.WriteLine($"jd: stopped at {failed.Workload}, node {node.NodeId}: {node.Message}");
         }
 
-        var node = failed.Run.Nodes[^1];
-        stderr.WriteLine($"jd: stopped at {failed.Workload}, node {node.NodeId}: {node.Message}");
-        return Invalid;
+        if (recording is not null && !await RecordAsync(recording, set, environment, graphs, runs, started, walked, time, stdout, stderr, cancellationToken))
+        {
+            return Invalid;
+        }
+
+        return failed is null ? Success : Invalid;
+    }
+
+    // The deployment stays whether or not the record is written; false (and why) when it could not be.
+    private static async Task<bool> RecordAsync(
+        Recording recording, ReleaseSet set, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, IReadOnlyList<WorkloadRun> runs, DateTimeOffset started, TimeSpan walked,
+        TimeProvider time, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var finished = time.GetUtcNow();
+        var json = ReleaseRecordBuilder.Build(set, recording.SetSha256, environment, graphs, runs, recording.Identity, started, finished, walked);
+        try
+        {
+            stdout.WriteLine($"record: {await ReleaseRecordFile.WriteAsync(recording.Directory, environment.Name, set.Label, finished, ReleaseRecordBuilder.DeployActivity, json, cancellationToken)}");
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            stderr.WriteLine($"jd: the release was deployed, but its record could not be written: {ex.Message}");
+            return false;
+        }
     }
 
     // A workload is "deployed" when one of its nodes changed, otherwise "unchanged"; a preview changes nothing, so its workloads are "previewed".
