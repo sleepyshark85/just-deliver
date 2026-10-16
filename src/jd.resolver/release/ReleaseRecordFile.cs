@@ -10,7 +10,7 @@ namespace jd.resolver.release;
 /// </summary>
 public static class ReleaseRecordFile
 {
-    public const string SetFileName = "set.yaml";
+    private const string SetFileName = "set.yaml";
 
     private const string TimeFormat = "yyyyMMdd'T'HHmmssfff'Z'";
 
