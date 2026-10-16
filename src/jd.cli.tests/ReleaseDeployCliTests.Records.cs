@@ -160,11 +160,13 @@ public sealed partial class ReleaseDeployCliTests
 
         _recordsVariable = null; // a preview needs no records directory
         var (previewCode, _, _) = await RunAsync(backend, Deploy(set, "--preview"));
-        _recordsVariable = _records;
+        _recordsVariable = _records; // and writes nothing where one is set
+        var (recordedPreviewCode, _, _) = await RunAsync(backend, Deploy(set, "--preview"));
         var (usageCode, _, _) = await RunAsync(backend, "release", "deploy");
         var (resolutionCode, _, _) = await RunAsync(backend, Deploy(broken));
 
         Assert.Equal(0, previewCode);
+        Assert.Equal(0, recordedPreviewCode);
         Assert.Equal(2, usageCode);
         Assert.Equal(1, resolutionCode);
         Assert.Empty(Directory.GetFileSystemEntries(_records));
@@ -199,7 +201,7 @@ public sealed partial class ReleaseDeployCliTests
         var (code, _, stderr) = await RunAsync(backend, Deploy(set));
 
         Assert.Equal(1, code);
-        Assert.Contains("jd: cannot name the deploying principal: Azure did not accept the credential in ARM_TENANT_ID.", stderr);
+        Assert.Contains("jd: Azure did not accept the credential in ARM_TENANT_ID.", stderr);
         Assert.Empty(backend.Calls);
         Assert.Empty(Directory.GetFileSystemEntries(_records));
     }
@@ -215,6 +217,39 @@ public sealed partial class ReleaseDeployCliTests
 
         Assert.Equal(1, code);
         Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET", stderr);
+        Assert.Empty(backend.Calls);
+        Assert.Empty(Directory.GetFileSystemEntries(_records));
+    }
+
+    [Fact]
+    public async Task A_malformed_tenant_id_stops_the_run_with_a_clear_error_before_the_backend_is_called_and_never_prints_the_secret()
+    {
+        var set = await CreateSetAsync();
+        _port = null;
+        (_variables["ARM_TENANT_ID"], _variables["ARM_CLIENT_ID"], _variables["ARM_CLIENT_SECRET"]) = ("not a tenant!", "client", "the-secret-value");
+        var backend = new RecordingBackend();
+
+        var (code, stdout, stderr) = await RunAsync(backend, Deploy(set));
+
+        Assert.Equal(1, code);
+        Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_ID and ARM_CLIENT_SECRET do not make a valid credential", stderr);
+        Assert.DoesNotContain("the-secret-value", stdout + stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("   at ", stderr, StringComparison.Ordinal);
+        Assert.Empty(backend.Calls);
+        Assert.Empty(Directory.GetFileSystemEntries(_records));
+    }
+
+    [Fact]
+    public async Task A_label_the_store_cannot_use_is_refused_with_a_message_before_the_backend_is_called_and_creates_nothing()
+    {
+        var set = await CreateSetAsync(label: "1.0.0-rc..1");
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunAsync(backend, Deploy(set));
+
+        Assert.Equal(1, code);
+        Assert.Contains("jd: '1.0.0-rc..1' cannot name a directory of the release records", stderr);
+        Assert.DoesNotContain("   at ", stderr, StringComparison.Ordinal);
         Assert.Empty(backend.Calls);
         Assert.Empty(Directory.GetFileSystemEntries(_records));
     }

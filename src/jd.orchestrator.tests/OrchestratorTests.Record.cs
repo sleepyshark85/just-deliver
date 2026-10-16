@@ -200,6 +200,20 @@ public partial class OrchestratorTests
     }
 
     [Fact]
+    public async Task Oq_is_failed_with_no_attempts_when_the_deploy_exported_nothing_to_probe_and_the_record_stays_valid()
+    {
+        var (set, graphs, runs) = await ReleaseRunAsync(new FakeBackend { Fqdn = null }, null, "shop");
+
+        var json = Record(set, graphs, runs);
+
+        await AssertValidAsync(json);
+        var oq = Parse(json)["workloads"]![0]!["oq"]!;
+        Assert.Equal("failed", (string?)oq["status"]);
+        Assert.Equal(0, (int?)oq["attempts"]);
+        Assert.Equal("the deploy exported no 'fqdn' to probe.", (string?)oq["detail"]);
+    }
+
+    [Fact]
     public async Task Oq_is_unchanged_when_the_revision_was_already_live_and_the_probe_was_skipped()
     {
         var backend = new FakeBackend { DetectChanges = true };

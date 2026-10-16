@@ -113,7 +113,7 @@
                     "id": { "type": "string", "minLength": 1 },
                     "outcome": { "enum": ["deployed", "unchanged", "previewed", "pendingUpstream", "failed"] },
                     "changes": {
-                      "description": "Resources per operation, as the provider counted them; counts only, never the changed properties.",
+                      "description": "Resources per operation, as the provider counted them (the keys keep the provider's operation names, PascalCase: Create, Update, Same, ...); counts only, never the changed properties.",
                       "type": "object",
                       "additionalProperties": { "type": "integer", "minimum": 0 }
                     },
@@ -158,7 +158,7 @@
                 }
               },
               "detail": { "description": "Present when the probe ran: its last answer.", "type": "string" },
-              "attempts": { "type": "integer", "minimum": 1 },
+              "attempts": { "description": "0 when the step failed before any probe was sent (no fqdn to probe).", "type": "integer", "minimum": 0 },
               "elapsedSeconds": { "type": "number", "minimum": 0 }
             }
           }

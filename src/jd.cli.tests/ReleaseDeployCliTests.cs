@@ -24,6 +24,9 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     private readonly string _records;
     private string? _recordsVariable;
 
+    // Other variables a run sees (the ARM_* ones).
+    private readonly Dictionary<string, string> _variables = [];
+
     public ReleaseDeployCliTests()
     {
         _port = _identity;
@@ -37,12 +40,12 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, name => name == "JD_RECORDS_DIR" ? _recordsVariable : null, backend, _port, _clock);
+        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, name => name == "JD_RECORDS_DIR" ? _recordsVariable : _variables.GetValueOrDefault(name), backend, _port, _clock);
         return (code, stdout.ToString(), stderr.ToString());
     }
 
     // The sample set, built from copies of the sample files so a test can change a definition first.
-    private async Task<string> CreateSetAsync(Func<string, string>? changeApp = null, string fileName = "set.yaml")
+    private async Task<string> CreateSetAsync(Func<string, string>? changeApp = null, string fileName = "set.yaml", string label = "1.0.0")
     {
         Directory.CreateDirectory(Path.Combine(_temp, "workloads"));
         Directory.CreateDirectory(Path.Combine(_temp, "releases"));
@@ -51,6 +54,8 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
             File.Copy(Path.Combine(Samples, file), Path.Combine(_temp, file), overwrite: true);
         }
 
+        var manifest = Path.Combine(_temp, "releases", "sample.manifest.yaml");
+        await File.WriteAllTextAsync(manifest, (await File.ReadAllTextAsync(manifest)).Replace("label: 1.0.0", $"label: {label}", StringComparison.Ordinal));
         var app = await File.ReadAllTextAsync(Path.Combine(Samples, "workloads", "sample-app.yaml"));
         await File.WriteAllTextAsync(Path.Combine(_temp, "workloads", "sample-app.yaml"), changeApp?.Invoke(app) ?? app);
         var set = Path.Combine(_temp, fileName);

@@ -123,7 +123,11 @@ public sealed class EnvUpAzureTests : IDisposable
 
     // The records of a label on dev, oldest first.
     private List<JsonElement> RecordsOf(string label) =>
-        Directory.GetFiles(Path.Combine(Records, DevName, label), "*-deploy.json").Order(StringComparer.Ordinal).Select(file => JsonDocument.Parse(File.ReadAllText(file)).RootElement.Clone()).ToList();
+        Directory.GetFiles(Path.Combine(Records, DevName, label), "*-deploy.json").Order(StringComparer.Ordinal).Select(file =>
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(file));
+            return document.RootElement.Clone();
+        }).ToList();
 
     private static string Oq(JsonElement record, int workload) => record.GetProperty("workloads")[workload].GetProperty("oq").GetProperty("status").GetString() ?? string.Empty;
 

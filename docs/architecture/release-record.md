@@ -33,7 +33,7 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 - **The set itself is kept beside the records, as ADR 0007 requires:** `<records>/<environment>/<label>/set.yaml` holds the set file's exact
   bytes (the definitions as received). It is created with `CreateNew` on the label's first attempt. On every later attempt the existing file
   must hash equal to the set being deployed; otherwise the run is refused before anything is deployed (a different set under the same label).
-  It is never overwritten. Records refer to it by `setSha256`.
+  It is never overwritten. Records refer to it by `setSha256`. *Residual:* it is written in place, not through a temp file and rename, so a crash in the middle of the write leaves a truncated `set.yaml`, which the next attempt reports as a different set; delete it by hand.
 - **Order of a recorded run (S17b):** parse and resolve everything (as today, no backend call); then obtain the deployer identity, token
   included; then check or create `set.yaml`; then the first backend call. A bad credential or a different set under the label therefore stops
   the run before anything is deployed (exit 1; a missing or invalid `JD_RECORDS_DIR` is a usage error, exit 2, checked first). `release qualify` follows the same order and also creates `set.yaml` when it is missing.

@@ -65,6 +65,7 @@ internal static class ReleaseDeployCli
         Options options, string? recordsDirectory, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, TimeProvider time, Func<string, string?> environmentVariable,
         TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
+        var started = time.GetUtcNow();
         var setResult = await ReleaseSetFile.LoadAsync(options.Set, cancellationToken);
         var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog, cancellationToken);
         var environmentResult = await EnvironmentFile.LoadAsync(options.Environment, cancellationToken);
@@ -88,25 +89,12 @@ internal static class ReleaseDeployCli
         }
 
         // A recorded run knows who deploys, and that no other set was deployed under this label, before it calls the backend.
-        var started = time.GetUtcNow();
         Recording? recording = null;
         if (recordsDirectory is not null)
         {
-            try
+            recording = await StartRecordingAsync(recordsDirectory, identity, environmentVariable, setResult.Bytes, set.Label, environment.Name, stderr, cancellationToken);
+            if (recording is null)
             {
-                var principal = await (identity ?? Cli.CreateDeployerIdentity(environmentVariable)).GetAsync(cancellationToken);
-                var (sha256, conflict) = await ReleaseRecordFile.KeepSetAsync(recordsDirectory, environment.Name, set.Label, setResult.Bytes, cancellationToken);
-                if (conflict is not null)
-                {
-                    stderr.WriteLine($"jd: {conflict}");
-                    return Invalid;
-                }
-
-                recording = new Recording(recordsDirectory, principal, sha256);
-            }
-            catch (InvalidOperationException ex)
-            {
-                stderr.WriteLine($"jd: cannot name the deploying principal: {ex.Message}");
                 return Invalid;
             }
         }
@@ -135,6 +123,40 @@ internal static class ReleaseDeployCli
         }
 
         return failed is null ? Success : Invalid;
+    }
+
+    // Null, with the reason on stderr, when the run must not start: the principal cannot be named, the label cannot name a directory, or it holds another set.
+    private static async Task<Recording?> StartRecordingAsync(
+        string recordsDirectory, IDeployerIdentity? identity, Func<string, string?> environmentVariable, ReadOnlyMemory<byte> setBytes, string label, string environmentName,
+        TextWriter stderr, CancellationToken cancellationToken)
+    {
+        DeployerIdentity principal;
+        try
+        {
+            principal = await (identity ?? Cli.CreateDeployerIdentity(environmentVariable)).GetAsync(cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            stderr.WriteLine($"jd: {ex.Message}");
+            return null;
+        }
+
+        try
+        {
+            var (sha256, conflict) = await ReleaseRecordFile.KeepSetAsync(recordsDirectory, environmentName, label, setBytes, cancellationToken);
+            if (conflict is null)
+            {
+                return new Recording(recordsDirectory, principal, sha256);
+            }
+
+            stderr.WriteLine($"jd: {conflict}");
+        }
+        catch (ArgumentException ex)
+        {
+            stderr.WriteLine($"jd: {ex.Message}");
+        }
+
+        return null;
     }
 
     // The deployment stays whether or not the record is written; false (and why) when it could not be.

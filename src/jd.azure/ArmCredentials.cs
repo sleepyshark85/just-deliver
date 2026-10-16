@@ -27,7 +27,22 @@ public sealed class ArmCredentials(string? tenantId, string? clientId, string? c
         }
     }
 
-    /// <summary>Throws <see cref="InvalidOperationException"/> with <see cref="Problem"/> when a variable is missing.</summary>
-    public TokenCredential ToCredential() =>
-        Problem is { } problem ? throw new InvalidOperationException(problem) : new ClientSecretCredential(tenantId, clientId, clientSecret);
+    /// <summary>Throws <see cref="InvalidOperationException"/> with <see cref="Problem"/> when a variable is missing, or with a clear message when the SDK refuses a malformed value.</summary>
+    public TokenCredential ToCredential()
+    {
+        if (Problem is { } problem)
+        {
+            throw new InvalidOperationException(problem);
+        }
+
+        try
+        {
+            return new ClientSecretCredential(tenantId, clientId, clientSecret);
+        }
+        catch (ArgumentException)
+        {
+            // The SDK refuses a malformed value (a tenant id that is neither a directory id nor a domain name); its message is not repeated.
+            throw new InvalidOperationException($"{TenantVariable}, {ClientVariable} and {SecretVariable} do not make a valid credential; check that {TenantVariable} is a directory id or domain name.");
+        }
+    }
 }

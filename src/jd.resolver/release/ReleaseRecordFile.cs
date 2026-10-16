@@ -61,7 +61,7 @@ public static class ReleaseRecordFile
         {
             if (segment.Length == 0 || segment.Contains("..", StringComparison.Ordinal) || segment.AsSpan().IndexOfAny('/', '\\') >= 0)
             {
-                throw new ArgumentException($"'{segment}' cannot name a directory of the record store.");
+                throw new ArgumentException($"'{segment}' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.");
             }
         }
 

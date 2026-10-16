@@ -115,6 +115,17 @@ public sealed class ArmDeployerIdentityTests
     }
 
     [Fact]
+    public void A_malformed_tenant_id_is_a_clear_error_naming_the_variables_without_the_secret_or_the_sdk_text()
+    {
+        var credentials = new ArmCredentials("not a tenant!", "client", "the-secret");
+
+        var error = Assert.Throws<InvalidOperationException>(credentials.ToCredential);
+
+        Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_ID and ARM_CLIENT_SECRET do not make a valid credential", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("the-secret", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_credentials_never_print_the_secret()
     {
         var credentials = new ArmCredentials("tenant", "client", "the-secret");

@@ -33,7 +33,7 @@ public sealed class ArmDeployerIdentity(TokenCredential credential) : IDeployerI
         {
             // The SDK's message is a page of protocol detail; the person needs to know which settings to check. Nothing of the credential is echoed.
             throw new InvalidOperationException(
-                $"Azure did not accept the credential in {ArmCredentials.TenantVariable}, {ArmCredentials.ClientVariable} and {ArmCredentials.SecretVariable}; check that the secret is correct and has not expired.", ex);
+                $"Azure did not accept the credential in {ArmCredentials.TenantVariable}, {ArmCredentials.ClientVariable} and {ArmCredentials.SecretVariable}, or could not be reached; check them (is the secret correct and unexpired?) and the network.", ex);
         }
 
         using var payload = Payload(token.Token);
