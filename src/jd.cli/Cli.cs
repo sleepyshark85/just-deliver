@@ -1,6 +1,7 @@
 using jd.azure;
 using jd.bp.pulumi;
 using jd.core.bp;
+using jd.core.identity;
 using jd.orchestrator;
 using jd.resolver;
 using jd.resolver.catalog;

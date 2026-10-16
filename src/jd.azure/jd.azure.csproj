@@ -6,7 +6,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../jd.orchestrator/jd.orchestrator.csproj" />
+    <ProjectReference Include="../jd.core/jd.core.csproj" />
   </ItemGroup>
 
 </Project>

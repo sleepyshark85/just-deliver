@@ -25,11 +25,15 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 - **Finding it later (S18, S19; named, not built):** the records of label X on environment Y are the files in `<records>/Y/X/`.
   An approval is *another* file in that directory (`…-approve.json`) that names the record's file name and the SHA-256 of its bytes (a
   record cannot contain its own hash). "Qualified" is derived, never stored: the newest `deploy` record has outcome `succeeded` and, for every
-  workload, OQ `passed` or `unchanged`, and the newest record of any activity that carries an IQ verdict has IQ `passed`.
+  workload, OQ `passed` or `unchanged` (an `unchanged` counts only when an earlier record under the same `<env>/<label>/` has OQ `passed`
+  for that workload, since the skipped probe relies on that earlier pass), and the newest record of any activity that carries an IQ verdict has IQ `passed`.
 - **The set itself is kept beside the records, as ADR 0007 requires:** `<records>/<environment>/<label>/set.yaml` holds the set file's exact
   bytes (the definitions as received). It is created with `CreateNew` on the label's first attempt. On every later attempt the existing file
   must hash equal to the set being deployed; otherwise the run is refused before anything is deployed (a different set under the same label).
   It is never overwritten. Records refer to it by `setSha256`.
+- **Order of a recorded run (S17b):** parse and resolve everything (as today, no backend call); then obtain the deployer identity, token
+  included; then check or create `set.yaml`; then the first backend call. A bad credential or a different set under the label therefore stops
+  the run before anything is deployed. `release qualify` follows the same order and also creates `set.yaml` when it is missing.
 - **`jd deploy <workload>` writes no record:** it has no label; the release is the unit that is deployed and promoted. It is the unrecorded
   development path ([usage.md](../usage.md)); the evidence of S20 comes from release sets.
 
@@ -47,8 +51,8 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 | `identity` | the identity port (section 3) |
 | `oq` per workload, `iq` | sections 4 to 6 |
 
-- **The graph is stored as hashes, not config.** The full graph is reproducible from the set, the catalog version and the environment
-  (hashes are deterministic, S07), and `graphSha256` proves it; this also keeps config out of the record. The records carry the definitions' SHA-256
+- **The graph is stored as hashes, not config.** The node hashes and `graphSha256` let anyone check that a graph resolved from the
+  set, the catalog and the environment matches the one that was deployed (hashes are deterministic, S07); this also keeps config out of the record. The records carry the definitions' SHA-256
   and the set file's; the definition text itself is the verified `set.yaml` beside them (ADR 0007: the platform keeps what it receives), so
   each record stays small and the content is stored once per label.
 - **Secrets cannot reach the record, by construction, not by filtering.** The writer is an allowlist of the fields above. It never reads
@@ -58,18 +62,20 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
   residual risk; a test pins that a secret output, a secret config value and a changed-property value never appear.
 - **Timings:** the node's `Elapsed` exists; the **step** elapsed and the probe **attempts** do not, so `StepReport` gains `Elapsed` and
   `Attempts` (a stopwatch per step in `ReleaseFlow`, the attempt counter it already has) and `WorkloadRun` gains `Elapsed`. A workload's
-  nodes cannot be summed: the grants run inside the runtime's Grants step, so the runtime node's elapsed already contains them. Total
-  deploy time (success criterion 6) is `finishedAt - startedAt`.
+  nodes cannot be summed: the grants run inside the runtime's Grants step, so the runtime node's elapsed already contains them. The deploy
+  walk's total (success criterion 6) is recorded as its own field, `deploySeconds` (a stopwatch around the walk), and the IQ walk as
+  `iq.elapsedSeconds`, so the deploy time excludes IQ; `startedAt` and `finishedAt` bracket the whole activity.
 
 ## 3. Machine identity
 
-The principal the run authenticated with, `{tenantId, clientId, objectId}`, from a port `IDeployerIdentity` in `jd.orchestrator`. Its
-adapter (new project `jd.azure`, the one place with the Azure identity SDK; `HttpRevisionProbe` in the CLI is the precedent for adapters
-at the root, but an Azure SDK reference belongs behind a boundary) builds a `ClientSecretCredential` from `ARM_TENANT_ID`, `ARM_CLIENT_ID` and
+The principal the run authenticated with, `{tenantId, clientId, objectId}`, from a port `IDeployerIdentity` in `jd.core` (`identity/`, beside the
+`IBackEndProvider` port). Its adapter (new project `jd.azure`, which references only `jd.core` and Azure SDKs; `HttpRevisionProbe` in the CLI
+is the precedent for adapters at the root, but an Azure SDK reference belongs behind a boundary, enforced by `tools/verify.sh`) builds a `ClientSecretCredential` from `ARM_TENANT_ID`, `ARM_CLIENT_ID` and
 `ARM_CLIENT_SECRET`, the variables Pulumi uses, gets an ARM token and reads `tid`, `appid` and `oid` from it. Reading the claims without validating the
 signature is sound: the token came straight from Entra over TLS in this call, and the claims are what Entra says the credential is, not
 what the environment says. The CLI refuses to deploy if the variables are missing (Pulumi would otherwise fall back to an ambient `az` login that
-the record could not name), and never prints the secret. Public cloud only, as the rest of the MVP.
+the record could not name), and never prints the secret (`ArmCredentials` is a class, so no generated `ToString` can). The ARM token scope is a named constant in
+the adapter (standards section 1 exception for Azure protocol constants). Public cloud only, as the rest of the MVP (E53).
 
 It cannot be spoofed by workload data because no definition, catalog, descriptor, release-set or stack-output value flows into it: the
 record builder takes the port's result as an argument, and the port reads only the credential. A person who controls the process
@@ -79,7 +85,8 @@ environment controls the identity; that is the trust boundary of a local tool (n
 
 From the runtime node's `Steps`, no new probing. Per workload: `oq.status` is `passed` (Probe `Done`), `failed` (Probe `Failed`; the
 reason and attempts are in the detail), `unchanged` (Probe `Skipped`: the new revision is already the live one, which only a passed
-probe and shift could have made it) or `notRun` (the dark or grants step failed, or the workload was not started). The contract applied
+probe and shift could have made it; for S19 it counts toward "qualified" only when an earlier record under the same `<env>/<label>/` has OQ
+`passed` for that workload, section 1) or `notRun` (the dark or grants step failed, or the workload was not started). The contract applied
 (`path`, `expectedStatus`) comes from the graph node's `probe`, which is catalog data. Plus the probe's detail, attempts and elapsed.
 
 ## 5. IQ: no drift
@@ -101,8 +108,9 @@ reads them for upstream nodes, and a never-deployed runtime yields `PendingUpstr
 
 ## 6. IQ: running digests
 
-Observed from Azure, never from state or the record. A new port `ILiveRevisions` in `jd.orchestrator`: given the runtime's resource id,
-return the revisions that hold traffic, each with its name, weight and container images. Adapter in `jd.azure` over
+Observed from Azure, never from state or the record. A new port `ILiveRevisions` in `jd.core` (like `IDeployerIdentity`, so `jd.azure` needs
+nothing else of ours): given the runtime's resource id, return the revisions that hold traffic, each with its name, weight and container
+images. The `Qualifier` in `jd.orchestrator` consumes it. Adapter in `jd.azure` over
 `Azure.ResourceManager.AppContainers` (new package; the reason is this port; `ContainerAppRevisionData.TrafficWeight` and
 `Template.Containers[].Image` exist in 1.6.0, checked in its XML docs; it shares the credential of section 3). The check: **every image of every
 revision with weight > 0 equals the workload's pinned image, ordinal string equality**, and at least one revision holds traffic.
@@ -132,11 +140,11 @@ revision with weight > 0 equals the workload's pinned image, ordinal string equa
 - **Outcome semantics:** IQ failure makes `deploy` and `qualify` exit **1**, lists every failed check (checks are all run, none short-circuits), and
   leaves the deployment as it is (no rollback; E31). The record says `outcome: succeeded`, `iq.status: failed`: *unqualified*, which S19 derives as in
   section 1. A later `qualify` or deploy that passes writes a new record; nothing is edited.
-- **Cost:** IQ re-previews every node (a refresh each), so a deploy takes roughly one more walk. Accepted for the MVP; measure in S17c.
+- **Cost:** IQ re-previews every node (a refresh each), so a deploy takes roughly one more walk. Accepted for the MVP; measure in S17c. Its time is recorded apart (`iq.elapsedSeconds`), not in the deploy time.
 - **The Azure test mismatch** (last step of `EnvUpAzureTests`, after all other assertions; same environment, no new account): on the
   worker's app, `az containerapp update --image <another publicly pullable image> --revision-suffix oob1`, then `az containerapp ingress traffic set
   --revision-weight <app>--oob1=100`. `jd release qualify` then exits 1 and reports both the drift on the runtime node and the image check
-  (`pinned …@sha256:…, live <other> on revision <app>--oob1`); the `qualify` record has `iq.status: failed`. The offline tests prove the image
+  (`pinned …@sha256:…, live <other> on revision <app>--oob1`); the `qualify` record has `iq.status: failed`. The Azure test must assert the image-check line itself, not only the drift line. The offline tests prove the image
   check alone (clean preview, different image). *Unverified:* that the revision can be created and given traffic if the other image does not serve
   on the app's port (`ingress update --target-port` fixes it); and what weight the new revision gets by default (hence the explicit `traffic set`).
 
@@ -144,9 +152,9 @@ revision with weight > 0 equals the workload's pinned image, ordinal string equa
 
 | Slice | Contents | Est. |
 |---|---|---|
-| **S17a identity** | `IDeployerIdentity`, `jd.azure` project (credential from `ARM_*`, token claims), standards section 3 amended for the new adapter project, composition-root seam | ~65 |
+| **S17a identity** | `IDeployerIdentity` (in `jd.core`), `jd.azure` project (credential from `ARM_*`, token claims), standards sections 1 and 3 amended, boundary check, composition-root seam | ~65 |
 | **S17b record + OQ + timings** | `JD_RECORDS_DIR`, `ReleaseRecordFile` (write-once store and `set.yaml` check, in `jd.resolver` beside `ReleaseSetFile`), `ReleaseRecordBuilder` (in `jd.orchestrator`, builds the JSON from the runs), schema, `StepReport`/`WorkloadRun` timings and attempts, set bytes and hash, `release deploy` wiring | ~220 |
-| **S17c IQ** | `ILiveRevisions` and adapter, `resourceIdOutput`, preview of the grants, `Qualifier`, `release qualify`, IQ in the deploy and its record | ~265 |
+| **S17c IQ** | `ILiveRevisions` (in `jd.core`) and adapter, `resourceIdOutput`, preview of the grants, `Qualifier`, `release qualify`, IQ in the deploy and its record | ~265 |
 
 The total (~550) is one slice's worth of work three times over; each part stands alone and keeps the gate green. S17c is slightly over the cap and
 can drop the grants preview into its own tiny slice if the reviewer wants it smaller.
@@ -158,7 +166,8 @@ can drop the grants preview into its own tiny slice if the reviewer wants it sma
 - *S17b:* golden record validated against the schema; the file is never opened for write twice (existing path fails, a re-run adds a file and leaves
   the old bytes unchanged); label or environment with `..` or a separator rejected; no secret (output, config value, changed property) in the text;
   failed run writes outcome `failed`, failing node and not-started workloads; preview, usage and resolution errors write nothing; missing
-  `JD_RECORDS_DIR` stops before the backend is called; OQ `passed`/`failed`/`unchanged`/`notRun`; identity equals the port's value, whatever the
+  `JD_RECORDS_DIR` stops before the backend is called; an identity failure (bad credential) stops before the backend is called and creates no
+  `set.yaml`; `release qualify` creates a missing `set.yaml` and checks an existing one; deploy time excludes the IQ walk; OQ `passed`/`failed`/`unchanged`/`notRun`; identity equals the port's value, whatever the
   definition says; `setSha256` equals the SHA-256 of `set.yaml`, which holds the set's exact bytes; an identical re-run reuses `set.yaml`; different
   bytes under the same label are refused before the backend is called; `set.yaml` is never overwritten; step elapsed within the node's. Azure: in `EnvUpAzureTests`, the good, bad and revert
   deploys each leave a record (outcomes `succeeded`, `failed`, `succeeded`; the bad one has OQ `failed`) and identity equals `ARM_CLIENT_ID`.

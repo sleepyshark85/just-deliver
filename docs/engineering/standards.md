@@ -17,6 +17,8 @@ infrastructure. Code that bakes in what should be data defeats the MVP.
   ad hoc deep in the code.
 - Allowed in code: the catalog/schema *formats*, the expression syntax, built-in functions, and
   defaults that are part of a format's contract (documented next to the format).
+- Exception: Azure protocol constants (an endpoint, a token scope) may be named constants inside an Azure adapter project (`jd.azure`),
+  with a comment saying so. The MVP is public cloud only; sovereign clouds need configuration (E53).
 - Tests may contain literal fixtures; production code may not.
 
 ## 2. Simplest thing that works
@@ -38,7 +40,7 @@ Dependencies point inward. Inner layers know nothing about Pulumi, Azure or the 
 | Application | `jd.orchestrator` | `jd.core`, `jd.resolver` | Pulumi, Azure SDKs, backend providers, `jd.azure`, CLI |
 | Validation | `jd.definitionvalidator` | `jd.core`, schema libs | Pulumi, Azure SDKs |
 | Infrastructure adapters | `backend-providers/jd.bp.pulumi` | `jd.core`, Pulumi Automation, the resolver's public output contract (`ResolvedGraph`, config values, references, `LoadError`) | resolver internals beyond that contract, CLI |
-| Infrastructure adapters (Azure) | `jd.azure` | `jd.core`, `jd.orchestrator` (the ports it implements, e.g. `IDeployerIdentity`), Azure SDKs | `jd.resolver`, Pulumi, backend providers, CLI |
+| Infrastructure adapters (Azure) | `jd.azure` | `jd.core` (the ports it implements, e.g. `IDeployerIdentity`), Azure SDKs | `jd.resolver`, `jd.orchestrator`, Pulumi, backend providers, CLI |
 | Composition root | `jd.cli` | everything | — (only wiring, argument parsing, output) |
 
 - `tools/verify.sh` enforces the inner-layer rule mechanically; the reviewer checks the rest.

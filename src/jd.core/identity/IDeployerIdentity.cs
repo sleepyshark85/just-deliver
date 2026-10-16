@@ -1,4 +1,4 @@
-namespace jd.orchestrator;
+namespace jd.core.identity;
 
 /// <summary>The principal a run authenticates with, as the identity provider reports it (not as any file or environment claims).</summary>
 /// <param name="TenantId">The directory the principal belongs to.</param>

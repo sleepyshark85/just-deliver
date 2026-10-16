@@ -1,7 +1,7 @@
 using System.Buffers.Text;
 using System.Text.Json;
 using Azure.Core;
-using jd.orchestrator;
+using jd.core.identity;
 
 namespace jd.azure;
 
@@ -12,7 +12,8 @@ namespace jd.azure;
 /// </summary>
 public sealed class ArmDeployerIdentity(TokenCredential credential) : IDeployerIdentity
 {
-    // The token is requested for Azure Resource Manager, the API every deploy goes through: its resource's default scope.
+    // The token is requested for Azure Resource Manager, the API every deploy goes through: its resource's default scope. A named protocol
+    // constant inside an Azure adapter (standards section 1); the MVP is public cloud only, other clouds need configuration (E53).
     private const string ArmScope = "https://management.azure.com/.default";
 
     private const string TenantClaim = "tid";

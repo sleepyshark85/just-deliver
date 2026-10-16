@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Text;
 using Azure.Core;
+using jd.core.identity;
 using Xunit;
 
 namespace jd.azure.tests;
@@ -26,7 +27,7 @@ public sealed class ArmDeployerIdentityTests
 
     private static string Encode(string text) => Base64Url.EncodeToString(Encoding.UTF8.GetBytes(text));
 
-    private static Task<jd.orchestrator.DeployerIdentity> IdentityOf(string token, FixedCredential? credential = null) =>
+    private static Task<DeployerIdentity> IdentityOf(string token, FixedCredential? credential = null) =>
         new ArmDeployerIdentity(credential ?? new FixedCredential(token)).GetAsync(CancellationToken.None);
 
     [Fact]
@@ -36,7 +37,7 @@ public sealed class ArmDeployerIdentityTests
 
         var identity = await IdentityOf(string.Empty, credential);
 
-        Assert.Equal(new jd.orchestrator.DeployerIdentity("tenant-1", "client-1", "object-1"), identity);
+        Assert.Equal(new DeployerIdentity("tenant-1", "client-1", "object-1"), identity);
         Assert.Single(credential.Requests);
         Assert.Single(credential.Requests[0]);
         Assert.EndsWith("/.default", credential.Requests[0][0], StringComparison.Ordinal);
@@ -90,6 +91,14 @@ public sealed class ArmDeployerIdentityTests
         Assert.DoesNotContain("the-secret", credentials.Problem, StringComparison.Ordinal);
         var error = Assert.Throws<InvalidOperationException>(credentials.ToCredential);
         Assert.Equal(credentials.Problem, error.Message);
+    }
+
+    [Fact]
+    public void The_credentials_never_print_the_secret()
+    {
+        var credentials = new ArmCredentials("tenant", "client", "the-secret");
+
+        Assert.DoesNotContain("the-secret", credentials.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
