@@ -1,6 +1,6 @@
 # Release record and qualification
 
-> Status: design note for S17 (MVP). S17a (identity) and S17b (record, OQ, timings, `set.yaml`) are built; IQ and `release qualify` (S17c) are not. Addresses [E52](../open-questions.md); the audit store (F39) is out of scope.
+> Status: design note for S17 (MVP). S17a (identity), S17b (record, OQ, timings, `set.yaml`) and S17c1 (the grants preview, `ILiveRevisions`, the `Qualifier`, `jd release qualify` and its record) are built; IQ inside `jd release deploy` (S17c2) is not. Addresses [E52](../open-questions.md); the audit store (F39) is out of scope.
 > Builds on [release.md](release.md) (the set), [provisioning.md](provisioning.md) (the walk and release flow) and
 > [ADR 0007](../decisions/0007-definition-upload-snapshot.md). Approvals (S18, F54) and promotion (S19) will use the same records.
 
@@ -23,8 +23,8 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
   usage error or a resolution error writes none (nothing was deployed). A killed process writes none: the file is written at the end.
   If the write itself fails after a deploy, the run exits 1 and says so; the deployment stays.
 - **Format:** JSON, `kind: ReleaseRecord`, contract in `schemas/release-record.schema.json` (as the set and manifest have), pinned by a test
-  (a committed golden record, validated against the schema). The schema has **no `iq` property yet**; S17c adds it as an optional one, so
-  records written before it stay valid.
+  (a committed golden record, validated against the schema). `activity` is `deploy` or `qualify`; a deploy requires `outcome`, `deploySeconds`, `notStarted` and each workload's `oq`, a qualify requires `iq` (`oneOf`, with
+  `additionalProperties: false` kept); `iq` is optional on a deploy until S17c2 fills it, so records written before it stay valid.
 - **Finding it later (S18, S19; named, not built):** the records of label X on environment Y are the files in `<records>/Y/X/`.
   An approval is *another* file in that directory (`…-approve.json`) that names the record's file name and the SHA-256 of its bytes (a
   record cannot contain its own hash). "Qualified" is derived, never stored: the newest `deploy` record has outcome `succeeded` and, for every
@@ -112,16 +112,16 @@ removed from state gives `create`. So a persisted refresh does not absorb drift:
 *Not verifiable offline:* that azure-native's refresh of a Container App, its role assignments and the Cosmos container reflects an
 out-of-band change into the inputs (it should; S11 shows no perpetual diffs on a clean re-run).
 
-**One gap to close:** the preview walk does not preview the after-runtime nodes (the grants), because it never runs the Grants step. They
-matter most for identity, so in preview `ReleaseFlow` calls `deployDependants` with the runtime outputs read from state (the walk already
-reads them for upstream nodes, and a never-deployed runtime yields `PendingUpstream`). About 10 lines.
+**The gap, closed in S17c1:** the preview walk did not preview the after-runtime nodes (the grants), because it never runs the Grants step. They
+matter most for identity, so in preview `ReleaseFlow` now calls `deployDependants` with the runtime outputs read from state (the walk already
+reads them for upstream nodes, and a never-deployed runtime yields `PendingUpstream`). A grant that fails in preview fails the runtime node's report (`grants: ...`).
 
 ## 6. IQ: running digests
 
 Observed from Azure, never from state or the record. A new port `ILiveRevisions` in `jd.core` (like `IDeployerIdentity`, so `jd.azure` needs
 nothing else of ours): given the runtime's resource id, return the revisions that hold traffic, each with its name, weight and container
 images. The `Qualifier` in `jd.orchestrator` consumes it. Adapter in `jd.azure` over
-`Azure.ResourceManager.AppContainers` (new package; the reason is this port; `ContainerAppRevisionData.TrafficWeight` and
+`Azure.ResourceManager.AppContainers` (new package, 1.6.0, the newest stable; the reason is this port; `ContainerAppRevisionData.TrafficWeight` and
 `Template.Containers[].Image` exist in 1.6.0, checked in its XML docs; it shares the credential of section 3). The check: **every image of every
 revision with weight > 0 equals the workload's pinned image, ordinal string equality**, and at least one revision holds traffic.
 
@@ -134,6 +134,14 @@ revision with weight > 0 equals the workload's pinned image, ordinal string equa
   raw ARM GET) needs a hand-built ARM client, an endpoint to configure and a small query language in the catalog, for a runtime that
   has one implementation (ADR 0013). The adapter holds the runtime port's Container Apps knowledge (revisions, weights), like the probe's
   transport; no workload, name or image is in it. A second runtime replaces the adapter and the one mapping name.
+- **As built (S17c1):** `ILiveRevisions` is `GetAsync(resourceId)` returning `LiveRevision(name, trafficWeight, images)` and throws `InvalidOperationException` with a
+  message for a person (HTTP status and Azure error code only, never the reply) when Azure cannot answer; `ArmLiveRevisions` is the adapter, over the same `ARM_*`
+  credential as the identity. The `Qualifier` (in `jd.orchestrator`) previews each workload on its own, so a failure in one does not hide another, turns every
+  graph node into a `drift` check and the runtime's revisions into `image` checks, and makes an exception of the reader or of the state read a failed check. A node the
+  walk never reached (it stops at a failed node, or at a runtime that is pending) is a failed check, "not checked", never a silent pass. The pinned image is the graph's
+  `WorkloadImage`, which for a release is the digest-pinned `container.image` of the set's definition.
+- **The record's `iq`:** `{status, elapsedSeconds, checks[]}`, each check `{workload, kind: drift|image, subject, status, detail}`; `detail` is the failure text and empty
+  when the check passed. `subject` is the node (drift), the revision (image) or the workload when there is no revision to name.
 - **Limit, stated:** Azure reports the image reference configured on the revision, which is the digest we pinned, not a content digest read
   from a running replica. *Not verifiable offline:* that Azure echoes a `repo@sha256:…` reference unchanged (expected; the Azure test shows it).
 
@@ -164,10 +172,10 @@ revision with weight > 0 equals the workload's pinned image, ordinal string equa
 |---|---|---|
 | **S17a identity** | `IDeployerIdentity` (in `jd.core`), `jd.azure` project (credential from `ARM_*`, token claims), standards sections 1 and 3 amended, boundary check, composition-root seam | ~65 |
 | **S17b record + OQ + timings** | `JD_RECORDS_DIR`, `ReleaseRecordFile` (write-once store and `set.yaml` check, in `jd.resolver` beside `ReleaseSetFile`), `ReleaseRecordBuilder` (in `jd.orchestrator`, builds the JSON from the runs), schema, `StepReport`/`WorkloadRun` timings and attempts, set bytes and hash, `release deploy` wiring | ~220 |
-| **S17c IQ** | `ILiveRevisions` (in `jd.core`) and adapter, `resourceIdOutput`, preview of the grants, `Qualifier`, `release qualify`, IQ in the deploy and its record | ~265 |
+| **S17c1 IQ + qualify** | grants preview, `resourceIdOutput`, `ILiveRevisions` (in `jd.core`) and adapter, `Qualifier`, `release qualify` and its record, the `jd.azure` allowlist check | ~200 |
+| **S17c2 IQ in deploy** | IQ inside `jd release deploy` after all workloads deployed (`notRun` when one failed), deploy time excluding IQ, exit 1 with `succeeded` + `failed` | ~65 |
 
-The total (~550) is one slice's worth of work three times over; each part stands alone and keeps the gate green. S17c is slightly over the cap and
-can drop the grants preview into its own tiny slice if the reviewer wants it smaller.
+The total (~550) is one slice's worth of work three times over (S17c, estimated ~265, was split in two); each part stands alone and keeps the gate green.
 
 **Required boundary tests**
 
@@ -181,17 +189,17 @@ can drop the grants preview into its own tiny slice if the reviewer wants it sma
   definition says; `setSha256` equals the SHA-256 of `set.yaml`, which holds the set's exact bytes; an identical re-run reuses `set.yaml`; different
   bytes under the same label are refused before the backend is called; `set.yaml` is never overwritten; step elapsed within the node's. Azure: in `EnvUpAzureTests`, the good, bad and revert
   deploys each leave a record (outcomes `succeeded`, `failed`, `succeeded`; the bad one has OQ `failed`) and identity equals `ARM_CLIENT_ID`.
-- *S17c:* drift (fake preview reports an update, or a create for a removed node) fails IQ; a drifted grant node fails it; `PendingUpstream` fails
+- *S17c1:* drift (fake preview reports an update, or a create for a removed node) fails IQ; a drifted grant node fails it; `PendingUpstream` fails
   it; digest mismatch with a clean preview fails it; the latest revision wrong but the live one right passes, the reverse fails; no revision with
-  traffic fails; a reader error (app gone) is a failed check, not a crash; `qualify` makes zero `DeployAsync` calls; in a deploy every `DeployAsync`
-  precedes every IQ preview, and a failed deploy gives `notRun`; IQ failure exits 1 and the record reads `succeeded` + `failed`; the failure
-  text lists all failed checks. Azure: the mismatch of section 7.
+  traffic fails; a reader error (app gone) is a failed check, not a crash; `qualify` makes zero `DeployAsync` calls; the failure
+  text lists all failed checks. Azure: the mismatch of section 7. *S17c2:* in a deploy every `DeployAsync` precedes every IQ preview, and a failed deploy gives
+  `notRun`; IQ failure exits 1 and the record reads `succeeded` + `failed`.
 
 ## Decisions (lead, pending the user's review)
 
 1. `jd deploy <workload>` writes no record; a release is the unit. It is the unrecorded development path. Success criterion 7 is met by release sets.
 2. `JD_RECORDS_DIR` is required for `release deploy` (not `--preview`) and `release qualify`.
-3. A new adapter project `jd.azure`; the package `Azure.ResourceManager.AppContainers` arrives in S17c (S17a needs only Azure.Identity, already pinned);
+3. A new adapter project `jd.azure`; the package `Azure.ResourceManager.AppContainers` arrives in S17c1 (S17a needs only Azure.Identity, already pinned);
    standards section 3 is amended in S17a.
 4. No deviation from ADR 0007: the record directory keeps the set file's bytes (`set.yaml`, section 1); records reference it by `setSha256`.
 5. IQ failure exits 1 and leaves the deployment live (no rollback; E31, E32).

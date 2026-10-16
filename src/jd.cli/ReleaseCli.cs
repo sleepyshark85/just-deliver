@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using jd.core.bp;
 using jd.core.identity;
+using jd.core.revisions;
 using jd.orchestrator;
 using jd.resolver.release;
 
@@ -16,12 +17,12 @@ internal static class ReleaseCli
 
     // args are the arguments after "release".
     public static async Task<int> RunAsync(
-        string[] args, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, TimeProvider time, Func<string, string?> environmentVariable,
+        string[] args, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions, TimeProvider time, Func<string, string?> environmentVariable,
         CancellationToken cancellationToken)
     {
-        if (args.FirstOrDefault() == "deploy")
+        if (args.FirstOrDefault() is "deploy" or "qualify")
         {
-            return await ReleaseDeployCli.RunAsync(args[1..], stdout, stderr, backend, probe, identity, time, environmentVariable, cancellationToken);
+            return await ReleaseDeployCli.RunAsync(args[1..], args[0] == "qualify", stdout, stderr, backend, probe, identity, liveRevisions, time, environmentVariable, cancellationToken);
         }
 
         var (command, input, output, problem) = Parse(args);
@@ -82,7 +83,7 @@ internal static class ReleaseCli
         var command = args.FirstOrDefault();
         if (command is not ("create" or "show"))
         {
-            return (null, string.Empty, null, command is null ? "release needs a command: create, show or deploy." : $"unknown release command '{command}'.");
+            return (null, string.Empty, null, command is null ? "release needs a command: create, show, deploy or qualify." : $"unknown release command '{command}'.");
         }
 
         string? output = null;

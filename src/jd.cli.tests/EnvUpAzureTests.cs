@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using jd.bp.pulumi;
 using jd.core.bp;
 using jd.resolver.environment;
@@ -14,7 +15,8 @@ namespace jd.cli.tests;
 /// deployed on <c>dev</c> (<c>jd release create</c>, <c>jd release deploy</c>): the workloads get distinct containers in the dev database
 /// without throughput of their own, so the free-tier RU/s budget holds, and a second deploy changes nothing. Then a release whose first
 /// workload's <c>/health</c> fails (its container does not exist) stops at the probe with traffic still on the good revision and the
-/// later workload untouched, and the good release deployed again goes live as a new revision. It is one scenario because
+/// later workload untouched, and the good release deployed again goes live as a new revision. Last, <c>jd release qualify</c> passes on the live
+/// good release, then fails after the worker's image is changed out of band, naming the image check. It is one scenario because
 /// Azure allows one free-tier Cosmos account per subscription and the substrate here is that account. Always deletes the resource
 /// groups it created. Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>,
 /// <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI, and a subscription
@@ -124,6 +126,14 @@ public sealed class EnvUpAzureTests : IDisposable
     // The records of a label on dev, oldest first.
     private List<JsonElement> RecordsOf(string label) =>
         Directory.GetFiles(Path.Combine(Records, DevName, label), "*-deploy.json").Order(StringComparer.Ordinal).Select(file =>
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(file));
+            return document.RootElement.Clone();
+        }).ToList();
+
+    // The qualify records of a label on dev, oldest first.
+    private List<JsonElement> QualifyRecordsOf(string label) =>
+        Directory.GetFiles(Path.Combine(Records, DevName, label), "*-qualify.json").Order(StringComparer.Ordinal).Select(file =>
         {
             using var document = JsonDocument.Parse(File.ReadAllText(file));
             return document.RootElement.Clone();
@@ -326,5 +336,44 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.All(records, record => Assert.Equal("succeeded", record.GetProperty("outcome").GetString()));
         Assert.Equal(["unchanged", "unchanged"], [Oq(records[1], 0), Oq(records[1], 1)]);
         Assert.Equal("passed", Oq(records[2], 0));
+
+        // IQ: the good release, as deployed, qualifies (no drift anywhere, the pinned digest on every revision that serves traffic).
+        var catalog = Path.Combine(AppContext.BaseDirectory, "catalog");
+        var qualify = new[] { "qualify", releaseSet, "--env", devDescriptor, "--catalog", catalog };
+        var (qualifiedCode, qualifiedOutput) = await ReleaseAsync(backend, qualify);
+        Assert.True(qualifiedCode == 0, qualifiedOutput);
+        var qualified = Assert.Single(QualifyRecordsOf("1.0.0"));
+        Assert.Equal("qualify", qualified.GetProperty("activity").GetString());
+        Assert.Equal("passed", qualified.GetProperty("iq").GetProperty("status").GetString());
+        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), qualified.GetProperty("identity").GetProperty("clientId").GetString());
+
+        // The image of the worker's app is changed out of band, and that revision is given all the traffic. The quickstart image is a small public
+        // Microsoft image that needs no registry login; it listens on port 80, so the app's ingress is pointed there for the revision to serve.
+        const string OtherImage = "mcr.microsoft.com/k8se/quickstart:latest";
+        var workerName = _az.Run("resource", "show", "--ids", workerApp, "--query", "name", "-o", "tsv").Output.Trim();
+        Assert.NotEmpty(workerName);
+        var oob = $"{workerName}--oob1";
+        foreach (var command in new[]
+        {
+            new[] { "containerapp", "update", "--ids", workerApp, "--image", OtherImage, "--revision-suffix", "oob1" },
+            ["containerapp", "ingress", "update", "--ids", workerApp, "--target-port", "80"],
+            ["containerapp", "ingress", "traffic", "set", "--ids", workerApp, "--revision-weight", $"{oob}=100"],
+        })
+        {
+            var changed = _az.Run(command); // the app's id carries its subscription
+            Assert.True(changed.Code == 0, $"az {string.Join(' ', command)} failed: {changed.Error}");
+        }
+
+        Assert.Equal(100, Revisions(workerApp)[oob]);
+        var (drifted, driftedOutput) = await ReleaseAsync(backend, qualify);
+        Assert.Equal(1, drifted);
+        // The image check names what was pinned (a digest) and what runs, on which revision; this is the line that proves IQ read Azure.
+        Assert.Matches($@"IQ failed: just-deliver-sample-worker: pinned \S+@sha256:[0-9a-f]{{64}}, live {Regex.Escape(OtherImage)} on revision {Regex.Escape(oob)}", driftedOutput);
+        // The runtime node differs from its stack too (not verifiable offline: that Azure's refresh reflects the change into the inputs).
+        Assert.Contains("just-deliver-sample-worker/dev/@workload/runtime differs from what is deployed", driftedOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("just-deliver-sample-app: pinned", driftedOutput, StringComparison.Ordinal);
+        var failedIq = QualifyRecordsOf("1.0.0");
+        Assert.Equal(2, failedIq.Count);
+        Assert.Equal("failed", failedIq[1].GetProperty("iq").GetProperty("status").GetString());
     }
 }

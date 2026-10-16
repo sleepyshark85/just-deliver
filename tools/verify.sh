@@ -40,9 +40,12 @@ for p in "${inner[@]}"; do
     fail "$p must not reference Pulumi, Azure SDKs or backend providers (see docs/engineering/standards.md)"
   fi
 done
-# The Azure adapter sits next to the core: it implements ports from jd.core and nothing else of ours.
-if [[ -f src/jd.azure/jd.azure.csproj ]] && grep -E -q 'Include="Pulumi[^"]*"|backend-providers|jd\.resolver|jd\.orchestrator|jd\.cli' src/jd.azure/jd.azure.csproj; then
-  fail "src/jd.azure/jd.azure.csproj may reference only jd.core and Azure SDKs (see docs/engineering/standards.md)"
+# The Azure adapter sits next to the core: an allowlist, so a new kind of reference fails until the rule is changed on purpose. It implements
+# ports from jd.core and uses Azure SDKs, nothing else.
+if [[ -f src/jd.azure/jd.azure.csproj ]]; then
+  refs=$(grep -E -o '(Project|Package)Reference[[:space:]]+(Include|Update)="[^"]*"' src/jd.azure/jd.azure.csproj || true)
+  outside=$({ grep -E '^ProjectReference' <<<"$refs" | grep -E -v '"\.\./jd\.core/jd\.core\.csproj"$'; grep -E '^PackageReference' <<<"$refs" | grep -E -v '"Azure\.[^"]*"$'; } || true)
+  [[ -z "$outside" ]] || fail "src/jd.azure/jd.azure.csproj may reference only jd.core (ProjectReference) and Azure.* packages (PackageReference), not: ${outside//$'\n'/; } (see docs/engineering/standards.md)"
 fi
 echo "ok"
 

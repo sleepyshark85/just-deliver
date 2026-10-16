@@ -19,6 +19,7 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     private readonly FakeIdentity _identity = new();
     private IDeployerIdentity? _port;
     private StepClock _clock = new();
+    private readonly FakeLiveRevisions _live = new();
 
     // JD_RECORDS_DIR as the run sees it: the temp records directory unless a test changes it.
     private readonly string _records;
@@ -40,7 +41,7 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, name => name == "JD_RECORDS_DIR" ? _recordsVariable : _variables.GetValueOrDefault(name), backend, _port, _clock);
+        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, name => name == "JD_RECORDS_DIR" ? _recordsVariable : _variables.GetValueOrDefault(name), backend, _port, _clock, _live);
         return (code, stdout.ToString(), stderr.ToString());
     }
 
