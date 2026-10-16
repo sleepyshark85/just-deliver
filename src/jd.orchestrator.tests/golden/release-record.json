@@ -1,0 +1,301 @@
+{
+  "kind": "ReleaseRecord",
+  "activity": "deploy",
+  "startedAt": "2026-10-17T08:00:00Z",
+  "finishedAt": "2026-10-17T08:01:30Z",
+  "outcome": "succeeded",
+  "identity": {
+    "tenantId": "tenant-1",
+    "clientId": "client-1",
+    "objectId": "object-1"
+  },
+  "environment": {
+    "name": "dev",
+    "tier": "team",
+    "region": "region-1",
+    "catalogVersion": "1"
+  },
+  "release": {
+    "label": "1.0.0",
+    "createdAt": "2026-10-17T07:00:00Z",
+    "setSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "deploySeconds": 42.5,
+  "notStarted": [],
+  "workloads": [
+    {
+      "name": "shop",
+      "team": "crew",
+      "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dependsOn": [],
+      "image": "registry.example/app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "graph": {
+        "sha256": "2da3a43231afbd4871dbdc05542855f6d3464b8ef54a9428b268f99d37d6a7ce",
+        "nodes": [
+          {
+            "id": "shop/dev/@workload/runtime",
+            "template": "t/runtime",
+            "stack": "shop.dev._workload.runtime",
+            "phase": "runtime",
+            "hash": "c7f236615de8a1a6015f15ba86b92488e505bbb3cbeddb6fdb71248f3294603c"
+          },
+          {
+            "id": "shop/dev/thing/group",
+            "template": "t/group",
+            "stack": "shop.dev.thing.group",
+            "phase": "infrastructure",
+            "hash": "501732be499c56fdae1d3948da3b192fe260b113d0f9eebe87ec77615dca3e26"
+          },
+          {
+            "id": "shop/dev/thing/app",
+            "template": "t/app",
+            "stack": "shop.dev.thing.app",
+            "phase": "infrastructure",
+            "hash": "31344f2390254fb60d29e19a9f1225d5ee44584a0a7227dc5349729e436e6078"
+          },
+          {
+            "id": "shop/dev/thing/app2",
+            "template": "t/app2",
+            "stack": "shop.dev.thing.app2",
+            "phase": "infrastructure",
+            "hash": "4402d63f0f9ccf778b6132ddb3fb88c4a22b8e4c9a5b0a727e61b9a87cfbfc3e"
+          },
+          {
+            "id": "shop/dev/thing/rt",
+            "template": "t/rt",
+            "stack": "shop.dev.thing.rt",
+            "phase": "afterRuntime",
+            "hash": "f1411dfd1702e6b074309aa5c8d162abaa2bb0ba8f040664baf7dcd2fc7f04c8"
+          }
+        ]
+      },
+      "run": {
+        "elapsedSeconds": 4.0,
+        "nodes": [
+          {
+            "id": "shop/dev/thing/group",
+            "outcome": "deployed",
+            "changes": {
+              "Create": 1
+            },
+            "message": "",
+            "elapsedSeconds": 2.0
+          },
+          {
+            "id": "shop/dev/thing/app",
+            "outcome": "deployed",
+            "changes": {
+              "Create": 1
+            },
+            "message": "",
+            "elapsedSeconds": 2.0
+          },
+          {
+            "id": "shop/dev/thing/app2",
+            "outcome": "deployed",
+            "changes": {
+              "Create": 1
+            },
+            "message": "",
+            "elapsedSeconds": 2.0
+          },
+          {
+            "id": "shop/dev/thing/rt",
+            "outcome": "deployed",
+            "changes": {
+              "Create": 1
+            },
+            "message": "",
+            "elapsedSeconds": 2.0
+          },
+          {
+            "id": "shop/dev/@workload/runtime",
+            "outcome": "deployed",
+            "changes": {
+              "Create": 1
+            },
+            "message": "",
+            "elapsedSeconds": 2.0,
+            "steps": [
+              {
+                "step": "dark",
+                "outcome": "done",
+                "detail": "app--rc6298a31e3b0c4",
+                "elapsedSeconds": 0.5,
+                "attempts": 0
+              },
+              {
+                "step": "grants",
+                "outcome": "done",
+                "detail": "",
+                "elapsedSeconds": 0.5,
+                "attempts": 0
+              },
+              {
+                "step": "probe",
+                "outcome": "done",
+                "detail": "HTTP 200",
+                "elapsedSeconds": 0.5,
+                "attempts": 1
+              },
+              {
+                "step": "shift",
+                "outcome": "done",
+                "detail": "app--rc6298a31e3b0c4",
+                "elapsedSeconds": 0.5,
+                "attempts": 0
+              }
+            ]
+          }
+        ]
+      },
+      "oq": {
+        "status": "passed",
+        "contract": {
+          "path": "/health",
+          "expectedStatus": 200
+        },
+        "detail": "HTTP 200",
+        "attempts": 1,
+        "elapsedSeconds": 0.5
+      }
+    },
+    {
+      "name": "cart",
+      "team": "crew",
+      "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dependsOn": [],
+      "image": "registry.example/app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "graph": {
+        "sha256": "17e8b3878f4a5ab112beb37956b18872e09cdb8d04e33ce82e19f16768884374",
+        "nodes": [
+          {
+            "id": "cart/dev/@workload/runtime",
+            "template": "t/runtime",
+            "stack": "cart.dev._workload.runtime",
+            "phase": "runtime",
+            "hash": "c7f236615de8a1a6015f15ba86b92488e505bbb3cbeddb6fdb71248f3294603c"
+          },
+          {
+            "id": "cart/dev/thing/group",
+            "template": "t/group",
+            "stack": "cart.dev.thing.group",
+            "phase": "infrastructure",
+            "hash": "501732be499c56fdae1d3948da3b192fe260b113d0f9eebe87ec77615dca3e26"
+          },
+          {
+            "id": "cart/dev/thing/app",
+            "template": "t/app",
+            "stack": "cart.dev.thing.app",
+            "phase": "infrastructure",
+            "hash": "31344f2390254fb60d29e19a9f1225d5ee44584a0a7227dc5349729e436e6078"
+          },
+          {
+            "id": "cart/dev/thing/app2",
+            "template": "t/app2",
+            "stack": "cart.dev.thing.app2",
+            "phase": "infrastructure",
+            "hash": "4402d63f0f9ccf778b6132ddb3fb88c4a22b8e4c9a5b0a727e61b9a87cfbfc3e"
+          },
+          {
+            "id": "cart/dev/thing/rt",
+            "template": "t/rt",
+            "stack": "cart.dev.thing.rt",
+            "phase": "afterRuntime",
+            "hash": "f1411dfd1702e6b074309aa5c8d162abaa2bb0ba8f040664baf7dcd2fc7f04c8"
+          }
+        ]
+      },
+      "run": {
+        "elapsedSeconds": 4.0,
+        "nodes": [
+          {
+            "id": "cart/dev/thing/group",
+            "outcome": "deployed",
+            "changes": {
+              "Create": 1
+            },
+            "message": "",
+            "elapsedSeconds": 2.0
+          },
+          {
+            "id": "cart/dev/thing/app",
+            "outcome": "deployed",
+            "changes": {
+              "Create": 1
+            },
+            "message": "",
+            "elapsedSeconds": 2.0
+          },
+          {
+            "id": "cart/dev/thing/app2",
+            "outcome": "deployed",
+            "changes": {
+              "Create": 1
+            },
+            "message": "",
+            "elapsedSeconds": 2.0
+          },
+          {
+            "id": "cart/dev/thing/rt",
+            "outcome": "deployed",
+            "changes": {
+              "Create": 1
+            },
+            "message": "",
+            "elapsedSeconds": 2.0
+          },
+          {
+            "id": "cart/dev/@workload/runtime",
+            "outcome": "deployed",
+            "changes": {
+              "Create": 1
+            },
+            "message": "",
+            "elapsedSeconds": 2.0,
+            "steps": [
+              {
+                "step": "dark",
+                "outcome": "done",
+                "detail": "app--rc6298a31e3b0c4",
+                "elapsedSeconds": 0.5,
+                "attempts": 0
+              },
+              {
+                "step": "grants",
+                "outcome": "done",
+                "detail": "",
+                "elapsedSeconds": 0.5,
+                "attempts": 0
+              },
+              {
+                "step": "probe",
+                "outcome": "done",
+                "detail": "HTTP 200",
+                "elapsedSeconds": 0.5,
+                "attempts": 1
+              },
+              {
+                "step": "shift",
+                "outcome": "done",
+                "detail": "app--rc6298a31e3b0c4",
+                "elapsedSeconds": 0.5,
+                "attempts": 0
+              }
+            ]
+          }
+        ]
+      },
+      "oq": {
+        "status": "passed",
+        "contract": {
+          "path": "/health",
+          "expectedStatus": 200
+        },
+        "detail": "HTTP 200",
+        "attempts": 1,
+        "elapsedSeconds": 0.5
+      }
+    }
+  ]
+}
