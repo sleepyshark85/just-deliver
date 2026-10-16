@@ -260,6 +260,7 @@ public sealed class CliTests : IDisposable
         Assert.Equal(1, code);
         Assert.Contains("jd: stopped at just-deliver-sample-app/dev/@workload/runtime: probe: HTTP 503 after 2 attempts", stderr);
         Assert.Contains("  probe: failed (HTTP 503 after 2 attempts)", stdout);
+        Assert.Single(stdout.Split("HTTP 503 after 2 attempts")[1..]); // the reason is printed once on stdout, not again as the node's message
         Assert.Single(backend.Calls, call => call == "deploy just-deliver-sample-app.dev._workload.runtime"); // the dark deploy only, no shift
         Assert.Equal(2, backend.Calls.Count(call => call.StartsWith("probe ", StringComparison.Ordinal)));
     }
