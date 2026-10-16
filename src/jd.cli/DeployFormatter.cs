@@ -24,7 +24,8 @@ public static class DeployFormatter
             text.AppendLine($"  {step.Step.ToString().ToLowerInvariant()}: {step.Outcome.ToString().ToLowerInvariant()}{(step.Detail.Length > 0 ? $" ({step.Detail})" : string.Empty)}");
         }
 
-        if (report.Message.Length > 0)
+        // A failed release step already shows the reason.
+        if (report.Message.Length > 0 && report.Steps?.Any(s => s.Outcome == StepOutcome.Failed) != true)
         {
             text.AppendLine($"  {report.Message}");
         }

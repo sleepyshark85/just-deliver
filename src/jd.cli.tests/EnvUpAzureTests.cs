@@ -11,7 +11,9 @@ namespace jd.cli.tests;
 /// collide) brought up with <c>jd env up</c> on a local file state. Checks the descriptors, the free-tier Cosmos account and its
 /// RU/s cap and the workspace's daily cap through <c>az</c>, and that running each again changes nothing. Then the sample release set is
 /// deployed on <c>dev</c> (<c>jd release create</c>, <c>jd release deploy</c>): the workloads get distinct containers in the dev database
-/// without throughput of their own, so the free-tier RU/s budget holds, and a second deploy changes nothing. It is one scenario because
+/// without throughput of their own, so the free-tier RU/s budget holds, and a second deploy changes nothing. Then a release whose first
+/// workload's <c>/health</c> fails (its container does not exist) stops at the probe with traffic still on the good revision and the
+/// later workload untouched, and the good release deployed again goes live as a new revision. It is one scenario because
 /// Azure allows one free-tier Cosmos account per subscription and the substrate here is that account. Always deletes the resource
 /// groups it created. Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>,
 /// <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI, and a subscription
@@ -113,6 +115,52 @@ public sealed class EnvUpAzureTests : IDisposable
         return (code, stdout + stderr.ToString());
     }
 
+    // The value of an environment variable of the Container App's container (its Azure resource id).
+    private string AppEnv(string appId, string name)
+    {
+        var result = _az.Run("resource", "show", "--ids", appId, "--query", $"properties.template.containers[0].env[?name=='{name}'].value | [0]", "-o", "tsv");
+        return result.Code == 0 ? result.Output.Trim() : throw new InvalidOperationException($"az resource show {appId} failed: {result.Error}");
+    }
+
+    // The Container App in the group whose COSMOS_CONTAINER starts with the prefix: the app names are not known to the test.
+    private string AppId(string group, string containerPrefix) =>
+        Az("resource", "list", "--resource-group", group, "--resource-type", "Microsoft.App/containerApps", "--query", "[].id")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Single(id => AppEnv(id, "COSMOS_CONTAINER").StartsWith(containerPrefix, StringComparison.Ordinal));
+
+    // The revisions of the app by name with their traffic weight (a revision without traffic reports none).
+    private Dictionary<string, int> Revisions(string appId)
+    {
+        var result = _az.Run("rest", "--method", "get", "--url", $"{appId}/revisions?api-version=2024-03-01", "--query", "value[].{name:name,weight:properties.trafficWeight}", "-o", "json");
+        return result.Code == 0
+            ? System.Text.Json.JsonDocument.Parse(result.Output).RootElement.EnumerateArray().ToDictionary(
+                revision => revision.GetProperty("name").GetString()!,
+                revision => revision.GetProperty("weight") is { ValueKind: System.Text.Json.JsonValueKind.Number } weight ? weight.GetInt32() : 0)
+            : throw new InvalidOperationException($"az rest revisions of {appId} failed: {result.Error}");
+    }
+
+    // The sample manifest and workloads in a new folder, with the sample worker's container variable naming a container that does not
+    // exist: the worker's /health answers 503. The worker is first in the set; the app depends on it.
+    private async Task<string> BadReleaseSetAsync(IBackEndProvider backend)
+    {
+        var folder = Path.Combine(_root, "bad");
+        Directory.CreateDirectory(folder);
+        var samples = Path.Combine(AppContext.BaseDirectory, "samples");
+        foreach (var workload in new[] { "sample-app", "sample-worker" })
+        {
+            var text = File.ReadAllText(Path.Combine(samples, "workloads", workload + ".yaml"));
+            var bad = workload == "sample-worker" ? text.Replace("COSMOS_CONTAINER: ${resource.database.container}", "COSMOS_CONTAINER: no-such-container", StringComparison.Ordinal) : text;
+            Assert.Equal(workload == "sample-worker", bad != text);
+            File.WriteAllText(Path.Combine(folder, workload + ".yaml"), bad);
+        }
+
+        File.WriteAllText(Path.Combine(folder, "manifest.yaml"), File.ReadAllText(Path.Combine(samples, "releases", "sample.manifest.yaml")).Replace("../workloads/", string.Empty, StringComparison.Ordinal));
+        var set = Path.Combine(folder, "release.yaml");
+        var (code, output) = await ReleaseAsync(backend, "create", Path.Combine(folder, "manifest.yaml"), "--out", set);
+        Assert.True(code == 0, output);
+        return set;
+    }
+
     [Fact]
     public async Task Shared_then_dev_are_provisioned_and_a_release_set_deploys_onto_dev_within_the_free_tier_and_reruns_change_nothing()
     {
@@ -201,5 +249,41 @@ public sealed class EnvUpAzureTests : IDisposable
         var (againReleaseCode, againRelease) = await ReleaseAsync(backend, deploy);
         Assert.True(againReleaseCode == 0, againRelease);
         AssertNothingChanged(againRelease, 10); // five nodes per workload: the runtime and four others
+
+        // The second pass on the deployed runtime: the pending variables hold real values; the secret one reaches the app and never the output.
+        var devGroup = loadedDev.Values["resourceGroup"];
+        var workerApp = AppId(devGroup, "just-deliver-sample-worker-");
+        var sampleApp = AppId(devGroup, "just-deliver-sample-app-");
+        Assert.StartsWith("https://", AppEnv(sampleApp, "COSMOS_ENDPOINT"), StringComparison.Ordinal);
+        Assert.Contains(AppEnv(sampleApp, "COSMOS_CONTAINER"), containers);
+        Assert.StartsWith("InstrumentationKey=", AppEnv(sampleApp, "APPLICATIONINSIGHTS_CONNECTION_STRING"), StringComparison.Ordinal);
+        Assert.DoesNotContain("InstrumentationKey", releaseOutput + againRelease, StringComparison.Ordinal);
+
+        // A worker whose /health fails never gets traffic: the probe fails with the real timeout, the good revision keeps 100%, and the app,
+        // later in the set, is not started.
+        var goodWorker = Revisions(workerApp);
+        var goodApp = Revisions(sampleApp);
+        var good = Assert.Single(goodWorker);
+        Assert.Equal(100, good.Value);
+        var (badCode, badOutput) = await ReleaseAsync(backend, "deploy", await BadReleaseSetAsync(backend), "--env", devDescriptor, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog"));
+        var badLines = badOutput.ReplaceLineEndings("\n").Split('\n').Select(line => line.Trim()).ToList();
+        Assert.NotEqual(0, badCode);
+        Assert.Contains(badLines, line => line.StartsWith("probe: failed", StringComparison.Ordinal));
+        Assert.DoesNotContain(badLines, line => line.StartsWith("shift:", StringComparison.Ordinal));
+        Assert.DoesNotContain("workload just-deliver-sample-app", badLines);
+        var afterBad = Revisions(workerApp);
+        Assert.Equal(2, afterBad.Count);
+        Assert.Equal(100, afterBad[good.Key]);
+        Assert.Equal(0, afterBad.Single(revision => revision.Key != good.Key).Value);
+        Assert.Equal(goodApp, Revisions(sampleApp));
+
+        // Going back to the good release deploys the old config as a new revision, probed and given all the traffic; the app is unchanged.
+        var (revertCode, revertOutput) = await ReleaseAsync(backend, deploy);
+        Assert.True(revertCode == 0, revertOutput);
+        var reverted = Revisions(workerApp);
+        Assert.Equal(3, reverted.Count);
+        var live = Assert.Single(reverted, revision => revision.Value == 100).Key;
+        Assert.DoesNotContain(live, afterBad.Keys);
+        Assert.Equal(goodApp, Revisions(sampleApp));
     }
 }

@@ -48,11 +48,12 @@
       "description": "Runtime mappings only: which inputs and outputs of the runtime node's template the release flow (dark revision, grants, probe, traffic shift) uses. The engine sets the two inputs, so the runtime node must not.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["suffixInput", "trafficInput", "trafficOutput", "revisionOutput", "fqdnOutput", "revisionKey", "latestKey", "weightKey"],
+      "required": ["suffixInput", "trafficInput", "trafficOutput", "suffixOutput", "revisionOutput", "fqdnOutput", "revisionKey", "latestKey", "weightKey"],
       "properties": {
         "suffixInput": { "description": "Template input that receives the revision suffix.", "type": "string", "minLength": 1 },
         "trafficInput": { "description": "Template input that receives the traffic list.", "type": "string", "minLength": 1 },
         "trafficOutput": { "description": "Output echoing the traffic last deployed; names the live revision.", "type": "string", "minLength": 1 },
+        "suffixOutput": { "description": "Output echoing the revision suffix last deployed; the next run compares it with its own.", "type": "string", "minLength": 1 },
         "revisionOutput": { "description": "Output naming the revision a deploy created.", "type": "string", "minLength": 1 },
         "fqdnOutput": { "description": "Output with that revision's address, the probe target.", "type": "string", "minLength": 1 },
         "revisionKey": { "description": "Key of a traffic item that names a revision.", "type": "string", "minLength": 1 },

@@ -419,7 +419,7 @@ public static class CatalogParser
         Map(d.Body["exports"]).ToDictionary(e => e.Key, e => Text(e.Value)),
         d.Body["probe"] is { } probe ? new Probe(Text(probe["path"]), (int?)probe["expectedStatus"] ?? 0, (int?)probe["timeoutSeconds"] ?? 0, (int?)probe["intervalSeconds"] ?? 0) : null,
         d.Body["release"] is { } release ? new RuntimeRelease(
-            Text(release["suffixInput"]), Text(release["trafficInput"]), Text(release["trafficOutput"]), Text(release["revisionOutput"]),
+            Text(release["suffixInput"]), Text(release["trafficInput"]), Text(release["trafficOutput"]), Text(release["suffixOutput"]), Text(release["revisionOutput"]),
             Text(release["fqdnOutput"]), Text(release["revisionKey"]), Text(release["latestKey"]), Text(release["weightKey"])) : null);
 
     private static Policy ToPolicy(Document d) => new(

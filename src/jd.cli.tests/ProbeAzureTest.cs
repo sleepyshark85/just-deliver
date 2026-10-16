@@ -90,7 +90,7 @@ public abstract class ProbeAzureTest : IDisposable
             kind: Mapping
             match: { kind: runtime }
             probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
-            release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }
+            release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }
             nodes:
               runtime:
                 template: test/runtime-stand-in
@@ -106,6 +106,7 @@ public abstract class ProbeAzureTest : IDisposable
                 type: List<Object>
             outputs:
               traffic: ${traffic}
+              suffix: ${suffix}
               revision: stand-in
               fqdn: example.invalid
             """);

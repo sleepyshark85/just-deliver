@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S16c — suffix decision in the S16c carry-forward note first.
+- **Next slice:** S17 — release record + qualification. **S16 complete.**
 - **In progress:** —
 - **Blocked:** —
 
@@ -39,7 +39,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S16a | `container-app` revision + traffic inputs | done | PR #29 | 1 | Spike first: a JSON list keeps its types through Pulumi config (`weight` integer, `latestRevision` boolean; provider rejects text). `traffic` (`List<Object>`), `revisionSuffix`, `maxInactiveRevisions` are inputs; mapping placeholders until S16b. Azure test shared setup (`ProbeAzureTest`). APPROVE first round; Azure gate green (CLI 86/86, dark revision got 0%, shift created no revision). |
 | S16b1 | Release data for the deploy steps | done | PR #30 | 1 | Split from S16b after a design note (est. 330 lines). Runtime mapping `release:` block (8 names: engine-driven inputs, read outputs, traffic-item keys), probe `timeoutSeconds`/`intervalSeconds`, load validation, template `traffic` echo output, `TemplateLibrary` waiver + checks. Walk still never deploys the runtime. APPROVE first round; Azure gate green. |
 | S16b2 | Deploy steps (orchestrator) + HTTP probe | done | PR #32 | 3 | Round 1: 1 blocking — **design gap the lead approved**: the first deploy left traffic as `latestRevision`, so state never named a revision and every later deploy sent all traffic to the unprobed revision; fixed by always shifting after a passed probe (first deploy included; first deploy is the documented exception). Round 2: 1 blocking — the HTTP probe followed redirects (a revision could pass via a 302 elsewhere). APPROVE round 3. Production ≈ +390/−85 raw, ~210 net code lines (rest doc comments). Azure stand-in tests use a passing probe; `EnvUpAzureTests` runs the real probe. Azure gate green (CLI 96/96, 1 h 7 min, sample apps deployed and probed over HTTP; nothing left). |
-| S16c | HTTP probe + E2E Azure test | todo | | | Sample release set live on dev; a revision failing `/health` never gets traffic. |
+| S16c | Revert-safe suffix + E2E Azure test | done | PR #33 | 1 + suggestions | Lead spike first (Azure rejects any template change reusing an existing revision suffix, even a revert). Lead decision: suffix = `r` + 8 hex over params + template content + 6 hex salt from the previous suffix (reused when the config part matches); `release.suffixOutput` from data. Azure test: a bad `sample-worker` (missing container → 503) fails its probe, traffic stays 100% on the good revision, the app behind it is untouched; revert deploys a new revision. ~40 production lines. APPROVE first round; 3 suggestions applied. Azure gate green (CLI 96/96, 1 h 2 min, nothing left). **S16 complete.** |
 | S17 | Release record + qualification | todo | | | |
 | S18 | Second environment + approvals | todo | | | |
 | S19 | Promotion | todo | | | |
@@ -57,17 +57,14 @@ Picked up by the slice named; remove once done.
 - **S15c review (minor):** errors GraphBuilder raises on a policy-set value point at the node field, not the policy path
   as written; a second-pass export failure names the node id instead of the mapping file; runtime-mapping nodes other than
   `runtime` get policy-added node names in scope (only `runtime` needs them).
-- **S16c (from S16b2 review, decide before the E2E run):** the revision suffix hashes only the filled parameters, so
-  (a) a template change with the same parameters reuses the live suffix and (b) going back to an earlier config (A → B → A)
-  reuses a suffix whose revision still exists; Azure rejects both at the Dark step (template comment, `Pulumi.yaml:45`).
-  Cheapest: hash `DeploymentContent` too; the revert case needs "revision exists → probe and shift to it" or a documented
-  limitation (E32). Verify live that `latestRevisionName` is `<app>--<suffix>`.
-- **S16b2 review (minor):** make the orchestrator's probe non-null with the default chosen once in `CreateOrchestrator`;
-  pin "suffix distinguishes null from empty" with a test; a failed runtime prints its reason twice in `DeployFormatter`;
-  the suffix hashes secret values into a public 40-bit suffix (fine until secret variables become Container App secrets).
+
+- **S16b2/S16c review (minor, left):** pin "suffix distinguishes null from empty" with a test; the suffix hashes secret values into
+  a public suffix (fine until secret variables become Container App secrets); `ContainerAppAzureTests.cs:180` hard-codes the ARM host
+  (use a resource-id URL as `EnvUpAzureTests` does).
+- **Release flow residual (S16c, documented):** a dark deploy that fails after Azure created the revision (unpullable image) leaves
+  the old suffix in outputs, so a same-config re-run is rejected until the config changes; traffic unaffected.
 - **S16a review (left):** `ContainerAppAzureTests` builds two stacks; fold the dark/shift steps into one test when next
   touched; neutral tag. (Non-deactivation of 0%-traffic revisions is now documented; traffic types asserted offline.)
-- **S16:** repeat the second-pass assertions (pending variable, secret masking) on the real deployed `runtime` node.
 - **S15c/S16 (S15a review):** a secret value in `variables` stays encrypted in Pulumi state but is plain text in the
   Container App's `env` (readable with Reader) — secret values should become Container App `secrets` + `secretRef`
   (ADR 0013 runtime port). Add an offline check that a secret `variables` entry is masked in preview.
@@ -96,6 +93,11 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-16/17 (S16b2 merged, S16c)** — S16b2 Azure gate green, merged (PR #32). Lead spike on Azure: a suffix naming an
+  existing revision is rejected even for a revert, so the hash-only suffix broke recovery from a bad release; lead designed the
+  revert-safe suffix (S16c brief). S16c: APPROVE round 1, suggestions applied, Azure gate green — a failing revision never got
+  traffic on real Azure, revert recovered. **S16 complete.** Trial: S16c 1 round. User asleep; lead continues with S17.
 
 - **2026-10-16 (S16b2)** — S16b2 built and reviewed in 3 rounds (APPROVE). Round 1 caught a gap in the lead-approved
   design (no live revision ever recorded after a first deploy); lead amended the design: Shift always runs after a passed

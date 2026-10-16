@@ -34,7 +34,9 @@ internal sealed class FakeBackend : IBackEndProvider, ITemplateStore
     public bool OmitIdOutput { get; set; }
     public string? Fqdn { get; set; } = "app.example.test";
 
-    public string GetContent(string templateName) => "template:" + templateName;
+    public string ContentVersion { get; set; } = string.Empty;
+
+    public string GetContent(string templateName) => "template:" + templateName + ContentVersion;
 
     public Task<DeploymentResult> DeployAsync(DeploymentPackage package, CancellationToken cancellationToken)
     {
@@ -59,6 +61,7 @@ internal sealed class FakeBackend : IBackEndProvider, ITemplateStore
         if (package.DeploymentParameters.TryGetValue("traffic", out var traffic) && package.DeploymentParameters.TryGetValue("suffix", out var suffix))
         {
             outputs["traffic"] = traffic;
+            outputs["suffix"] = suffix;
             outputs["revision"] = new("app--" + suffix.Value);
             if (Fqdn is not null)
             {

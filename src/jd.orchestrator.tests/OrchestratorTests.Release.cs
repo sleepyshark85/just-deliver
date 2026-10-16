@@ -390,7 +390,55 @@ public partial class OrchestratorTests
         Assert.NotEqual(baseline, await SuffixAsync("reg/app:1", "    B: one\n"));
         // Azure: lowercase letters, digits and '-', starting with a letter, ending with a letter or digit; the revision name <app>--<suffix> at most 54 characters.
         Assert.Matches("^[a-z][a-z0-9-]*[a-z0-9]$", baseline);
-        Assert.Matches("^r[0-9a-f]{10}$", baseline);
+        Assert.Matches("^r[0-9a-f]{14}$", baseline);
+        Assert.Equal(Hash(string.Empty)[..6], baseline[^6..]); // a first deploy has no previous suffix: the salt is that of the empty string
+    }
+
+    private static string Hash(string text) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
+
+    private static async Task<RunReport> DeployVariantAsync(FakeBackend backend, string value)
+    {
+        var (graph, catalog) = await ResolveAsync(
+            DefaultRequires, ExportingMapping, runtimeMapping: RuntimeReadingMapping,
+            container: $"container:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n    A: {value}\n");
+        return await Create(backend, catalog).DeployAsync(graph, null, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Going_back_to_an_earlier_config_deploys_a_new_revision_that_is_probed_and_shifted()
+    {
+        var backend = new FakeBackend { DetectChanges = true };
+
+        await DeployVariantAsync(backend, "one");
+        await DeployVariantAsync(backend, "two");
+        var revert = await DeployVariantAsync(backend, "one");
+
+        var deploys = RuntimeDeploys(backend); // dark and shift of each release
+        Assert.Equal(6, deploys.Count);
+        var suffixes = new[] { 0, 2, 4 }.Select(i => Parameter(deploys[i], "suffix")).ToList();
+        Assert.Equal(3, suffixes.Distinct().Count());
+        Assert.Equal(suffixes[0][..9], suffixes[2][..9]); // the same config part, a different salt
+        Assert.NotEqual(suffixes[0][9..], suffixes[2][9..]);
+        Assert.Equal(NodeOutcome.Deployed, Runtime(revert).Outcome);
+        Assert.Equal(3, backend.Log.Count(e => e == "probe"));
+        Assert.Equal($$"""[{"revisionName":"app--{{suffixes[1]}}","weight":100}]""", Parameter(deploys[4], "traffic")); // dark: the second is live
+        Assert.Equal($$"""[{"revisionName":"app--{{suffixes[2]}}","weight":100}]""", Parameter(deploys[5], "traffic"));
+    }
+
+    [Fact]
+    public async Task A_changed_template_with_the_same_parameters_gets_a_new_suffix()
+    {
+        var backend = new FakeBackend { DetectChanges = true };
+        var (graph, catalog) = await ResolveAsync();
+        var orchestrator = Create(backend, catalog);
+        await orchestrator.DeployAsync(graph, null, CancellationToken.None);
+        backend.ContentVersion = "-v2";
+
+        var report = await orchestrator.DeployAsync(graph, null, CancellationToken.None);
+
+        var deploys = RuntimeDeploys(backend);
+        Assert.NotEqual(Parameter(deploys[0], "suffix"), Parameter(deploys[2], "suffix"));
+        Assert.Equal(NodeOutcome.Deployed, Runtime(report).Outcome);
     }
 
     [Fact]

@@ -74,7 +74,7 @@ internal static class ReleaseDeployCli
             return Invalid;
         }
 
-        var orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, backend, environmentVariable, probe ?? Cli.HttpProbe());
+        var orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, backend, environmentVariable, probe);
         var runs = await orchestrator.DeployReleaseAsync(
             graphs,
             options.DryRun,

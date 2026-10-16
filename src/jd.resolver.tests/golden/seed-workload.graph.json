@@ -127,6 +127,7 @@
         "suffixInput": "revisionSuffix",
         "trafficInput": "traffic",
         "trafficOutput": "traffic",
+        "suffixOutput": "revisionSuffix",
         "revisionOutput": "latestRevisionName",
         "fqdnOutput": "latestRevisionFqdn",
         "revisionKey": "revisionName",

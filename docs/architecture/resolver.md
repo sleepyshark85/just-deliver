@@ -212,6 +212,7 @@ release:                                          # which template inputs/output
   suffixInput: revisionSuffix                     # inputs the flow sets per step, so the runtime node sets neither
   trafficInput: traffic
   trafficOutput: traffic                          # output echoing the traffic last deployed; names the live revision
+  suffixOutput: revisionSuffix                    # output echoing the suffix last deployed
   revisionOutput: latestRevisionName              # output naming the revision a deploy created
   fqdnOutput: latestRevisionFqdn                  # its address, the probe target
   revisionKey: revisionName                       # traffic item key naming a revision

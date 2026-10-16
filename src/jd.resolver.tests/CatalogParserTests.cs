@@ -241,7 +241,7 @@ public class CatalogParserTests
     private const string RuntimeHead = "kind: Mapping\nmatch: { kind: runtime }\n";
     private const string RuntimeNode = "nodes:\n  runtime:\n    template: t/rt\n    config: {}\n";
     private const string Probe = "probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n";
-    private const string Release = "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }\n";
+    private const string Release = "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }\n";
 
     [Fact]
     public async Task A_runtime_mapping_loads_with_its_probe_and_release_and_no_exports()
@@ -298,6 +298,7 @@ public class CatalogParserTests
     [InlineData("suffixInput")]
     [InlineData("trafficInput")]
     [InlineData("trafficOutput")]
+    [InlineData("suffixOutput")]
     [InlineData("revisionOutput")]
     [InlineData("fqdnOutput")]
     [InlineData("revisionKey")]
