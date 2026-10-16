@@ -40,11 +40,14 @@ for p in "${inner[@]}"; do
     fail "$p must not reference Pulumi, Azure SDKs or backend providers (see docs/engineering/standards.md)"
   fi
 done
-# The Azure adapter sits next to the core: an allowlist, so a new kind of reference fails until the rule is changed on purpose. It implements
-# ports from jd.core and uses Azure SDKs, nothing else.
+# The Azure adapter sits next to the core: an allowlist over what MSBuild evaluates (so a Condition or a multi-line element cannot slip a
+# reference past a text match). It implements ports from jd.core and uses Azure SDKs, nothing else. Checked by hand when written, each
+# variant added to src/jd.azure/jd.azure.csproj and rejected: a ProjectReference to jd.resolver (also with Condition="true" before Include),
+# a PackageReference to Pulumi.Automation (also with Condition="true"), to Newtonsoft.Json and to Microsoft.Azure.Cosmos, and a
+# PackageReference whose Include is on the line after the element name.
 if [[ -f src/jd.azure/jd.azure.csproj ]]; then
-  refs=$(grep -E -o '(Project|Package)Reference[[:space:]]+(Include|Update)="[^"]*"' src/jd.azure/jd.azure.csproj || true)
-  outside=$({ grep -E '^ProjectReference' <<<"$refs" | grep -E -v '"\.\./jd\.core/jd\.core\.csproj"$'; grep -E '^PackageReference' <<<"$refs" | grep -E -v '"Azure\.[^"]*"$'; } || true)
+  items() { dotnet msbuild src/jd.azure/jd.azure.csproj -nologo "-getItem:$1" 9>&- | grep -o '"Identity": "[^"]*"' | sed 's/"Identity": "\(.*\)"/\1/' || true; }
+  outside=$({ items ProjectReference | grep -v -x '\.\./jd\.core/jd\.core\.csproj'; items PackageReference | grep -v -E '^Azure\.'; } || true)
   [[ -z "$outside" ]] || fail "src/jd.azure/jd.azure.csproj may reference only jd.core (ProjectReference) and Azure.* packages (PackageReference), not: ${outside//$'\n'/; } (see docs/engineering/standards.md)"
 fi
 echo "ok"

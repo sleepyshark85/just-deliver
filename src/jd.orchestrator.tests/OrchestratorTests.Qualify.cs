@@ -1,6 +1,8 @@
+using jd.core.bp;
 using jd.core.revisions;
 using jd.resolver.catalog;
 using jd.resolver.graph;
+using jd.resolver.release;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -14,6 +16,13 @@ public partial class OrchestratorTests
     private const string Other = "registry.example/other@sha256:bbbb";
 
     private static IReadOnlyList<LiveRevision> Serving(string image = Pinned) => [new("app--r1", 100, [image])];
+
+    // The set a qualification pins: its workloads' image is the one the graphs were resolved with, which the image check compares.
+    private static ReleaseSet PinnedSetOf(params string[] workloads)
+    {
+        var set = SetOf(workloads);
+        return set with { Workloads = set.Workloads.Select(w => w with { Image = Pinned }).ToList() };
+    }
 
     private static IReadOnlyList<LiveRevision> OneAnswer(string resourceId, string image = Pinned) => resourceId.Length == 0 ? [] : Serving(image);
 
@@ -111,17 +120,17 @@ public partial class OrchestratorTests
     }
 
     [Fact]
-    public async Task The_revision_that_serves_decides_not_the_latest_one()
+    public async Task The_revision_that_serves_decides_whichever_is_the_latest()
     {
         var (backend, graphs, catalog) = await DeployedAsync();
-        LiveRevision[] latestWrong = [new("app--r1", 100, [Pinned]), new("app--r2", 0, [Other])];
-        LiveRevision[] latestRight = [new("app--r1", 0, [Pinned]), new("app--r2", 100, [Other])];
+        LiveRevision[] latestWrongServingRight = [new("app--r1", 100, [Pinned]), new("app--r2", 0, [Other])];
+        LiveRevision[] latestRightServingWrong = [new("app--r1", 100, [Other]), new("app--r2", 0, [Pinned])];
 
-        var passes = await QualifyAsync(backend, graphs, catalog, new FakeLiveRevisions(_ => latestWrong));
-        var fails = await QualifyAsync(backend, graphs, catalog, new FakeLiveRevisions(_ => latestRight));
+        var passes = await QualifyAsync(backend, graphs, catalog, new FakeLiveRevisions(_ => latestWrongServingRight));
+        var fails = await QualifyAsync(backend, graphs, catalog, new FakeLiveRevisions(_ => latestRightServingWrong));
 
         Assert.True(passes.Passed, string.Join("; ", Failures(passes)));
-        Assert.Equal([$"pinned {Pinned}, live {Other} on revision app--r2"], Failures(fails));
+        Assert.Equal([$"pinned {Pinned}, live {Other} on revision app--r1"], Failures(fails));
     }
 
     [Fact]
@@ -133,6 +142,16 @@ public partial class OrchestratorTests
         var result = await QualifyAsync(backend, graphs, catalog, new FakeLiveRevisions(_ => split));
 
         Assert.Equal([$"pinned {Pinned}, live {Other} on revision app--r1"], Failures(result));
+    }
+
+    [Fact]
+    public async Task A_revision_with_traffic_that_reports_no_image_fails()
+    {
+        var (backend, graphs, catalog) = await DeployedAsync();
+
+        var result = await QualifyAsync(backend, graphs, catalog, new FakeLiveRevisions(_ => [new("app--r1", 100, [])]));
+
+        Assert.Equal(["revision app--r1 reports no image."], Failures(result));
     }
 
     [Fact]
@@ -213,7 +232,7 @@ public partial class OrchestratorTests
         backend.PreviewSummaries["shop.dev.thing.app"] = new() { ["Update"] = 1, ["Same"] = 3 };
         var live = new FakeLiveRevisions(id => OneAnswer(id, id.Contains("shop", StringComparison.Ordinal) ? Other : Pinned));
         var iq = (await QualifyAsync(backend, graphs, catalog, live)) with { Elapsed = TimeSpan.FromSeconds(12.5) };
-        return (ReleaseRecordBuilder.BuildQualify(SetOf("shop", "cart"), SetSha, Env, graphs, Principal, RecordStart, RecordStart.AddSeconds(90), iq), iq);
+        return (ReleaseRecordBuilder.BuildQualify(PinnedSetOf("shop", "cart"), SetSha, Env, graphs, Principal, RecordStart, RecordStart.AddSeconds(90), iq), iq);
     }
 
     [Fact]
@@ -262,11 +281,18 @@ public partial class OrchestratorTests
         var secret = backend.State["shop.dev.thing.group"]["key"].Value;
         Assert.False(string.IsNullOrEmpty(secret));
         backend.PreviewSummaries["shop.dev.thing.app"] = new() { ["Update"] = 1 };
+        backend.PreviewChanges["shop.dev.thing.app"] =
+            [new ResourceChange { Urn = "urn", Type = "t", Operation = "update", ChangedProperties = [new PropertyChange { Path = "p", OldValue = "old-secret-value", NewValue = "new-secret-value" }] }];
         var iq = await QualifyAsync(backend, graphs, catalog, new FakeLiveRevisions(id => OneAnswer(id)));
+        Assert.Contains(iq.Checks, c => !c.Passed); // the drifted stack was previewed with its changes
 
-        var json = ReleaseRecordBuilder.BuildQualify(SetOf("shop"), SetSha, Env, graphs, Principal, RecordStart, RecordStart.AddSeconds(1), iq);
+        var json = ReleaseRecordBuilder.BuildQualify(PinnedSetOf("shop"), SetSha, Env, graphs, Principal, RecordStart, RecordStart.AddSeconds(1), iq);
 
-        Assert.DoesNotContain(secret!, json, StringComparison.Ordinal);
+        foreach (var hidden in new[] { secret!, "old-secret-value", "new-secret-value" })
+        {
+            Assert.DoesNotContain(hidden, json, StringComparison.Ordinal);
+        }
+
         await AssertValidAsync(json);
     }
 

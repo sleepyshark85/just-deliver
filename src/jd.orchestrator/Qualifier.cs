@@ -82,8 +82,9 @@ public sealed class Qualifier(Orchestrator orchestrator, IBackEndProvider provid
             var pinned = graph.WorkloadImage;
             return serving.Count == 0
                 ? [Failed($"no revision of {id} holds traffic.")]
-                : serving.SelectMany(r => r.Images.Select(image => new IqCheck(
-                    IqCheckKind.Image, graph.Workload, r.Name, image == pinned ? string.Empty : $"pinned {pinned}, live {image} on revision {r.Name}")));
+                : serving.SelectMany(r => r.Images.Count == 0
+                    ? [new IqCheck(IqCheckKind.Image, graph.Workload, r.Name, $"revision {r.Name} reports no image.")]
+                    : r.Images.Select(image => new IqCheck(IqCheckKind.Image, graph.Workload, r.Name, image == pinned ? string.Empty : $"pinned {pinned}, live {image} on revision {r.Name}")));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

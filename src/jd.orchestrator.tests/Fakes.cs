@@ -33,6 +33,9 @@ internal sealed class FakeBackend : IBackEndProvider, ITemplateStore
 
     // What a preview of the stack reports, instead of Summary: a drifted stack has changes, a clean one only "Same".
     public Dictionary<string, Dictionary<string, int>> PreviewSummaries { get; } = [];
+
+    // The per-property changes a preview of the stack reports (they may carry secret values).
+    public Dictionary<string, List<ResourceChange>> PreviewChanges { get; } = [];
     public bool DetectChanges { get; set; }
     public string? FailOn { get; set; }
     public bool OmitIdOutput { get; set; }
@@ -85,7 +88,7 @@ internal sealed class FakeBackend : IBackEndProvider, ITemplateStore
     {
         Calls.Add(("preview", package));
         Log.Add("preview " + package.StackName);
-        return Task.FromResult(new DeploymentResult { Outputs = [], Summary = PreviewSummaries.GetValueOrDefault(package.StackName) ?? Summary });
+        return Task.FromResult(new DeploymentResult { Outputs = [], Summary = PreviewSummaries.GetValueOrDefault(package.StackName) ?? Summary, Changes = PreviewChanges.GetValueOrDefault(package.StackName) ?? [] });
     }
 
     public Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(string stackName, string deploymentContent, CancellationToken cancellationToken)

@@ -36,7 +36,7 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
   It is never overwritten. Records refer to it by `setSha256`. *Residual:* it is written in place, not through a temp file and rename, so a crash in the middle of the write leaves a truncated `set.yaml`, which the next attempt reports as a different set; delete it by hand.
 - **Order of a recorded run (S17b):** parse and resolve everything (as today, no backend call); then obtain the deployer identity, token
   included; then check or create `set.yaml`; then the first backend call. A bad credential or a different set under the label therefore stops
-  the run before anything is deployed (exit 1; a missing or invalid `JD_RECORDS_DIR` is a usage error, exit 2, checked first). `release qualify` follows the same order and also creates `set.yaml` when it is missing.
+  the run before anything is deployed (exit 1; a missing or invalid `JD_RECORDS_DIR` is a usage error, exit 2, checked first). `release qualify` follows the same order and also creates `set.yaml` when it is missing. A failure after `set.yaml` is created but before the walk starts (building the backend or the live-revisions reader) writes no record, as a killed process writes none; `set.yaml` stays and the next attempt reuses it.
 - **`jd deploy <workload>` writes no record:** it has no label; the release is the unit that is deployed and promoted. It is the unrecorded
   development path ([usage.md](../usage.md)); the evidence of S20 comes from release sets.
 

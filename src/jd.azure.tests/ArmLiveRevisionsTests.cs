@@ -78,6 +78,27 @@ public sealed class ArmLiveRevisionsTests
         Assert.DoesNotContain("secret-looking", error.Message, StringComparison.Ordinal);
     }
 
+    private sealed class Unreachable : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new HttpRequestException("Connection refused to secret-host.example");
+    }
+
+    [Fact]
+    public async Task A_transport_failure_after_the_retries_is_one_clear_error_without_the_sdks_text()
+    {
+        // The default retry policy stays on (only its delay is short): what the SDK throws after the last try is what the adapter must turn into its own error.
+        var options = new ArmClientOptions { Transport = new HttpClientTransport(new HttpClient(new Unreachable())) };
+        options.Retry.Delay = TimeSpan.FromMilliseconds(1);
+        options.Retry.MaxDelay = TimeSpan.FromMilliseconds(2);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => new ArmLiveRevisions(new FixedCredential(), options).GetAsync(AppId, CancellationToken.None));
+
+        Assert.Contains($"Azure could not be reached to list the revisions of '{AppId}'", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-host", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Retry failed", error.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_resource_id_that_is_not_one_is_refused_clearly()
     {

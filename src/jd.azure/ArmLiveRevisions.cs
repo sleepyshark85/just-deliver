@@ -32,6 +32,11 @@ public sealed class ArmLiveRevisions(TokenCredential credential, ArmClientOption
             // The SDK's message is a page of HTTP detail; the status and Azure's error code say what went wrong without echoing a payload.
             throw new InvalidOperationException($"Azure refused to list the revisions of '{resourceId}': HTTP {ex.Status}{(string.IsNullOrEmpty(ex.ErrorCode) ? string.Empty : $", {ex.ErrorCode}")}.", ex);
         }
+        catch (AggregateException ex)
+        {
+            // What Azure.Core throws when every retry failed to reach Azure; its text lists each attempt and the transport's own message.
+            throw new InvalidOperationException($"Azure could not be reached to list the revisions of '{resourceId}'; check the network.", ex);
+        }
         catch (Exception ex) when (ex is ArgumentException or FormatException)
         {
             // The SDK refuses an id it cannot take for a subscription-scoped resource.

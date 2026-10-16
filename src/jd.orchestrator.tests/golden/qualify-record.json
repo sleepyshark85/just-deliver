@@ -25,7 +25,7 @@
       "team": "crew",
       "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "dependsOn": [],
-      "image": "registry.example/app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "image": "registry.example/app@sha256:aaaa",
       "graph": {
         "sha256": "7a8ec136d91c69b72ec2c60c59ab144103ab82ea0e587b1efbbdf05c5ddf778e",
         "nodes": [
@@ -72,7 +72,7 @@
       "team": "crew",
       "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "dependsOn": [],
-      "image": "registry.example/app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "image": "registry.example/app@sha256:aaaa",
       "graph": {
         "sha256": "837e12d36bdb02634007d4809efed53ad0672c49457062817ce07abf137734c6",
         "nodes": [
