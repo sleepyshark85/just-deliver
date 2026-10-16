@@ -106,6 +106,7 @@ public abstract class ProbeAzureTest : IDisposable
                 type: List<Object>
             outputs:
               traffic: ${traffic}
+              suffix: ${suffix}
               revision: stand-in
               fqdn: example.invalid
             """);
