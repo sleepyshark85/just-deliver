@@ -305,13 +305,13 @@ public class CatalogParserTests
     [InlineData("weightKey")]
     public async Task A_release_block_missing_a_name_or_naming_it_empty_is_an_error(string name)
     {
-        var without = Release.Replace($"{name}: ", $"x{name}: ");
+        var without = System.Text.RegularExpressions.Regex.Replace(Release, $" {name}: [A-Za-z]+,?", string.Empty);
         var empty = System.Text.RegularExpressions.Regex.Replace(Release, $"{name}: [A-Za-z]+", $"{name}: ''");
 
         var missing = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + Probe + without + RuntimeNode));
         var blank = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + Probe + empty + RuntimeNode));
 
-        Assert.Contains(missing.Errors, e => e.Location == $"release.{name}" || e.Location == $"release.x{name}");
+        Assert.Contains(missing.Errors, e => e.Location == $"release.{name}");
         Assert.Equal($"release.{name}", Assert.Single(blank.Errors).Location);
     }
 

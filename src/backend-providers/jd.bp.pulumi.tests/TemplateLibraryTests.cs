@@ -244,4 +244,33 @@ public partial class TemplateLibraryTests
         var error = Assert.Single(errors, e => e.Message.Contains("declares no output", StringComparison.Ordinal));
         Assert.Equal(("w/dev/@workload/runtime", output), (error.File, error.Location));
     }
+
+    // The catalog loader refuses a runtime mapping that sets the engine's inputs, but a workload-scope policy sets runtime.* after the
+    // mapping loaded: the resolved runtime node is checked here.
+    [Theory]
+    [InlineData("set", "suffix")]
+    [InlineData("set", "traffic")]
+    [InlineData("default", "suffix")]
+    [InlineData("default", "traffic")]
+    public async Task A_policy_that_sets_the_suffix_or_traffic_of_the_runtime_node_is_an_error(string layer, string input)
+    {
+        var sources = new[]
+        {
+            "kind: Catalog\nversion: \"1\"\n",
+            "kind: Mapping\nmatch: { kind: runtime }\nprobe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
+                + "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight }\n"
+                + "nodes:\n  runtime:\n    template: t/rt\n    config: { image: i }\n",
+            $"kind: Policy\nname: pol\nreason: r\nmatch: {{ kind: runtime }}\n{layer}: {{ runtime.{input}: from-policy }}\n",
+        }.Select((content, i) => new CatalogSource($"f{i}.yaml", content));
+        var loaded = await CatalogParser.ParseAsync(sources);
+        Assert.Empty(loaded.Errors);
+        var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\ncontainer:\n  image: reg/app:1\nrequires: []\n");
+        var graph = jd.resolver.Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, new EnvironmentDescriptor("dev", "region-1", "team", new Dictionary<string, string>(), []));
+        Assert.Empty(graph.Errors);
+
+        var error = Assert.Single(RuntimeLibrary().Check(graph));
+
+        Assert.Equal(("shop/dev/@workload/runtime", input), (error.File, error.Location));
+        Assert.Contains("the release flow sets the input", error.Message);
+    }
 }
