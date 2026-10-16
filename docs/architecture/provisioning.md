@@ -199,10 +199,7 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   deployed inside that flow, in its Grants step. Topological order can put the runtime before unrelated infrastructure (its id sorts first),
   so the walk does not rely on it. Each node, the grants included, is reported as it completes; the runtime's report comes last.
 - **Release flow (the runtime node).** The `container-app` template takes `revisionSuffix` and `traffic` as inputs and owns no opinion on
-  either, so one template deploys all the moves of the flow, in this order: (1) **Dark**: deploy with a revision suffix that is `r` + the first
-  10 hex digits of the SHA-256 of the filled runtime parameters (key, value, secret flag, in key order; the suffix and traffic inputs
-  excluded), so the same config always gives the same suffix and a re-run finds its revision instead of creating another (Azure's rule for a
-  suffix: lowercase letters, digits and `-`, starting with a letter; the revision name `<app>--<suffix>` at most 54 characters), and `traffic` =
+  either, so one template deploys all the moves of the flow, in this order: (1) **Dark**: deploy with a revision suffix (below), and `traffic` =
   `[{revisionName: <live revision>, weight: 100}]`, so the new revision exists and the live one keeps all traffic; the first deploy has no live
   revision and passes `[{latestRevision: true, weight: 100}]`. The new revision is the dark deploy's `revisionOutput`. (2) **Grants**: the
   after-runtime nodes, deployed with the dark deploy's outputs. (3) **Probe**: GET the new revision's `fqdnOutput` + the mapping's `probe.path`
@@ -215,6 +212,16 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   latest revision at 100% and it serves before it is probed; a failed probe is still reported `failed`, but nothing protects the traffic.
   The probe target is built only from the dark deploy's FQDN output and the
   mapping's path (a missing or empty FQDN output fails the Probe step without a probe), never from workload data or another node.
+  **Suffix:** `r` + a config part + a salt, 15 characters (Azure's rule: lowercase letters, digits and `-`, starting with a letter; the revision
+  name `<app>--<suffix>` at most 54 characters). The config part is the first 8 hex digits of the SHA-256 of the template content and the
+  filled runtime parameters (key, value, secret flag, in key order; the suffix and traffic inputs excluded). Azure rejects any template
+  change whose suffix names an existing revision, even when the template equals that revision's old one, so the engine reads the previous
+  suffix from the stack (the mapping's `suffixOutput`, which the template echoes like the traffic): if it starts with `r` + this config part,
+  it is reused (the same config as the last deploy: a re-run is `unchanged`, and a re-run after a probe failure finds the failed revision
+  and probes and shifts it, creating no other); otherwise (first deploy, changed config or template, a revert) the salt is the first 6 hex
+  digits of the SHA-256 of the previous suffix (of the empty string when there is none), so A to B to A gives A a new suffix and the old
+  config is redeployed as a new revision. Residual: a 24-bit salt collision on a config deployed before names an existing revision, and
+  Azure rejects it at the dark step.
   **Live revision:** read from the stack before the dark deploy: the template echoes the traffic it was last given as an output (the
   mapping's `trafficOutput`), and the live revision is the last item with a `revisionKey` (none on a first deploy, or when only
   `latestKey` items are there); the app's `latestReadyRevisionName` is the newest revision, not the live one, so it cannot tell. **Unchanged:** the dark deploy

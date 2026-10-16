@@ -24,9 +24,10 @@ internal sealed class ReleaseFlow(
     Func<GraphNode, Task<Prepared>> prepare, Func<Dictionary<string, ConfigEntry>, Task<string?>> deployDependants)
 {
     // Azure's rule for a revision suffix: lowercase letters, digits and '-', starting with a letter; the revision name <app>--<suffix>
-    // takes at most 54 characters. The suffix is a letter and 10 hex digits.
+    // takes at most 54 characters. The suffix is a letter, 8 hex digits of the config and 6 of the salt: 15 characters.
     private const string SuffixPrefix = "r";
-    private const int SuffixHexLength = 10;
+    private const int ConfigHexLength = 8;
+    private const int SaltHexLength = 6;
     private const int FullWeight = 100;
 
     public async Task<NodeReport> RunAsync(GraphNode node, CancellationToken cancellationToken)
@@ -50,8 +51,9 @@ internal sealed class ReleaseFlow(
                 return prepared.Outcome == NodeOutcome.Failed ? Stop(prepared.Message) : NodeReport.For(node, prepared.Outcome, prepared.Message);
             }
 
-            // The engine alone sets the suffix and the traffic; the same config gives the same suffix.
-            var suffix = new ConfigEntry(Suffix(package.DeploymentParameters, release));
+            // The engine alone sets the suffix and the traffic. The same config as the last deploy keeps its suffix; otherwise a new one.
+            var outputs = await provider.GetOutputsAsync(node.Stack, package.DeploymentContent, cancellationToken);
+            var suffix = new ConfigEntry(Suffix(package, release, outputs?.GetValueOrDefault(release.SuffixOutput)?.Value ?? string.Empty));
             DeploymentPackage With(ConfigEntry traffic) => new()
             {
                 StackName = package.StackName,
@@ -59,7 +61,7 @@ internal sealed class ReleaseFlow(
                 DeploymentParameters = new Dictionary<string, ConfigEntry>(package.DeploymentParameters) { [release.SuffixInput] = suffix, [release.TrafficInput] = traffic },
             };
 
-            var live = LiveRevision(await provider.GetOutputsAsync(node.Stack, package.DeploymentContent, cancellationToken), release);
+            var live = LiveRevision(outputs, release);
             var darkPackage = With(Traffic(release, live));
             if (preview)
             {
@@ -142,16 +144,21 @@ internal sealed class ReleaseFlow(
         }
     }
 
-    // Hashes the filled config, secret flags included. The engine's own inputs are not config and do not count.
-    private static string Suffix(Dictionary<string, ConfigEntry> parameters, RuntimeRelease release)
+    // The config part hashes the template and the filled config, secret flags included; the engine's own inputs are not config. Azure
+    // rejects a suffix that names an existing revision, so the same config as the previous deploy reuses its suffix (it is that revision),
+    // and any other config, a revert included, gets a salt derived from the previous suffix. Residual: a 24-bit salt collision on a
+    // config deployed before names an existing revision, which Azure rejects at the dark step.
+    private static string Suffix(DeploymentPackage package, RuntimeRelease release, string previous)
     {
-        var canonical = new JArray(parameters
+        var canonical = new JArray(package.DeploymentContent, new JArray(package.DeploymentParameters
             .Where(p => p.Key != release.SuffixInput && p.Key != release.TrafficInput)
             .OrderBy(p => p.Key, StringComparer.Ordinal)
-            .Select(p => new JArray(new JValue(p.Key), new JValue(p.Value.Value), new JValue(p.Value.IsSecret))));
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString(Formatting.None)));
-        return SuffixPrefix + Convert.ToHexStringLower(hash)[..SuffixHexLength];
+            .Select(p => new JArray(new JValue(p.Key), new JValue(p.Value.Value), new JValue(p.Value.IsSecret)))));
+        var config = SuffixPrefix + Hash(canonical.ToString(Formatting.None))[..ConfigHexLength];
+        return previous.StartsWith(config, StringComparison.Ordinal) ? previous : config + Hash(previous)[..SaltHexLength];
     }
+
+    private static string Hash(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 
     // The live revision is the last revision the traffic names; no outputs, or only the latest revision, is a first deploy.
     private static string? LiveRevision(Dictionary<string, ConfigEntry>? outputs, RuntimeRelease release) =>

@@ -61,6 +61,7 @@ public static class GraphJson
                 ["suffixInput"] = release.SuffixInput,
                 ["trafficInput"] = release.TrafficInput,
                 ["trafficOutput"] = release.TrafficOutput,
+                ["suffixOutput"] = release.SuffixOutput,
                 ["revisionOutput"] = release.RevisionOutput,
                 ["fqdnOutput"] = release.FqdnOutput,
                 ["revisionKey"] = release.RevisionKey,

@@ -126,7 +126,7 @@ public sealed class TemplateLibrary : ITemplateStore
                     errors.Add(new LoadError(node.Id, input, $"the release flow sets the input '{input}'; the runtime node must not."));
                 }
 
-                foreach (var output in new[] { release.TrafficOutput, release.RevisionOutput, release.FqdnOutput }.Where(o => !template.Outputs.Contains(o)))
+                foreach (var output in new[] { release.TrafficOutput, release.SuffixOutput, release.RevisionOutput, release.FqdnOutput }.Where(o => !template.Outputs.Contains(o)))
                 {
                     errors.Add(new LoadError(node.Id, output, $"template '{node.Template}' declares no output '{output}' that the runtime mapping's release block names."));
                 }

@@ -90,6 +90,8 @@ resources:
 outputs:
   # The traffic as configured by the last deploy; the release flow reads the live revision from it
   traffic: ${traffic}
+  # The revision suffix as configured by the last deploy; the release flow reuses it for the same config
+  revisionSuffix: ${revisionSuffix}
   containerAppId: ${containerApp.id}
   principalId: ${containerApp.identity.principalId}
   latestRevisionName: ${containerApp.latestRevisionName}
