@@ -194,32 +194,45 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   `true`), objects and arrays as compact JSON (a Pulumi config value is always a string; templates read maps and lists
   as JSON; an `fn::entries` object, the workload's variables, as a list of `{name, value}` items sorted by name). A value built
   from a secret output, directly or through an export, is a secret; a secret variable makes the whole `variables` entry secret. The walk stops at the first failure and reports what was deployed.
-- **The runtime node** (phase `runtime`, the Container App from the runtime mapping) and the **after-runtime nodes** (phase `after-runtime`:
-  grants that reference `runtime.*`) are not deployed by this walk: each is reported "waiting for runtime", the runtime
-  node as "the runtime is deployed in a later step" (the release flow deploys it, S16). Workload-scope nodes (`@workload/…`,
-  the runtime among them) are reported before the requirements' nodes, since their ids sort first.
-- **Revisions and traffic (what S16b builds on S16a).** The `container-app` template takes `revisionSuffix` and `traffic` as inputs and
-  owns no opinion on either, so one template deploys all three moves of the release flow. S16b sets them per step from the runtime
-  node's config and its own state, and runs the steps in order: (1) **dark**: a revision suffix derived deterministically from the node's
-  config hash with `traffic` excluded (unchanged config creates no revision), and `traffic` = `[{revisionName: <app>--<previous suffix>,
-  weight: 100}]`, so the new revision `<app>--<suffix>` exists and the previous keeps 100%; the first deploy has no previous revision and
-  passes `[{latestRevision: true, weight: 100}]`; (2) grants, then the OQ probe against the new revision with retry; (3) **shift**: the same
-  suffix, `traffic` = `[{revisionName: <app>--<suffix>, weight: 100}]`, which changes traffic only and creates no revision. On a failed
-  step traffic stays on the previous revision and dependants stop. Which revision is live is read from the stack: the template echoes
-  the traffic it was last given as an output (`traffic`), and the live revision is the last `revisionName` in it (none on a first deploy or
-  with `latestRevision`); the app's `latestReadyRevisionName` is the newest revision, not the live one, so it cannot tell. The runtime
-  mapping's `release` block names these inputs and outputs and the shape of a traffic item, so none is in code, and its `probe` carries
-  the retry bound (`timeoutSeconds`, `intervalSeconds`). The runtime node's config sets neither the suffix nor the traffic.
+- **Walk order.** The infrastructure-phase nodes first, in graph order; then the runtime node (phase `runtime`, the Container App from the
+  runtime mapping) through the release flow below; the **after-runtime nodes** (phase `after-runtime`: grants that reference `runtime.*`) are
+  deployed inside that flow, in its Grants step. Topological order can put the runtime before unrelated infrastructure (its id sorts first),
+  so the walk does not rely on it. Each node, the grants included, is reported as it completes; the runtime's report comes last.
+- **Release flow (the runtime node).** The `container-app` template takes `revisionSuffix` and `traffic` as inputs and owns no opinion on
+  either, so one template deploys all the moves of the flow, in this order: (1) **Dark**: deploy with a revision suffix that is `r` + the first
+  10 hex digits of the SHA-256 of the filled runtime parameters (key, value, secret flag, in key order; the suffix and traffic inputs
+  excluded), so the same config always gives the same suffix and a re-run finds its revision instead of creating another (Azure's rule for a
+  suffix: lowercase letters, digits and `-`, starting with a letter; the revision name `<app>--<suffix>` at most 54 characters), and `traffic` =
+  `[{revisionName: <live revision>, weight: 100}]`, so the new revision exists and the live one keeps all traffic; the first deploy has no live
+  revision and passes `[{latestRevision: true, weight: 100}]`. The new revision is the dark deploy's `revisionOutput`. (2) **Grants**: the
+  after-runtime nodes, deployed with the dark deploy's outputs. (3) **Probe**: GET the new revision's `fqdnOutput` + the mapping's `probe.path`
+  through `IRevisionProbe`; the orchestrator retries up to `1 + timeoutSeconds / intervalSeconds` times, waiting `intervalSeconds` between
+  attempts, because grants may take minutes to propagate. (4) **Shift**: the same suffix with `traffic` = `[{revisionName: <new revision>,
+  weight: 100}]`, which changes traffic only and creates no revision; skipped on a first deploy, where the latest revision already has all
+  traffic. Traffic goes to the new revision only here, after a passed probe. A failed step makes the runtime `failed` with `<step>: <reason>`;
+  later steps do not run, so traffic stays on the live revision. The probe target is built only from the dark deploy's FQDN output and the
+  mapping's path (a missing or empty FQDN output fails the Probe step without a probe), never from workload data or another node.
+  **Live revision:** read from the stack before the dark deploy: the template echoes the traffic it was last given as an output (the
+  mapping's `trafficOutput`), and the live revision is the last item with a `revisionKey` (none on a first deploy, or with only `latestKey`
+  items); the app's `latestReadyRevisionName` is the newest revision, not the live one, so it cannot tell. **Unchanged:** the dark deploy
+  reports no changes and the new revision is the live one: the runtime is `unchanged`, Probe and Shift are `skipped`, and the grants still
+  deploy. (A re-run right after a first deploy has no live revision to compare with, so it probes once more and reports `deployed`
+  with no changes.) The runtime mapping's `release` block names the inputs, outputs and the shape of a traffic item, so none is in code, and
+  its `probe` carries the retry bound. The engine alone sets the suffix and the traffic: `TemplateLibrary.Check` rejects a runtime node whose
+  config sets either (a workload-scope policy could otherwise), and the engine's values replace any that reach the walk.
   **Known limitation:** old revisions are not deactivated. Container Apps keeps a 0%-traffic revision active in multiple-revision mode,
   where it scales to zero and costs nothing; deactivating one is an API action Pulumi YAML cannot express. `maxInactiveRevisions` bounds
   only revisions that are already inactive (open question E32).
 - **Preview.** Same order, nothing is created. A reference to a node this run has not deployed is filled from
   `GetOutputsAsync` (state of an earlier deploy); if the node was never deployed the value is missing and the node is
   reported "pending upstream" and not previewed (never a fake value). Template `fn::invoke`s still run during preview, so
-  previewing a new environment's substrate needs its upstream deployed first.
-- **Result.** Per node: outcome (`deployed`, `unchanged`, `previewed`, `pending upstream`, `waiting for runtime`,
-  `failed`), the provider's change summary and per-resource changes, and the time. A node is `unchanged` when its summary
-  has no operation other than `Same`; "re-run = zero changes" means every deployed node is `unchanged`.
+  previewing a new environment's substrate needs its upstream deployed first. For the runtime, only the dark package is previewed (with the
+  live revision read from state); its Dark, Grants, Probe and Shift steps are `planned`, the probe is never called, and the grants are not
+  previewed (they need the runtime's outputs).
+- **Result.** Per node: outcome (`deployed`, `unchanged`, `previewed`, `pending upstream`, `failed`), the provider's change summary and
+  per-resource changes, and the time. A node is `unchanged` when its summary has no operation other than `Same`; "re-run = zero changes"
+  means every deployed node is `unchanged` (the runtime as described above). The runtime's report also carries its steps (`dark`, `grants`,
+  `probe`, `shift`, each `done`, `planned`, `skipped` or `failed` with a detail), printed one line each under the node.
 - **Configuration.** `jd deploy` reads `PULUMI_BACKEND_URL` and `PULUMI_CONFIG_PASSPHRASE` (or `PULUMI_CONFIG_PASSPHRASE_FILE`)
   in the composition root and refuses to run when they are unset (an empty passphrase is allowed: local/dev only); a default
   state location would lose track of stacks between runs. Optional: `PULUMI_HOME`, `JD_SCRATCH_DIR`. The orchestrator
@@ -230,7 +243,7 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
 A release set ([release.md](release.md)) is deployed by the same path as one workload, once per workload. `ReleaseResolver`
 (`jd.resolver`) parses each embedded definition and runs `Resolver.Resolve` in `Order`, naming errors `<set>#<workload>`;
 the CLI checks every graph against the templates; then `Orchestrator.DeployReleaseAsync` walks the graphs in that order
-(`DeployAsync`, or `PreviewAsync` with `--preview`) and stops after the first workload that fails, so later workloads are
+(`DeployAsync`, or `PreviewAsync` with `--preview`) and stops after the first workload that fails (a revision that fails its probe included), so later workloads are
 never touched. All resolution and checks come before the first node, so a resolve error in the last workload creates nothing.
 Rollback of the workloads before a failure is not part of the walk (open question E31): the run reports where it stopped and
 running it again resumes. The workloads' containers share the environment database's throughput (no per-container RU/s).

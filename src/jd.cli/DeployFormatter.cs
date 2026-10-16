@@ -5,7 +5,7 @@ using jd.orchestrator;
 
 namespace jd.cli;
 
-/// <summary>The per-node lines printed by <c>jd deploy</c>: outcome, changes and time, then each changed resource.</summary>
+/// <summary>The per-node lines printed by <c>jd deploy</c>: outcome, changes and time, then each changed resource and, for the runtime, each release step.</summary>
 public static class DeployFormatter
 {
     public static string Format(NodeReport report)
@@ -17,6 +17,11 @@ public static class DeployFormatter
         foreach (var change in report.Changes.Where(c => DeploymentResult.IsChange(c.Operation)))
         {
             text.AppendLine($"  {change.Operation.ToLowerInvariant()} {change.Type}");
+        }
+
+        foreach (var step in report.Steps ?? [])
+        {
+            text.AppendLine($"  {step.Step.ToString().ToLowerInvariant()}: {step.Outcome.ToString().ToLowerInvariant()}{(step.Detail.Length > 0 ? $" ({step.Detail})" : string.Empty)}");
         }
 
         if (report.Message.Length > 0)
@@ -33,7 +38,6 @@ public static class DeployFormatter
         NodeOutcome.Unchanged => "unchanged",
         NodeOutcome.Previewed => "previewed",
         NodeOutcome.PendingUpstream => "pending upstream",
-        NodeOutcome.WaitingForRuntime => "waiting for runtime",
         NodeOutcome.Failed => "failed",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "unknown outcome"),
     };

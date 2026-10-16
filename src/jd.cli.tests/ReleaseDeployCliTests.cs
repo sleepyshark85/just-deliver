@@ -21,7 +21,7 @@ public sealed class ReleaseDeployCliTests : IDisposable
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend);
+        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, probe: backend);
         return (code, stdout.ToString(), stderr.ToString());
     }
 
@@ -55,13 +55,20 @@ public sealed class ReleaseDeployCliTests : IDisposable
 
         Assert.Equal(0, code);
         Assert.Empty(stderr);
-        Assert.Equal(
-            [$"deploy {Worker}.dev._workload.appinsights", $"deploy {Worker}.dev.database.container", $"deploy {App}.dev._workload.appinsights", $"deploy {App}.dev.database.container"],
-            backend.Calls);
+        // Per workload: its infrastructure, its runtime, the grants (inside the runtime's Grants step), then the probe of the new revision.
+        Assert.Equal(12, backend.Calls.Count);
+        foreach (var (name, first) in new[] { (Worker, 0), (App, 6) })
+        {
+            Assert.Equal([$"deploy {name}.dev._workload.appinsights", $"deploy {name}.dev.database.container", $"deploy {name}.dev._workload.runtime"], backend.Calls.Skip(first).Take(3));
+            Assert.Equal([$"deploy {name}.dev._workload.appinsights-access", $"deploy {name}.dev.database.access"], backend.Calls.Skip(first + 3).Take(2).Order(StringComparer.Ordinal));
+            Assert.Equal("probe out-latestRevisionFqdn/health", backend.Calls[first + 5]);
+        }
+
         var lines = stdout.ReplaceLineEndings("\n");
         Assert.True(lines.IndexOf($"workload {Worker}\n", StringComparison.Ordinal) < lines.IndexOf($"{Worker}/dev/database/container: deployed", StringComparison.Ordinal));
         Assert.True(lines.IndexOf($"{Worker}/dev/database/container: deployed", StringComparison.Ordinal) < lines.IndexOf($"workload {App}\n", StringComparison.Ordinal));
-        Assert.Contains($"{App}/dev/database/access: waiting for runtime (no changes, ", stdout);
+        Assert.Contains($"{App}/dev/database/access: deployed (create 1, ", stdout);
+        Assert.Contains($"{App}/dev/@workload/runtime: deployed (create 1, ", stdout);
         Assert.Contains("release 1.0.0 on dev: 2 deployed, 0 unchanged, 0 failed, 0 not started.", stdout);
     }
 

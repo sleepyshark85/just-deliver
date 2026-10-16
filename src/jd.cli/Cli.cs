@@ -34,8 +34,8 @@ public static class Cli
         validate  checks a workload against its schema and rules.
         preview   validates the workload, then prints the resolved graph (--json: as stable JSON).
         release   create writes an immutable release set (pinned workloads, deploy order) from a manifest; show prints one;
-                  deploy resolves every workload of a set, then provisions their infrastructure in deploy order, stopping at the first failure.
-        deploy    provisions the infrastructure nodes in order (--preview: only shows the changes; nothing is created).
+                  deploy resolves every workload of a set, then deploys them in deploy order, stopping at the first failure.
+        deploy    provisions the infrastructure nodes in order, then releases the runtime: dark revision, grants, probe, traffic shift (--preview: only shows the changes; nothing is created).
         env up    provisions an environment's substrate from its definition and writes the environment descriptor from the outputs.
                   --base: the descriptor of the layer below (the new values are added to it); --region defaults to JD_REGION;
                   --force: overwrite an existing --out.
@@ -59,9 +59,9 @@ public static class Cli
     private const string PassphraseFileVariable = "PULUMI_CONFIG_PASSPHRASE_FILE";
 
     // backend is the one deploy uses; when null, the Pulumi backend configured from the process environment variables.
-    // environmentVariable reads them (null: the process environment). Both are test seams.
+    // environmentVariable reads them (null: the process environment). probe checks a new revision is healthy (null: an HTTP GET). All three are test seams.
     public static async Task<int> RunAsync(
-        string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, IBackEndProvider? backend = null, Func<string, string?>? environmentVariable = null)
+        string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, IBackEndProvider? backend = null, Func<string, string?>? environmentVariable = null, IRevisionProbe? probe = null)
     {
         environmentVariable ??= System.Environment.GetEnvironmentVariable;
         if (args.Contains("--help") || args.Contains("-h"))
@@ -72,7 +72,7 @@ public static class Cli
 
         if (args.FirstOrDefault() == "release")
         {
-            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, backend, environmentVariable, cancellationToken);
+            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, backend, probe, environmentVariable, cancellationToken);
         }
 
         if (args.FirstOrDefault() == "env")
@@ -103,7 +103,7 @@ public static class Cli
 
         try
         {
-            return await RunCommandAsync(options, backend, environmentVariable, stdout, stderr, cancellationToken);
+            return await RunCommandAsync(options, backend, probe, environmentVariable, stdout, stderr, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -113,7 +113,7 @@ public static class Cli
         }
     }
 
-    private static async Task<int> RunCommandAsync(Options options, IBackEndProvider? backend, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    private static async Task<int> RunCommandAsync(Options options, IBackEndProvider? backend, IRevisionProbe? probe, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var loaded = await WorkloadFile.LoadAsync(options.Workload, cancellationToken);
         if (loaded.Workload is not { } workload)
@@ -145,7 +145,7 @@ public static class Cli
 
         if (resolve is DeployOptions deploy)
         {
-            return await DeployAsync(deploy, graph, catalog, environment, backend, environmentVariable, stdout, stderr, cancellationToken);
+            return await DeployAsync(deploy, graph, catalog, environment, backend, probe, environmentVariable, stdout, stderr, cancellationToken);
         }
 
         stdout.Write(resolve is PreviewOptions { Json: true } ? GraphJson.Serialize(graph) : PreviewFormatter.Format(graph));
@@ -153,9 +153,9 @@ public static class Cli
     }
 
     private static async Task<int> DeployAsync(
-        DeployOptions options, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend,
+        DeployOptions options, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend, IRevisionProbe? probe,
         Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken) =>
-        (await ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, options.DryRun, stdout, stderr, cancellationToken)).Code;
+        (await ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, options.DryRun, stdout, stderr, cancellationToken, probe)).Code;
 
     // Catalog errors name files relative to the catalog root; the person needs the path they can open.
     // An error about the catalog as a whole names no real file and is left as it is.
@@ -178,19 +178,19 @@ public static class Cli
     }
 
     internal static Orchestrator CreateOrchestrator(
-        TemplateLibrary templates, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend, Func<string, string?> environmentVariable) =>
-        new(backend ?? CreatePulumiBackend(environmentVariable), templates, catalog, environment);
+        TemplateLibrary templates, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend, Func<string, string?> environmentVariable, IRevisionProbe? probe) =>
+        new(backend ?? CreatePulumiBackend(environmentVariable), templates, catalog, environment, probe ?? new HttpRevisionProbe(new HttpClient()));
 
     internal static async Task<(int Code, RunReport? Run)> ProvisionAsync(
         string catalogDirectory, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend,
-        Func<string, string?> environmentVariable, bool dryRun, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        Func<string, string?> environmentVariable, bool dryRun, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken, IRevisionProbe? probe = null)
     {
         if (await CheckTemplatesAsync(catalogDirectory, [graph], stderr, cancellationToken) is not { } templates)
         {
             return (Invalid, null);
         }
 
-        var orchestrator = CreateOrchestrator(templates, catalog, environment, backend, environmentVariable);
+        var orchestrator = CreateOrchestrator(templates, catalog, environment, backend, environmentVariable, probe);
         void Show(NodeReport report) => stdout.Write(DeployFormatter.Format(report));
         var run = dryRun
             ? await orchestrator.PreviewAsync(graph, Show, cancellationToken)
