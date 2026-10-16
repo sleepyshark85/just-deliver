@@ -26,14 +26,19 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
   An approval is *another* file in that directory (`…-approve.json`) that names the record's file name and the SHA-256 of its bytes (a
   record cannot contain its own hash). "Qualified" is derived, never stored: the newest `deploy` record has outcome `succeeded` and, for every
   workload, OQ `passed` or `unchanged`, and the newest record of any activity that carries an IQ verdict has IQ `passed`.
-- **`jd deploy <workload>` writes no record:** it has no label; the release is the unit that is deployed and promoted. Needs the user's nod (below).
+- **The set itself is kept beside the records, as ADR 0007 requires:** `<records>/<environment>/<label>/set.yaml` holds the set file's exact
+  bytes (the definitions as received). It is created with `CreateNew` on the label's first attempt. On every later attempt the existing file
+  must hash equal to the set being deployed; otherwise the run is refused before anything is deployed (a different set under the same label).
+  It is never overwritten. Records refer to it by `setSha256`.
+- **`jd deploy <workload>` writes no record:** it has no label; the release is the unit that is deployed and promoted. It is the unrecorded
+  development path ([usage.md](../usage.md)); the evidence of S20 comes from release sets.
 
 ## 2. Contents and where each value comes from
 
 | Field | Source today |
 |---|---|
 | `activity`, `startedAt`, `finishedAt` (UTC, to the second) | composition root, an injected `TimeProvider` |
-| `label`, set `createdAt`, `setSha256` (SHA-256 of the set file's bytes) | `ReleaseSet`; the hash is new: `ReleaseSetFile.LoadAsync` returns it (about 5 lines) |
+| `label`, set `createdAt`, `setSha256` (SHA-256 of `set.yaml`'s bytes) | `ReleaseSet`; the hash and the bytes are new: `ReleaseSetFile.LoadAsync` exposes the bytes it verified, so the hash and the copy come from one read |
 | per workload: `name`, `team`, `definitionSha256`, `dependsOn`, `image` (digest-pinned), deploy order | `ReleaseWorkload`, `ReleaseSet.Order` |
 | `environment`, `tier`, `region`, `catalogVersion` | `EnvironmentDescriptor`; `ResolvedGraph.CatalogVersion` (a version label, not a content hash) |
 | graph: nodes as `{id, template, stack, phase, hash}` and `graphSha256` of `GraphJson.Serialize` | `ResolvedGraph` |
@@ -43,9 +48,9 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 | `oq` per workload, `iq` | sections 4 to 6 |
 
 - **The graph is stored as hashes, not config.** The full graph is reproducible from the set, the catalog version and the environment
-  (hashes are deterministic, S07), and `graphSha256` proves it; this also keeps config out of the record. Definitions are stored by SHA-256
-  and the set file by SHA-256 rather than embedded (mvp.md lists "definition SHAs"); ADR 0007 says the record holds the content. The set is
-  the snapshot for the MVP. Embedding is a later change of the writer.
+  (hashes are deterministic, S07), and `graphSha256` proves it; this also keeps config out of the record. The records carry the definitions' SHA-256
+  and the set file's; the definition text itself is the verified `set.yaml` beside them (ADR 0007: the platform keeps what it receives), so
+  each record stays small and the content is stored once per label.
 - **Secrets cannot reach the record, by construction, not by filtering.** The writer is an allowlist of the fields above. It never reads
   `NodeReport.Outputs` (already non-secret only, but unneeded) or `NodeReport.Changes` (per-property old and new values, which
   may carry secret values). Remaining free text is `StepReport.Detail` and `NodeReport.Message`: revision names, `HTTP 503`, the transport
@@ -140,10 +145,10 @@ revision with weight > 0 equals the workload's pinned image, ordinal string equa
 | Slice | Contents | Est. |
 |---|---|---|
 | **S17a identity** | `IDeployerIdentity`, `jd.azure` project (credential from `ARM_*`, token claims), standards section 3 amended for the new adapter project, composition-root seam | ~65 |
-| **S17b record + OQ + timings** | `JD_RECORDS_DIR`, `ReleaseRecordFile` (write-once store, in `jd.resolver` beside `ReleaseSetFile`), `ReleaseRecordBuilder` (in `jd.orchestrator`, builds the JSON from the runs), schema, `StepReport`/`WorkloadRun` timings and attempts, set hash, `release deploy` wiring | ~205 |
+| **S17b record + OQ + timings** | `JD_RECORDS_DIR`, `ReleaseRecordFile` (write-once store and `set.yaml` check, in `jd.resolver` beside `ReleaseSetFile`), `ReleaseRecordBuilder` (in `jd.orchestrator`, builds the JSON from the runs), schema, `StepReport`/`WorkloadRun` timings and attempts, set bytes and hash, `release deploy` wiring | ~220 |
 | **S17c IQ** | `ILiveRevisions` and adapter, `resourceIdOutput`, preview of the grants, `Qualifier`, `release qualify`, IQ in the deploy and its record | ~265 |
 
-The total (~535) is one slice's worth of work three times over; each part stands alone and keeps the gate green. S17c is slightly over the cap and
+The total (~550) is one slice's worth of work three times over; each part stands alone and keeps the gate green. S17c is slightly over the cap and
 can drop the grants preview into its own tiny slice if the reviewer wants it smaller.
 
 **Required boundary tests**
@@ -154,7 +159,8 @@ can drop the grants preview into its own tiny slice if the reviewer wants it sma
   the old bytes unchanged); label or environment with `..` or a separator rejected; no secret (output, config value, changed property) in the text;
   failed run writes outcome `failed`, failing node and not-started workloads; preview, usage and resolution errors write nothing; missing
   `JD_RECORDS_DIR` stops before the backend is called; OQ `passed`/`failed`/`unchanged`/`notRun`; identity equals the port's value, whatever the
-  definition says; `setSha256` equals the file's SHA-256; step elapsed within the node's. Azure: in `EnvUpAzureTests`, the good, bad and revert
+  definition says; `setSha256` equals the SHA-256 of `set.yaml`, which holds the set's exact bytes; an identical re-run reuses `set.yaml`; different
+  bytes under the same label are refused before the backend is called; `set.yaml` is never overwritten; step elapsed within the node's. Azure: in `EnvUpAzureTests`, the good, bad and revert
   deploys each leave a record (outcomes `succeeded`, `failed`, `succeeded`; the bad one has OQ `failed`) and identity equals `ARM_CLIENT_ID`.
 - *S17c:* drift (fake preview reports an update, or a create for a removed node) fails IQ; a drifted grant node fails it; `PendingUpstream` fails
   it; digest mismatch with a clean preview fails it; the latest revision wrong but the live one right passes, the reverse fails; no revision with
@@ -162,10 +168,11 @@ can drop the grants preview into its own tiny slice if the reviewer wants it sma
   precedes every IQ preview, and a failed deploy gives `notRun`; IQ failure exits 1 and the record reads `succeeded` + `failed`; the failure
   text lists all failed checks. Azure: the mismatch of section 7.
 
-## Decisions for the user
+## Decisions (lead, pending the user's review)
 
-1. `jd deploy <workload>` writes no record (a release is the unit); success criterion 7 says "every deploy".
-2. `JD_RECORDS_DIR` is required for `release deploy` and `release qualify`.
-3. A new project `jd.azure` and the package `Azure.ResourceManager.AppContainers` (Azure.Identity is already pinned).
-4. Deviation from ADR 0007: the record holds hashes of definitions and of the set, not the definition text.
-5. IQ failure exits 1 and leaves the deployment live.
+1. `jd deploy <workload>` writes no record; a release is the unit. It is the unrecorded development path. Success criterion 7 is met by release sets.
+2. `JD_RECORDS_DIR` is required for `release deploy` (not `--preview`) and `release qualify`.
+3. A new adapter project `jd.azure`; the package `Azure.ResourceManager.AppContainers` arrives in S17c (S17a needs only Azure.Identity, already pinned);
+   standards section 3 is amended in S17a.
+4. No deviation from ADR 0007: the record directory keeps the set file's bytes (`set.yaml`, section 1); records reference it by `setSha256`.
+5. IQ failure exits 1 and leaves the deployment live (no rollback; E31, E32).
