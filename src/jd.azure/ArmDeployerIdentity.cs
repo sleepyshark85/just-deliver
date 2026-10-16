@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Text.Json;
 using Azure.Core;
+using Azure.Identity;
 using jd.core.identity;
 
 namespace jd.azure;
@@ -20,9 +21,21 @@ public sealed class ArmDeployerIdentity(TokenCredential credential) : IDeployerI
     private const string ClientClaim = "appid";
     private const string ObjectClaim = "oid";
 
+    /// <summary>Throws <see cref="InvalidOperationException"/>, fit to show a person, when Entra refuses the credential or the token cannot be read.</summary>
     public async Task<DeployerIdentity> GetAsync(CancellationToken cancellationToken)
     {
-        var token = await credential.GetTokenAsync(new TokenRequestContext([ArmScope]), cancellationToken);
+        AccessToken token;
+        try
+        {
+            token = await credential.GetTokenAsync(new TokenRequestContext([ArmScope]), cancellationToken);
+        }
+        catch (AuthenticationFailedException ex)
+        {
+            // The SDK's message is a page of protocol detail; the person needs to know which settings to check. Nothing of the credential is echoed.
+            throw new InvalidOperationException(
+                $"Azure did not accept the credential in {ArmCredentials.TenantVariable}, {ArmCredentials.ClientVariable} and {ArmCredentials.SecretVariable}; check that the secret is correct and has not expired.", ex);
+        }
+
         using var payload = Payload(token.Token);
         return new DeployerIdentity(Claim(payload, TenantClaim), Claim(payload, ClientClaim), Claim(payload, ObjectClaim));
     }

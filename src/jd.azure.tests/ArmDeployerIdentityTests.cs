@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Text;
 using Azure.Core;
+using Azure.Identity;
 using jd.core.identity;
 using Xunit;
 
@@ -54,6 +55,26 @@ public sealed class ArmDeployerIdentityTests
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => IdentityOf(Token(payload)));
 
         Assert.Contains($"'{claim}'", error.Message, StringComparison.Ordinal);
+    }
+
+    private sealed class RefusingCredential(string message) : TokenCredential
+    {
+        public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken) => throw new AuthenticationFailedException(message);
+
+        public override ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken) =>
+            ValueTask.FromException<AccessToken>(new AuthenticationFailedException(message));
+    }
+
+    [Fact]
+    public async Task A_credential_Entra_refuses_is_a_clear_error_naming_the_variables_without_the_sdk_text_or_any_secret()
+    {
+        var sdkMessage = "ClientSecretCredential authentication failed: AADSTS7000215: Invalid client secret provided. the-secret";
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => new ArmDeployerIdentity(new RefusingCredential(sdkMessage)).GetAsync(CancellationToken.None));
+
+        Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_ID and ARM_CLIENT_SECRET", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("AADSTS", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("the-secret", error.Message, StringComparison.Ordinal);
     }
 
     [Theory]
