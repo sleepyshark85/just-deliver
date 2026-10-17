@@ -115,8 +115,8 @@ Look at: the Cosmos account is free tier, capped at 1,000 RU/s, refuses keys; `d
 
 ```bash
 az cosmosdb list --query "[].{name:name, free:enableFreeTier, limit:capacity.totalThroughputLimit, noKeys:disableLocalAuth}" -o table
-COSMOS=$(az cosmosdb list --query "[0].name" -o tsv)
-COSMOS_RG=$(az cosmosdb list --query "[0].resourceGroup" -o tsv)
+COSMOS=$(az cosmosdb list --query "[?enableFreeTier] | [0].name" -o tsv)
+COSMOS_RG=$(az cosmosdb list --query "[?enableFreeTier] | [0].resourceGroup" -o tsv)
 for db in db-dev db-stage; do
   az cosmosdb sql database throughput show -a "$COSMOS" -g "$COSMOS_RG" -n "$db" --query "resource.throughput" -o tsv     # 400 each
 done
