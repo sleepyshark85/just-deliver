@@ -19,6 +19,7 @@ namespace jd.orchestrator;
 public static class ReleaseRecordBuilder
 {
     public const string DeployActivity = "deploy";
+    public const string QualifyActivity = "qualify";
 
     private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
@@ -30,19 +31,62 @@ public static class ReleaseRecordBuilder
     /// <param name="identity">The principal the run authenticated with, from the identity port.</param>
     /// <param name="startedAt">When the activity started.</param>
     /// <param name="finishedAt">When it finished.</param>
-    /// <param name="deployElapsed">The time of the deploy walk alone.</param>
+    /// <param name="deployElapsed">The time of the deploy walk alone; the IQ time is in <paramref name="iq"/>.</param>
+    /// <param name="iq">The qualification run after the deploy; null when it did not run (a workload failed), which the record spells <c>notRun</c>.</param>
     public static string Build(
         ReleaseSet set, string setSha256, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, IReadOnlyList<WorkloadRun> runs,
-        DeployerIdentity identity, DateTimeOffset startedAt, DateTimeOffset finishedAt, TimeSpan deployElapsed)
+        DeployerIdentity identity, DateTimeOffset startedAt, DateTimeOffset finishedAt, TimeSpan deployElapsed, IqResult? iq)
     {
         var failed = runs.FirstOrDefault(r => !r.Run.Succeeded);
-        var record = new JObject
+        var record = Head(DeployActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
+            set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), runs.FirstOrDefault(r => r.Workload == name), deploy: true));
+        record["outcome"] = failed is null ? "succeeded" : "failed";
+        record["deploySeconds"] = Seconds(deployElapsed);
+        record["iq"] = Iq(iq);
+        record["notStarted"] = new JArray(set.Order.Where(name => runs.All(r => r.Workload != name)));
+        if (failed is not null)
+        {
+            record["failure"] = new JObject { ["workload"] = failed.Workload, ["node"] = failed.Run.Nodes[^1].NodeId };
+        }
+
+        return record.ToString(Formatting.Indented) + "\n";
+    }
+
+    /// <summary>The record of <c>jd release qualify</c>: the pinned release and the IQ verdict; nothing was deployed, so there are no runs, no OQ and no deploy time. <c>iq</c> is what the qualification found.</summary>
+    public static string BuildQualify(
+        ReleaseSet set, string setSha256, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, DeployerIdentity identity,
+        DateTimeOffset startedAt, DateTimeOffset finishedAt, IqResult iq)
+    {
+        var record = Head(QualifyActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
+            set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), null, deploy: false));
+        record["iq"] = Iq(iq);
+        return record.ToString(Formatting.Indented) + "\n";
+    }
+
+    // The verdict and every check that ran; a qualification that did not run has no time and no checks.
+    private static JObject Iq(IqResult? iq) => new()
+    {
+        ["status"] = iq is null ? "notRun" : iq.Passed ? "passed" : "failed",
+        ["elapsedSeconds"] = Seconds(iq?.Elapsed ?? TimeSpan.Zero),
+        ["checks"] = new JArray((iq?.Checks ?? []).Select(c => new JObject
+        {
+            ["workload"] = c.Workload,
+            ["kind"] = Name(c.Kind),
+            ["subject"] = c.Subject,
+            ["status"] = c.Passed ? "passed" : "failed",
+            ["detail"] = c.Failure,
+        })),
+    };
+
+    // What every record has: when, who, where, which release, and the workloads as pinned (in deploy order) with their graphs.
+    private static JObject Head(
+        string activity, ReleaseSet set, string setSha256, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, DeployerIdentity identity,
+        DateTimeOffset startedAt, DateTimeOffset finishedAt, Func<string, JObject> workload) => new()
         {
             ["kind"] = "ReleaseRecord",
-            ["activity"] = DeployActivity,
+            ["activity"] = activity,
             ["startedAt"] = Time(startedAt),
             ["finishedAt"] = Time(finishedAt),
-            ["outcome"] = failed is null ? "succeeded" : "failed",
             ["identity"] = new JObject { ["tenantId"] = identity.TenantId, ["clientId"] = identity.ClientId, ["objectId"] = identity.ObjectId },
             ["environment"] = new JObject
             {
@@ -52,20 +96,11 @@ public static class ReleaseRecordBuilder
                 ["catalogVersion"] = graphs[0].CatalogVersion,
             },
             ["release"] = new JObject { ["label"] = set.Label, ["createdAt"] = Time(set.CreatedAt), ["setSha256"] = setSha256 },
-            ["deploySeconds"] = Seconds(deployElapsed),
-            ["notStarted"] = new JArray(set.Order.Where(name => runs.All(r => r.Workload != name))),
-            ["workloads"] = new JArray(set.Order.Select(name => Workload(
-                set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), runs.FirstOrDefault(r => r.Workload == name)))),
+            ["workloads"] = new JArray(set.Order.Select(workload)),
         };
-        if (failed is not null)
-        {
-            record["failure"] = new JObject { ["workload"] = failed.Workload, ["node"] = failed.Run.Nodes[^1].NodeId };
-        }
 
-        return record.ToString(Formatting.Indented) + "\n";
-    }
-
-    private static JObject Workload(ReleaseWorkload workload, ResolvedGraph graph, WorkloadRun? run)
+    // A deploy adds the run (when the workload started) and its OQ; a qualification deployed nothing, so it has neither.
+    private static JObject Workload(ReleaseWorkload workload, ResolvedGraph graph, WorkloadRun? run, bool deploy)
     {
         var entry = new JObject
         {
@@ -87,6 +122,11 @@ public static class ReleaseRecordBuilder
                 })),
             },
         };
+        if (!deploy)
+        {
+            return entry;
+        }
+
         if (run is not null)
         {
             entry["run"] = new JObject { ["elapsedSeconds"] = Seconds(run.Elapsed), ["nodes"] = new JArray(run.Run.Nodes.Select(Node)) };

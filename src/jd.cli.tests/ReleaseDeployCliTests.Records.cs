@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using jd.core.identity;
+using jd.core.revisions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -20,10 +21,33 @@ internal sealed class FakeIdentity : IDeployerIdentity
     }
 }
 
-// A clock that moves one second at every reading, so every record gets its own time.
+// The revisions of every app as the platform would report them: by default one, holding all traffic, running the sample's pinned image.
+internal sealed class FakeLiveRevisions : ILiveRevisions
+{
+    public const string Pinned = "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9";
+
+    public Func<string, IReadOnlyList<LiveRevision>> Answer { get; set; } = _ => [new LiveRevision("app--r1", 100, [Pinned])];
+    public List<string> Calls { get; } = [];
+
+    public Task<IReadOnlyList<LiveRevision>> GetAsync(string resourceId, CancellationToken cancellationToken)
+    {
+        Calls.Add(resourceId);
+        return Task.FromResult(Answer(resourceId));
+    }
+}
+
+// A clock that moves one second at every reading of the time, so every record gets its own time. Its timestamps, which time a stretch of work,
+// stand still until a test moves them with Advance (the fake backend does, for each call it answers).
 internal sealed class StepClock : TimeProvider
 {
     private DateTimeOffset _now = new(2026, 10, 17, 8, 0, 0, TimeSpan.Zero);
+    private long _timestamp;
+
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+    public override long GetTimestamp() => _timestamp;
+
+    public void Advance(TimeSpan time) => _timestamp += time.Ticks;
 
     public override DateTimeOffset GetUtcNow()
     {

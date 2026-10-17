@@ -5,12 +5,13 @@
 
 ## Now
 
-- **Next slice:** S17c1 is blocked (below); then S17c2 — IQ inside `jd release deploy`.
+- **Next slice:** S18a — approval policy, the gate, `stage` (brief in the scratchpad, `s18a-brief.md`; from approvals.md §6–8 S18a).
+  The S18 design note (`mvp/s18-design`, approved, user chose (a) for its three choices) merges first.
 - **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
   required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
   leaves the deployment live; ADR 0007 kept (the set file's bytes are stored write-once as `set.yaml` per label).
 - **In progress:** —
-- **Blocked:** S17c1 (branch `mvp/s17c1-qualify`, head c7a6e05): 3 review rounds without APPROVE — **user decision needed** (see the S17c1 row).
+- **Blocked:** —
 
 ## Slices
 
@@ -45,8 +46,8 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S16c | Revert-safe suffix + E2E Azure test | done | PR #33 | 1 + suggestions | Lead spike first (Azure rejects any template change reusing an existing revision suffix, even a revert). Lead decision: suffix = `r` + 8 hex over params + template content + 6 hex salt from the previous suffix (reused when the config part matches); `release.suffixOutput` from data. Azure test: a bad `sample-worker` (missing container → 503) fails its probe, traffic stays 100% on the good revision, the app behind it is untouched; revert deploys a new revision. ~40 production lines. APPROVE first round; 3 suggestions applied. Azure gate green (CLI 96/96, 1 h 2 min, nothing left). **S16 complete.** |
 | S17a | Design note + deployer identity | done | PR #34 | 2 | Design note `release-record.md` (split S17a/b/c, ~550 lines). Lead decisions recorded in Now. Identity port in `jd.core`, adapter `jd.azure` reads `tid`/`appid`/`oid` from the ARM token. Round 1: 1 blocking — port in `jd.orchestrator` made `jd.azure` depend on `jd.resolver` transitively, against its own standards row; plus secret in a record's `ToString`, ARM scope URL vs §1, 5 design-note gaps (OQ `unchanged` evidence chain, refusal order, IQ time apart from deploy time). Azure gate green (CLI 98/98, 1 h 3 min, identity test live, nothing left). |
 | S17b | Release record + OQ + timings | done | PR #35 | 2 | Record per attempt under `JD_RECORDS_DIR/<env>/<label>/`, write-once; `set.yaml` holds the set's bytes (hash-checked, ADR 0007); schema `release-record.schema.json` (`iq` to be added as optional in S17c); OQ from runtime steps; step/node/deploy timings; identity from the port; `AuthenticationFailedException` → clear CLI error. Round 1: 3 blocking — a `..` label crashed instead of a clear error, a probe with 0 attempts violated the schema, the preview-writes-nothing test was weak. ~233 production lines. Azure gate green (CLI 112/112, 1 h 6 min; good/bad/revert records, same-label refusal; nothing left). |
-| S17c1 | IQ (drift + live images) + `jd release qualify` | blocked | — | 3 | Lead split S17c (note est. ~265) into S17c1/S17c2. Each round's blocking findings were **new test gaps, not design rework**; every fix was small. R1: `verify.sh` allowlist was pattern-based (bypassable), transport error leaked SDK text (`AggregateException`), secret test lacked changed-property values. R2: failed-grant preview branch untested (mutation survived), `!` without comment. R3: a node whose preview **fails** and the unreached nodes after it are untested — two mutations together turn a throwing preview into a passing IQ (code is correct today; the test is missing). Size ~263 net production lines vs ~200 cap / ~250 stop. Offline gate green; Azure gate not run. Options: (a) let the lead/developer add the one Qualifier test and run the gate; (b) change the developer model (trial rule); (c) other. |
-| S17c2 | IQ inside `jd release deploy` | todo | | | Order, `notRun`, deploy time excludes IQ, exit 1 with `succeeded` + `failed`. |
+| S17c1 | IQ (drift + live images) + `jd release qualify` | done | [#40](https://github.com/sleepyshark85/just-deliver/pull/40) | 3 + final | Blocked after 3 rounds (each found new test gaps); user chose: lead finishes. Lead added the preview-failure test and round-3 hardening (jd.azure guard refuses Target/Import/UsingTask/Sdk and Directory.Build files, allowlists FrameworkReference; qualify records refuse deploy fields); one scoped final review (2 findings, fixed, APPROVE). Azure gate failed first: the new qualify step expected env name `dev` (test renames it) — drift on the runtime node **is** reported on Azure (`Update 1`), design note §7 confirmed. `verify.sh` now prints failure messages. Gate green: CLI 126/126, 1 h 6 min, nothing left. Not done (reasoned): narrowing the qualify `try` (Qualifier throws for a mapping without a release block). |
+| S17c2 | IQ inside `jd release deploy` | done | [#41](https://github.com/sleepyshark85/just-deliver/pull/41) | 2 | **Trial, Sonnet developer:** round 1 found 3 blocking (a real-clock sleep in a test instead of the run's `TimeProvider`, duplicated provider/qualifier wiring, a schema line with no effect), fixed by a fresh Sonnet developer; round 2 APPROVE. Early Azure test (new rule) passed on the first head; gate green on the approved head: CLI 133/133, 1 h 6 min, nothing left. Older deploy records without `iq` no longer validate — no reader exists yet (release-record.md §1). |
 | S18 | Second environment + approvals | todo | | | |
 | S19 | Promotion | todo | | | |
 | S20 | E2E run and docs | todo | | | |
@@ -103,6 +104,16 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-17 (S17c2, S18 choices)** — S17c2 done in 2 rounds (first trial slice: Sonnet code met the bar after one round of
+  structural findings, no design rework). User took (a) for all three S18 open choices (policy in the environment definition,
+  listed Entra object ids, approver = service principal; per-person sign-in deferred).
+
+- **2026-10-17 (S17c1 done, S18 design)** — S17c1 finished by the lead (option a) and merged after a green gate; see its row. User
+  agreed to parallel work: S18's design note ran beside S17c1's gate (developer Sonnet, reviewer Opus, fixer for round 2's finding; 3
+  rounds, APPROVE). Its review removed a tier constant from code (the gate is the descriptor's `approval` block) and found NJsonSchema
+  ignores `if`/`then` (use `anyOf`). Branch `mvp/s18-design` merges after the user answers its open choices. S17c2 brief:
+  scratchpad `s17c2-brief.md` (lead re-creates it if the scratchpad is gone: release-record.md §7/§8, required tests from §8 S17c).
 
 - **2026-10-17 (early Azure test)** — S17c1's gate failed in the end-to-end test's new qualify part, the first time it ran
   on Azure (the slice was blocked before any gate); the log named only the test. User agreed: `verify.sh` prints each
