@@ -1,4 +1,5 @@
 using jd.core.bp;
+using jd.core.revisions;
 using jd.resolver.catalog;
 
 namespace jd.orchestrator.tests;
@@ -29,8 +30,15 @@ internal sealed class FakeBackend : IBackEndProvider, ITemplateStore
     public List<string> Log { get; } = [];
     public Dictionary<string, Dictionary<string, ConfigEntry>> State { get; } = [];
     public Dictionary<string, int> Summary { get; set; } = new() { ["Create"] = 1 };
+
+    // What a preview of the stack reports, instead of Summary: a drifted stack has changes, a clean one only "Same".
+    public Dictionary<string, Dictionary<string, int>> PreviewSummaries { get; } = [];
+
+    // The per-property changes a preview of the stack reports (they may carry secret values).
+    public Dictionary<string, List<ResourceChange>> PreviewChanges { get; } = [];
     public bool DetectChanges { get; set; }
     public string? FailOn { get; set; }
+    public string? PreviewFailOn { get; set; }
     public bool OmitIdOutput { get; set; }
     public string? Fqdn { get; set; } = "app.example.test";
 
@@ -63,6 +71,7 @@ internal sealed class FakeBackend : IBackEndProvider, ITemplateStore
             outputs["traffic"] = traffic;
             outputs["suffix"] = suffix;
             outputs["revision"] = new("app--" + suffix.Value);
+            outputs["appId"] = new("/apps/" + package.StackName);
             if (Fqdn is not null)
             {
                 outputs["fqdn"] = new(Fqdn);
@@ -80,12 +89,29 @@ internal sealed class FakeBackend : IBackEndProvider, ITemplateStore
     {
         Calls.Add(("preview", package));
         Log.Add("preview " + package.StackName);
-        return Task.FromResult(new DeploymentResult { Outputs = [], Summary = Summary });
+        if (package.StackName == PreviewFailOn)
+        {
+            throw new InvalidOperationException("provider exploded");
+        }
+
+        return Task.FromResult(new DeploymentResult { Outputs = [], Summary = PreviewSummaries.GetValueOrDefault(package.StackName) ?? Summary, Changes = PreviewChanges.GetValueOrDefault(package.StackName) ?? [] });
     }
 
     public Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(string stackName, string deploymentContent, CancellationToken cancellationToken)
     {
         Calls.Add(("read", new DeploymentPackage { StackName = stackName, DeploymentContent = deploymentContent, DeploymentParameters = [] }));
         return Task.FromResult(State.GetValueOrDefault(stackName));
+    }
+}
+
+// Answers the live revisions of every app from Answer; records which apps were asked about.
+internal sealed class FakeLiveRevisions(Func<string, IReadOnlyList<LiveRevision>> answer) : ILiveRevisions
+{
+    public List<string> Calls { get; } = [];
+
+    public Task<IReadOnlyList<LiveRevision>> GetAsync(string resourceId, CancellationToken cancellationToken)
+    {
+        Calls.Add(resourceId);
+        return Task.FromResult(answer(resourceId));
     }
 }

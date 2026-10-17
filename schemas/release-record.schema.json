@@ -2,13 +2,29 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/release-record.schema.json",
   "title": "just-deliver release record",
-  "description": "Written by `jd release deploy`, one file per attempt, never edited: the local evidence of one attempt to put a release set on one environment (docs/architecture/release-record.md). Holds no config and no output values: the graph is stored as hashes, change counts replace the changes. Workloads are in deploy order. A later slice adds an optional `iq` verdict.",
+  "description": "Written by `jd release deploy` and `jd release qualify`, one file per attempt, never edited: the local evidence of one attempt to put a release set on one environment, or to re-check it (docs/architecture/release-record.md). Holds no config and no output values: the graph is stored as hashes, change counts replace the changes. Workloads are in deploy order. A deploy has an outcome, a deploy time, the workloads not started and each workload's run and OQ; a qualify has an `iq` verdict instead and deployed nothing.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "activity", "startedAt", "finishedAt", "outcome", "identity", "environment", "release", "deploySeconds", "notStarted", "workloads"],
+  "required": ["kind", "activity", "startedAt", "finishedAt", "identity", "environment", "release", "workloads"],
+  "oneOf": [
+    {
+      "description": "A deploy: the outcome, the deploy time, the workloads not started, and each workload's OQ.",
+      "properties": { "activity": { "enum": ["deploy"] }, "workloads": { "items": { "required": ["oq"] } } },
+      "required": ["outcome", "deploySeconds", "notStarted"]
+    },
+    {
+      "description": "A qualification: the IQ verdict, and none of a deploy's fields, since it deployed nothing.",
+      "properties": {
+        "activity": { "enum": ["qualify"] },
+        "workloads": { "items": { "not": { "anyOf": [{ "required": ["run"] }, { "required": ["oq"] }] } } }
+      },
+      "required": ["iq"],
+      "not": { "anyOf": [{ "required": ["outcome"] }, { "required": ["deploySeconds"] }, { "required": ["notStarted"] }, { "required": ["failure"] }] }
+    }
+  ],
   "properties": {
     "kind": { "enum": ["ReleaseRecord"] },
-    "activity": { "enum": ["deploy"] },
+    "activity": { "enum": ["deploy", "qualify"] },
     "startedAt": { "$ref": "#/definitions/time" },
     "finishedAt": { "$ref": "#/definitions/time" },
     "outcome": { "enum": ["succeeded", "failed"] },
@@ -54,6 +70,31 @@
         "setSha256": { "description": "SHA-256 of the exact bytes of set.yaml beside the records.", "$ref": "#/definitions/sha256" }
       }
     },
+    "iq": {
+      "description": "Installation qualification: the deployment still matches its graphs (no drift) and every revision that serves traffic runs the pinned image. Every check that ran is listed; the status is failed when any failed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "elapsedSeconds", "checks"],
+      "properties": {
+        "status": { "enum": ["passed", "failed"] },
+        "elapsedSeconds": { "type": "number", "minimum": 0 },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["workload", "kind", "subject", "status", "detail"],
+            "properties": {
+              "workload": { "type": "string", "minLength": 1 },
+              "kind": { "enum": ["drift", "image"] },
+              "subject": { "description": "The node (drift) or revision (image) checked; the workload when there is none to name.", "type": "string", "minLength": 1 },
+              "status": { "enum": ["passed", "failed"] },
+              "detail": { "description": "Why it failed, naming the node or revision; empty when it passed.", "type": "string" }
+            }
+          }
+        }
+      }
+    },
     "deploySeconds": { "description": "The deploy walk alone; started and finished bracket the whole activity.", "type": "number", "minimum": 0 },
     "notStarted": {
       "description": "Names of the workloads the run never reached because an earlier one failed.",
@@ -66,7 +107,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "team", "definitionSha256", "dependsOn", "image", "graph", "oq"],
+        "required": ["name", "team", "definitionSha256", "dependsOn", "image", "graph"],
         "properties": {
           "name": { "type": "string", "minLength": 1 },
           "team": { "type": "string", "minLength": 1 },

@@ -218,6 +218,7 @@ release:                                          # which template inputs/output
   revisionKey: revisionName                       # traffic item key naming a revision
   latestKey: latestRevision                       # traffic item key meaning the latest revision
   weightKey: weight
+  resourceIdOutput: containerAppId                # output with the runtime resource's id; qualification looks its live revisions up by it
 nodes:
   runtime:
     template: azure/container-app

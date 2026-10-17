@@ -10,6 +10,7 @@ dotnet run --project src/jd.cli -- preview <workload.yaml> --env <environment.ya
 dotnet run --project src/jd.cli -- release create <manifest.yaml> --out <release-set.yaml>
 dotnet run --project src/jd.cli -- release show <release-set.yaml>
 dotnet run --project src/jd.cli -- release deploy <release-set.yaml> --env <environment.yaml> --catalog <dir> [--preview]
+dotnet run --project src/jd.cli -- release qualify <release-set.yaml> --env <environment.yaml> --catalog <dir>
 dotnet run --project src/jd.cli -- deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
 dotnet run --project src/jd.cli -- env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
 dotnet run --project src/jd.cli -- --help
@@ -126,6 +127,7 @@ workloads:
 | `release show <set>` | Re-verifies each embedded definition against its recorded SHA-256 and re-applies the create rules, then prints (derived from the definitions) the label, the deploy order and, per workload, team, definition SHA-256, image and dependencies. A modified set, or one that breaks a rule, is an error (exit 1). |
 
 | `release deploy <set> --env <environment> --catalog <dir> [--preview]` | Loads the set (re-verifying it like `show`), resolves **every** workload on the environment and checks every graph against the templates, and only then deploys each workload (infrastructure, then the runtime release) in the set's deploy order. Same resolver, template check and orchestrator as `jd deploy`, and the same backend variables (`PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE`), plus `JD_RECORDS_DIR` and the `ARM_*` principal (below) unless `--preview`. **Creates real Azure resources.** |
+| `release qualify <set> --env <environment> --catalog <dir>` | Re-checks a deployed set without deploying anything (installation qualification, IQ): resolves like `release deploy`, then checks that no node of any workload has drifted and that every revision serving traffic runs the pinned image. Same variables as a recorded `release deploy`. Writes a record (below). |
 
 Exit codes are the same as above (a manifest, set or `--out` path problem is 2; invalid content is 1).
 
@@ -147,7 +149,7 @@ Exit codes are the same as above (a manifest, set or `--out` path problem is 2; 
   (and the failing workload and node, and the workloads not started), who deployed, what was pinned (hashes, not config), what ran with change
   **counts**, timings, and the operational qualification (OQ) of each workload read from its probe: `passed`, `failed`, `unchanged` (the revision
   was already live) or `notRun`. Contract: `schemas/release-record.schema.json`; design: [release-record.md](architecture/release-record.md).
-  Installation qualification (IQ) and `jd release qualify` are a later slice (S17c).
+  A deploy does not run IQ yet (a later slice); `jd release qualify` does.
   - `JD_RECORDS_DIR` is **required**: an existing directory (exit 2 and what to set otherwise, before anything is created). Keep it
     somewhere durable; it is the evidence, and nothing in it is a secret.
   - **Who deployed** is the service principal in `ARM_TENANT_ID`, `ARM_CLIENT_ID` and `ARM_CLIENT_SECRET` (the variables Pulumi uses too),
@@ -156,3 +158,21 @@ Exit codes are the same as above (a manifest, set or `--out` path problem is 2; 
   - `<records>/<environment>/<label>/set.yaml` is the set file's exact bytes, kept on the label's first attempt. A later attempt under the same
     label with a different set is refused (exit 1) before anything is deployed: use a new label. It is never overwritten.
   - If the record itself cannot be written, the run exits 1 and says the release was deployed; the deployment stays.
+  - Also exit 1, before anything is deployed and with nothing created: a credential Entra refuses or that is malformed (for example `ARM_TENANT_ID`
+    neither a directory id nor a domain name), and a label the record store rejects (it must not contain a path separator or `..`, since it names a directory).
+    A missing or invalid `JD_RECORDS_DIR` is exit 2.
+
+### `jd release qualify`
+
+Checks, never changes: it makes no deploy call. It runs every check and lists every failure; none stops the others.
+
+- **No drift:** every node of every workload (the grants included) is previewed against what is deployed; a node that would change, cannot be previewed
+  (waits on something not deployed) or fails is a failed check. The substrate (`jd env up`) is not part of a release and is not checked.
+- **The running image:** the runtime's revisions are read live from Azure (not from state or the record); every image of every revision with traffic must equal
+  the workload's pinned image, and at least one revision must hold traffic. A failure reads
+  `pinned <image>, live <image> on revision <name>`. If Azure cannot answer (the app is gone, access refused, no network) that is a failed check with the reason.
+- Starts like a recorded `release deploy` (needs `JD_RECORDS_DIR`, the `ARM_*` principal and the backend variables; creates `set.yaml` when the label has none,
+  refuses a different set under the label), then writes `...-qualify.json` and prints `record: <path>`. The record holds the pinned release and graphs, who ran
+  it and the `iq` verdict (`passed` or `failed`, its time and each check); it has no run, no OQ and no deploy time.
+- Exit 0 when IQ passes; exit 1 when it fails (each failure is a `jd: IQ failed: <workload>: <reason>` line) or when the record cannot be written.
+  The deployment is left as it is.

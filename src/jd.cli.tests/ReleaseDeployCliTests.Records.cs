@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using jd.core.identity;
+using jd.core.revisions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -17,6 +18,21 @@ internal sealed class FakeIdentity : IDeployerIdentity
     {
         Calls++;
         return Failure is null ? Task.FromResult(Value) : Task.FromException<DeployerIdentity>(Failure);
+    }
+}
+
+// The revisions of every app as the platform would report them: by default one, holding all traffic, running the sample's pinned image.
+internal sealed class FakeLiveRevisions : ILiveRevisions
+{
+    public const string Pinned = "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9";
+
+    public Func<string, IReadOnlyList<LiveRevision>> Answer { get; set; } = _ => [new LiveRevision("app--r1", 100, [Pinned])];
+    public List<string> Calls { get; } = [];
+
+    public Task<IReadOnlyList<LiveRevision>> GetAsync(string resourceId, CancellationToken cancellationToken)
+    {
+        Calls.Add(resourceId);
+        return Task.FromResult(Answer(resourceId));
     }
 }
 

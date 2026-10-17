@@ -70,6 +70,8 @@ internal sealed class AzureCli : IDisposable
     {
         var info = new ProcessStartInfo("az") { RedirectStandardOutput = true, RedirectStandardError = true };
         info.Environment["AZURE_CONFIG_DIR"] = _configDirectory;
+        // 'az containerapp' is an extension; the temporary configuration directory starts without it, so allow az to install it when a command needs it.
+        info.Environment["AZURE_EXTENSION_USE_DYNAMIC_INSTALL"] = "yes_without_prompt";
         foreach (var argument in arguments)
         {
             info.ArgumentList.Add(argument);

@@ -67,6 +67,7 @@ public static class GraphJson
                 ["revisionKey"] = release.RevisionKey,
                 ["latestKey"] = release.LatestKey,
                 ["weightKey"] = release.WeightKey,
+                ["resourceIdOutput"] = release.ResourceIdOutput,
             };
         }
 

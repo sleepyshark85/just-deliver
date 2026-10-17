@@ -3,7 +3,6 @@
   "activity": "deploy",
   "startedAt": "2026-10-17T08:00:00Z",
   "finishedAt": "2026-10-17T08:01:30Z",
-  "outcome": "succeeded",
   "identity": {
     "tenantId": "tenant-1",
     "clientId": "client-1",
@@ -20,8 +19,6 @@
     "createdAt": "2026-10-17T07:00:00Z",
     "setSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   },
-  "deploySeconds": 42.5,
-  "notStarted": [],
   "workloads": [
     {
       "name": "shop",
@@ -30,7 +27,7 @@
       "dependsOn": [],
       "image": "registry.example/app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "graph": {
-        "sha256": "2da3a43231afbd4871dbdc05542855f6d3464b8ef54a9428b268f99d37d6a7ce",
+        "sha256": "7a8ec136d91c69b72ec2c60c59ab144103ab82ea0e587b1efbbdf05c5ddf778e",
         "nodes": [
           {
             "id": "shop/dev/@workload/runtime",
@@ -167,7 +164,7 @@
       "dependsOn": [],
       "image": "registry.example/app@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "graph": {
-        "sha256": "17e8b3878f4a5ab112beb37956b18872e09cdb8d04e33ce82e19f16768884374",
+        "sha256": "837e12d36bdb02634007d4809efed53ad0672c49457062817ce07abf137734c6",
         "nodes": [
           {
             "id": "cart/dev/@workload/runtime",
@@ -297,5 +294,8 @@
         "elapsedSeconds": 0.5
       }
     }
-  ]
+  ],
+  "outcome": "succeeded",
+  "deploySeconds": 42.5,
+  "notStarted": []
 }

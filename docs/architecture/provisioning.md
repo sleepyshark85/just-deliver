@@ -238,8 +238,9 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   `GetOutputsAsync` (state of an earlier deploy); if the node was never deployed the value is missing and the node is
   reported "pending upstream" and not previewed (never a fake value). Template `fn::invoke`s still run during preview, so
   previewing a new environment's substrate needs its upstream deployed first. For the runtime, only the dark package is previewed (with the
-  live revision read from state); its Dark, Grants, Probe and Shift steps are `planned`, the probe is never called, and the grants are not
-  previewed (they need the runtime's outputs).
+  live revision read from state); its Dark, Grants, Probe and Shift steps are `planned`, and the probe is never called. The grants (the nodes after the runtime) are
+  previewed too, with the runtime's outputs read from state like any upstream node's; a runtime never deployed has none, so they are reported
+  "pending upstream". This is what lets `jd release qualify` see a drifted grant ([release-record.md](release-record.md) section 5).
 - **Result.** Per node: outcome (`deployed`, `unchanged`, `previewed`, `pending upstream`, `failed`), the provider's change summary and
   per-resource changes, and the time. A node is `unchanged` when its summary has no operation other than `Same`; "re-run = zero changes"
   means every deployed node is `unchanged` (the runtime as described above). The runtime's report also carries its steps (`dark`, `grants`,

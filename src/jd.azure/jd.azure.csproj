@@ -3,6 +3,7 @@
   <!-- Azure adapters: the only project besides the Pulumi backend that references an Azure SDK (standards §3). -->
   <ItemGroup>
     <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="Azure.ResourceManager.AppContainers" />
   </ItemGroup>
 
   <ItemGroup>

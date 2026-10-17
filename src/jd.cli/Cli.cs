@@ -1,7 +1,9 @@
+using Azure.Core;
 using jd.azure;
 using jd.bp.pulumi;
 using jd.core.bp;
 using jd.core.identity;
+using jd.core.revisions;
 using jd.orchestrator;
 using jd.resolver;
 using jd.resolver.catalog;
@@ -29,6 +31,7 @@ public static class Cli
           jd release create <manifest.yaml> --out <release-set.yaml>
           jd release show <release-set.yaml>
           jd release deploy <release-set.yaml> --env <environment.yaml> --catalog <dir> [--preview]
+          jd release qualify <release-set.yaml> --env <environment.yaml> --catalog <dir>
           jd deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
           jd env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
           jd --help
@@ -37,13 +40,13 @@ public static class Cli
         preview   validates the workload, then prints the resolved graph (--json: as stable JSON).
         release   create writes an immutable release set (pinned workloads, deploy order) from a manifest; show prints one;
                   deploy resolves every workload of a set, then deploys them in deploy order, stopping at the first failure, and writes a release record
-                  (not with --preview).
+                  (not with --preview); qualify re-checks a deployed set without deploying (no drift, the pinned image on every revision that serves traffic) and writes a record.
         deploy    provisions the infrastructure nodes in order, then releases the runtime: dark revision, grants, probe, traffic shift (--preview: only shows the changes; nothing is created).
         env up    provisions an environment's substrate from its definition and writes the environment descriptor from the outputs.
                   --base: the descriptor of the layer below (the new values are added to it); --region defaults to JD_REGION;
                   --force: overwrite an existing --out.
-        Backend (deploy, release deploy, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
-        Records (release deploy, not --preview): JD_RECORDS_DIR, an existing directory, and the deploying service principal in ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET.
+        Backend (deploy, release deploy, release qualify, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
+        Records (release deploy, not --preview; release qualify): JD_RECORDS_DIR, an existing directory, and the deploying service principal in ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET.
         Exit codes: 0 success, 1 validation, resolution or deployment errors, 2 usage errors.
 
         """;
@@ -64,10 +67,11 @@ public static class Cli
 
     // backend is the one deploy uses; when null, the Pulumi backend configured from the process environment variables.
     // environmentVariable reads them (null: the process environment). probe checks a new revision is healthy (null: an HTTP GET).
-    // identity names the deploying principal (null: from the ARM_* variables); time stamps the release record (null: the system clock). All five are test seams.
+    // identity names the deploying principal (null: from the ARM_* variables); time stamps the release record (null: the system clock);
+    // liveRevisions reads what runs (null: Azure, with the same variables). All six are test seams.
     public static async Task<int> RunAsync(
         string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, IBackEndProvider? backend = null, Func<string, string?>? environmentVariable = null,
-        IRevisionProbe? probe = null, IDeployerIdentity? identity = null, TimeProvider? time = null)
+        IRevisionProbe? probe = null, IDeployerIdentity? identity = null, TimeProvider? time = null, ILiveRevisions? liveRevisions = null)
     {
         environmentVariable ??= System.Environment.GetEnvironmentVariable;
         if (args.Contains("--help") || args.Contains("-h"))
@@ -78,7 +82,7 @@ public static class Cli
 
         if (args.FirstOrDefault() == "release")
         {
-            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, backend, probe, identity, time ?? TimeProvider.System, environmentVariable, cancellationToken);
+            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, backend, probe, identity, liveRevisions, time ?? TimeProvider.System, environmentVariable, cancellationToken);
         }
 
         if (args.FirstOrDefault() == "env")
@@ -229,11 +233,15 @@ public static class Cli
     }
 
     // The principal the run authenticates with, from the ARM_* variables Pulumi uses too. Throws InvalidOperationException naming the unset ones.
-    internal static IDeployerIdentity CreateDeployerIdentity(Func<string, string?> environmentVariable) =>
-        new ArmDeployerIdentity(new ArmCredentials(
-            environmentVariable(ArmCredentials.TenantVariable), environmentVariable(ArmCredentials.ClientVariable), environmentVariable(ArmCredentials.SecretVariable)).ToCredential());
+    internal static IDeployerIdentity CreateDeployerIdentity(Func<string, string?> environmentVariable) => new ArmDeployerIdentity(ArmCredential(environmentVariable));
 
-    private static IBackEndProvider CreatePulumiBackend(Func<string, string?> environmentVariable)
+    // The live revisions are read with the same credential as the identity, so the principal named in a record is the one that observed.
+    internal static ILiveRevisions CreateLiveRevisions(Func<string, string?> environmentVariable) => new ArmLiveRevisions(ArmCredential(environmentVariable));
+
+    private static TokenCredential ArmCredential(Func<string, string?> environmentVariable) =>
+        new ArmCredentials(environmentVariable(ArmCredentials.TenantVariable), environmentVariable(ArmCredentials.ClientVariable), environmentVariable(ArmCredentials.SecretVariable)).ToCredential();
+
+    internal static IBackEndProvider CreatePulumiBackend(Func<string, string?> environmentVariable)
     {
         var services = new ServiceCollection();
         services.AddLogging();
