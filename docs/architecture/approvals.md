@@ -153,7 +153,7 @@ directory, where S19 looks; the set is read from the source environment's direct
   3. **not qualified** on `qualifiedOn` (section 5), with every reason listed;
   4. the approver is not in `approvers`;
   5. `separateFromDeployer` and the approver deployed this label on `qualifiedOn`;
-  6. **repeated**: this `objectId` already has an approval of this set on this environment. This reads the approval files through the one reader of section 5 step 3 (`ApprovalRecord.ReadAsync`, S19a); a file it ignores (unreadable, invalid, naming another environment, label, set or `qualifiedOn`) is not an earlier approval, and `jd approve` does not report it.
+  6. **repeated**: this `objectId` already has an approval of this set on this environment. This reads the approval files through the one reader of section 5 step 3 (`ApprovalRecord.ReadAsync`, S19a); a file it ignores (unreadable, invalid, naming another environment, label, set or `qualifiedOn`) is not an earlier approval; `jd approve` ignores it and reports it on stderr (`jd: approve: ignored <file>: <why>`), and still goes ahead. A file whose name is not `<time>-approve.json` with a valid time is ignored the same way.
 - **A repeat is a UX refusal, not a lock.** Two simultaneous runs by one principal could both write; S19 counts distinct principals, so a duplicate
   file never counts twice. Approvals are never revoked in the MVP; a withdrawn release is a new label (a rejection record is out of the MVP).
 - Prints `approved <label> for <env> (<n> of <required>)` and `record: <path>`.

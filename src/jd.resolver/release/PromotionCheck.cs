@@ -10,6 +10,7 @@ namespace jd.resolver.release;
 /// <param name="IgnoredApprovals">Approval files that were not counted, with why. Reported whatever the outcome: an ignored approval cannot block a promotion.</param>
 public sealed record PromotionDecision(string? SetSha256, IReadOnlyList<string> Reasons, IReadOnlyList<string> IgnoredApprovals)
 {
+    /// <summary>True when there is no reason against the promotion.</summary>
     public bool MayPromote => Reasons.Count == 0;
 }
 

@@ -81,9 +81,15 @@ public static class ReleaseRecordFile
 
     /// <summary>Splits <c>&lt;time&gt;-&lt;activity&gt;.json</c> into its time part and activity; null when the name is not that of a record.</summary>
     internal static (string Time, string Activity)? SplitName(string fileName) =>
-        Activities.FirstOrDefault(a => fileName.EndsWith(NameEnd(a), StringComparison.Ordinal)) is { } activity
-            ? (fileName[..^NameEnd(activity).Length], activity)
-            : null;
+        Activities.FirstOrDefault(a => TimeOf(fileName, a) is not null) is { } activity ? (TimeOf(fileName, activity)!, activity) : null;
+
+    /// <summary>The time part of <c>&lt;time&gt;-&lt;activity&gt;.json</c>; null when the name does not end that way.</summary>
+    internal static string? TimeOf(string fileName, string activity) =>
+        fileName.EndsWith(NameEnd(activity), StringComparison.Ordinal) ? fileName[..^NameEnd(activity).Length] : null;
+
+    /// <summary>Whether <paramref name="time"/> is a time as <see cref="WriteAsync"/> writes it into a file name.</summary>
+    internal static bool IsNameTime(string time) =>
+        DateTimeOffset.TryParseExact(time, NameTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out _);
 
     internal static string NameEnd(string activity) => $"-{activity}.json";
 

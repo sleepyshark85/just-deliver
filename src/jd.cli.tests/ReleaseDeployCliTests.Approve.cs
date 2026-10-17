@@ -404,22 +404,21 @@ public sealed partial class ReleaseDeployCliTests
     }
 
     [Fact]
-    public async Task An_approval_file_that_cannot_be_read_is_ignored_and_the_approval_goes_ahead()
+    public async Task An_approval_file_that_cannot_be_used_is_ignored_reported_on_stderr_and_the_approval_goes_ahead()
     {
         await DeployedAsync();
         var stage = await StageAsync();
         Act(Alice);
-        Place("20260101T000000000Z-approve.json", Bob);
-        if (!TryRestrict(Path.Combine(StageDirectory, "20260101T000000000Z-approve.json")))
-        {
-            return;
-        }
+        Place("20260101T000000000Z-approve.json", Bob, "not json");
+        Place("notes-approve.json", Bob);
 
-        var (code, stdout, _) = await ApproveAsync(stage);
+        var (code, stdout, stderr) = await ApproveAsync(stage);
 
         Assert.Equal(0, code);
         Assert.Contains("approved 1.0.0 for stage (1 of 1)", stdout);
-        Assert.Equal(2, ApprovalFiles.Length);
+        Assert.Contains("jd: approve: ignored 20260101T000000000Z-approve.json: cannot be read: ", stderr);
+        Assert.Contains("jd: approve: ignored notes-approve.json: is not named <time>-approve.json", stderr);
+        Assert.Equal(3, ApprovalFiles.Length);
     }
 
     [Fact]

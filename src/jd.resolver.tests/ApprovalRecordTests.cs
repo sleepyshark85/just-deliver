@@ -194,12 +194,29 @@ public sealed class ApprovalRecordTests : IDisposable
     {
         await WriteApprovalAsync("object-a", 1);
         var directory = Path.Combine(_records, "stage", "1.0.0");
-        await File.WriteAllTextAsync(Path.Combine(directory, "20261017T030499000Z-approve.json"), content);
+        await File.WriteAllTextAsync(Path.Combine(directory, "20261017T030459000Z-approve.json"), content);
 
         var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 
         Assert.Equal(["object-a"], reading.Approvers);
-        Assert.StartsWith("20261017T030499000Z-approve.json: cannot be read: ", Assert.Single(reading.Ignored), StringComparison.Ordinal);
+        Assert.StartsWith("20261017T030459000Z-approve.json: cannot be read: ", Assert.Single(reading.Ignored), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("notes-approve.json")]
+    [InlineData("-approve.json")]
+    [InlineData("20261017T0304-approve.json")]
+    [InlineData("20261017T030499000Z-extra-approve.json")]
+    public async Task An_approval_file_not_named_with_a_time_is_ignored_and_reported_even_if_its_content_is_valid(string fileName)
+    {
+        var valid = await WriteApprovalAsync("object-b", 2);
+        var directory = Path.Combine(_records, "stage", "1.0.0");
+        File.Move(Path.Combine(directory, valid), Path.Combine(directory, fileName));
+
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
+
+        Assert.Empty(reading.Approvers);
+        Assert.StartsWith($"{fileName}: is not named <time>-approve.json", Assert.Single(reading.Ignored), StringComparison.Ordinal);
     }
 
     [Fact]

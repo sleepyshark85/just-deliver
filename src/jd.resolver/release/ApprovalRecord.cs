@@ -23,6 +23,8 @@ public static class ApprovalRecord
 
     private sealed record StoredIdentity(string TenantId, string ClientId, string ObjectId);
 
+    private sealed record Expected(string Environment, string Label, string SetSha256, string QualifiedOn);
+
     private static readonly JsonSerializerSettings Settings = new() { ContractResolver = new CamelCasePropertyNamesContractResolver(), DateParseHandling = DateParseHandling.None };
 
     private static readonly JsonSerializer Serializer = JsonSerializer.Create(Settings);
@@ -67,11 +69,12 @@ public static class ApprovalRecord
             return new ApprovalReading([], [$"'{directory}' cannot be read: {ex.Message}"]);
         }
 
+        var expected = new Expected(target.Name, label, setSha256, policy.QualifiedOn);
         var approvers = new List<string>();
         var ignored = new List<string>();
         foreach (var path in paths)
         {
-            var (stored, problem) = await LoadAsync(path, (target.Name, label, setSha256, policy.QualifiedOn), cancellationToken);
+            var (stored, problem) = await LoadAsync(path, expected, cancellationToken);
             if (stored is null)
             {
                 ignored.Add($"{Path.GetFileName(path)}: {problem}");
@@ -86,12 +89,17 @@ public static class ApprovalRecord
     }
 
     // The approval when the file is a valid one that belongs here, else why it is ignored.
-    private static async Task<(Stored? Approval, string? Problem)> LoadAsync(string path, (string Environment, string Label, string SetSha256, string QualifiedOn) expected, CancellationToken cancellationToken)
+    private static async Task<(Stored? Approval, string? Problem)> LoadAsync(string path, Expected expected, CancellationToken cancellationToken)
     {
+        if (ReleaseRecordFile.TimeOf(Path.GetFileName(path), ReleaseRecordFile.ApproveActivity) is not { } time || !ReleaseRecordFile.IsNameTime(time))
+        {
+            return (null, $"is not named <time>-{ReleaseRecordFile.ApproveActivity}.json with a time like 20261017T030405123Z.");
+        }
+
         JObject body;
         try
         {
-            using var reader = new JsonTextReader(new StringReader(await File.ReadAllTextAsync(path, cancellationToken)));
+            using var reader = new JsonTextReader(new StringReader(await File.ReadAllTextAsync(path, cancellationToken))) { DateParseHandling = DateParseHandling.None };
             body = JObject.Load(reader);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
