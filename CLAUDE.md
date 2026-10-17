@@ -25,7 +25,8 @@ How the team works together (independence, rounds, short reports, context cost):
 1. **Session start:** read `docs/plans/status.md`. Resume the slice in progress, or take the next `todo` slice.
 2. **Brief:** expand the slice from `mvp.md` into a brief — goal, acceptance criteria, files in scope,
    out of scope, ADRs/docs that apply. Mark the slice `in-progress` in status.md.
-3. **Develop:** dispatch `developer` with the brief.
+3. **Develop:** dispatch `developer` with the brief. If the slice adds or changes an Azure test, run that test early
+   ([conventions](docs/engineering/conventions.md#how-we-work)) before the review.
 4. **Review:** dispatch a new `reviewer` with **only the brief and the branch name** — never the developer's report.
 5. **Iterate:** on CHANGES REQUIRED, send the blocking findings to the `fixer` (all small and obvious) or the
    `developer` (same branch; resume it only while under 150k context, else a fresh one). Then send the **same**

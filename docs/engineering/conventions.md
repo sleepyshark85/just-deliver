@@ -41,7 +41,10 @@ rule says and this page for how it is applied; raise the conflict so one of them
   The lead never reads whole diffs or logs: `grep`, `head`, or an agent's short report.
 - **Azure is the lead's.** Only the lead runs `tools/verify.sh --azure`, one run at a time, after the reviewer
   approves; agents never run Azure tests or create resources. A gate failure goes back through the developer like a
-  review finding.
+  review finding. **A slice that adds or changes an Azure test gets that test run early:** when the developer hands
+  back, before review round 1, the lead runs only that test (`JD_AZURE_TESTS=1 dotnet test --filter`, holding the
+  same lock as `verify.sh --azure`), so a failure only Azure can show costs a developer round, not a blocked slice
+  after approval. The full gate still runs after APPROVE.
 - **Claims are reproduced, not trusted.** A constraint an agent reports ("the SDK cannot", "this mutant is equivalent",
   "Azure rejects that") becomes a rule, a design input or an exclusion only once it is shown — a failing command, a
   test, a spike. The S16c suffix redesign started from a lead spike, not from a report.

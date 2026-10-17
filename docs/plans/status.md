@@ -104,6 +104,11 @@ Picked up by the slice named; remove once done.
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
 
+- **2026-10-17 (early Azure test)** — S17c1's gate failed in the end-to-end test's new qualify part, the first time it ran
+  on Azure (the slice was blocked before any gate); the log named only the test. User agreed: `verify.sh` prints each
+  failure's message (on the S17c1 branch), and a slice that adds or changes an Azure test gets that test run early by the
+  lead, before review round 1 (conventions, "Azure is the lead's"; CLAUDE.md step 3). Auto-compact set to 300k by the user.
+
 - **2026-10-17 (process)** — User chose (a)+(b) for blocked S17c1: the lead adds the missing Qualifier test and the
   round-3 hardening, then a final review and the Azure gate (in progress: test written in a worktree, not yet committed);
   models briefly Opus developer / Opus reviewer / Sonnet fixer; then the user set the developer back to **Sonnet** to
