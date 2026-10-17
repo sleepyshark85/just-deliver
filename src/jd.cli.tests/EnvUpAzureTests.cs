@@ -56,8 +56,8 @@ public sealed class EnvUpAzureTests : IDisposable
     }
 
     // The groups are named after their environment, so the suffix finds them even when a deploy failed before writing a descriptor.
-    // A failed teardown fails the test: a resource group left behind must never go unnoticed. The shared group goes last: the
-    // Container Apps environment of every other group logs to its workspace.
+    // A failed teardown fails the test: a resource group left behind must never go unnoticed. The environment groups are deleted in
+    // parallel (each takes about 27 minutes), the shared group last: the Container Apps environment of every other group logs to its workspace.
     private List<string> TestGroups()
     {
         var list = _az.Run("group", "list", "--subscription", _az.Subscription, "--query", $"[?tags.project=='just-deliver-mvp' && contains(name, '{_suffix}')].name", "-o", "tsv");
@@ -68,19 +68,40 @@ public sealed class EnvUpAzureTests : IDisposable
 
     private void DeleteResourceGroups()
     {
-        foreach (var group in TestGroups())
+        var groups = TestGroups();
+        var environments = groups.Where(g => !g.Contains(SharedName, StringComparison.Ordinal)).ToList();
+        foreach (var group in environments)
         {
-            var delete = _az.Run("group", "delete", "--name", group, "--subscription", _az.Subscription, "--yes");
-            if (delete.Code != 0)
+            Delete(group, "--no-wait");
+        }
+
+        foreach (var group in environments)
+        {
+            var wait = _az.Run("group", "wait", "--deleted", "--name", group, "--subscription", _az.Subscription, "--timeout", "3600");
+            if (wait.Code != 0)
             {
-                throw new InvalidOperationException($"Could not delete resource group {group}; run tools/azure/cleanup.sh --yes --all. {delete.Error}");
+                throw new InvalidOperationException($"Resource group {group} was not deleted; run tools/azure/cleanup.sh --yes --all. {wait.Error}");
             }
+        }
+
+        foreach (var group in groups.Except(environments))
+        {
+            Delete(group);
         }
 
         var left = TestGroups();
         if (left.Count > 0)
         {
             throw new InvalidOperationException($"Resource groups left behind: {string.Join(", ", left)}; run tools/azure/cleanup.sh --yes --all.");
+        }
+    }
+
+    private void Delete(string group, params string[] extra)
+    {
+        var delete = _az.Run(["group", "delete", "--name", group, "--subscription", _az.Subscription, "--yes", .. extra]);
+        if (delete.Code != 0)
+        {
+            throw new InvalidOperationException($"Could not delete resource group {group}; run tools/azure/cleanup.sh --yes --all. {delete.Error}");
         }
     }
 
@@ -152,11 +173,18 @@ public sealed class EnvUpAzureTests : IDisposable
     // The stage descriptor with its policy pointed at the renamed dev and at the principal that ran the deploys (the sandbox has one), strict or relaxed about separation.
     private string StagePolicy(string stageDescriptor, string file, string principal, bool separate)
     {
-        var text = Regex.Replace(File.ReadAllText(stageDescriptor), @"qualifiedOn:\s*dev\b", $"qualifiedOn: {DevName}");
-        text = text.Replace("00000000-0000-0000-0000-000000000000", principal, StringComparison.Ordinal);
+        var text = ReplaceOnce(File.ReadAllText(stageDescriptor), @"qualifiedOn:\s*dev\b", $"qualifiedOn: {DevName}");
+        text = ReplaceOnce(text, "00000000-0000-0000-0000-000000000000", principal);
         var path = Path.Combine(_root, file);
-        File.WriteAllText(path, Regex.Replace(text, @"separateFromDeployer:\s*true", $"separateFromDeployer: {(separate ? "true" : "false")}"));
+        File.WriteAllText(path, ReplaceOnce(text, @"separateFromDeployer:\s*true", $"separateFromDeployer: {(separate ? "true" : "false")}"));
         return path;
+    }
+
+    // A rewrite of a descriptor that must change it: a pattern that no longer matches fails the test instead of leaving the text as it was.
+    private static string ReplaceOnce(string text, string pattern, string replacement)
+    {
+        Assert.Matches(pattern, text);
+        return Regex.Replace(text, pattern, replacement.Replace("$", "$$", StringComparison.Ordinal));
     }
 
     private async Task<(int Code, string Output)> ApproveAsync(string label, string stageDescriptor)
