@@ -39,12 +39,19 @@ rule says and this page for how it is applied; raise the conflict so one of them
   at 300k to hand back; it tells the lead to update status.md and ask the user to `/compact`. Resume an agent
   (`SendMessage`) for the same slice only while it is under 150k; otherwise dispatch a fresh one with the findings.
   The lead never reads whole diffs or logs: `grep`, `head`, or an agent's short report.
-- **Azure is the lead's.** Only the lead runs `tools/verify.sh --azure`, one run at a time, after the reviewer
-  approves; agents never run Azure tests or create resources. A gate failure goes back through the developer like a
-  review finding. **A slice that adds or changes an Azure test gets that test run early:** when the developer hands
-  back, before review round 1, the lead runs only that test (`JD_AZURE_TESTS=1 dotnet test --filter`, holding the
-  same lock as `verify.sh --azure`), so a failure only Azure can show costs a developer round, not a blocked slice
-  after approval. The full gate still runs after APPROVE.
+- **Azure is the lead's.** Only the lead runs `tools/verify.sh --azure`, one run at a time; agents never run Azure
+  tests or create resources. A gate failure goes back through the developer like a review finding. The suite is one
+  end-to-end scenario (~2 h since S18a), so it runs **once per slice, and only for an Azure-facing slice** (user's
+  choice, 2026-10-17):
+  - **Azure-facing** means the slice changes an Azure test (`*AzureTests.cs`, `DeployerIdentityTests.cs`),
+    `src/jd.azure`, `src/backend-providers`, `catalog/`, `samples/environments`, `samples/sample-app`, or what
+    `env up`, `deploy` or `release deploy` sends to Azure. Any other slice merges on the offline `verify.sh` (CI runs it
+    on every PR). The lead decides and records "Azure gate: run" or "none, not Azure-facing" in status.md.
+  - **When it runs:** after the developer's hand-back, before review round 1, so a failure only Azure can show costs a
+    developer round, not a blocked slice. Later rounds re-run it only if they touch Azure-facing code; otherwise the
+    first run stands for the approved head.
+  - **It does not block the next slice:** while a gate runs, the next slice may be developed on a branch from the
+    gated one (rebased onto `main` after the merge). Merges stay in order, and only one slice is in review at a time.
 - **Claims are reproduced, not trusted.** A constraint an agent reports ("the SDK cannot", "this mutant is equivalent",
   "Azure rejects that") becomes a rule, a design input or an exclusion only once it is shown — a failing command, a
   test, a spike. The S16c suffix redesign started from a lead spike, not from a report.

@@ -5,7 +5,7 @@
 
 ## Now
 
-- **Next slice:** S18c — `jd approve` (approvals.md §4, §6–8 S18c). S18b needed 3 rounds (a trial stop condition); asked, the user chose to keep the Sonnet developer.
+- **In progress:** S18c — `jd approve` (approvals.md §4, §6–8 S18c; the approval reader moves to S19). Azure-facing (adds an Azure step). S18b needed 3 rounds (a trial stop condition); asked, the user chose to keep the Sonnet developer.
 - **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
   required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
   leaves the deployment live; ADR 0007 kept (the set file's bytes are stored write-once as `set.yaml` per label).
@@ -104,6 +104,10 @@ Picked up by the slice named; remove once done.
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
 
+- **2026-10-17 (Azure gate rule)** — The ~2 h Azure suite ran twice per slice (early + after APPROVE) whatever the slice touched. User's
+  choice: run it once, only for an Azure-facing slice, before review round 1, and let the next slice be developed while it runs
+  ([conventions](../engineering/conventions.md#how-we-work)). S18b merged on CI alone; its stopped gate's leftover groups were torn down.
+  S18c is in development (brief: approval reader moved to S19 per approvals.md §6, S18c ~150 lines).
 - **2026-10-17 (S18b)** — S18b done in 3 rounds (third trial slice). Findings were code-bar items (duplicated record literals, a crash on an
   unlistable directory, two weak tests), not design; the fixer only partly fixed the literals in round 1, which cost round 2. Three rounds is a
   model-trial stop condition; asked, the user chose to keep the Sonnet developer for S18c.
