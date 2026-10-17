@@ -1,3 +1,5 @@
+using jd.resolver.release;
+
 namespace jd.cli;
 
 /// <summary>
@@ -47,6 +49,43 @@ internal sealed record Arguments(IReadOnlyList<string> Positional, string? Envir
         }
 
         return (new Arguments(positional, environment, catalog, json, dryRun), string.Empty);
+    }
+
+    /// <summary>
+    /// Reads the arguments of a command that takes one release label and the value options <paramref name="valueOptions"/> (<c>jd approve</c>, <c>jd promote</c>). The label is null,
+    /// with the problem set, when an option is unknown or lacks its value, or there is not exactly one label, or it cannot name a directory. A value given twice is the last one.
+    /// </summary>
+    public static (string? Label, IReadOnlyDictionary<string, string> Values, string Problem) ScanLabel(string[] args, params string[] valueOptions)
+    {
+        var values = new Dictionary<string, string>();
+        var positional = new List<string>();
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (valueOptions.Contains(args[i]))
+            {
+                if (i + 1 == args.Length)
+                {
+                    return (null, values, $"{args[i]} needs a value.");
+                }
+
+                values[args[i]] = args[++i];
+            }
+            else if (args[i].StartsWith("--", StringComparison.Ordinal))
+            {
+                return (null, values, $"unknown option '{args[i]}'.");
+            }
+            else
+            {
+                positional.Add(args[i]);
+            }
+        }
+
+        if (positional.Count != 1)
+        {
+            return (null, values, "expected exactly one release label.");
+        }
+
+        return ReleaseRecordFile.LabelProblem(positional[0]) is { } labelProblem ? (null, values, labelProblem) : (positional[0], values, string.Empty);
     }
 
     /// <summary>Each input must be what its role needs: the file and the environment are files, the catalog is a directory. Null when all are fine.</summary>

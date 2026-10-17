@@ -33,7 +33,7 @@ public static class QualificationReader
     public static async Task<Qualification> ReadAsync(string recordsDirectory, string environment, string label, CancellationToken cancellationToken = default)
     {
         var directory = ReleaseRecordFile.LabelDirectory(recordsDirectory, environment, label);
-        var setPath = Path.Combine(directory, ReleaseRecordFile.SetFileName);
+        var setPath = ReleaseRecordFile.KeptSetPath(recordsDirectory, environment, label);
         if (!File.Exists(setPath))
         {
             return new Qualification(null, [$"unknown label: '{setPath}' does not exist."], []);

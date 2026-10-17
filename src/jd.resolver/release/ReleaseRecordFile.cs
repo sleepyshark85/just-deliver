@@ -48,7 +48,7 @@ public static class ReleaseRecordFile
         string recordsDirectory, string environment, string label, ReadOnlyMemory<byte> setBytes, CancellationToken cancellationToken = default)
     {
         var directory = LabelDirectory(recordsDirectory, environment, label);
-        var path = Path.Combine(directory, SetFileName);
+        var path = KeptSetPath(recordsDirectory, environment, label);
         var sha256 = ReleaseDocument.Sha256(setBytes.Span);
         if (File.Exists(path))
         {
@@ -123,4 +123,11 @@ public static class ReleaseRecordFile
 
         return Path.Combine(recordsDirectory, environment, label);
     }
+
+    /// <summary>The path of the set kept for a label (<c>set.yaml</c> in its directory). Throws as <see cref="LabelDirectory"/>.</summary>
+    public static string KeptSetPath(string recordsDirectory, string environment, string label) =>
+        Path.Combine(LabelDirectory(recordsDirectory, environment, label), SetFileName);
+
+    /// <summary>The hash a record names for a set: the lowercase hex SHA-256 of its bytes.</summary>
+    public static string Sha256(ReadOnlySpan<byte> setBytes) => ReleaseDocument.Sha256(setBytes);
 }

@@ -20,7 +20,8 @@ namespace jd.cli.tests;
 /// workload's <c>/health</c> fails (its container does not exist) stops at the probe with traffic still on the good revision and the
 /// later workload untouched, and the good release deployed again goes live as a new revision. Then <c>jd release qualify</c> passes on the live
 /// good release; <c>jd approve</c> refuses an unknown label and, under the strict <c>stage</c> policy, the principal that deployed the set, then records an approval
-/// under a relaxed policy and refuses a repeat. Last, the worker's image is changed out of band: <c>qualify</c> fails naming the image check and <c>approve</c> is refused as not qualified. It is one scenario because
+/// under a relaxed policy and refuses a repeat; <c>jd promote</c> refuses the set before the approval (nothing is written) and, after it, deploys the kept set to <c>stage</c>
+/// (same bytes, a deploy record with IQ passed, the same image digests). Last, the worker's image is changed out of band: <c>qualify</c> fails naming the image check and <c>approve</c> and <c>promote</c> are refused as not qualified. It is one scenario because
 /// Azure allows one free-tier Cosmos account per subscription and the substrate here is that account. Always deletes the resource
 /// groups it created. Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>,
 /// <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI, and a subscription
@@ -150,9 +151,9 @@ public sealed class EnvUpAzureTests : IDisposable
         return (code, stdout + stderr.ToString());
     }
 
-    // The records of a label on dev, oldest first.
-    private List<JsonElement> RecordsOf(string label) =>
-        Directory.GetFiles(Path.Combine(Records, DevName, label), "*-deploy.json").Order(StringComparer.Ordinal).Select(file =>
+    // The deploy records of a label on dev (or the environment given), oldest first.
+    private List<JsonElement> RecordsOf(string label, string? environment = null) =>
+        Directory.GetFiles(Path.Combine(Records, environment ?? DevName, label), "*-deploy.json").Order(StringComparer.Ordinal).Select(file =>
         {
             using var document = JsonDocument.Parse(File.ReadAllText(file));
             return document.RootElement.Clone();
@@ -194,6 +195,17 @@ public sealed class EnvUpAzureTests : IDisposable
         var code = await Cli.RunAsync(
             ["approve", label, "--env", stageDescriptor, "--meaning", "Azure test: reviewed the evidence."], stdout, stderr, CancellationToken.None,
             environmentVariable: name => name == "JD_RECORDS_DIR" ? Records : System.Environment.GetEnvironmentVariable(name));
+        return (code, stdout + stderr.ToString());
+    }
+
+    // The promotion of a label to the gated environment of the descriptor, with the real backend; the output is stdout and stderr together.
+    private async Task<(int Code, string Output)> PromoteAsync(IBackEndProvider backend, string label, string stageDescriptor)
+    {
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var code = await Cli.RunAsync(
+            ["promote", label, "--to", stageDescriptor, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog")], stdout, stderr, CancellationToken.None, backend,
+            name => name == "JD_RECORDS_DIR" ? Records : System.Environment.GetEnvironmentVariable(name));
         return (code, stdout + stderr.ToString());
     }
 
@@ -439,6 +451,10 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal(1, strictCode);
         Assert.Contains($"principal {principal} deployed 1.0.0 on {DevName}", strictOutput, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.Combine(Records, StageName)), "a refusal wrote a record");
+        var (unapprovedCode, unapprovedOutput) = await PromoteAsync(backend, "1.0.0", relaxedStage); // qualified, but nobody approved it
+        Assert.Equal(1, unapprovedCode);
+        Assert.Contains($"0 of 1 required approvals for '{StageName}' count.", unapprovedOutput, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(Records, StageName)), "a refused promotion wrote a record");
         var (approvedCode, approvedOutput) = await ApproveAsync("1.0.0", relaxedStage);
         Assert.True(approvedCode == 0, approvedOutput);
         Assert.Contains($"approved 1.0.0 for {StageName} (1 of 1)", approvedOutput, StringComparison.Ordinal);
@@ -449,6 +465,19 @@ public sealed class EnvUpAzureTests : IDisposable
         var (repeatCode, repeatOutput) = await ApproveAsync("1.0.0", relaxedStage);
         Assert.Equal(1, repeatCode);
         Assert.Contains("already approved", repeatOutput, StringComparison.Ordinal);
+
+        // Promotion: the approved set goes to stage by the same walk, from the bytes kept on dev. Stage keeps those bytes, its deploy record carries IQ (passed) and the
+        // hash of the set, and both environments run the same image digests.
+        var (promotedCode, promotedOutput) = await PromoteAsync(backend, "1.0.0", relaxedStage);
+        Assert.True(promotedCode == 0, promotedOutput);
+        var devSet = Path.Combine(Records, DevName, "1.0.0", "set.yaml");
+        Assert.Equal(File.ReadAllBytes(devSet), File.ReadAllBytes(Path.Combine(Records, StageName, "1.0.0", "set.yaml")));
+        var promoted = Assert.Single(RecordsOf("1.0.0", StageName));
+        Assert.Equal("succeeded", promoted.GetProperty("outcome").GetString());
+        Assert.Equal("passed", Iq(promoted));
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(devSet))), promoted.GetProperty("release").GetProperty("setSha256").GetString());
+        Func<JsonElement, string[]> images = record => [.. record.GetProperty("workloads").EnumerateArray().Select(workload => workload.GetProperty("image").GetString()!)];
+        Assert.Equal(images(RecordsOf("1.0.0")[^1]), images(promoted));
 
         // The image of the worker's app is changed out of band, and that revision is given all the traffic. The quickstart image is a small public
         // Microsoft image that needs no registry login; it listens on port 80, so the app's ingress is pointed there first, for the new revision to start serving.
@@ -484,5 +513,11 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal(1, staleCode);
         Assert.Contains($"release 1.0.0 is not qualified on {DevName}", staleOutput, StringComparison.Ordinal);
         Assert.Single(Directory.GetFiles(Path.Combine(Records, StageName, "1.0.0"), "*-approve.json"));
+
+        // The same holds for promotion: the newest evidence on dev says IQ failed, so the set cannot be promoted again and stage keeps its one deploy record.
+        var (barredCode, barredOutput) = await PromoteAsync(backend, "1.0.0", relaxedStage);
+        Assert.Equal(1, barredCode);
+        Assert.Contains($"not qualified on {DevName}", barredOutput, StringComparison.Ordinal);
+        Assert.Single(RecordsOf("1.0.0", StageName));
     }
 }
