@@ -335,7 +335,7 @@ public partial class OrchestratorTests
     }
 
     [Fact]
-    public async Task The_schema_requires_the_deploy_fields_of_a_deploy_and_the_iq_of_a_qualify()
+    public async Task The_schema_requires_the_deploy_fields_of_a_deploy_and_the_iq_and_no_deploy_field_of_a_qualify()
     {
         var (set, graphs, runs) = await ReleaseRunAsync(new FakeBackend(), null, "shop");
         var deploy = Parse(Record(set, graphs, runs));
@@ -357,5 +357,18 @@ public partial class OrchestratorTests
         var unknown = Parse(qualify);
         unknown["verdict"] = "ok";
         await AssertInvalidAsync(unknown.ToString());
+        foreach (var field in new[] { "outcome", "deploySeconds", "notStarted" })
+        {
+            var withDeployField = Parse(qualify);
+            withDeployField[field] = deploy[field]!.DeepClone();
+            await AssertInvalidAsync(withDeployField.ToString());
+        }
+
+        foreach (var field in new[] { "run", "oq" })
+        {
+            var withWorkloadField = Parse(qualify);
+            withWorkloadField["workloads"]![0]![field] = deploy["workloads"]![0]![field]!.DeepClone();
+            await AssertInvalidAsync(withWorkloadField.ToString());
+        }
     }
 }
