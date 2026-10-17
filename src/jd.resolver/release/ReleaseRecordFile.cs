@@ -127,4 +127,7 @@ public static class ReleaseRecordFile
     /// <summary>The path of the set kept for a label (<c>set.yaml</c> in its directory). Throws as <see cref="LabelDirectory"/>.</summary>
     public static string KeptSetPath(string recordsDirectory, string environment, string label) =>
         Path.Combine(LabelDirectory(recordsDirectory, environment, label), SetFileName);
+
+    /// <summary>The hash a record names for a set: the lowercase hex SHA-256 of its bytes.</summary>
+    public static string Sha256(ReadOnlySpan<byte> setBytes) => ReleaseDocument.Sha256(setBytes);
 }

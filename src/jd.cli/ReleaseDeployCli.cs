@@ -21,18 +21,24 @@ internal static class ReleaseDeployCli
     private const int Invalid = 1;
     private const int UsageError = 2;
 
-    // Promoted: the run is `jd promote`'s walk of the kept set, which has judged the promotion already; only PromoteCli says so, no argument can.
-    private sealed record Options(string Set, string Environment, string Catalog, bool DryRun, bool Qualify, bool Promoted);
+    // Promotion is set only by PromoteAsync, never by an argument: the run is the walk of a promotion that was judged already.
+    private sealed record Options(string Set, string Environment, string Catalog, bool DryRun, bool Qualify)
+    {
+        public Promotion? Promotion { get; init; }
+    }
+
+    // What `jd promote` has settled before the walk: who runs it, and the hash of the kept set that the walk must read.
+    internal sealed record Promotion(DeployerIdentity Principal, string SetSha256);
 
     // What a recorded run has before anything is deployed: where the records go, who deploys, and the kept set's hash.
     private sealed record Recording(string Directory, DeployerIdentity Identity, string SetSha256);
 
-    // args are the arguments after "release deploy" or "release qualify" (qualify), or the walk of `jd promote` (promoted).
+    // args are the arguments after "release deploy" or "release qualify" (qualify).
     public static async Task<int> RunAsync(
         string[] args, bool qualify, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions,
-        TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken, bool promoted = false)
+        TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken)
     {
-        var (options, problem) = Parse(args, qualify, promoted);
+        var (options, problem) = Parse(args, qualify);
         if (options is null)
         {
             stderr.WriteLine($"jd: {problem}");
@@ -40,9 +46,22 @@ internal static class ReleaseDeployCli
             return UsageError;
         }
 
+        return await RunCheckedAsync(options, backend, probe, identity, liveRevisions, time, environmentVariable, stdout, stderr, cancellationToken);
+    }
+
+    // The walk of `jd promote` on the target, below the gate that refuses a direct deploy: the kept set, the target, the catalog, and what promote settled.
+    public static Task<int> PromoteAsync(
+        string keptSet, string environment, string catalog, Promotion promotion, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe,
+        ILiveRevisions? liveRevisions, TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken) =>
+        RunCheckedAsync(new Options(keptSet, environment, catalog, false, false) { Promotion = promotion }, backend, probe, null, liveRevisions, time, environmentVariable, stdout, stderr, cancellationToken);
+
+    private static async Task<int> RunCheckedAsync(
+        Options options, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions, TimeProvider time,
+        Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
         // A preview deploys nothing, so it records nothing and needs no directory; a qualification records the check.
         var records = environmentVariable(Cli.RecordsDirectoryVariable);
-        problem = Arguments.Unreadable(options.Set, options.Environment, options.Catalog) ?? (backend is null ? Cli.BackendSettingsProblem(environmentVariable) : null)
+        var problem = Arguments.Unreadable(options.Set, options.Environment, options.Catalog) ?? (backend is null ? Cli.BackendSettingsProblem(environmentVariable) : null)
             ?? (options.DryRun ? null : Cli.RecordsDirectoryProblem(records));
         if (problem is not null)
         {
@@ -76,8 +95,15 @@ internal static class ReleaseDeployCli
         }
 
         // A gated environment is deployed to only by promotion; this stops before the identity, the records or the backend is touched.
-        if (!options.DryRun && !options.Promoted && Cli.RefuseGated(environment, Command(options.Qualify), stderr))
+        if (!options.DryRun && options.Promotion is null && Cli.RefuseGated(environment, Command(options.Qualify), stderr))
         {
+            return Invalid;
+        }
+
+        // The promotion judged the hash of the kept set; the bytes read now are the ones deployed, so they must be those.
+        if (options.Promotion is { } promotion && ReleaseRecordFile.Sha256(setResult.Bytes.Span) != promotion.SetSha256)
+        {
+            stderr.WriteLine($"jd: promote: the kept set '{options.Set}' changed since it was checked (expected sha256 {promotion.SetSha256}).");
             return Invalid;
         }
 
@@ -98,7 +124,7 @@ internal static class ReleaseDeployCli
         Recording? recording = null;
         if (recordsDirectory is not null)
         {
-            recording = await StartRecordingAsync(recordsDirectory, identity, environmentVariable, setResult.Bytes, set.Label, environment.Name, stderr, cancellationToken);
+            recording = await StartRecordingAsync(recordsDirectory, options.Promotion?.Principal, identity, environmentVariable, setResult.Bytes, set.Label, environment.Name, stderr, cancellationToken);
             if (recording is null)
             {
                 return Invalid;
@@ -188,12 +214,12 @@ internal static class ReleaseDeployCli
         }
     }
 
-    // Null, with the reason on stderr, when the run must not start: the principal cannot be named, the label cannot name a directory, or it holds another set.
+    // Null, with the reason on stderr, when the run must not start: the principal (known already, for a promotion) cannot be named, the label cannot name a directory, or it holds another set.
     private static async Task<Recording?> StartRecordingAsync(
-        string recordsDirectory, IDeployerIdentity? identity, Func<string, string?> environmentVariable, ReadOnlyMemory<byte> setBytes, string label, string environmentName,
+        string recordsDirectory, DeployerIdentity? known, IDeployerIdentity? identity, Func<string, string?> environmentVariable, ReadOnlyMemory<byte> setBytes, string label, string environmentName,
         TextWriter stderr, CancellationToken cancellationToken)
     {
-        if (await Cli.GetIdentityAsync(identity, environmentVariable, stderr, cancellationToken) is not { } principal)
+        if ((known ?? await Cli.GetIdentityAsync(identity, environmentVariable, stderr, cancellationToken)) is not { } principal)
         {
             return null;
         }
@@ -249,7 +275,7 @@ internal static class ReleaseDeployCli
 
     private static string Command(bool qualify) => qualify ? "release qualify" : "release deploy";
 
-    private static (Options? Options, string Problem) Parse(string[] args, bool qualify, bool promoted)
+    private static (Options? Options, string Problem) Parse(string[] args, bool qualify)
     {
         var command = Command(qualify);
         var (scanned, problem) = Arguments.Scan(args, 0);
@@ -275,6 +301,6 @@ internal static class ReleaseDeployCli
 
         return scanned.Environment is null || scanned.Catalog is null
             ? (null, $"{command} needs --env and --catalog.")
-            : (new Options(scanned.Positional[0], scanned.Environment, scanned.Catalog, scanned.DryRun, qualify, promoted), string.Empty);
+            : (new Options(scanned.Positional[0], scanned.Environment, scanned.Catalog, scanned.DryRun, qualify), string.Empty);
     }
 }

@@ -1,3 +1,4 @@
+using jd.core.identity;
 using jd.core.revisions;
 using Xunit;
 
@@ -27,8 +28,9 @@ public sealed partial class ReleaseDeployCliTests
         return stage;
     }
 
-    // A refused promotion: exit 1, nothing printed on stdout, no backend, identity or live call, and nothing on the target but the approvals that were there.
-    private async Task<string> RefusedAsync(string stage, string label = "1.0.0")
+    // A refused promotion: exit 1, nothing printed on stdout, no backend or live call, nothing on the target but the approvals that were there, and the identity
+    // asked for exactly as often as the order says (once when the descriptor is gated, as the credential is checked before the records are read; else never).
+    private async Task<string> RefusedAsync(string stage, string label = "1.0.0", int identityAsked = 1)
     {
         var backend = new RecordingBackend();
         var identityCalls = _identity.Calls;
@@ -39,7 +41,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal(1, code);
         Assert.Empty(stdout);
         Assert.Empty(backend.Calls);
-        Assert.Equal(identityCalls, _identity.Calls);
+        Assert.Equal(identityCalls + identityAsked, _identity.Calls);
         Assert.Equal(liveCalls, _live.Calls.Count);
         Assert.DoesNotContain(StageFiles("*"), file => !file.EndsWith("-approve.json", StringComparison.Ordinal));
         return stderr;
@@ -51,6 +53,7 @@ public sealed partial class ReleaseDeployCliTests
         var stage = await ApprovedAsync(); // Dave is not an approver, nor the deployer
         var other = await CreateSetAsync(app => app.Replace("LOG_LEVEL: info", "LOG_LEVEL: warn", StringComparison.Ordinal), "other.yaml"); // same label, other bytes, elsewhere
         var backend = new RecordingBackend();
+        var identityCalls = _identity.Calls;
 
         var (code, stdout, stderr) = await PromoteAsync(stage, backend);
 
@@ -71,6 +74,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal(hash, (string?)record["release"]!["setSha256"]);
         Assert.Equal("stage", (string?)record["environment"]!["name"]);
         Assert.Equal(Dave, (string?)record["identity"]!["objectId"]);
+        Assert.Equal(1, _identity.Calls - identityCalls); // asked once, before the check, and not again by the walk
         Assert.Equal("succeeded", (string?)record["outcome"]);
         Assert.Equal("passed", (string?)record["iq"]!["status"]);
         var dev = Read(Assert.Single(RecordFiles));
@@ -216,7 +220,7 @@ public sealed partial class ReleaseDeployCliTests
     {
         await DeployedAsync();
 
-        var stderr = await RefusedAsync(Environment);
+        var stderr = await RefusedAsync(Environment, identityAsked: 0);
 
         Assert.Contains("jd: promote: environment 'dev' has no approval policy, so there is nothing to promote through.", stderr);
     }
@@ -228,9 +232,59 @@ public sealed partial class ReleaseDeployCliTests
         var broken = Path.Combine(_temp, "broken.env.yaml");
         await File.WriteAllTextAsync(broken, "kind: Nonsense\n");
 
-        var stderr = await RefusedAsync(broken);
+        var stderr = await RefusedAsync(broken, identityAsked: 0);
 
         Assert.Contains(broken, stderr);
+    }
+
+    [Fact]
+    public async Task A_bad_credential_stops_before_the_records_are_read_or_anything_is_deployed()
+    {
+        var stage = await StageAsync(); // no label was ever deployed: reading the records would say "unknown label"
+        _identity.Failure = new InvalidOperationException("ARM_TENANT_ID is not set.");
+        var backend = new RecordingBackend();
+
+        var (code, stdout, stderr) = await PromoteAsync(stage, backend);
+
+        Assert.Equal(1, code);
+        Assert.Contains("jd: ARM_TENANT_ID is not set.", stderr);
+        Assert.DoesNotContain("unknown label", stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("cannot be promoted", stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("promoting", stdout, StringComparison.Ordinal);
+        Assert.Empty(backend.Calls);
+        Assert.Equal(1, _identity.Calls);
+        Assert.Empty(StageFiles("*"));
+    }
+
+    [Fact]
+    public async Task An_environment_without_an_approval_policy_is_exit_1_even_without_a_records_directory()
+    {
+        _recordsVariable = null;
+
+        var (code, _, stderr) = await RunAsync(null, "promote", "1.0.0", "--to", Environment, "--catalog", Catalog);
+
+        Assert.Equal(1, code);
+        Assert.Contains("has no approval policy", stderr);
+        Assert.Equal(0, _identity.Calls);
+    }
+
+    [Fact]
+    public async Task The_walk_refuses_a_kept_set_whose_bytes_are_not_the_checked_ones_before_anything_is_deployed_or_kept()
+    {
+        var stage = await ApprovedAsync();
+        var backend = new RecordingBackend();
+        var kept = Path.Combine(_records, "dev", "1.0.0", "set.yaml");
+        var changed = new ReleaseDeployCli.Promotion(new DeployerIdentity("tenant-1", "client-1", Dave), new string('0', 64));
+
+        var stderr = new StringWriter();
+        var code = await ReleaseDeployCli.PromoteAsync(
+            kept, stage, Catalog, changed, new StringWriter(), stderr, backend, null, _live, _clock, name => name == "JD_RECORDS_DIR" ? _records : null, CancellationToken.None);
+
+        Assert.Equal(1, code);
+        Assert.Contains("changed since it was checked", stderr.ToString());
+        Assert.Empty(backend.Calls);
+        Assert.Empty(StageFiles("*-deploy.json"));
+        Assert.DoesNotContain(StageFiles("*"), file => file.EndsWith("set.yaml", StringComparison.Ordinal));
     }
 
     [Theory]

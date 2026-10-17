@@ -134,45 +134,19 @@ internal static class ApproveCli
 
     private static (Options? Options, string Problem) Parse(string[] args)
     {
-        string? environment = null, meaning = null;
-        var positional = new List<string>();
-        for (var i = 0; i < args.Length; i++)
+        var (label, values, problem) = Arguments.ScanLabel(args, "--env", "--meaning");
+        if (label is null)
         {
-            switch (args[i])
-            {
-                case "--env" or "--meaning" when i + 1 == args.Length:
-                    return (null, $"{args[i]} needs a value.");
-                case "--env":
-                    environment = args[++i];
-                    break;
-                case "--meaning":
-                    meaning = args[++i];
-                    break;
-                case var option when option.StartsWith("--", StringComparison.Ordinal):
-                    return (null, $"unknown option '{option}'.");
-                default:
-                    positional.Add(args[i]);
-                    break;
-            }
+            return (null, problem);
         }
 
-        if (positional.Count != 1)
-        {
-            return (null, "expected exactly one release label.");
-        }
-
-        if (ReleaseRecordFile.LabelProblem(positional[0]) is { } labelProblem)
-        {
-            return (null, labelProblem);
-        }
-
-        if (environment is null)
+        if (!values.TryGetValue("--env", out var environment))
         {
             return (null, "approve needs --env.");
         }
 
-        return meaning is null || meaning.Length is 0 or > MeaningMaxLength || meaning.Any(char.IsControl)
+        return !values.TryGetValue("--meaning", out var meaning) || meaning.Length is 0 or > MeaningMaxLength || meaning.Any(char.IsControl)
             ? (null, $"approve needs --meaning <text>: 1 to {MeaningMaxLength.ToString(CultureInfo.InvariantCulture)} characters, no control characters.")
-            : (new Options(positional[0], environment, meaning), string.Empty);
+            : (new Options(label, environment, meaning), string.Empty);
     }
 }
