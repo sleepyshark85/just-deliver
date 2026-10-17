@@ -24,6 +24,7 @@ provisions and deploys it, IT Ops moves from executor to gatekeeper.
    - [resolver.md](architecture/resolver.md) — proposed resolver design (C52)
    - [release.md](architecture/release.md) — the release manifest and release set: pinned workloads in deploy order (C53)
    - [release-record.md](architecture/release-record.md) — design note: the release record and IQ/OQ qualification (S17)
+   - [approvals.md](architecture/approvals.md) — design note: the `stage` substrate, the protected tier, approval policy and records (S18)
    - [usage.md](usage.md) — using the `jd` CLI: commands and exit codes
    - [workload_deployment_flow.html](architecture/workload_deployment_flow.html) — deployment flow diagram ([overview svg](architecture/workload_deployment_flow-overview.svg), [steps svg](architecture/workload_deployment_flow-steps.svg))
    - [landing-zone.md](architecture/landing-zone.md) — landing zone ownership and definition
