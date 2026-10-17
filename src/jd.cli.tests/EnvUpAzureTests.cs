@@ -369,8 +369,8 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal(1, drifted);
         // The image check names what was pinned (a digest) and what runs, on which revision; this is the line that proves IQ read Azure.
         Assert.Matches($@"IQ failed: just-deliver-sample-worker: pinned \S+@sha256:[0-9a-f]{{64}}, live {Regex.Escape(OtherImage)} on revision {Regex.Escape(oob)}", driftedOutput);
-        // The runtime node differs from its stack too (not verifiable offline: that Azure's refresh reflects the change into the inputs).
-        Assert.True(driftedOutput.Contains("just-deliver-sample-worker/dev/@workload/runtime differs from what is deployed", StringComparison.Ordinal), driftedOutput);
+        // The runtime node differs from its stack too: Azure's refresh reflects the change into the inputs (seen in the S17c1 gate).
+        Assert.True(driftedOutput.Contains($"just-deliver-sample-worker/{DevName}/@workload/runtime differs from what is deployed", StringComparison.Ordinal), driftedOutput);
         Assert.DoesNotContain("just-deliver-sample-app: pinned", driftedOutput, StringComparison.Ordinal);
         var failedIq = QualifyRecordsOf("1.0.0");
         Assert.Equal(2, failedIq.Count);
