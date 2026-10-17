@@ -139,6 +139,8 @@ public sealed class EnvUpAzureTests : IDisposable
             return document.RootElement.Clone();
         }).ToList();
 
+    private static string Iq(JsonElement record) => record.GetProperty("iq").GetProperty("status").GetString() ?? string.Empty;
+
     private static string Oq(JsonElement record, int workload) => record.GetProperty("workloads")[workload].GetProperty("oq").GetProperty("status").GetString() ?? string.Empty;
 
     // The value of an environment variable of the Container App's container (its Azure resource id).
@@ -262,6 +264,7 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), firstRecord.GetProperty("identity").GetProperty("clientId").GetString());
         Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_TENANT_ID"), firstRecord.GetProperty("identity").GetProperty("tenantId").GetString());
         Assert.Equal(["passed", "passed"], [Oq(firstRecord, 0), Oq(firstRecord, 1)]);
+        Assert.Equal("passed", Iq(firstRecord)); // the deploy qualified itself: no drift, the pinned digest live
 
         var containers = Az("cosmosdb", "sql", "container", "list", "--account-name", account, "--resource-group", sharedGroup, "--database-name", database, "--query", "[].name")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -320,6 +323,7 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal("failed", badRecord.GetProperty("outcome").GetString());
         Assert.Equal(["failed", "notRun"], [Oq(badRecord, 0), Oq(badRecord, 1)]);
         Assert.Equal(["just-deliver-sample-app"], badRecord.GetProperty("notStarted").EnumerateArray().Select(name => name.GetString()));
+        Assert.Equal("notRun", Iq(badRecord)); // a failed deploy runs no IQ
 
         // Going back to the good release deploys the old config as a new revision, probed and given all the traffic; the app is unchanged.
         var (revertCode, revertOutput) = await ReleaseAsync(backend, deploy);
@@ -336,6 +340,7 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.All(records, record => Assert.Equal("succeeded", record.GetProperty("outcome").GetString()));
         Assert.Equal(["unchanged", "unchanged"], [Oq(records[1], 0), Oq(records[1], 1)]);
         Assert.Equal("passed", Oq(records[2], 0));
+        Assert.Equal("passed", Iq(records[2]));
 
         // IQ: the good release, as deployed, qualifies (no drift anywhere, the pinned digest on every revision that serves traffic).
         var catalog = Path.Combine(AppContext.BaseDirectory, "catalog");

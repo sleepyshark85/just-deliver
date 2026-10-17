@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using System.Globalization;
-using jd.bp.pulumi;
 using jd.core.bp;
 using jd.core.identity;
 using jd.core.revisions;
@@ -102,21 +100,36 @@ internal static class ReleaseDeployCli
             }
         }
 
-        if (options.Qualify)
+        // Everything a run calls is built before any backend call, so a reader that cannot be built stops it before anything is deployed.
+        // A preview records nothing and qualifies nothing, so it has no qualifier.
+        Orchestrator orchestrator;
+        Qualifier? qualifier = null;
+        try
         {
-            // recordsDirectory is null only for a --preview, which qualify refuses at parse time, so a qualification always has a recording here.
-            return await QualifyAsync(recording!, set, catalog, environment, graphs, templates, backend, probe, liveRevisions, started, time, environmentVariable, stdout, stderr, cancellationToken);
+            var provider = backend ?? Cli.CreatePulumiBackend(environmentVariable);
+            orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, provider, environmentVariable, probe);
+            qualifier = recording is null ? null : new Qualifier(orchestrator, provider, templates, liveRevisions ?? Cli.CreateLiveRevisions(environmentVariable), time);
+        }
+        catch (InvalidOperationException ex)
+        {
+            stderr.WriteLine($"jd: {ex.Message}");
+            return Invalid;
         }
 
-        var orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, backend, environmentVariable, probe);
-        var walk = Stopwatch.GetTimestamp();
+        if (options.Qualify)
+        {
+            // recordsDirectory is null only for a --preview, which qualify refuses at parse time, so a qualification always has a recording and a qualifier here.
+            return await QualifyAsync(recording!, set, environment, graphs, qualifier!, started, time, stdout, stderr, cancellationToken);
+        }
+
+        var walk = time.GetTimestamp();
         var runs = await orchestrator.DeployReleaseAsync(
             graphs,
             options.DryRun,
             name => stdout.WriteLine($"workload {name}"),
             report => stdout.Write(DeployFormatter.Format(report)),
             cancellationToken);
-        var walked = Stopwatch.GetElapsedTime(walk);
+        var walked = time.GetElapsedTime(walk);
 
         stdout.WriteLine(Summarize(set, environment.Name, runs, options.DryRun));
         var failed = runs.FirstOrDefault(r => !r.Run.Succeeded);
@@ -126,48 +139,48 @@ internal static class ReleaseDeployCli
             stderr.WriteLine($"jd: stopped at {failed.Workload}, node {node.NodeId}: {node.Message}");
         }
 
+        // IQ runs only after every workload deployed; on a failure it is not run, and a failed IQ leaves the deployment as it is.
+        IqResult? iq = null;
+        if (qualifier is not null && failed is null)
+        {
+            iq = await qualifier.QualifyAsync(graphs, cancellationToken);
+            ReportIq(set, environment, iq, stdout, stderr);
+        }
+
         if (recording is not null)
         {
             var finished = time.GetUtcNow();
-            var json = ReleaseRecordBuilder.Build(set, recording.SetSha256, environment, graphs, runs, recording.Identity, started, finished, walked);
+            var json = ReleaseRecordBuilder.Build(set, recording.SetSha256, environment, graphs, runs, recording.Identity, started, finished, walked, iq);
             if (!await RecordAsync(recording, set.Label, environment.Name, finished, ReleaseRecordBuilder.DeployActivity, json, "deployed", stdout, stderr, cancellationToken))
             {
                 return Invalid;
             }
         }
 
-        return failed is null ? Success : Invalid;
+        return failed is null && (iq?.Passed ?? true) ? Success : Invalid;
     }
 
     // Checks the deployment without touching it; the record is written whether IQ passed or not.
     private static async Task<int> QualifyAsync(
-        Recording recording, ReleaseSet set, Catalog catalog, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, TemplateLibrary templates, IBackEndProvider? backend,
-        IRevisionProbe? probe, ILiveRevisions? liveRevisions, DateTimeOffset started, TimeProvider time, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr,
-        CancellationToken cancellationToken)
+        Recording recording, ReleaseSet set, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, Qualifier qualifier, DateTimeOffset started, TimeProvider time,
+        TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        IqResult iq;
-        try
-        {
-            var provider = backend ?? Cli.CreatePulumiBackend(environmentVariable);
-            var orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, provider, environmentVariable, probe);
-            iq = await new Qualifier(orchestrator, provider, templates, liveRevisions ?? Cli.CreateLiveRevisions(environmentVariable)).QualifyAsync(graphs, cancellationToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            stderr.WriteLine($"jd: {ex.Message}");
-            return Invalid;
-        }
+        var iq = await qualifier.QualifyAsync(graphs, cancellationToken);
+        ReportIq(set, environment, iq, stdout, stderr);
+        var finished = time.GetUtcNow();
+        var json = ReleaseRecordBuilder.BuildQualify(set, recording.SetSha256, environment, graphs, recording.Identity, started, finished, iq);
+        return await RecordAsync(recording, set.Label, environment.Name, finished, ReleaseRecordBuilder.QualifyActivity, json, "checked", stdout, stderr, cancellationToken) && iq.Passed ? Success : Invalid;
+    }
 
+    // The verdict on stdout, and every failed check on stderr.
+    private static void ReportIq(ReleaseSet set, EnvironmentDescriptor environment, IqResult iq, TextWriter stdout, TextWriter stderr)
+    {
         var failures = iq.Checks.Where(c => !c.Passed).ToList();
         stdout.WriteLine($"release {set.Label} on {environment.Name}: IQ {(iq.Passed ? "passed" : "failed")}, {iq.Checks.Count.ToString(CultureInfo.InvariantCulture)} checks, {failures.Count.ToString(CultureInfo.InvariantCulture)} failed.");
         foreach (var failure in failures)
         {
             stderr.WriteLine($"jd: IQ failed: {failure.Workload}: {failure.Failure}");
         }
-
-        var finished = time.GetUtcNow();
-        var json = ReleaseRecordBuilder.BuildQualify(set, recording.SetSha256, environment, graphs, recording.Identity, started, finished, iq);
-        return await RecordAsync(recording, set.Label, environment.Name, finished, ReleaseRecordBuilder.QualifyActivity, json, "checked", stdout, stderr, cancellationToken) && iq.Passed ? Success : Invalid;
     }
 
     // Null, with the reason on stderr, when the run must not start: the principal cannot be named, the label cannot name a directory, or it holds another set.

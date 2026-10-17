@@ -65,6 +65,7 @@ public sealed partial class ReleaseDeployCliTests
         await RunAsync(new RecordingBackend(), Deploy(set));
         var other = await CreateSetAsync(app => app.Replace("LOG_LEVEL: info", "LOG_LEVEL: debug"), "other.yaml");
         var backend = new RecordingBackend { Deployed = true };
+        _live.Calls.Clear(); // the deploy above qualified itself
 
         var (code, _, stderr) = await RunAsync(backend, Qualify(other));
 
@@ -154,6 +155,21 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Empty(backend.Calls);
         Assert.Empty(_live.Calls);
         Assert.Empty(Directory.GetFileSystemEntries(_records));
+    }
+
+    [Fact]
+    public async Task A_reader_of_live_revisions_that_cannot_be_built_stops_a_qualification_before_any_backend_call()
+    {
+        var set = await CreateSetAsync();
+        _reader = null; // built from the ARM_* variables, which this run does not have
+        var backend = new RecordingBackend { Deployed = true };
+
+        var (code, _, stderr) = await RunAsync(backend, Qualify(set));
+
+        Assert.Equal(1, code);
+        Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET", stderr);
+        Assert.Empty(backend.Calls);
+        Assert.Empty(QualifyRecordFiles);
     }
 
     [Theory]

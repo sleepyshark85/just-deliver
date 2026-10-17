@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using jd.core.bp;
 using jd.core.revisions;
@@ -35,11 +34,11 @@ public sealed record IqResult(IReadOnlyList<IqCheck> Checks, TimeSpan Elapsed)
 /// graphs (the preview walk reports no change anywhere) and every revision that serves traffic runs the pinned image, observed live.
 /// It deploys nothing. All checks run; a failure is a failed check, never an exception.
 /// </summary>
-public sealed class Qualifier(Orchestrator orchestrator, IBackEndProvider provider, ITemplateStore templates, ILiveRevisions revisions)
+public sealed class Qualifier(Orchestrator orchestrator, IBackEndProvider provider, ITemplateStore templates, ILiveRevisions revisions, TimeProvider time)
 {
     public async Task<IqResult> QualifyAsync(IReadOnlyList<ResolvedGraph> graphs, CancellationToken cancellationToken)
     {
-        var started = Stopwatch.GetTimestamp();
+        var started = time.GetTimestamp();
         var checks = new List<IqCheck>();
         foreach (var graph in graphs)
         {
@@ -49,7 +48,7 @@ public sealed class Qualifier(Orchestrator orchestrator, IBackEndProvider provid
             checks.AddRange(await ImageChecksAsync(graph, cancellationToken));
         }
 
-        return new IqResult(checks, Stopwatch.GetElapsedTime(started));
+        return new IqResult(checks, time.GetElapsedTime(started));
     }
 
     private static IqCheck DriftCheck(ResolvedGraph graph, GraphNode node, NodeReport? report)

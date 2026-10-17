@@ -1,6 +1,6 @@
 # Release record and qualification
 
-> Status: design note for S17 (MVP). S17a (identity), S17b (record, OQ, timings, `set.yaml`) and S17c1 (the grants preview, `ILiveRevisions`, the `Qualifier`, `jd release qualify` and its record) are built; IQ inside `jd release deploy` (S17c2) is not. Addresses [E52](../open-questions.md); the audit store (F39) is out of scope.
+> Status: design note for S17 (MVP). S17a (identity), S17b (record, OQ, timings, `set.yaml`) and S17c1 (the grants preview, `ILiveRevisions`, the `Qualifier`, `jd release qualify` and its record) and S17c2 (IQ inside `jd release deploy`) are built. Addresses [E52](../open-questions.md); the audit store (F39) is out of scope.
 > Builds on [release.md](release.md) (the set), [provisioning.md](provisioning.md) (the walk and release flow) and
 > [ADR 0007](../decisions/0007-definition-upload-snapshot.md). Approvals (S18, F54) and promotion (S19) will use the same records.
 
@@ -23,8 +23,8 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
   usage error or a resolution error writes none (nothing was deployed). A killed process writes none: the file is written at the end.
   If the write itself fails after a deploy, the run exits 1 and says so; the deployment stays.
 - **Format:** JSON, `kind: ReleaseRecord`, contract in `schemas/release-record.schema.json` (as the set and manifest have), pinned by a test
-  (a committed golden record, validated against the schema). `activity` is `deploy` or `qualify`; a deploy requires `outcome`, `deploySeconds`, `notStarted` and each workload's `oq`, a qualify requires `iq` (`oneOf`, with
-  `additionalProperties: false` kept); `iq` is optional on a deploy until S17c2 fills it, so records written before it stay valid.
+  (a committed golden record, validated against the schema). `activity` is `deploy` or `qualify`; a deploy requires `outcome`, `deploySeconds`, `notStarted`, `iq` and each workload's `oq`, a qualify requires `iq` (`oneOf`, with
+  `additionalProperties: false` kept). `iq.status` is `passed`, `failed` or, for a deploy only, `notRun` (no checks, no time: a workload failed, so IQ did not run). Deploy records written before S17c2 have no `iq` and are no longer valid; they exist only as test fixtures (no reader of records exists yet; S18 and S19 will read the current shape).
 - **Finding it later (S18, S19; named, not built):** the records of label X on environment Y are the files in `<records>/Y/X/`.
   An approval is *another* file in that directory (`…-approve.json`) that names the record's file name and the SHA-256 of its bytes (a
   record cannot contain its own hash). "Qualified" is derived, never stored: the newest `deploy` record has outcome `succeeded` and, for every
@@ -57,7 +57,7 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 - **As built:** the record has `workloads` in deploy order, each with its pinned fields, `graph` (`sha256` and the nodes as `{id, template, stack,
   phase, hash}`), `run` (absent when the workload was not started: `elapsedSeconds` and its nodes with outcome, change counts, message, elapsed
   and, for the runtime node, the steps) and `oq`; at the top `outcome`, `failure` (`{workload, node}`, only when failed), `notStarted`, `identity`,
-  `environment`, `release` (`label`, `createdAt`, `setSha256`) and `deploySeconds`. `failure.node` is the last node of the failed workload's
+  `environment`, `release` (`label`, `createdAt`, `setSha256`), `deploySeconds` and `iq` (section 6). `failure.node` is the last node of the failed workload's
   report: the runtime node when one of its steps failed (its message reads `<step>: <reason>`).
 - **The graph is stored as hashes, not config.** The node hashes and `graphSha256` let anyone check that a graph resolved from the
   set, the catalog and the environment matches the one that was deployed (hashes are deterministic, S07); this also keeps config out of the record. The records carry the definitions' SHA-256
@@ -173,7 +173,7 @@ revision with weight > 0 equals the workload's pinned image, ordinal string equa
 | **S17a identity** | `IDeployerIdentity` (in `jd.core`), `jd.azure` project (credential from `ARM_*`, token claims), standards sections 1 and 3 amended, boundary check, composition-root seam | ~65 |
 | **S17b record + OQ + timings** | `JD_RECORDS_DIR`, `ReleaseRecordFile` (write-once store and `set.yaml` check, in `jd.resolver` beside `ReleaseSetFile`), `ReleaseRecordBuilder` (in `jd.orchestrator`, builds the JSON from the runs), schema, `StepReport`/`WorkloadRun` timings and attempts, set bytes and hash, `release deploy` wiring | ~220 |
 | **S17c1 IQ + qualify** | grants preview, `resourceIdOutput`, `ILiveRevisions` (in `jd.core`) and adapter, `Qualifier`, `release qualify` and its record, the `jd.azure` allowlist check | ~200 |
-| **S17c2 IQ in deploy** | IQ inside `jd release deploy` after all workloads deployed (`notRun` when one failed), deploy time excluding IQ, exit 1 with `succeeded` + `failed` | ~65 |
+| **S17c2 IQ in deploy** (built) | IQ inside `jd release deploy` after all workloads deployed (`notRun` when one failed), deploy time excluding IQ, exit 1 with `succeeded` + `failed` | ~65 |
 
 The total (~550) is one slice's worth of work three times over (S17c, estimated ~265, was split in two); each part stands alone and keeps the gate green.
 

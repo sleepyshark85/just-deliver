@@ -31,16 +31,18 @@ public static class ReleaseRecordBuilder
     /// <param name="identity">The principal the run authenticated with, from the identity port.</param>
     /// <param name="startedAt">When the activity started.</param>
     /// <param name="finishedAt">When it finished.</param>
-    /// <param name="deployElapsed">The time of the deploy walk alone.</param>
+    /// <param name="deployElapsed">The time of the deploy walk alone; the IQ time is in <paramref name="iq"/>.</param>
+    /// <param name="iq">The qualification run after the deploy; null when it did not run (a workload failed), which the record spells <c>notRun</c>.</param>
     public static string Build(
         ReleaseSet set, string setSha256, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, IReadOnlyList<WorkloadRun> runs,
-        DeployerIdentity identity, DateTimeOffset startedAt, DateTimeOffset finishedAt, TimeSpan deployElapsed)
+        DeployerIdentity identity, DateTimeOffset startedAt, DateTimeOffset finishedAt, TimeSpan deployElapsed, IqResult? iq)
     {
         var failed = runs.FirstOrDefault(r => !r.Run.Succeeded);
         var record = Head(DeployActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
             set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), runs.FirstOrDefault(r => r.Workload == name), deploy: true));
         record["outcome"] = failed is null ? "succeeded" : "failed";
         record["deploySeconds"] = Seconds(deployElapsed);
+        record["iq"] = Iq(iq);
         record["notStarted"] = new JArray(set.Order.Where(name => runs.All(r => r.Workload != name)));
         if (failed is not null)
         {
@@ -57,21 +59,24 @@ public static class ReleaseRecordBuilder
     {
         var record = Head(QualifyActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
             set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), null, deploy: false));
-        record["iq"] = new JObject
-        {
-            ["status"] = iq.Passed ? "passed" : "failed",
-            ["elapsedSeconds"] = Seconds(iq.Elapsed),
-            ["checks"] = new JArray(iq.Checks.Select(c => new JObject
-            {
-                ["workload"] = c.Workload,
-                ["kind"] = Name(c.Kind),
-                ["subject"] = c.Subject,
-                ["status"] = c.Passed ? "passed" : "failed",
-                ["detail"] = c.Failure,
-            })),
-        };
+        record["iq"] = Iq(iq);
         return record.ToString(Formatting.Indented) + "\n";
     }
+
+    // The verdict and every check that ran; a qualification that did not run has no time and no checks.
+    private static JObject Iq(IqResult? iq) => new()
+    {
+        ["status"] = iq is null ? "notRun" : iq.Passed ? "passed" : "failed",
+        ["elapsedSeconds"] = Seconds(iq?.Elapsed ?? TimeSpan.Zero),
+        ["checks"] = new JArray((iq?.Checks ?? []).Select(c => new JObject
+        {
+            ["workload"] = c.Workload,
+            ["kind"] = Name(c.Kind),
+            ["subject"] = c.Subject,
+            ["status"] = c.Passed ? "passed" : "failed",
+            ["detail"] = c.Failure,
+        })),
+    };
 
     // What every record has: when, who, where, which release, and the workloads as pinned (in deploy order) with their graphs.
     private static JObject Head(

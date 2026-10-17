@@ -42,8 +42,13 @@ public partial class OrchestratorTests
         return (SetOf(workloads), graphs, runs);
     }
 
-    private static string Record(ReleaseSet set, IReadOnlyList<ResolvedGraph> graphs, IReadOnlyList<WorkloadRun> runs, DeployerIdentity? identity = null) =>
-        ReleaseRecordBuilder.Build(set, SetSha, Env, graphs, runs, identity ?? Principal, RecordStart, RecordStart.AddSeconds(90), TimeSpan.FromSeconds(42.5));
+    // The record of a deploy; iq is null when IQ did not run, as after a failed workload.
+    private static string Record(ReleaseSet set, IReadOnlyList<ResolvedGraph> graphs, IReadOnlyList<WorkloadRun> runs, DeployerIdentity? identity = null, IqResult? iq = null) =>
+        ReleaseRecordBuilder.Build(set, SetSha, Env, graphs, runs, identity ?? Principal, RecordStart, RecordStart.AddSeconds(90), TimeSpan.FromSeconds(42.5), iq);
+
+    // An IQ that took a known time: the shop's runtime node and its one revision, both clean.
+    private static readonly IqResult PassingIq = new(
+        [new IqCheck(IqCheckKind.Drift, "shop", "shop/dev/@workload/runtime", string.Empty), new IqCheck(IqCheckKind.Image, "shop", "app--r1", string.Empty)], TimeSpan.FromSeconds(12.5));
 
     // Dates stay text: the record spells them as the schema says.
     private static JObject Parse(string json)
@@ -80,7 +85,7 @@ public partial class OrchestratorTests
         var backend = new FakeBackend();
         var (set, graphs, runs) = await ReleaseRunAsync(backend, null, "shop", "cart");
 
-        var record = Record(set, graphs, runs.Select(Timed).ToList());
+        var record = Record(set, graphs, runs.Select(Timed).ToList(), iq: PassingIq);
 
         await AssertValidAsync(record);
         if (System.Environment.GetEnvironmentVariable("JD_UPDATE_GOLDEN") == "1")
@@ -107,6 +112,9 @@ public partial class OrchestratorTests
         Assert.Equal("shop", (string?)record["failure"]!["workload"]);
         Assert.Equal("shop/dev/thing/group", (string?)record["failure"]!["node"]);
         Assert.Equal(["cart", "shed"], record["notStarted"]!.Select(n => (string?)n));
+        Assert.Equal("notRun", (string?)record["iq"]!["status"]);
+        Assert.Equal(0, (double?)record["iq"]!["elapsedSeconds"]);
+        Assert.Empty(record["iq"]!["checks"]!);
         Assert.Equal(["shop", "cart", "shed"], record["workloads"]!.Select(w => (string?)w["name"]));
         Assert.Equal([true, false, false], record["workloads"]!.Select(w => w["run"] is not null));
         Assert.Equal("failed", (string?)record["workloads"]![0]!["run"]!["nodes"]![0]!["outcome"]);
@@ -126,6 +134,36 @@ public partial class OrchestratorTests
         Assert.Equal(42.5, (double?)record["deploySeconds"]);
         Assert.Equal("2026-10-17T08:00:00Z", (string?)record["startedAt"]);
         Assert.Equal("2026-10-17T08:01:30Z", (string?)record["finishedAt"]);
+    }
+
+    [Fact]
+    public async Task The_deploy_time_excludes_iq_which_has_its_own_time_and_checks_in_the_record()
+    {
+        var (set, graphs, runs) = await ReleaseRunAsync(new FakeBackend(), null, "shop");
+
+        var record = Parse(Record(set, graphs, runs, iq: PassingIq));
+
+        Assert.Equal(42.5, (double?)record["deploySeconds"]);
+        Assert.Equal(12.5, (double?)record["iq"]!["elapsedSeconds"]);
+        Assert.Equal("passed", (string?)record["iq"]!["status"]);
+        Assert.Equal(["drift", "image"], record["iq"]!["checks"]!.Select(c => (string?)c["kind"]));
+        Assert.Equal("succeeded", (string?)record["outcome"]);
+    }
+
+    [Fact]
+    public async Task A_failed_iq_after_a_succeeded_deploy_is_a_succeeded_record_with_a_failed_iq_listing_its_failed_checks()
+    {
+        var (set, graphs, runs) = await ReleaseRunAsync(new FakeBackend(), null, "shop");
+        var failing = new IqResult([.. PassingIq.Checks, new IqCheck(IqCheckKind.Drift, "shop", "shop/dev/thing/app", "node shop/dev/thing/app differs from what is deployed: Update 1")], TimeSpan.FromSeconds(3));
+
+        var json = Record(set, graphs, runs, iq: failing);
+
+        await AssertValidAsync(json);
+        var record = Parse(json);
+        Assert.Equal("succeeded", (string?)record["outcome"]);
+        Assert.Equal("failed", (string?)record["iq"]!["status"]);
+        Assert.Equal(["passed", "passed", "failed"], record["iq"]!["checks"]!.Select(c => (string?)c["status"]));
+        Assert.Equal("node shop/dev/thing/app differs from what is deployed: Update 1", (string?)record["iq"]!["checks"]![2]!["detail"]);
     }
 
     [Fact]

@@ -2,20 +2,24 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/release-record.schema.json",
   "title": "just-deliver release record",
-  "description": "Written by `jd release deploy` and `jd release qualify`, one file per attempt, never edited: the local evidence of one attempt to put a release set on one environment, or to re-check it (docs/architecture/release-record.md). Holds no config and no output values: the graph is stored as hashes, change counts replace the changes. Workloads are in deploy order. A deploy has an outcome, a deploy time, the workloads not started and each workload's run and OQ; a qualify has an `iq` verdict instead and deployed nothing.",
+  "description": "Written by `jd release deploy` and `jd release qualify`, one file per attempt, never edited: the local evidence of one attempt to put a release set on one environment, or to re-check it (docs/architecture/release-record.md). Holds no config and no output values: the graph is stored as hashes, change counts replace the changes. Workloads are in deploy order. A deploy has an outcome, a deploy time, the workloads not started, each workload's run and OQ, and an `iq` verdict (`notRun` when a workload failed); a qualify has only the `iq` verdict (passed or failed) and deployed nothing.",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "activity", "startedAt", "finishedAt", "identity", "environment", "release", "workloads"],
   "oneOf": [
     {
-      "description": "A deploy: the outcome, the deploy time, the workloads not started, and each workload's OQ.",
-      "properties": { "activity": { "enum": ["deploy"] }, "workloads": { "items": { "required": ["oq"] } } },
-      "required": ["outcome", "deploySeconds", "notStarted"]
+      "description": "A deploy: the outcome, the deploy time, the workloads not started, each workload's OQ, and the IQ verdict, which is notRun when IQ did not run because a workload failed.",
+      "properties": {
+        "activity": { "enum": ["deploy"] },
+        "workloads": { "items": { "required": ["oq"] } }
+      },
+      "required": ["outcome", "deploySeconds", "notStarted", "iq"]
     },
     {
-      "description": "A qualification: the IQ verdict, and none of a deploy's fields, since it deployed nothing.",
+      "description": "A qualification: the IQ verdict, which ran (passed or failed), and none of a deploy's fields, since it deployed nothing.",
       "properties": {
         "activity": { "enum": ["qualify"] },
+        "iq": { "properties": { "status": { "enum": ["passed", "failed"] } } },
         "workloads": { "items": { "not": { "anyOf": [{ "required": ["run"] }, { "required": ["oq"] }] } } }
       },
       "required": ["iq"],
@@ -71,12 +75,12 @@
       }
     },
     "iq": {
-      "description": "Installation qualification: the deployment still matches its graphs (no drift) and every revision that serves traffic runs the pinned image. Every check that ran is listed; the status is failed when any failed.",
+      "description": "Installation qualification: the deployment still matches its graphs (no drift) and every revision that serves traffic runs the pinned image. Every check that ran is listed; the status is failed when any failed, and notRun (no checks, no time) for a deploy that did not reach IQ.",
       "type": "object",
       "additionalProperties": false,
       "required": ["status", "elapsedSeconds", "checks"],
       "properties": {
-        "status": { "enum": ["passed", "failed"] },
+        "status": { "enum": ["passed", "failed", "notRun"] },
         "elapsedSeconds": { "type": "number", "minimum": 0 },
         "checks": {
           "type": "array",

@@ -36,10 +36,18 @@ internal sealed class FakeLiveRevisions : ILiveRevisions
     }
 }
 
-// A clock that moves one second at every reading, so every record gets its own time.
+// A clock that moves one second at every reading of the time, so every record gets its own time. Its timestamps, which time a stretch of work,
+// stand still until a test moves them with Advance (the fake backend does, for each call it answers).
 internal sealed class StepClock : TimeProvider
 {
     private DateTimeOffset _now = new(2026, 10, 17, 8, 0, 0, TimeSpan.Zero);
+    private long _timestamp;
+
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+    public override long GetTimestamp() => _timestamp;
+
+    public void Advance(TimeSpan time) => _timestamp += time.Ticks;
 
     public override DateTimeOffset GetUtcNow()
     {
