@@ -87,15 +87,16 @@ public static class ReleaseRecordFile
 
     internal static string NameEnd(string activity) => $"-{activity}.json";
 
-    /// <summary>The shape of a release label; the pattern of <c>release.label</c> in schemas/approval-record.schema.json.</summary>
-    public const string LabelPattern = @"^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?$";
+    // The shape of a release label: the pattern of release.label in schemas/approval-record.schema.json, except that it ends in \z. The schema
+    // reads $ as the end of the string; in .NET $ also matches before a final newline, which would let "1.0.0\n" name a directory.
+    private const string LabelPattern = @"^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?\z";
 
     /// <summary>Why <paramref name="label"/> cannot name a release (it is not label-shaped, or not one path segment); null when it can.</summary>
     public static string? LabelProblem(string label) =>
         SegmentProblem(label) ?? (Regex.IsMatch(label, LabelPattern, RegexOptions.CultureInvariant) ? null : $"'{label}' is not a release label (like 1.0.0 or 1.0.0-rc.1).");
 
     /// <summary>Why <paramref name="segment"/> cannot name a directory of the store (empty, or contains '..', '/' or '\\'); null when it can.</summary>
-    public static string? SegmentProblem(string segment) =>
+    private static string? SegmentProblem(string segment) =>
         segment.Length == 0 || segment.Contains("..", StringComparison.Ordinal) || segment.AsSpan().IndexOfAny('/', '\\') >= 0
             ? $"'{segment}' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'."
             : null;

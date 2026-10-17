@@ -213,7 +213,7 @@ separation from the deployer means something only when each approver and each de
 Exit 1 with a message naming the cause, and nothing written, when: the descriptor has no `approval` block; the label is unknown on `qualifiedOn`
 (or its `set.yaml` or directory cannot be read, which is said as such); the set is not qualified on `qualifiedOn` (every reason is listed); the principal
 is not in `approvers`; `separateFromDeployer` is on and the principal deployed the label on `qualifiedOn`; or the principal already approved this set for this
-environment. A bad credential stops before any record is read (exit 1). Exit 2: a missing or empty `--meaning`, a label that is a path, an unreadable `--env`,
+environment. A bad credential stops before any record is read (exit 1). Exit 2: a missing or empty `--meaning`, a label that is not a release label (or is a path), an unreadable `--env`,
 a missing `JD_RECORDS_DIR`.
 
 It writes `<JD_RECORDS_DIR>/<target>/<label>/<UTC time>-approve.json` (`kind: ApprovalRecord`, [schema](../schemas/approval-record.schema.json); created once,

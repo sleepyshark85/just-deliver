@@ -213,6 +213,7 @@ public sealed partial class ReleaseDeployCliTests
     [InlineData("a/b", "cannot name a directory")]
     [InlineData("a\\b", "cannot name a directory")]
     [InlineData("1.0.0-a..b", "cannot name a directory")]
+    [InlineData("1.0.0\n", "is not a release label")]
     [InlineData("foo", "is not a release label")]
     [InlineData(".", "is not a release label")]
     public async Task A_label_that_is_not_label_shaped_is_a_usage_error_before_the_descriptor_the_records_and_the_credential(string label, string expected)
