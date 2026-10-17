@@ -19,7 +19,7 @@
         "workloads": { "items": { "not": { "anyOf": [{ "required": ["run"] }, { "required": ["oq"] }] } } }
       },
       "required": ["iq"],
-      "not": { "anyOf": [{ "required": ["outcome"] }, { "required": ["deploySeconds"] }, { "required": ["notStarted"] }] }
+      "not": { "anyOf": [{ "required": ["outcome"] }, { "required": ["deploySeconds"] }, { "required": ["notStarted"] }, { "required": ["failure"] }] }
     }
   ],
   "properties": {

@@ -364,6 +364,10 @@ public partial class OrchestratorTests
             await AssertInvalidAsync(withDeployField.ToString());
         }
 
+        var withFailure = Parse(qualify);
+        withFailure["failure"] = new JObject { ["workload"] = "shop", ["node"] = "shop/dev/thing/app" };
+        await AssertInvalidAsync(withFailure.ToString());
+
         foreach (var field in new[] { "run", "oq" })
         {
             var withWorkloadField = Parse(qualify);

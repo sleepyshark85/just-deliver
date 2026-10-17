@@ -45,11 +45,12 @@ done
 # Checked by hand when written, each variant added to src/jd.azure/jd.azure.csproj and rejected: a ProjectReference to jd.resolver (also
 # with Condition="true" before Include), a PackageReference to Pulumi.Automation (also with Condition="true"), to Newtonsoft.Json and to
 # Microsoft.Azure.Cosmos, a PackageReference whose Include is on the line after the element name, and a Reference with a HintPath (any
-# Reference item is refused), a FrameworkReference to Microsoft.AspNetCore.App, a <Target>, an <Import>, a <UsingTask> and a src/jd.azure/Directory.Build.props.
-# Targets, imports, tasks and a nearer Directory.Build file could add references after evaluation, so the project may hold none of them.
+# Reference item is refused), a FrameworkReference to Microsoft.AspNetCore.App, a <Target>, an <Import> (also with Project= on the next line), a <UsingTask>, an <Sdk Name=…/> and a
+# src/jd.azure/Directory.Build.props.
+# Targets, imports, SDKs, tasks and a nearer Directory.Build file could add references after evaluation, so the project may hold none of them.
 if [[ -f src/jd.azure/jd.azure.csproj ]]; then
-  if grep -q -E '<(Target|Import|UsingTask)[[:space:]>/]' src/jd.azure/jd.azure.csproj; then
-    fail "src/jd.azure/jd.azure.csproj must not declare a Target, Import or UsingTask (see docs/engineering/standards.md)"
+  if grep -q -E '<(Target|Import|UsingTask|Sdk)([[:space:]>/]|$)' src/jd.azure/jd.azure.csproj; then
+    fail "src/jd.azure/jd.azure.csproj must not declare a Target, Import, UsingTask or Sdk element (see docs/engineering/standards.md)"
   fi
   extra=$(find src/jd.azure -path '*/bin' -prune -o -path '*/obj' -prune -o -name 'Directory.Build.*' -print)
   [[ -z "$extra" ]] || fail "src/jd.azure must not hold a Directory.Build file: ${extra//$'\n'/; } (see docs/engineering/standards.md)"
