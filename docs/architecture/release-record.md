@@ -25,11 +25,7 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 - **Format:** JSON, `kind: ReleaseRecord`, contract in `schemas/release-record.schema.json` (as the set and manifest have), pinned by a test
   (a committed golden record, validated against the schema). `activity` is `deploy` or `qualify`; a deploy requires `outcome`, `deploySeconds`, `notStarted`, `iq` and each workload's `oq`, a qualify requires `iq` (`oneOf`, with
   `additionalProperties: false` kept). `iq.status` is `passed`, `failed` or, for a deploy only, `notRun` (no checks, no time: a workload failed, so IQ did not run). Deploy records written before S17c2 have no `iq` and are no longer valid; they exist only as test fixtures (no reader of records exists yet; S18 and S19 will read the current shape).
-- **Finding it later (S18, S19; named, not built):** the records of label X on environment Y are the files in `<records>/Y/X/`.
-  An approval is *another* file in that directory (`…-approve.json`) that names the record's file name and the SHA-256 of its bytes (a
-  record cannot contain its own hash). "Qualified" is derived, never stored: the newest `deploy` record has outcome `succeeded` and, for every
-  workload, OQ `passed` or `unchanged` (an `unchanged` counts only when an earlier record under the same `<env>/<label>/` has OQ `passed`
-  for that workload, since the skipped probe relies on that earlier pass), and the newest record of any activity that carries an IQ verdict has IQ `passed`.
+- **Finding it later (S18, S19):** the records of label X on environment Y are the files in `<records>/Y/X/`. How "qualified" is derived from them and how approvals are stored and judged is in [approvals.md](approvals.md) sections 4 and 5.
 - **The set itself is kept beside the records, as ADR 0007 requires:** `<records>/<environment>/<label>/set.yaml` holds the set file's exact
   bytes (the definitions as received). It is created with `CreateNew` on the label's first attempt. On every later attempt the existing file
   must hash equal to the set being deployed; otherwise the run is refused before anything is deployed (a different set under the same label).
@@ -96,7 +92,7 @@ environment controls the identity; that is the trust boundary of a local tool (n
 From the runtime node's `Steps`, no new probing. Per workload: `oq.status` is `passed` (Probe `Done`), `failed` (Probe `Failed`; the
 reason and attempts are in the detail), `unchanged` (Probe `Skipped`: the new revision is already the live one, which only a passed
 probe and shift could have made it; for S19 it counts toward "qualified" only when an earlier record under the same `<env>/<label>/` has OQ
-`passed` for that workload, section 1) or `notRun` (the dark or grants step failed, or the workload was not started). The contract applied
+`passed` for that workload, [approvals.md](approvals.md) section 5) or `notRun` (the dark or grants step failed, or the workload was not started). The contract applied
 (`path`, `expectedStatus`) comes from the graph node's `probe`, which is catalog data. Plus the probe's detail, attempts and elapsed.
 
 ## 5. IQ: no drift
@@ -157,7 +153,7 @@ revision with weight > 0 equals the workload's pinned image, ordinal string equa
   deploy over drift" gate is a policy, not MVP.
 - **Outcome semantics:** IQ failure makes `deploy` and `qualify` exit **1**, lists every failed check (checks are all run, none short-circuits), and
   leaves the deployment as it is (no rollback; E31). The record says `outcome: succeeded`, `iq.status: failed`: *unqualified*, which S19 derives as in
-  section 1. A later `qualify` or deploy that passes writes a new record; nothing is edited.
+  [approvals.md](approvals.md) section 5. A later `qualify` or deploy that passes writes a new record; nothing is edited.
 - **Cost:** IQ re-previews every node (a refresh each), so a deploy takes roughly one more walk. Accepted for the MVP; measure in S17c. Its time is recorded apart (`iq.elapsedSeconds`), not in the deploy time.
 - **The Azure test mismatch** (last step of `EnvUpAzureTests`, after all other assertions; same environment, no new account): on the
   worker's app, `az containerapp update --image <another publicly pullable image> --revision-suffix oob1`, then `az containerapp ingress traffic set
