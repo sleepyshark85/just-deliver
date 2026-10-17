@@ -254,6 +254,9 @@ from deploying (`separateFromDeployer: true`), a second one that approves. Set (
 | `PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE` (or `PULUMI_CONFIG_PASSPHRASE_FILE`) | the Pulumi state; the same values on every run |
 | `JD_RECORDS_DIR` | an existing directory for the release records (the evidence) |
 
+Log `az` in as the same principal (the walkthrough's `az` checks and the teardown need it):
+`az login --service-principal -u "$ARM_CLIENT_ID" --password="$ARM_CLIENT_SECRET" --tenant "$ARM_TENANT_ID" -o none && az account set -s "$ARM_SUBSCRIPTION_ID"`.
+
 Before `stage` is brought up, put the approver's object id (`az ad sp show --id <approver client id> --query id -o tsv`) in `approvers` of
 `samples/environments/stage.yaml`.
 

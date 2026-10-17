@@ -33,6 +33,7 @@ provisions and deploys it, IT Ops moves from executor to gatekeeper.
 6. Plans
    - [status.md](plans/status.md) — current work status (read first each session)
    - [mvp.md](plans/mvp.md) — MVP scope and slices
+   - [e2e-evidence.md](plans/e2e-evidence.md) — MVP success criteria 1–9 and the tests that prove them
    - [phase-0-bootstrap.md](plans/phase-0-bootstrap.md) — manual Azure bootstrap runbook
 7. Engineering
    - [conventions.md](engineering/conventions.md) — how we work, the code quality bar, tests, design rules
