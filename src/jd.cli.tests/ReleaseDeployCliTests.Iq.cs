@@ -57,7 +57,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal(1, code);
         Assert.DoesNotContain(backend.Calls, Previews);
         Assert.Empty(_live.Calls);
-        Assert.DoesNotContain("IQ", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain(" IQ ", stdout, StringComparison.Ordinal); // the IQ verdict line; "IQ" alone can occur in the random temp path of the record
         var record = Read(Assert.Single(RecordFiles));
         Assert.Equal("failed", (string?)record["outcome"]);
         Assert.Equal("notRun", (string?)record["iq"]!["status"]);

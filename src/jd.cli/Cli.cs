@@ -33,6 +33,7 @@ public static class Cli
           jd release deploy <release-set.yaml> --env <environment.yaml> --catalog <dir> [--preview]
           jd release qualify <release-set.yaml> --env <environment.yaml> --catalog <dir>
           jd approve <label> --env <environment.yaml> --meaning <text>
+          jd promote <label> --to <environment.yaml> --catalog <dir>
           jd deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
           jd env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
           jd --help
@@ -44,13 +45,15 @@ public static class Cli
                   (not with --preview); qualify re-checks a deployed set without deploying (no drift, the pinned image on every revision that serves traffic) and writes a record.
         approve   records that the principal of the ARM_* credential approves the kept set of <label> for a gated environment (its descriptor has an approval block);
                   refused unless the set is qualified on the policy's qualifiedOn environment and the principal may approve it; --meaning (1 to 500 characters) says what the approval asserts.
+        promote   deploys the kept set of <label> to a gated environment (--to: its descriptor): refused unless the set is qualified on the policy's qualifiedOn environment and enough
+                  principals approved it; then the same walk as release deploy, with the same set bytes, and IQ.
         deploy    provisions the infrastructure nodes in order, then releases the runtime: dark revision, grants, probe, traffic shift (--preview: only shows the changes; nothing is created).
         env up    provisions an environment's substrate from its definition and writes the environment descriptor from the outputs.
                   --base: the descriptor of the layer below (the new values are added to it); --region defaults to JD_REGION;
                   --force: overwrite an existing --out.
-        Gated (deploy, release deploy, release qualify): an environment whose descriptor has an approval block refuses them (exit 1; --preview is allowed): it is deployed to only by promotion.
-        Backend (deploy, release deploy, release qualify, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
-        Records (release deploy, not --preview; release qualify; approve): JD_RECORDS_DIR, an existing directory, and the service principal that deploys or approves in ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET.
+        Gated (deploy, release deploy, release qualify): an environment whose descriptor has an approval block refuses them (exit 1; --preview is allowed): it is deployed to only by `jd promote`.
+        Backend (deploy, release deploy, release qualify, promote, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
+        Records (release deploy, not --preview; release qualify; approve; promote): JD_RECORDS_DIR, an existing directory, and the service principal that deploys or approves in ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET.
         Exit codes: 0 success, 1 validation, resolution or deployment errors, 2 usage errors.
 
         """;
@@ -92,6 +95,11 @@ public static class Cli
         if (args.FirstOrDefault() == "approve")
         {
             return await ApproveCli.RunAsync(args[1..], stdout, stderr, identity, time ?? TimeProvider.System, environmentVariable, cancellationToken);
+        }
+
+        if (args.FirstOrDefault() == "promote")
+        {
+            return await PromoteCli.RunAsync(args[1..], stdout, stderr, backend, probe, identity, liveRevisions, time ?? TimeProvider.System, environmentVariable, cancellationToken);
         }
 
         if (args.FirstOrDefault() == "env")

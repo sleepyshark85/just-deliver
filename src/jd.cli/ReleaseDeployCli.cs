@@ -21,17 +21,18 @@ internal static class ReleaseDeployCli
     private const int Invalid = 1;
     private const int UsageError = 2;
 
-    private sealed record Options(string Set, string Environment, string Catalog, bool DryRun, bool Qualify);
+    // Promoted: the run is `jd promote`'s walk of the kept set, which has judged the promotion already; only PromoteCli says so, no argument can.
+    private sealed record Options(string Set, string Environment, string Catalog, bool DryRun, bool Qualify, bool Promoted);
 
     // What a recorded run has before anything is deployed: where the records go, who deploys, and the kept set's hash.
     private sealed record Recording(string Directory, DeployerIdentity Identity, string SetSha256);
 
-    // args are the arguments after "release deploy" or "release qualify" (qualify).
+    // args are the arguments after "release deploy" or "release qualify" (qualify), or the walk of `jd promote` (promoted).
     public static async Task<int> RunAsync(
         string[] args, bool qualify, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions,
-        TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken)
+        TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken, bool promoted = false)
     {
-        var (options, problem) = Parse(args, qualify);
+        var (options, problem) = Parse(args, qualify, promoted);
         if (options is null)
         {
             stderr.WriteLine($"jd: {problem}");
@@ -75,7 +76,7 @@ internal static class ReleaseDeployCli
         }
 
         // A gated environment is deployed to only by promotion; this stops before the identity, the records or the backend is touched.
-        if (!options.DryRun && Cli.RefuseGated(environment, Command(options.Qualify), stderr))
+        if (!options.DryRun && !options.Promoted && Cli.RefuseGated(environment, Command(options.Qualify), stderr))
         {
             return Invalid;
         }
@@ -248,7 +249,7 @@ internal static class ReleaseDeployCli
 
     private static string Command(bool qualify) => qualify ? "release qualify" : "release deploy";
 
-    private static (Options? Options, string Problem) Parse(string[] args, bool qualify)
+    private static (Options? Options, string Problem) Parse(string[] args, bool qualify, bool promoted)
     {
         var command = Command(qualify);
         var (scanned, problem) = Arguments.Scan(args, 0);
@@ -274,6 +275,6 @@ internal static class ReleaseDeployCli
 
         return scanned.Environment is null || scanned.Catalog is null
             ? (null, $"{command} needs --env and --catalog.")
-            : (new Options(scanned.Positional[0], scanned.Environment, scanned.Catalog, scanned.DryRun, qualify), string.Empty);
+            : (new Options(scanned.Positional[0], scanned.Environment, scanned.Catalog, scanned.DryRun, qualify, promoted), string.Empty);
     }
 }

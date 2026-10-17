@@ -12,6 +12,7 @@ dotnet run --project src/jd.cli -- release show <release-set.yaml>
 dotnet run --project src/jd.cli -- release deploy <release-set.yaml> --env <environment.yaml> --catalog <dir> [--preview]
 dotnet run --project src/jd.cli -- release qualify <release-set.yaml> --env <environment.yaml> --catalog <dir>
 dotnet run --project src/jd.cli -- approve <label> --env <environment.yaml> --meaning <text>
+dotnet run --project src/jd.cli -- promote <label> --to <environment.yaml> --catalog <dir>
 dotnet run --project src/jd.cli -- deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
 dotnet run --project src/jd.cli -- env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
 dotnet run --project src/jd.cli -- --help
@@ -118,8 +119,7 @@ An environment whose **descriptor carries an `approval` block** is gated, whatev
 schemas only require the block for tier `protected`, so one cannot be written without it. A `protected` environment without an `approval` block fails the schema check (`NotAnyOf … PropertyRequired: #/approval`). `jd deploy`, `jd release deploy` and `jd release qualify`
 on a gated descriptor exit 1 with "environment '<name>' is gated by an approval policy: use `jd promote`" before the principal, `JD_RECORDS_DIR` or the
 backend is touched: no call, no record, no `set.yaml`. `--preview` is not refused (it creates nothing), and neither is `jd env up` (the substrate is not a
-release). `jd approve` records an approval for a gated environment (below); `jd promote`, the only way a set reaches one, is not built yet
-([approvals.md](architecture/approvals.md)).
+release). `jd approve` records an approval for a gated environment (below); `jd promote`, the only way a set reaches one, is below ([approvals.md](architecture/approvals.md)).
 
 | Exit code | Meaning |
 |---|---|
@@ -220,3 +220,20 @@ It writes `<JD_RECORDS_DIR>/<target>/<label>/<UTC time>-approve.json` (`kind: Ap
 never edited) and prints `approved <label> for <env> (<n> of <required>)` and `record: <path>`. The record names the target, the label, the SHA-256 of the
 kept `set.yaml` (the approval binds the set, not a record), `qualifiedOn`, the principal as the credential reports it and the meaning. A repeat is refused as a
 convenience, not a lock; `jd promote` counts distinct principals. Approvals are not revoked: a withdrawn release gets a new label.
+
+### `jd promote`
+
+`jd promote <label> --to <stage.env.yaml> --catalog <dir>` deploys a set to a gated environment. It takes **no set file**: the set is the bytes kept on the
+policy's `qualifiedOn` environment, `<JD_RECORDS_DIR>/<qualifiedOn>/<label>/set.yaml`, which become the target's own `set.yaml` unchanged, so both
+environments run the same digests and the same set hash. `--to` is the target's descriptor (it carries the `approval` policy). Needs `JD_RECORDS_DIR`,
+the `ARM_*` principal and the backend variables, as `release deploy` does.
+
+The set is promoted only when it is **qualified** on `qualifiedOn` (the newest deploy succeeded and the newest IQ passed, judged from the records now) and
+**approved** by enough distinct principals (`jd approve`, counted by the environment's policy). Whoever runs `promote` is not checked against `approvers`.
+Otherwise exit 1 lists every reason (and every approval file that was ignored and why) and nothing is written, no backend is called. Exit 1 also when the descriptor has no
+`approval` block. Exit 2: a missing or bad argument, a label that is not a release label, an unreadable `--to` or `--catalog`, a missing `JD_RECORDS_DIR` or
+backend variable.
+
+When it may go ahead it prints `promoting <label> from <source> (set sha256 <h>)`, then runs the walk of `jd release deploy` on the target with its output, exit
+codes, deploy record (with IQ) and `set.yaml` check. The record's `release.setSha256` is `<h>`. `jd release deploy`, `jd deploy` and `jd release qualify`
+stay refused on the gated environment.
