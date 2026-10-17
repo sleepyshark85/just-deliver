@@ -335,7 +335,7 @@ jq '{release, identity, meaning}' "$(newest stage 1.1.0 approve)"
 ```
 
 With a second principal (the strict path of `samples/environments/stage.yaml`): make the variant with the approver's object id and `true`
-(`stage-policy.sh … stage.strict.env.yaml 1 true <approver object id>`), run `jd approve` with the approver's `ARM_*` values in the environment, then
+(`stage-policy.sh … stage.second.env.yaml 1 true <approver object id>`), run `jd approve` with the approver's `ARM_*` values in the environment, then
 `jd promote` as the deployer (whoever runs `promote` is not checked against `approvers`).
 
 ### 8. Approvals that do not count
