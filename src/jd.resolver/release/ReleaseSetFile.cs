@@ -9,8 +9,6 @@ namespace jd.resolver.release;
 /// <summary>Writes a <see cref="ReleaseSet"/> once and reads it back, re-verifying every embedded definition against its recorded hash.</summary>
 public static class ReleaseSetFile
 {
-    private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
-
     private static readonly ISerializer Serializer = new SerializerBuilder()
         .WithQuotingNecessaryStrings()
         .WithEventEmitter(next => new MultilineEmitter(next))
@@ -39,7 +37,7 @@ public static class ReleaseSetFile
         {
             ["kind"] = "ReleaseSet",
             ["label"] = set.Label,
-            ["createdAt"] = set.CreatedAt.ToString(TimeFormat, CultureInfo.InvariantCulture),
+            ["createdAt"] = set.CreatedAt.ToString(ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture),
             ["workloads"] = set.Workloads.Select(w => new Dictionary<string, object>
             {
                 ["definitionSha256"] = w.DefinitionSha256,
@@ -70,7 +68,7 @@ public static class ReleaseSetFile
         }
 
         // The schema guarantees the shapes read here.
-        if (!DateTimeOffset.TryParseExact((string)body["createdAt"]!, TimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var createdAt))
+        if (!DateTimeOffset.TryParseExact((string)body["createdAt"]!, ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var createdAt))
         {
             return new ReleaseSetResult(null, [new LoadError(path, "createdAt", "not a valid UTC time.")]);
         }

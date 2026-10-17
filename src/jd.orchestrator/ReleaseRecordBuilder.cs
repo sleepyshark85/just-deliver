@@ -18,11 +18,6 @@ namespace jd.orchestrator;
 /// </summary>
 public static class ReleaseRecordBuilder
 {
-    public const string DeployActivity = "deploy";
-    public const string QualifyActivity = "qualify";
-
-    private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
-
     /// <param name="set">The set that was deployed; its workloads come out in deploy order.</param>
     /// <param name="setSha256">SHA-256 of the kept <c>set.yaml</c>.</param>
     /// <param name="environment">The environment deployed to.</param>
@@ -38,9 +33,9 @@ public static class ReleaseRecordBuilder
         DeployerIdentity identity, DateTimeOffset startedAt, DateTimeOffset finishedAt, TimeSpan deployElapsed, IqResult? iq)
     {
         var failed = runs.FirstOrDefault(r => !r.Run.Succeeded);
-        var record = Head(DeployActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
+        var record = Head(ReleaseRecordFile.DeployActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
             set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), runs.FirstOrDefault(r => r.Workload == name), deploy: true));
-        record["outcome"] = failed is null ? "succeeded" : "failed";
+        record["outcome"] = failed is null ? ReleaseRecordFile.SucceededOutcome : "failed";
         record["deploySeconds"] = Seconds(deployElapsed);
         record["iq"] = Iq(iq);
         record["notStarted"] = new JArray(set.Order.Where(name => runs.All(r => r.Workload != name)));
@@ -57,7 +52,7 @@ public static class ReleaseRecordBuilder
         ReleaseSet set, string setSha256, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, DeployerIdentity identity,
         DateTimeOffset startedAt, DateTimeOffset finishedAt, IqResult iq)
     {
-        var record = Head(QualifyActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
+        var record = Head(ReleaseRecordFile.QualifyActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
             set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), null, deploy: false));
         record["iq"] = Iq(iq);
         return record.ToString(Formatting.Indented) + "\n";
@@ -66,14 +61,14 @@ public static class ReleaseRecordBuilder
     // The verdict and every check that ran; a qualification that did not run has no time and no checks.
     private static JObject Iq(IqResult? iq) => new()
     {
-        ["status"] = iq is null ? "notRun" : iq.Passed ? "passed" : "failed",
+        ["status"] = iq is null ? "notRun" : iq.Passed ? ReleaseRecordFile.PassedStatus : "failed",
         ["elapsedSeconds"] = Seconds(iq?.Elapsed ?? TimeSpan.Zero),
         ["checks"] = new JArray((iq?.Checks ?? []).Select(c => new JObject
         {
             ["workload"] = c.Workload,
             ["kind"] = Name(c.Kind),
             ["subject"] = c.Subject,
-            ["status"] = c.Passed ? "passed" : "failed",
+            ["status"] = c.Passed ? ReleaseRecordFile.PassedStatus : "failed",
             ["detail"] = c.Failure,
         })),
     };
@@ -169,7 +164,7 @@ public static class ReleaseRecordBuilder
         var probe = run?.Run.Nodes.FirstOrDefault(n => n.NodeId == runtime.Id)?.Steps?.FirstOrDefault(s => s.Step == Step.Probe);
         var oq = new JObject
         {
-            ["status"] = probe?.Outcome switch { StepOutcome.Done => "passed", StepOutcome.Failed => "failed", StepOutcome.Skipped => "unchanged", _ => "notRun" },
+            ["status"] = probe?.Outcome switch { StepOutcome.Done => ReleaseRecordFile.PassedStatus, StepOutcome.Failed => "failed", StepOutcome.Skipped => ReleaseRecordFile.UnchangedStatus, _ => "notRun" },
             ["contract"] = new JObject { ["path"] = spec.Path, ["expectedStatus"] = spec.ExpectedStatus },
         };
         if (probe is { Outcome: StepOutcome.Done or StepOutcome.Failed })
@@ -182,7 +177,7 @@ public static class ReleaseRecordBuilder
         return oq;
     }
 
-    private static string Time(DateTimeOffset time) => time.UtcDateTime.ToString(TimeFormat, CultureInfo.InvariantCulture);
+    private static string Time(DateTimeOffset time) => time.UtcDateTime.ToString(ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture);
 
     private static double Seconds(TimeSpan elapsed) => Math.Round(elapsed.TotalSeconds, 3);
 

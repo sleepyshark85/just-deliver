@@ -9,6 +9,7 @@ internal static class ReleaseDocument
 {
     public const string ManifestSchema = "schemas/release-manifest.schema.json";
     public const string SetSchema = "schemas/release-set.schema.json";
+    public const string RecordSchema = "schemas/release-record.schema.json";
 
     private static readonly YamlSchemaValidator Validator = new();
 
@@ -25,11 +26,15 @@ internal static class ReleaseDocument
             return (null, [new LoadError(source, string.Empty, $"not valid YAML: {YamlSchemaValidator.DescribeYamlError(ex, text)}")]);
         }
 
-        var result = await Validator.ValidateTokenAsync(await EmbeddedSchema.ReadAsync(schemaName, cancellationToken), parsed);
+        var errors = await ValidateAsync(source, parsed, schemaName, cancellationToken);
         // Both schemas have a root "type": "object", so a schema-valid document is an object and the other branch carries errors.
-        return result.IsValid && parsed is JObject body
-            ? (body, [])
-            : (null, result.Errors.Select(e => LoadError.FromSchema(source, e)).ToList());
+        return errors.Count == 0 && parsed is JObject body ? (body, []) : (null, errors);
+    }
+
+    public static async Task<IReadOnlyList<LoadError>> ValidateAsync(string source, JToken document, string schemaName, CancellationToken cancellationToken)
+    {
+        var result = await Validator.ValidateTokenAsync(await EmbeddedSchema.ReadAsync(schemaName, cancellationToken), document);
+        return result.Errors.Select(e => LoadError.FromSchema(source, e)).ToList();
     }
 
     public static string Sha256(ReadOnlySpan<byte> bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));

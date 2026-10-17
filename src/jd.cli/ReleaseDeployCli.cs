@@ -157,7 +157,7 @@ internal static class ReleaseDeployCli
         {
             var finished = time.GetUtcNow();
             var json = ReleaseRecordBuilder.Build(set, recording.SetSha256, environment, graphs, runs, recording.Identity, started, finished, walked, iq);
-            if (!await RecordAsync(recording, set.Label, environment.Name, finished, ReleaseRecordBuilder.DeployActivity, json, "deployed", stdout, stderr, cancellationToken))
+            if (!await RecordAsync(recording, set.Label, environment.Name, finished, ReleaseRecordFile.DeployActivity, json, "deployed", stdout, stderr, cancellationToken))
             {
                 return Invalid;
             }
@@ -175,7 +175,7 @@ internal static class ReleaseDeployCli
         ReportIq(set, environment, iq, stdout, stderr);
         var finished = time.GetUtcNow();
         var json = ReleaseRecordBuilder.BuildQualify(set, recording.SetSha256, environment, graphs, recording.Identity, started, finished, iq);
-        return await RecordAsync(recording, set.Label, environment.Name, finished, ReleaseRecordBuilder.QualifyActivity, json, "checked", stdout, stderr, cancellationToken) && iq.Passed ? Success : Invalid;
+        return await RecordAsync(recording, set.Label, environment.Name, finished, ReleaseRecordFile.QualifyActivity, json, "checked", stdout, stderr, cancellationToken) && iq.Passed ? Success : Invalid;
     }
 
     // The verdict on stdout, and every failed check on stderr.
