@@ -28,7 +28,8 @@ step "Build"
 dotnet build "$SLN" -nologo -v q 9>&-
 
 step "Tests (${FILTER:-all})"
-dotnet test "$SLN" --no-build -nologo -v q ${FILTER:+--filter "$FILTER"} 9>&-
+# The console logger prints each failed test's message and stack; an Azure run is too long to repeat only to read its error.
+dotnet test "$SLN" --no-build -nologo -v q --logger "console;verbosity=minimal" ${FILTER:+--filter "$FILTER"} 9>&-
 
 step "Architecture boundaries"
 # Inner projects hold domain, resolution and orchestration logic: they must not depend on Pulumi, Azure SDKs or the backend providers.
