@@ -268,7 +268,7 @@ named `@<name>`, so its ids and stacks (`_dev.dev.substrate.group`) can never co
 workload-scope policies add nothing) and the orchestrator deploys the graph.
 There is no second resolution or deploy path. Because Azure allows one free-tier Cosmos account per subscription there are two
 layers: `shared` (once per subscription: resource group, Log Analytics workspace with a daily cap, the Cosmos account with free
-tier and `totalThroughputLimit: 1000`) and one definition per environment on top of the shared descriptor (`--base`): resource
+tier, `totalThroughputLimit: 1000` and key (local) authentication disabled) and one definition per environment on top of the shared descriptor (`--base`): resource
 group, Container Apps environment (Consumption) on the shared workspace, and a Cosmos SQL database with 400 RU/s shared throughput
 in the shared account. Two environments use 800 of the 1,000 free RU/s. These values live in the catalog mappings, not in code.
 
