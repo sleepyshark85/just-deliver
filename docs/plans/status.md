@@ -104,6 +104,14 @@ Picked up by the slice named; remove once done.
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
 
+- **2026-10-17 (process)** — User chose (a)+(b) for blocked S17c1: the lead adds the missing Qualifier test and the
+  round-3 hardening, then a final review and the Azure gate (in progress: test written in a worktree, not yet committed);
+  models now Opus developer / Opus reviewer / Sonnet fixer. Adopted from `~/sources/officina`: `conventions.md`
+  (how we work + code quality bar + tests + design rules), one reviewer kept per slice for its rounds, a `fixer`
+  agent, ten-line reports, mutation-proof tests as blocking, reviewer in a detached worktree, the context-size hook
+  (150k/300k warnings, tests in `verify.sh`). Not adopted: PR-comment review gate and auto-merge (our PR opens after the
+  Azure gate), parallel-agent file ownership.
+
 - **2026-10-17 (S17c1 blocked)** — S17b merged (PR #35). S17c split into S17c1/S17c2 (lead). S17c1: 3 rounds without APPROVE →
   blocked per the workflow, waiting for the user. R3 suggestions to fold in when resumed: `verify.sh` also refuses `<Target>`/`<Import>`/
   `<UsingTask>` and `FrameworkReference` in `jd.azure.csproj`; schema `qualify` branch forbids the deploy-only fields; narrow the

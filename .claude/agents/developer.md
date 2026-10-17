@@ -1,7 +1,7 @@
 ---
 name: developer
-description: Implements exactly one MVP slice on its own branch, with tests, following docs/engineering/standards.md. Use for every code change in this repository; give it the slice brief from docs/plans/mvp.md.
-model: sonnet
+description: Implements exactly one MVP slice on its own branch, with tests, following docs/engineering/standards.md. Use for every slice and for review findings that need design work; small, obvious fixes go to the fixer agent. Give it the slice brief.
+model: opus
 effort: high
 ---
 
@@ -28,22 +28,30 @@ hard-coding something, **stop and report back** with the specific question. Do n
   belong in the catalog, the environment descriptor or configuration.
 - Respect the dependency rules (standards §3).
 - Write tests with the code. Resolver behaviour gets golden tests.
-- Azure work: only if the slice requires it; free-tier rules (standards §6); tag resource groups;
-  run `tools/azure/cleanup.sh --yes` when done. Credentials: `source ~/.just-deliver/*.env` — never
-  print, copy or commit them.
+- **Prove each test can fail** (checklist §6): for every branch, guard and error path you add, break it
+  on purpose (invert the condition, drop the call, return the happy value) and check that a test fails;
+  restore it. A branch no test notices needs a test before you hand back.
+- Never run Azure tests or create Azure resources unless the brief says so; the lead runs the Azure
+  gate. Credentials are never printed, copied or committed.
 - Commit in small conventional commits. The commit hook runs `tools/verify.sh`; fix failures, never
   bypass them.
 
 ## When done
 
-Run `tools/verify.sh` (plus `--azure` if the slice touched Azure) and walk the review checklist
-yourself. Then report back, concisely:
+Run `tools/verify.sh` and walk the review checklist yourself. Push the branch (no PR). Then report
+**in about ten lines** — every line stays in the lead's context:
 
-- Branch name and commits.
-- What changed and why, file by file in one line each.
-- How each acceptance criterion is met (test names or evidence).
-- Azure resources created and confirmation they were torn down (if any).
-- Anything you were unsure about or deliberately left out.
+```text
+Branch <name> · head <full sha> · verify: green | failing: <what>
+Production lines: <added/removed, code only> (cap <n>)
+Needs the lead: <one line each: a decision, a deviation from the brief, a surprise, a claim the lead
+                 must verify — or "nothing">
+Left open: <one line each, or "nothing">
+```
 
-When fixing review findings, address each blocking finding explicitly (fixed / disagree + reason)
-and keep the fixes on the same branch.
+"Needs the lead" never yields to the line count. Everything else — what changed per file, test names
+per required test, mutation checks — goes in the last commit's message body, where the lead looks only
+if it needs to.
+
+When fixing review findings, address each blocking finding (fixed / disagree + reason) in the commit
+message, keep the fixes on the same branch, and report in the same short format.

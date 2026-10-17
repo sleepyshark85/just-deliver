@@ -1,7 +1,7 @@
 # Review checklist
 
 Used by the reviewer on every PR, and by the developer before asking for review. Each item maps to
-[standards.md](standards.md). Review the **diff and the files it touches**, against the **slice brief**.
+[standards.md](standards.md), and the [code quality bar](conventions.md#code-quality-bar) applies to every changed line. Review the **diff and the files it touches**, against the **slice brief**.
 
 ## Verdict format
 
@@ -48,6 +48,9 @@ Any blocking finding means CHANGES REQUIRED. Findings cite a file and line and t
 
 ## 6. Tests — blocking
 - Behaviour change without tests? Missing golden test for resolver behaviour?
+- Would each test fail if the behaviour it names broke? Every new branch, guard and error path is noticed by a
+  test (break it and see); a surviving mutation in changed code is blocking ([conventions](conventions.md#tests)).
+- Each required test of the brief exists and proves its boundary; error tests pin which error and what did not happen.
 - Azure tests tagged `Category=Azure`; unit tests offline and deterministic.
 
 ## 7. Free tier and Azure safety — blocking
