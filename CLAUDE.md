@@ -4,7 +4,8 @@ Internal Developer Platform for Azure. Start every session with [docs/README.md]
 
 - [Work status](docs/plans/status.md) — **where we are; read first, update last**
 - [MVP plan](docs/plans/mvp.md) — scope and slices S01–S18
-- [Engineering standards](docs/engineering/standards.md) and [review checklist](docs/engineering/review-checklist.md) — binding for all code
+- [Conventions](docs/engineering/conventions.md) (how we work, the code quality bar), [engineering standards](docs/engineering/standards.md)
+  and [review checklist](docs/engineering/review-checklist.md) — binding for all code
 - [Decisions](docs/decisions/README.md) — ADRs; all **Proposed — pending review**; only the user changes their status
 - [Open questions](docs/open-questions.md), [architecture](docs/architecture/)
 
@@ -13,19 +14,24 @@ Internal Developer Platform for Azure. Start every session with [docs/README.md]
 | Role | Who | Model |
 |---|---|---|
 | Lead | the main session | Opus 5.5 |
-| Developer | `developer` agent ([.claude/agents/developer.md](.claude/agents/developer.md)) | Sonnet 5.5 |
-| Reviewer | `reviewer` agent ([.claude/agents/reviewer.md](.claude/agents/reviewer.md)) | Opus 5.5 — a different model from the developer, by design |
+| Developer | `developer` agent ([.claude/agents/developer.md](.claude/agents/developer.md)) — slices, design-level findings | Sonnet 5.5 |
+| Fixer | `fixer` agent ([.claude/agents/fixer.md](.claude/agents/fixer.md)) — small findings with an obvious fix | Sonnet 5.5 |
+| Reviewer | `reviewer` agent ([.claude/agents/reviewer.md](.claude/agents/reviewer.md)) — one per slice, kept for its rounds | Opus 5.5 |
+
+How the team works together (independence, rounds, short reports, context cost): [conventions](docs/engineering/conventions.md#how-we-work).
 
 ## Lead workflow
 
 1. **Session start:** read `docs/plans/status.md`. Resume the slice in progress, or take the next `todo` slice.
 2. **Brief:** expand the slice from `mvp.md` into a brief — goal, acceptance criteria, files in scope,
    out of scope, ADRs/docs that apply. Mark the slice `in-progress` in status.md.
-3. **Develop:** dispatch `developer` with the brief.
-4. **Review:** dispatch `reviewer` with **only the brief and the branch name** — never the developer's report.
-5. **Iterate:** on CHANGES REQUIRED, send the blocking findings to the developer (same branch). The lead
-   arbitrates disputes using the standards. After 3 rounds without APPROVE, mark the slice `blocked`
-   and escalate to the user.
+3. **Develop:** dispatch `developer` with the brief. If the slice adds or changes an Azure test, run that test early
+   ([conventions](docs/engineering/conventions.md#how-we-work)) before the review.
+4. **Review:** dispatch a new `reviewer` with **only the brief and the branch name** — never the developer's report.
+5. **Iterate:** on CHANGES REQUIRED, send the blocking findings to the `fixer` (all small and obvious) or the
+   `developer` (same branch; resume it only while under 150k context, else a fresh one). Then send the **same**
+   reviewer the next round: the new head sha only. The lead arbitrates disputes using the standards. After 3 rounds
+   without APPROVE, mark the slice `blocked` and escalate to the user.
 6. **Merge:** on APPROVE, put the status update on the slice branch, push it, open a PR to `main` and wait for CI
    (`gh pr checks <n> --watch`). `main` is protected on GitHub: changes only via PR, the `verify` check must pass
    with the branch up to date, no force-push, admins included. Merge with `gh pr merge --squash`; delete the branch only
@@ -37,9 +43,11 @@ Internal Developer Platform for Azure. Start every session with [docs/README.md]
 Work one slice at a time. Do not involve the user unless blocked: an ADR or architecture conflict,
 a needed decision, a guardrail or free-tier limit in the way, missing credentials, or 3 failed review rounds.
 
-**Model trial:** the developer/reviewer pairing (Sonnet/Opus) is on trial. If PR quality is poor — repeated
-blocking design findings, over-engineering, or slices needing 3 rounds — stop and ask the user to choose
-different models. Record each slice's review rounds in status.md so the trial can be judged.
+**Model trial:** from S17c2 (user's choice, 2026-10-17) the developer is Sonnet again, now held to the
+[code quality bar](docs/engineering/conventions.md#code-quality-bar) and the mutation-proof test rule; the fixer is
+Sonnet, the reviewer Opus. The trial judges whether Sonnet code meets the bar. If PR quality is
+poor — repeated blocking design findings, over-engineering, or slices needing 3 rounds — stop and ask the user.
+Record each slice's review rounds in status.md so the trial can be judged.
 
 ## Non-negotiables
 

@@ -31,6 +31,9 @@ step "Tests (${FILTER:-all})"
 # The console logger prints each failed test's message and stack; an Azure run is too long to repeat only to read its error.
 dotnet test "$SLN" --no-build -nologo -v q --logger "console;verbosity=minimal" ${FILTER:+--filter "$FILTER"} 9>&-
 
+step "Claude hooks"
+python3 -B -m unittest discover -q -s .claude/hooks/tests 9>&- || fail "Claude hook tests failed"
+
 step "Architecture boundaries"
 # Inner projects hold domain, resolution and orchestration logic: they must not depend on Pulumi, Azure SDKs or the backend providers.
 inner=(src/jd.core/jd.core.csproj)
