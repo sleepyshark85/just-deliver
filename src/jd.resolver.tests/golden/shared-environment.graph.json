@@ -36,12 +36,13 @@
       "kind": "Create",
       "stack": "_shared.shared.substrate.cosmos",
       "phase": "Infrastructure",
-      "hash": "46c17135e410a18efc6a289391db02509eabd4224ba518db2569a4fa1ffa8977",
+      "hash": "98a5bfc294af050d94922663753a819d841ba257b9bea27d70fc35fb23f90ffd",
       "dependsOn": [
         "@shared/shared/substrate/group"
       ],
       "config": {
         "accountName": "cosmos-shared-39d0b1",
+        "disableLocalAuth": true,
         "enableFreeTier": true,
         "location": "${group.location}",
         "resourceGroupName": "${group.resourceGroupName}",
@@ -49,6 +50,7 @@
       },
       "provenance": {
         "accountName": "Mapping: mappings/shared-substrate/standard.yaml",
+        "disableLocalAuth": "Mapping: mappings/shared-substrate/standard.yaml",
         "enableFreeTier": "Mapping: mappings/shared-substrate/standard.yaml",
         "location": "Mapping: mappings/shared-substrate/standard.yaml",
         "resourceGroupName": "Mapping: mappings/shared-substrate/standard.yaml",

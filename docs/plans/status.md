@@ -5,11 +5,11 @@
 
 ## Now
 
-- **Next slice:** S20 — the E2E run and docs (mvp.md M5). **Waiting for the user:** S19b was the third 3-round slice of the Sonnet trial (S18a 2, S18b 3, S18c 3, S19a 2, S19b 3); the lead asked whether to keep Sonnet.
+- **Next slice:** —
 - **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
   required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
   leaves the deployment live; ADR 0007 kept (the set file's bytes are stored write-once as `set.yaml` per label).
-- **In progress:** —
+- **In progress:** S20w — manual-test walkthrough (`docs/walkthrough.md`) and sample kit (`samples/walkthrough/`), user request; approved in 2 rounds, PR after S20.
 - **Blocked:** —
 
 ## Slices
@@ -49,7 +49,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S17c2 | IQ inside `jd release deploy` | done | [#41](https://github.com/sleepyshark85/just-deliver/pull/41) | 2 | **Trial, Sonnet developer:** round 1 found 3 blocking (a real-clock sleep in a test instead of the run's `TimeProvider`, duplicated provider/qualifier wiring, a schema line with no effect), fixed by a fresh Sonnet developer; round 2 APPROVE. Early Azure test (new rule) passed on the first head; gate green on the approved head: CLI 133/133, 1 h 6 min, nothing left. Older deploy records without `iq` no longer validate — no reader exists yet (release-record.md §1). |
 | S18 | Second environment + approvals | done | design [#42](https://github.com/sleepyshark85/just-deliver/pull/42) | 3 (design) | Design note `docs/architecture/approvals.md` (Sonnet developer, Opus reviewer; round 2 fixed by the fixer). User chose (a) ×3. **S18a done** (PR #43, 2 rounds; Sonnet developer, one blocking finding in round 1; 31 mutations all caught; Azure: `stage` up, `db-stage` 400 RU/s, limit 1000). **S18b done** (PR #44, 3 rounds; Sonnet developer, round-1 fixes and round 2 by the fixer; 5 → 2 → 0 blocking: literals shared with the record writer, an unguarded directory listing, surviving mutants, a host-dependent test; no design rework; ~142 lines, over the ~120 target; no Azure gate — no Azure-facing code, the first slice under the new gate rule). Built as S18a (policy, gate, `stage`, ~110), S18b (qualification reader, ~120), S18c (`jd approve`, ~200; reader may move to S19). **S18c done** (PR #46, 3 rounds: 4 → 2 → 0 blocking — a crash on a malformed approval file, record keys spelled twice, label checked late, a misnamed test helper; then a `$` anchor letting `1.0.0\n` through; Sonnet developer, fixes by the fixer; ~160 lines; approval reader moved to S19). Azure gate run once before review: green, 1 h 13 m (was 1 h 38 m: environment groups now deleted in parallel), subscription empty. **S18 complete.** |
 | S19 | Promotion | done | S19a #47, S19b #48 | 2 (S19a), 3 (S19b) | Split: S19a (approval reader + `PromotionCheck`, no CLI) and S19b (`jd promote`, Azure test). **S19a done** (PR #47, 2 rounds: 4 → 0 blocking — `jd approve` silently dropped ignored approvals (lead: ignore, but report on stderr), a dead catch, two API nits; Sonnet developer, fixes by the fixer; ~110 lines; no Azure gate, not Azure-facing). Flaky test found on main: `A_failed_workload_runs_no_iq…` asserts no "IQ" in output that contains a random temp path — fix in S19b. **S19b done** (PR #48, 3 rounds: 4 → 1 → 0 blocking — promote re-entered the walk by rebuilding argv with a gate-skip flag, identity after the check (lead had waived the brief's order; reversed), no bad-credential test, a copied label parser; then option strings spelled twice; Sonnet developer, round 1 by a fresh developer, round 2 by the fixer; ~145 lines; the walk refuses kept bytes whose hash is not the checked `h`). Azure gate run once on the hand-back head 6820880: green, 1 h 21 m (`promote` refused without approval, promoted after, same `set.yaml` and digests on both environments, refused after drift); later rounds changed only the CLI entry, not what is sent to Azure; subscription empty. |
-| S20 | E2E run and docs | todo | | | |
+| S20 | E2E run and docs | done | S20 PR (this) | 1 | **Opus developer** (first slice after the trial). Evidence map `docs/plans/e2e-evidence.md`: criteria 1–9 each tied to an assertion. Gaps closed in `EnvUpAzureTests`: telemetry arrives in App Insights (bounded poll), write + read-back through managed identity, no app secrets, Cosmos `disableLocalAuth` (**lead accepted a catalog change**: the account allowed keys, so criterion 1 could not hold), dependency order and zero worker drift on the first workload, record timings, Consumption/`minReplicas: 0`; criterion 5 by a new offline test. Left: the Container Apps environment still sends logs with the Log Analytics shared key (substrate only; recorded in the map). Usage walkthrough + teardown. Azure gate run once on the hand-back head 14aa671: green first time, 1 h 20 m, CLI 204/204, subscription empty. APPROVE round 1. **M5 / MVP complete.** |
 
 ## Carry-forward notes
 
@@ -103,6 +103,14 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-18 (S20, MVP done)** — User left the developer model to the lead ("use opus if you think it's better"); lead switched the
+  developer to Opus (CLAUDE.md, agent file). S20 by an Opus developer: APPROVE in round 1, Azure gate green first time (1 h 20 m), so all
+  nine success criteria are evidenced (`docs/plans/e2e-evidence.md`). Lead accepted one Azure-facing catalog change (Cosmos
+  `disableLocalAuth: true`) — for the user's review. User asked for a manual-test walkthrough with sample artifacts: S20w, built on a branch
+  stacked on S20 while the gate ran (Opus developer; 2 review rounds; the fixer fixed scenario 6's reset, which could not work: the same
+  config reuses the revision suffix, and Azure rejects that). Its scripts and new commands have not run against Azure; the user's manual run
+  is their first.
 
 - **2026-10-18 (S19)** — S19a (2 rounds, no Azure gate) and S19b (3 rounds) done; promotion works on Azure. Lead error: accepted a deviation
   from the brief's identity order that the reviewer then rightly blocked. A flaky test (random temp path containing "IQ") fixed in S19b; one

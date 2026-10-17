@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Net;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -16,7 +19,8 @@ namespace jd.cli.tests;
 /// (tier <c>protected</c>, with its approval policy) is brought up on the same account: its own database of 400 RU/s, the account limit still
 /// 1000, a descriptor that carries the policy, and a re-run that changes nothing. Then the sample release set is
 /// deployed on <c>dev</c> (<c>jd release create</c>, <c>jd release deploy</c>): the workloads get distinct containers in the dev database
-/// without throughput of their own, so the free-tier RU/s budget holds, and a second deploy changes nothing. Then a release whose first
+/// without throughput of their own, so the free-tier RU/s budget holds, and a second deploy changes nothing. The live apps hold no key (the account
+/// refuses key auth, the apps have no secret), run on Consumption scaled to zero, write and read an item, and their telemetry reaches App Insights. Then a release whose first
 /// workload's <c>/health</c> fails (its container does not exist) stops at the probe with traffic still on the good revision and the
 /// later workload untouched, and the good release deployed again goes live as a new revision. Then <c>jd release qualify</c> passes on the live
 /// good release; <c>jd approve</c> refuses an unknown label and, under the strict <c>stage</c> policy, the principal that deployed the set, then records an approval
@@ -209,11 +213,48 @@ public sealed class EnvUpAzureTests : IDisposable
         return (code, stdout + stderr.ToString());
     }
 
-    // The value of an environment variable of the Container App's container (its Azure resource id).
-    private string AppEnv(string appId, string name)
+    // The value of a JMESPath query on a resource (its Azure resource id carries the subscription), as tsv.
+    private string Show(string resourceId, string query)
     {
-        var result = _az.Run("resource", "show", "--ids", appId, "--query", $"properties.template.containers[0].env[?name=='{name}'].value | [0]", "-o", "tsv");
-        return result.Code == 0 ? result.Output.Trim() : throw new InvalidOperationException($"az resource show {appId} failed: {result.Error}");
+        var result = _az.Run("resource", "show", "--ids", resourceId, "--query", query, "-o", "tsv");
+        return result.Code == 0 ? result.Output.Trim() : throw new InvalidOperationException($"az resource show {resourceId} failed: {result.Error}");
+    }
+
+    // The value of an environment variable of the Container App's container (its Azure resource id).
+    private string AppEnv(string appId, string name) => Show(appId, $"properties.template.containers[0].env[?name=='{name}'].value | [0]");
+
+    // The app scales to zero and gives each Cosmos call 5 s, so the first requests after a cold start may answer 503 while its client starts:
+    // a request is sent again on 503, 12 times at most, 10 s apart (two minutes).
+    private static async Task<HttpResponseMessage> ServedAsync(Func<Task<HttpResponseMessage>> send)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var response = await send();
+            if (response.StatusCode != HttpStatusCode.ServiceUnavailable || attempt == 12)
+            {
+                return response;
+            }
+
+            response.Dispose();
+            await Task.Delay(TimeSpan.FromSeconds(10));
+        }
+    }
+
+    // The number of requests the App Insights component holds from the last day. Ingestion takes minutes, so a count of zero is asked
+    // again, 20 times at most, 30 s apart (ten minutes); the last count is returned.
+    private async Task<long> RequestTelemetryAsync(string componentId)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var result = _az.Run("monitor", "app-insights", "query", "--apps", componentId, "--analytics-query", "requests | count", "--offset", "1d", "--query", "tables[0].rows[0][0]", "-o", "tsv");
+            var count = result.Code == 0 ? long.Parse(result.Output.Trim(), CultureInfo.InvariantCulture) : throw new InvalidOperationException($"az monitor app-insights query on {componentId} failed: {result.Error}");
+            if (count > 0 || attempt == 20)
+            {
+                return count;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(30));
+        }
     }
 
     // The Container App in the group whose COSMOS_CONTAINER starts with the prefix: the app names are not known to the test.
@@ -343,6 +384,9 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal(2, releaseLines.Count(line => line.Contains("/@workload/runtime: deployed", StringComparison.Ordinal)));
         Assert.Equal(2, releaseLines.Count(line => line.Trim() == "probe: done (HTTP 200)"));
         Assert.Equal(2, releaseLines.Count(line => line.Trim().StartsWith("shift: done", StringComparison.Ordinal)));
+        // In the set's order: the worker, which the app depends on, first.
+        var workerStarted = Array.FindIndex(releaseLines, line => line.Trim() == "workload just-deliver-sample-worker");
+        Assert.True(workerStarted >= 0 && Array.FindIndex(releaseLines, line => line.Trim() == "workload just-deliver-sample-app") > workerStarted, releaseOutput);
 
         // The deploy left a record naming the principal the run authenticated with (as Entra reports it) and a passed OQ for each workload.
         var firstRecord = Assert.Single(RecordsOf("1.0.0"));
@@ -351,6 +395,19 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_TENANT_ID"), firstRecord.GetProperty("identity").GetProperty("tenantId").GetString());
         Assert.Equal(["passed", "passed"], [Oq(firstRecord, 0), Oq(firstRecord, 1)]);
         Assert.Equal("passed", Iq(firstRecord)); // the deploy qualified itself: no drift, the pinned digest live
+        // The set's second workload changed nothing of the first: IQ, after both were deployed, refreshed each of the worker's five nodes against Azure and found no drift.
+        var workerDrift = firstRecord.GetProperty("iq").GetProperty("checks").EnumerateArray()
+            .Where(check => check.GetProperty("workload").GetString() == "just-deliver-sample-worker" && check.GetProperty("kind").GetString() == "drift").ToList();
+        Assert.Equal(5, workerDrift.Count);
+        Assert.All(workerDrift, check => Assert.Equal("passed", check.GetProperty("status").GetString()));
+        // The deploy time is measured and recorded: every node and every workload's run took time, the walk's own time holds the runs (each rounded to
+        // 3 decimals), and IQ is timed apart.
+        var runs = firstRecord.GetProperty("workloads").EnumerateArray().Select(workload => workload.GetProperty("run")).ToList();
+        Assert.All(runs.SelectMany(run => run.GetProperty("nodes").EnumerateArray()), node => Assert.True(node.GetProperty("elapsedSeconds").GetDouble() > 0));
+        var runSeconds = runs.Select(run => run.GetProperty("elapsedSeconds").GetDouble()).ToList();
+        Assert.All(runSeconds, seconds => Assert.True(seconds > 0));
+        Assert.True(firstRecord.GetProperty("deploySeconds").GetDouble() >= runSeconds.Sum() - 0.002, $"deploySeconds {firstRecord.GetProperty("deploySeconds")} is less than the runs' {runSeconds.Sum()}");
+        Assert.True(firstRecord.GetProperty("iq").GetProperty("elapsedSeconds").GetDouble() > 0);
 
         var containers = Az("cosmosdb", "sql", "container", "list", "--account-name", account, "--resource-group", sharedGroup, "--database-name", database, "--query", "[].name")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -382,6 +439,31 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Contains(AppEnv(sampleApp, "COSMOS_CONTAINER"), containers);
         Assert.StartsWith("InstrumentationKey=", AppEnv(sampleApp, "APPLICATIONINSIGHTS_CONNECTION_STRING"), StringComparison.Ordinal);
         Assert.DoesNotContain("InstrumentationKey", releaseOutput + againRelease, StringComparison.Ordinal);
+
+        // No key or connection string for the data: the account refuses key authentication, and each app holds no secret and no variable backed by
+        // one; its variables are the workload's addresses and the App Insights connection string. Free tier: the environment has no profile other
+        // than Consumption, and each app scales to zero at 0.25 vCPU and 0.5Gi.
+        Assert.Equal("true", Az("cosmosdb", "show", "--name", account, "--resource-group", sharedGroup, "--query", "disableLocalAuth"), ignoreCase: true);
+        Assert.Equal("0", Show(loadedDev.Values["containerAppsEnvironment.id"], "length(properties.workloadProfiles[?workloadProfileType!='Consumption'] || `[]`)"));
+        foreach (var app in new[] { workerApp, sampleApp })
+        {
+            Assert.Equal("0", Show(app, "length(properties.configuration.secrets || `[]`)"));
+            Assert.Equal("0", Show(app, "length(properties.template.containers[0].env[?secretRef])"));
+            Assert.Equal(
+                ["APPLICATIONINSIGHTS_CONNECTION_STRING", "COSMOS_CONTAINER", "COSMOS_DATABASE", "COSMOS_ENDPOINT", "LOG_LEVEL"],
+                Show(app, "properties.template.containers[0].env[].name").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Order(StringComparer.Ordinal));
+            Assert.Equal(("0", "0.25", "0.5Gi"), (Show(app, "properties.template.scale.minReplicas"), Show(app, "properties.template.containers[0].resources.cpu"), Show(app, "properties.template.containers[0].resources.memory")));
+        }
+
+        // The app reads and writes its container with its identity: an item written through the live revision is read back.
+        using (var http = new HttpClient { BaseAddress = new Uri("https://" + Show(sampleApp, "properties.configuration.ingress.fqdn")), Timeout = TimeSpan.FromMinutes(1) })
+        {
+            using var created = await ServedAsync(() => http.PostAsJsonAsync("/items", new { text = "s20-" + _suffix }));
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            using var read = await ServedAsync(() => http.GetAsync(created.Headers.Location));
+            Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+            Assert.Contains("s20-" + _suffix, await read.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        }
 
         // A worker whose /health fails never gets traffic: the probe fails with the real timeout, the good revision keeps 100%, and the app,
         // later in the set, is not started.
@@ -419,6 +501,14 @@ public sealed class EnvUpAzureTests : IDisposable
         var live = Assert.Single(reverted, revision => revision.Value == 100).Key;
         Assert.DoesNotContain(live, afterBad.Keys);
         Assert.Equal(goodApp, Revisions(sampleApp));
+
+        // Telemetry reaches App Insights: the component whose connection string the app holds has its requests (the probe of the first deploy and the
+        // item calls, minutes ago by now, so the bounded wait rarely waits).
+        var connection = AppEnv(sampleApp, "APPLICATIONINSIGHTS_CONNECTION_STRING");
+        var component = Az("resource", "list", "--resource-group", devGroup, "--resource-type", "Microsoft.Insights/components", "--query", "[].id")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Single(id => Show(id, "properties.ConnectionString") == connection);
+        Assert.True(await RequestTelemetryAsync(component) > 0, $"no request telemetry reached {component} within ten minutes");
 
         // The good release's records: the first deploy, the re-run that changed nothing and the revert, each its own file.
         var records = RecordsOf("1.0.0");

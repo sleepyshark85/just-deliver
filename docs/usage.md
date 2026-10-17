@@ -124,7 +124,7 @@ release). `jd approve` records an approval for a gated environment (below); `jd 
 | Exit code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Validation or resolution errors (workload, catalog, environment or graph), a failed deployment, or a deploy to a gated environment |
+| 1 | Validation or resolution errors (workload, catalog, environment or graph), a failed deployment, a deploy to a gated environment, a credential Entra refuses or that is malformed (for example `ARM_TENANT_ID` neither a directory id nor a domain name), or a release label the record store rejects (a path separator or `..`) |
 | 2 | Usage error: unknown command or option, missing argument, unreadable file or directory |
 
 ## Releases
@@ -237,3 +237,82 @@ backend variable.
 When it may go ahead it prints `promoting <label> from <source> (set sha256 <h>)`, then runs the walk of `jd release deploy` on the target with its output, exit
 codes, deploy record (with IQ) and `set.yaml` check. The record's `release.setSha256` is `<h>`. `jd release deploy`, `jd deploy` and `jd release qualify`
 stay refused on the gated environment.
+
+## Walkthrough
+
+From a clean subscription to a release promoted to `stage`, then teardown. Commands only; each is described above. `jd` stands for
+`dotnet run --project src/jd.cli --`. Free tier only: the subscription must have no free-tier Cosmos account yet (Azure allows one).
+
+**1. Prerequisites.** The .NET SDK, the `pulumi` CLI and the `az` CLI. A deploying service principal and, because `stage` keeps approval separate
+from deploying (`separateFromDeployer: true`), a second one that approves. Set (names only; never commit the values):
+
+| Variable | For |
+|---|---|
+| `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_TENANT_ID`, `ARM_SUBSCRIPTION_ID` | the principal that runs the command (Pulumi, the records' identity) |
+| `JD_REGION` | the region of everything (or `--region` on `env up`) |
+| `PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE` (or `PULUMI_CONFIG_PASSPHRASE_FILE`) | the Pulumi state; the same values on every run |
+| `JD_RECORDS_DIR` | an existing directory for the release records (the evidence) |
+
+Log `az` in as the same principal (the walkthrough's `az` checks and the teardown need it):
+`az login --service-principal -u "$ARM_CLIENT_ID" --password="$ARM_CLIENT_SECRET" --tenant "$ARM_TENANT_ID" -o none && az account set -s "$ARM_SUBSCRIPTION_ID"`.
+
+Before `stage` is brought up, put the approver's object id (`az ad sp show --id <approver client id> --query id -o tsv`) in `approvers` of
+`samples/environments/stage.yaml`.
+
+**2. Environments** (as the deployer):
+
+```
+jd env up samples/environments/shared.yaml --catalog catalog --out shared.env.yaml
+jd env up samples/environments/dev.yaml    --catalog catalog --base shared.env.yaml --out dev.env.yaml
+jd env up samples/environments/stage.yaml  --catalog catalog --base shared.env.yaml --out stage.env.yaml
+```
+
+**3. One workload on `dev`** (the unrecorded path):
+
+```
+jd preview samples/workloads/sample-app.yaml --env dev.env.yaml --catalog catalog
+jd deploy  samples/workloads/sample-app.yaml --env dev.env.yaml --catalog catalog
+```
+
+**4. A two-workload release on `dev`** (`sample-app` depends on `sample-worker`):
+
+```
+jd release create  samples/releases/sample.manifest.yaml --out release.yaml
+jd release show    release.yaml
+jd release deploy  release.yaml --env dev.env.yaml --catalog catalog
+jd release qualify release.yaml --env dev.env.yaml --catalog catalog
+```
+
+**5. Approve and promote to `stage`.** `jd approve` as the approver (its `ARM_*` values in the environment), then `jd promote` as the deployer (whoever runs it is not checked against `approvers`):
+
+```
+jd approve 1.0.0 --env stage.env.yaml --meaning "Reviewed the dev evidence for 1.0.0."
+jd promote 1.0.0 --to stage.env.yaml --catalog catalog
+```
+
+**6. Read the records.** Every attempt is one JSON file, never edited (`schemas/release-record.schema.json`, `schemas/approval-record.schema.json`):
+
+```
+ls "$JD_RECORDS_DIR"/dev/1.0.0     # set.yaml, …-deploy.json, …-qualify.json
+ls "$JD_RECORDS_DIR"/stage/1.0.0   # set.yaml (dev's bytes), …-approve.json, …-deploy.json
+```
+
+`outcome`, `oq` per workload, `iq.status`, `deploySeconds` and `identity` are the fields to read first ([release-record.md](architecture/release-record.md)).
+
+### Teardown
+
+`jd` has no destroy command. Delete the resource groups with `az`, in the order the Azure test uses: the environment groups first (their
+Container Apps environments log to the shared workspace), then the shared group. The names are in the descriptors: `resourceGroup` in
+`dev.env.yaml` and `stage.env.yaml`, `shared.resourceGroup` in `shared.env.yaml`.
+
+```
+az group delete --name <dev resourceGroup>   --yes --no-wait
+az group delete --name <stage resourceGroup> --yes --no-wait
+az group wait   --name <dev resourceGroup>   --deleted
+az group wait   --name <stage resourceGroup> --deleted
+az group delete --name <shared resourceGroup> --yes
+az group list --query "[?tags.project=='just-deliver-mvp'].name" -o tsv    # prints nothing when all are gone
+```
+
+Then remove the Pulumi state at `PULUMI_BACKEND_URL` (its stacks now describe deleted resources) and the descriptors. Keep `JD_RECORDS_DIR` if the
+evidence is wanted; nothing in it is a secret.

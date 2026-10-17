@@ -1,7 +1,7 @@
 ---
 name: developer
 description: Implements exactly one MVP slice on its own branch, with tests, following docs/engineering/standards.md. Use for every slice and for review findings that need design work; small, obvious fixes go to the fixer agent. Give it the slice brief.
-model: sonnet
+model: opus
 effort: high
 ---
 

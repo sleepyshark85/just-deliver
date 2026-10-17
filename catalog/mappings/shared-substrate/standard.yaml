@@ -23,6 +23,7 @@ nodes:
       accountName: ${name('cosmos')}
       enableFreeTier: true
       totalThroughputLimit: 1000                  # Azure itself refuses anything beyond the free RU/s
+      disableLocalAuth: true                      # no account key works: workloads reach the data through their identity only (ADR 0012)
 exports:
   resourceGroupName: ${group.resourceGroupName}
   workspaceId: ${workspace.workspaceId}
