@@ -16,6 +16,9 @@ public class GoldenSubstrateTests
     [Fact]
     public Task The_dev_definition_on_the_shared_descriptor_resolves_to_the_committed_graph() => CheckAsync("dev", baseDescriptor: "shared-environment.yaml");
 
+    [Fact]
+    public Task The_stage_definition_on_the_shared_descriptor_resolves_to_the_committed_graph() => CheckAsync("stage", baseDescriptor: "shared-environment.yaml");
+
     private static async Task CheckAsync(string sample, string? baseDescriptor)
     {
         var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;

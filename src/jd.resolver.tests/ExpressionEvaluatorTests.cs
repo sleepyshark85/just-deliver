@@ -31,7 +31,8 @@ public class ExpressionEvaluatorTests
             ["cosmos.endpoint"] = "https://acct.example",
             ["logAnalytics.id"] = "/law/id",
         },
-        []);
+        [],
+        null);
 
     private static ExpressionContext Context(
         string workload = "shop",

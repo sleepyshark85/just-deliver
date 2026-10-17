@@ -98,12 +98,32 @@ values:                         # the descriptor layout; each leaf is an express
   resourceGroup: ${resource.substrate.resourceGroupName}
   cosmos: { databaseName: ${resource.substrate.databaseName} }
 grantable: [cosmos.accountId]   # may name base values
+approval:                       # optional for team, required for protected; copied as it is into the descriptor
+  qualifiedOn: dev              # the environment whose records must show the set qualified
+  required: 1                   # distinct approvers needed (1 to the number listed)
+  approvers: ["00000000-0000-0000-0000-000000000000"]   # Entra object ids (lower case) that may approve
+  separateFromDeployer: true    # an approver may not be a principal that deployed the label on qualifiedOn; required, no default
 ```
+
+`samples/environments/stage.yaml` is `dev`'s layout plus such a block, tier `protected`: bring it up like `dev`
+(`jd env up samples/environments/stage.yaml --catalog catalog --base shared.env.yaml --out stage.env.yaml`). It gets its own resource group,
+Container Apps environment and 400 RU/s database (`db-stage`) on the shared Cosmos account and workspace, so `dev` and `stage` use 800 of the free
+1,000 RU/s; a third environment would not fit. As shipped the approver is the all-zero id, which matches no principal: replace it with the object ids of
+the service principals that may approve before anything can be promoted.
+
+#### Gated environments
+
+An environment whose **descriptor carries an `approval` block** is gated, whatever its tier (the tool tests for the block, never for a tier name). The
+schemas only require the block for tier `protected`, so one cannot be written without it. A `protected` environment without an `approval` block fails the schema check (`NotAnyOf … PropertyRequired: #/approval`). `jd deploy`, `jd release deploy` and `jd release qualify`
+on a gated descriptor exit 1 with "environment '<name>' is gated by an approval policy: use `jd promote`" before the principal, `JD_RECORDS_DIR` or the
+backend is touched: no call, no record, no `set.yaml`. `--preview` is not refused (it creates nothing), and neither is `jd env up` (the substrate is not a
+release). `jd approve` and `jd promote`, the only way a set reaches a gated environment, are not built yet
+([approvals.md](architecture/approvals.md)).
 
 | Exit code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Validation or resolution errors (workload, catalog, environment or graph), or a failed deployment |
+| 1 | Validation or resolution errors (workload, catalog, environment or graph), a failed deployment, or a deploy to a gated environment |
 | 2 | Usage error: unknown command or option, missing argument, unreadable file or directory |
 
 ## Releases

@@ -45,6 +45,7 @@ public static class Cli
         env up    provisions an environment's substrate from its definition and writes the environment descriptor from the outputs.
                   --base: the descriptor of the layer below (the new values are added to it); --region defaults to JD_REGION;
                   --force: overwrite an existing --out.
+        Gated (deploy, release deploy, release qualify): an environment whose descriptor has an approval block refuses them (exit 1; --preview is allowed): it is deployed to only by promotion.
         Backend (deploy, release deploy, release qualify, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
         Records (release deploy, not --preview; release qualify): JD_RECORDS_DIR, an existing directory, and the deploying service principal in ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET.
         Exit codes: 0 success, 1 validation, resolution or deployment errors, 2 usage errors.
@@ -146,6 +147,11 @@ public static class Cli
             return Invalid;
         }
 
+        if (resolve is DeployOptions { DryRun: false } && RefuseGated(environment, "deploy", stderr))
+        {
+            return Invalid;
+        }
+
         var graph = Resolver.Resolve(workload, options.Workload, catalog, environment);
         if (graph.Errors.Count > 0)
         {
@@ -166,6 +172,19 @@ public static class Cli
         DeployOptions options, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend, IRevisionProbe? probe,
         Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken) =>
         (await ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, options.DryRun, stdout, stderr, probe, cancellationToken)).Code;
+
+    // An environment whose descriptor carries an approval policy takes deploys only through `jd promote` (docs/architecture/approvals.md section 2). The check reads
+    // the block, not the tier. Run before the identity, the records or the backend is touched; a preview creates nothing, so callers do not ask it.
+    internal static bool RefuseGated(EnvironmentDescriptor environment, string command, TextWriter stderr)
+    {
+        if (environment.Approval is null)
+        {
+            return false;
+        }
+
+        stderr.WriteLine($"jd: {command}: environment '{environment.Name}' is gated by an approval policy: use `jd promote`.");
+        return true;
+    }
 
     // Catalog errors name files relative to the catalog root; the person needs the path they can open.
     // An error about the catalog as a whole names no real file and is left as it is.

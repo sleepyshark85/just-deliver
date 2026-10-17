@@ -1,0 +1,29 @@
+kind: Environment
+name: stage
+region: region-1
+tier: protected
+values:
+  shared:
+    resourceGroup: rg-shared-1
+  logAnalytics:
+    id: /ws/id
+    name: law-1
+    customerId: cust-1
+  cosmos:
+    accountId: /cosmos/id
+    accountName: cosmos-1
+    endpoint: https://cosmos-1.documents.azure.com:443/
+    databaseName: db-stage
+    databaseId: /db/id
+  resourceGroup: rg-stage-1
+  containerAppsEnvironment:
+    id: /apps/id
+    defaultDomain: dev.example.io
+grantable:
+- cosmos.accountId
+approval:
+  qualifiedOn: dev
+  required: 1
+  approvers:
+  - 00000000-0000-0000-0000-000000000000
+  separateFromDeployer: true

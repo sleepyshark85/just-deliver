@@ -39,6 +39,11 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
             ["values"] = merged,
             ["grantable"] = new JArray(environment.Grantable.Concat(definition.Grantable).Distinct().Order(StringComparer.Ordinal)),
         };
+        if (environment.Approval is { } approval)
+        {
+            document["approval"] = approval.ToJson();
+        }
+
         var yaml = Serializer.Serialize(Plain(document));
 
         // The descriptor rules (reserved keys, dotted keys, grantable paths) are the loader's, applied to the composed document.
@@ -139,6 +144,6 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
     {
         JObject obj => obj.Properties().ToDictionary(p => p.Name, p => Plain(p.Value)),
         JArray array => array.Select(Plain).ToList(),
-        _ => (string?)token,
+        _ => ((JValue)token).Value, // a string, or the number or boolean of an approval block
     };
 }

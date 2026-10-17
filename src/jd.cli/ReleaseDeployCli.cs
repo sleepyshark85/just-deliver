@@ -76,6 +76,12 @@ internal static class ReleaseDeployCli
             return Invalid;
         }
 
+        // A gated environment is deployed to only by promotion; this stops before the identity, the records or the backend is touched.
+        if (!options.DryRun && Cli.RefuseGated(environment, Command(options.Qualify), stderr))
+        {
+            return Invalid;
+        }
+
         // Everything is resolved and checked before anything is created.
         var (graphs, errors) = await ReleaseResolver.ResolveAsync(options.Set, set, catalog, environment, cancellationToken);
         if (errors.Count > 0)
@@ -248,9 +254,11 @@ internal static class ReleaseDeployCli
             + (notStarted.Count == 0 ? "0 not started." : $"{notStarted.Count.ToString(CultureInfo.InvariantCulture)} not started ({string.Join(", ", notStarted)}).");
     }
 
+    private static string Command(bool qualify) => qualify ? "release qualify" : "release deploy";
+
     private static (Options? Options, string Problem) Parse(string[] args, bool qualify)
     {
-        var command = qualify ? "release qualify" : "release deploy";
+        var command = Command(qualify);
         var (scanned, problem) = Arguments.Scan(args, 0);
         if (scanned is null)
         {

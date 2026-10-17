@@ -11,7 +11,9 @@ namespace jd.cli.tests;
 /// <summary>
 /// Real resources, free tier only: the sample <c>shared</c> and <c>dev</c> definitions (renamed with a random suffix, so names cannot
 /// collide) brought up with <c>jd env up</c> on a local file state. Checks the descriptors, the free-tier Cosmos account and its
-/// RU/s cap and the workspace's daily cap through <c>az</c>, and that running each again changes nothing. Then the sample release set is
+/// RU/s cap and the workspace's daily cap through <c>az</c>, and that running each again changes nothing. The <c>stage</c> definition
+/// (tier <c>protected</c>, with its approval policy) is brought up on the same account: its own database of 400 RU/s, the account limit still
+/// 1000, a descriptor that carries the policy, and a re-run that changes nothing. Then the sample release set is
 /// deployed on <c>dev</c> (<c>jd release create</c>, <c>jd release deploy</c>): the workloads get distinct containers in the dev database
 /// without throughput of their own, so the free-tier RU/s budget holds, and a second deploy changes nothing. Then a release whose first
 /// workload's <c>/health</c> fails (its container does not exist) stops at the probe with traffic still on the good revision and the
@@ -33,6 +35,8 @@ public sealed class EnvUpAzureTests : IDisposable
 
     private string DevName => "s12dv" + _suffix;
 
+    private string StageName => "s12st" + _suffix;
+
     public void Dispose()
     {
         try
@@ -50,13 +54,13 @@ public sealed class EnvUpAzureTests : IDisposable
     }
 
     // The groups are named after their environment, so the suffix finds them even when a deploy failed before writing a descriptor.
-    // A failed teardown fails the test: a resource group left behind must never go unnoticed. The dev group goes first: its
-    // Container Apps environment logs to the shared workspace.
+    // A failed teardown fails the test: a resource group left behind must never go unnoticed. The shared group goes last: the
+    // Container Apps environment of every other group logs to its workspace.
     private List<string> TestGroups()
     {
         var list = _az.Run("group", "list", "--subscription", _az.Subscription, "--query", $"[?tags.project=='just-deliver-mvp' && contains(name, '{_suffix}')].name", "-o", "tsv");
         return list.Code == 0
-            ? list.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).OrderBy(g => g.Contains(DevName, StringComparison.Ordinal) ? 0 : 1).ToList()
+            ? list.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).OrderBy(g => g.Contains(SharedName, StringComparison.Ordinal) ? 1 : 0).ToList()
             : throw new InvalidOperationException($"Could not list the test resource groups; run tools/azure/cleanup.sh --yes --all. {list.Error}");
     }
 
@@ -237,6 +241,26 @@ public sealed class EnvUpAzureTests : IDisposable
         var (againDevCode, againDev) = await UpAsync(backend, region, dev, "--base", sharedDescriptor, "--out", devDescriptor);
         Assert.True(againDevCode == 0, againDev);
         AssertNothingChanged(againDev, 3);
+
+        // stage: dev's layout with an approval policy, on the same account. Its own database holds 400 RU/s, so the two use 800 of the free 1,000
+        // and the account limit stays; the descriptor says protected and carries the policy; running it again changes nothing.
+        var stage = Definition("stage", StageName);
+        var stageDescriptor = Path.Combine(_root, "stage.env.yaml");
+        var (stageCode, stageOutput) = await UpAsync(backend, region, stage, "--base", sharedDescriptor, "--out", stageDescriptor);
+        Assert.True(stageCode == 0, stageOutput);
+        var loadedStage = (await EnvironmentFile.LoadAsync(stageDescriptor)).Descriptor;
+        Assert.NotNull(loadedStage);
+        Assert.Equal(("protected", "dev", 1, true), (loadedStage.Tier, loadedStage.Approval?.QualifiedOn, loadedStage.Approval?.Required, loadedStage.Approval?.SeparateFromDeployer));
+        Assert.Equal(["00000000-0000-0000-0000-000000000000"], loadedStage.Approval!.Approvers);
+        Assert.Equal(account, loadedStage.Values["cosmos.accountName"]);
+        var stageDatabase = loadedStage.Values["cosmos.databaseName"];
+        Assert.NotEqual(database, stageDatabase);
+        Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", stageDatabase, "--query", "resource.throughput"));
+        Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", database, "--query", "resource.throughput"));
+        Assert.Equal("1000", Az("cosmosdb", "show", "--name", account, "--resource-group", sharedGroup, "--query", "capacity.totalThroughputLimit"));
+        var (againStageCode, againStage) = await UpAsync(backend, region, stage, "--base", sharedDescriptor, "--out", stageDescriptor);
+        Assert.True(againStageCode == 0, againStage);
+        AssertNothingChanged(againStage, 3);
 
         // The sample release set on dev: two workloads, one container each in the dev database, each runtime a real Container App released through dark revision, grants and probe.
         var releaseSet = Path.Combine(_root, "release.yaml");
