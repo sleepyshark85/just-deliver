@@ -93,15 +93,14 @@ public sealed partial class ReleaseDeployCliTests
     public async Task The_deploy_time_is_the_walk_alone_and_iq_has_its_own_time()
     {
         var set = await CreateSetAsync();
-        var backend = new RecordingBackend { PreviewDelay = TimeSpan.FromMilliseconds(100) };
+        var backend = new RecordingBackend { Clock = _clock, DeployTime = TimeSpan.FromSeconds(2), PreviewTime = TimeSpan.FromSeconds(5) };
 
         var (code, _, _) = await RunAsync(backend, Deploy(set));
 
         Assert.Equal(0, code);
         var record = Read(Assert.Single(RecordFiles));
-        var iq = (double)record["iq"]!["elapsedSeconds"]!;
-        Assert.True(iq >= 0.9 * 0.1 * backend.Calls.Count(Previews), $"IQ took {iq} s for {backend.Calls.Count(Previews)} previews of 100 ms");
-        Assert.True((double)record["deploySeconds"]! < iq, $"the deploy walk took {record["deploySeconds"]} s, IQ {iq} s");
+        Assert.Equal(2 * backend.Calls.Count(c => c.StartsWith("deploy ", StringComparison.Ordinal)), (double)record["deploySeconds"]!);
+        Assert.Equal(5 * backend.Calls.Count(Previews), (double)record["iq"]!["elapsedSeconds"]!);
     }
 
     [Fact]

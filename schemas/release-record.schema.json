@@ -11,7 +11,6 @@
       "description": "A deploy: the outcome, the deploy time, the workloads not started, each workload's OQ, and the IQ verdict, which is notRun when IQ did not run because a workload failed.",
       "properties": {
         "activity": { "enum": ["deploy"] },
-        "iq": { "properties": { "status": { "enum": ["passed", "failed", "notRun"] } } },
         "workloads": { "items": { "required": ["oq"] } }
       },
       "required": ["outcome", "deploySeconds", "notStarted", "iq"]

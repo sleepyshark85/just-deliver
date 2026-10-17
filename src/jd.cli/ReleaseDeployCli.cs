@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using System.Globalization;
-using jd.bp.pulumi;
 using jd.core.bp;
 using jd.core.identity;
 using jd.core.revisions;
@@ -102,20 +100,15 @@ internal static class ReleaseDeployCli
             }
         }
 
-        if (options.Qualify)
-        {
-            // recordsDirectory is null only for a --preview, which qualify refuses at parse time, so a qualification always has a recording here.
-            return await QualifyAsync(recording!, set, catalog, environment, graphs, templates, backend, probe, liveRevisions, started, time, environmentVariable, stdout, stderr, cancellationToken);
-        }
-
-        var provider = backend ?? Cli.CreatePulumiBackend(environmentVariable);
-        var orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, provider, environmentVariable, probe);
-
-        // A recorded run qualifies what it deployed. Its checker is built first, so a reader that cannot be built stops the run before anything is deployed.
+        // Everything a run calls is built before any backend call, so a reader that cannot be built stops it before anything is deployed.
+        // A preview records nothing and qualifies nothing, so it has no qualifier.
+        Orchestrator orchestrator;
         Qualifier? qualifier = null;
         try
         {
-            qualifier = recording is null ? null : new Qualifier(orchestrator, provider, templates, liveRevisions ?? Cli.CreateLiveRevisions(environmentVariable));
+            var provider = backend ?? Cli.CreatePulumiBackend(environmentVariable);
+            orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, provider, environmentVariable, probe);
+            qualifier = recording is null ? null : new Qualifier(orchestrator, provider, templates, liveRevisions ?? Cli.CreateLiveRevisions(environmentVariable), time);
         }
         catch (InvalidOperationException ex)
         {
@@ -123,14 +116,20 @@ internal static class ReleaseDeployCli
             return Invalid;
         }
 
-        var walk = Stopwatch.GetTimestamp();
+        if (options.Qualify)
+        {
+            // recordsDirectory is null only for a --preview, which qualify refuses at parse time, so a qualification always has a recording and a qualifier here.
+            return await QualifyAsync(recording!, set, environment, graphs, qualifier!, started, time, stdout, stderr, cancellationToken);
+        }
+
+        var walk = time.GetTimestamp();
         var runs = await orchestrator.DeployReleaseAsync(
             graphs,
             options.DryRun,
             name => stdout.WriteLine($"workload {name}"),
             report => stdout.Write(DeployFormatter.Format(report)),
             cancellationToken);
-        var walked = Stopwatch.GetElapsedTime(walk);
+        var walked = time.GetElapsedTime(walk);
 
         stdout.WriteLine(Summarize(set, environment.Name, runs, options.DryRun));
         var failed = runs.FirstOrDefault(r => !r.Run.Succeeded);
@@ -163,23 +162,10 @@ internal static class ReleaseDeployCli
 
     // Checks the deployment without touching it; the record is written whether IQ passed or not.
     private static async Task<int> QualifyAsync(
-        Recording recording, ReleaseSet set, Catalog catalog, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, TemplateLibrary templates, IBackEndProvider? backend,
-        IRevisionProbe? probe, ILiveRevisions? liveRevisions, DateTimeOffset started, TimeProvider time, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr,
-        CancellationToken cancellationToken)
+        Recording recording, ReleaseSet set, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, Qualifier qualifier, DateTimeOffset started, TimeProvider time,
+        TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        IqResult iq;
-        try
-        {
-            var provider = backend ?? Cli.CreatePulumiBackend(environmentVariable);
-            var orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, provider, environmentVariable, probe);
-            iq = await new Qualifier(orchestrator, provider, templates, liveRevisions ?? Cli.CreateLiveRevisions(environmentVariable)).QualifyAsync(graphs, cancellationToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            stderr.WriteLine($"jd: {ex.Message}");
-            return Invalid;
-        }
-
+        var iq = await qualifier.QualifyAsync(graphs, cancellationToken);
         ReportIq(set, environment, iq, stdout, stderr);
         var finished = time.GetUtcNow();
         var json = ReleaseRecordBuilder.BuildQualify(set, recording.SetSha256, environment, graphs, recording.Identity, started, finished, iq);

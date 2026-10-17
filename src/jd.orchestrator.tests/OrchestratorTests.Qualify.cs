@@ -46,7 +46,7 @@ public partial class OrchestratorTests
     }
 
     private static Task<IqResult> QualifyAsync(FakeBackend backend, IReadOnlyList<ResolvedGraph> graphs, Catalog catalog, FakeLiveRevisions live) =>
-        new Qualifier(Create(backend, catalog), backend, backend, live).QualifyAsync(graphs, CancellationToken.None);
+        new Qualifier(Create(backend, catalog), backend, backend, live, TimeProvider.System).QualifyAsync(graphs, CancellationToken.None);
 
     private static IEnumerable<string> Failures(IqResult result) => result.Checks.Where(c => !c.Passed).Select(c => c.Failure);
 

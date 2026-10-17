@@ -57,7 +57,7 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 - **As built:** the record has `workloads` in deploy order, each with its pinned fields, `graph` (`sha256` and the nodes as `{id, template, stack,
   phase, hash}`), `run` (absent when the workload was not started: `elapsedSeconds` and its nodes with outcome, change counts, message, elapsed
   and, for the runtime node, the steps) and `oq`; at the top `outcome`, `failure` (`{workload, node}`, only when failed), `notStarted`, `identity`,
-  `environment`, `release` (`label`, `createdAt`, `setSha256`) and `deploySeconds`. `failure.node` is the last node of the failed workload's
+  `environment`, `release` (`label`, `createdAt`, `setSha256`), `deploySeconds` and `iq` (section 6). `failure.node` is the last node of the failed workload's
   report: the runtime node when one of its steps failed (its message reads `<step>: <reason>`).
 - **The graph is stored as hashes, not config.** The node hashes and `graphSha256` let anyone check that a graph resolved from the
   set, the catalog and the environment matches the one that was deployed (hashes are deterministic, S07); this also keeps config out of the record. The records carry the definitions' SHA-256
