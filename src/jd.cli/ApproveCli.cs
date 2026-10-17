@@ -108,7 +108,7 @@ internal static class ApproveCli
             return Invalid;
         }
 
-        var earlier = await ApprovalRecord.ApproversAsync(records, target, label, setSha256, cancellationToken);
+        var earlier = (await ApprovalRecord.ReadAsync(records, target, label, setSha256, cancellationToken)).Approvers;
         if (earlier.Contains(approver, StringComparer.OrdinalIgnoreCase))
         {
             stderr.WriteLine($"jd: approve: principal {approver} already approved {label} for '{target.Name}'.");

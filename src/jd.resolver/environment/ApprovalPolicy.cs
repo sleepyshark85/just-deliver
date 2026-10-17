@@ -27,7 +27,11 @@ public sealed record ApprovalPolicy(string QualifiedOn, int Required, IReadOnlyL
     public bool Counts(string approver, IReadOnlyCollection<string> deployers) =>
         Approvers.Contains(approver, StringComparer.OrdinalIgnoreCase) && !(SeparateFromDeployer && deployers.Contains(approver, StringComparer.OrdinalIgnoreCase));
 
-    /// <summary>Whether enough distinct principals among <paramref name="approvals"/> (the object id of each approval) count.</summary>
+    /// <summary>The distinct principals among <paramref name="approvals"/> (the object id of each approval) whose approval counts.</summary>
+    public IReadOnlyList<string> Counting(IEnumerable<string> approvals, IReadOnlyCollection<string> deployers) =>
+        approvals.Where(a => Counts(a, deployers)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>Whether enough distinct principals among <paramref name="approvals"/> count.</summary>
     public bool Evaluate(IEnumerable<string> approvals, IReadOnlyCollection<string> deployers) =>
-        approvals.Where(a => Counts(a, deployers)).Distinct(StringComparer.OrdinalIgnoreCase).Count() >= Required;
+        Counting(approvals, deployers).Count >= Required;
 }

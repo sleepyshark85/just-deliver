@@ -45,7 +45,11 @@ public sealed partial class ReleaseDeployCliTests
     {
         Directory.CreateDirectory(StageDirectory);
         File.WriteAllText(Path.Combine(StageDirectory, name), content
-            ?? $$"""{ "environment": { "name": "stage" }, "release": { "setSha256": "{{Sha256(Path.Combine(_records, "dev", "1.0.0", "set.yaml"))}}" }, "qualifiedOn": "dev", "identity": { "objectId": "{{objectId}}" } }""");
+            ?? $$"""
+            { "kind": "ApprovalRecord", "approvedAt": "2026-01-01T00:00:00Z", "environment": { "name": "stage", "tier": "protected" },
+              "release": { "label": "1.0.0", "setSha256": "{{Sha256(Path.Combine(_records, "dev", "1.0.0", "set.yaml"))}}" }, "qualifiedOn": "dev",
+              "identity": { "tenantId": "tenant-1", "clientId": "client-1", "objectId": "{{objectId}}" }, "meaning": "placed by hand" }
+            """);
     }
 
     // Sets a file mode, or says false when it would change nothing: file modes do not stop a privileged process, and Windows has none.
@@ -400,7 +404,7 @@ public sealed partial class ReleaseDeployCliTests
     }
 
     [Fact]
-    public async Task An_approval_file_that_cannot_be_read_is_exit_2_with_the_reason()
+    public async Task An_approval_file_that_cannot_be_read_is_ignored_and_the_approval_goes_ahead()
     {
         await DeployedAsync();
         var stage = await StageAsync();
@@ -411,11 +415,11 @@ public sealed partial class ReleaseDeployCliTests
             return;
         }
 
-        var (code, _, stderr) = await ApproveAsync(stage);
+        var (code, stdout, _) = await ApproveAsync(stage);
 
-        Assert.Equal(2, code);
-        Assert.Contains("20260101T000000000Z-approve.json", stderr);
-        Assert.Single(ApprovalFiles);
+        Assert.Equal(0, code);
+        Assert.Contains("approved 1.0.0 for stage (1 of 1)", stdout);
+        Assert.Equal(2, ApprovalFiles.Length);
     }
 
     [Fact]
