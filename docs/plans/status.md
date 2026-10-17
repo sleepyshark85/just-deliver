@@ -5,11 +5,11 @@
 
 ## Now
 
-- **Next slice:** S20 — the E2E run and docs (mvp.md M5). **Waiting for the user:** S19b was the third 3-round slice of the Sonnet trial (S18a 2, S18b 3, S18c 3, S19a 2, S19b 3); the lead asked whether to keep Sonnet.
+- **Next slice:** —
 - **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
   required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
   leaves the deployment live; ADR 0007 kept (the set file's bytes are stored write-once as `set.yaml` per label).
-- **In progress:** —
+- **In progress:** S20 (Opus developer from here; the Sonnet trial ended after three 3-round slices).
 - **Blocked:** —
 
 ## Slices
@@ -49,7 +49,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S17c2 | IQ inside `jd release deploy` | done | [#41](https://github.com/sleepyshark85/just-deliver/pull/41) | 2 | **Trial, Sonnet developer:** round 1 found 3 blocking (a real-clock sleep in a test instead of the run's `TimeProvider`, duplicated provider/qualifier wiring, a schema line with no effect), fixed by a fresh Sonnet developer; round 2 APPROVE. Early Azure test (new rule) passed on the first head; gate green on the approved head: CLI 133/133, 1 h 6 min, nothing left. Older deploy records without `iq` no longer validate — no reader exists yet (release-record.md §1). |
 | S18 | Second environment + approvals | done | design [#42](https://github.com/sleepyshark85/just-deliver/pull/42) | 3 (design) | Design note `docs/architecture/approvals.md` (Sonnet developer, Opus reviewer; round 2 fixed by the fixer). User chose (a) ×3. **S18a done** (PR #43, 2 rounds; Sonnet developer, one blocking finding in round 1; 31 mutations all caught; Azure: `stage` up, `db-stage` 400 RU/s, limit 1000). **S18b done** (PR #44, 3 rounds; Sonnet developer, round-1 fixes and round 2 by the fixer; 5 → 2 → 0 blocking: literals shared with the record writer, an unguarded directory listing, surviving mutants, a host-dependent test; no design rework; ~142 lines, over the ~120 target; no Azure gate — no Azure-facing code, the first slice under the new gate rule). Built as S18a (policy, gate, `stage`, ~110), S18b (qualification reader, ~120), S18c (`jd approve`, ~200; reader may move to S19). **S18c done** (PR #46, 3 rounds: 4 → 2 → 0 blocking — a crash on a malformed approval file, record keys spelled twice, label checked late, a misnamed test helper; then a `$` anchor letting `1.0.0\n` through; Sonnet developer, fixes by the fixer; ~160 lines; approval reader moved to S19). Azure gate run once before review: green, 1 h 13 m (was 1 h 38 m: environment groups now deleted in parallel), subscription empty. **S18 complete.** |
 | S19 | Promotion | done | S19a #47, S19b #48 | 2 (S19a), 3 (S19b) | Split: S19a (approval reader + `PromotionCheck`, no CLI) and S19b (`jd promote`, Azure test). **S19a done** (PR #47, 2 rounds: 4 → 0 blocking — `jd approve` silently dropped ignored approvals (lead: ignore, but report on stderr), a dead catch, two API nits; Sonnet developer, fixes by the fixer; ~110 lines; no Azure gate, not Azure-facing). Flaky test found on main: `A_failed_workload_runs_no_iq…` asserts no "IQ" in output that contains a random temp path — fix in S19b. **S19b done** (PR #48, 3 rounds: 4 → 1 → 0 blocking — promote re-entered the walk by rebuilding argv with a gate-skip flag, identity after the check (lead had waived the brief's order; reversed), no bad-credential test, a copied label parser; then option strings spelled twice; Sonnet developer, round 1 by a fresh developer, round 2 by the fixer; ~145 lines; the walk refuses kept bytes whose hash is not the checked `h`). Azure gate run once on the hand-back head 6820880: green, 1 h 21 m (`promote` refused without approval, promoted after, same `set.yaml` and digests on both environments, refused after drift); later rounds changed only the CLI entry, not what is sent to Azure; subscription empty. |
-| S20 | E2E run and docs | todo | | | |
+| S20 | E2E run and docs | in-progress | `mvp/s20-e2e` | | |
 
 ## Carry-forward notes
 

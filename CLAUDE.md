@@ -14,7 +14,7 @@ Internal Developer Platform for Azure. Start every session with [docs/README.md]
 | Role | Who | Model |
 |---|---|---|
 | Lead | the main session | Opus 5.5 |
-| Developer | `developer` agent ([.claude/agents/developer.md](.claude/agents/developer.md)) — slices, design-level findings | Sonnet 5.5 |
+| Developer | `developer` agent ([.claude/agents/developer.md](.claude/agents/developer.md)) — slices, design-level findings | Opus 5.5 |
 | Fixer | `fixer` agent ([.claude/agents/fixer.md](.claude/agents/fixer.md)) — small findings with an obvious fix | Sonnet 5.5 |
 | Reviewer | `reviewer` agent ([.claude/agents/reviewer.md](.claude/agents/reviewer.md)) — one per slice, kept for its rounds | Opus 5.5 |
 
@@ -44,11 +44,9 @@ How the team works together (independence, rounds, short reports, context cost):
 Work one slice at a time. Do not involve the user unless blocked: an ADR or architecture conflict,
 a needed decision, a guardrail or free-tier limit in the way, missing credentials, or 3 failed review rounds.
 
-**Model trial:** from S17c2 (user's choice, 2026-10-17) the developer is Sonnet again, now held to the
-[code quality bar](docs/engineering/conventions.md#code-quality-bar) and the mutation-proof test rule; the fixer is
-Sonnet, the reviewer Opus. The trial judges whether Sonnet code meets the bar. If PR quality is
-poor — repeated blocking design findings, over-engineering, or slices needing 3 rounds — stop and ask the user.
-Record each slice's review rounds in status.md so the trial can be judged.
+**Model trial (ended):** S17c2–S19b ran a Sonnet developer (rounds 2, 2, 3, 3, 2, 3); three 3-round slices met the stop
+rule. From S20 (2026-10-18, user left the choice to the lead) the developer is Opus; the fixer stays Sonnet, the reviewer
+Opus. Keep recording each slice's review rounds in status.md.
 
 ## Non-negotiables
 
