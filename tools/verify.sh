@@ -30,6 +30,9 @@ dotnet build "$SLN" -nologo -v q 9>&-
 step "Tests (${FILTER:-all})"
 dotnet test "$SLN" --no-build -nologo -v q ${FILTER:+--filter "$FILTER"} 9>&-
 
+step "Claude hooks"
+python3 -B -m unittest discover -q -s .claude/hooks/tests 9>&- || fail "Claude hook tests failed"
+
 step "Architecture boundaries"
 # Inner projects hold domain, resolution and orchestration logic: they must not depend on Pulumi, Azure SDKs or the backend providers.
 inner=(src/jd.core/jd.core.csproj)

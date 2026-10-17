@@ -33,6 +33,7 @@ provisions and deploys it, IT Ops moves from executor to gatekeeper.
    - [mvp.md](plans/mvp.md) — MVP scope and slices
    - [phase-0-bootstrap.md](plans/phase-0-bootstrap.md) — manual Azure bootstrap runbook
 7. Engineering
+   - [conventions.md](engineering/conventions.md) — how we work, the code quality bar, tests, design rules
    - [standards.md](engineering/standards.md) — binding rules for all code
    - [review-checklist.md](engineering/review-checklist.md) — what every review checks
    - Sandbox subscription setup: [tools/sandbox](../tools/sandbox/README.md)
