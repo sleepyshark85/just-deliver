@@ -18,6 +18,9 @@ configuration:
   # Hard cap on provisioned RU/s across the account, enforced by Azure (backstop for the free tier)
   totalThroughputLimit:
     type: Integer
+  # Refuse key-based (local) authentication, so only Entra identities reach the data
+  disableLocalAuth:
+    type: Boolean
 
 resources:
   account:
@@ -29,6 +32,7 @@ resources:
       kind: GlobalDocumentDB
       databaseAccountOfferType: Standard
       enableFreeTier: ${enableFreeTier}
+      disableLocalAuth: ${disableLocalAuth}
       capacity:
         totalThroughputLimit: ${totalThroughputLimit}
       consistencyPolicy:

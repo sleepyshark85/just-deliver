@@ -80,6 +80,7 @@ public class SubstrateTests
         Assert.Equal("@shared/shared/substrate/group", graph.Nodes[0].Id);
         Assert.Equal(true, Scalar(graph, "cosmos", "enableFreeTier"));
         Assert.Equal(1000L, Scalar(graph, "cosmos", "totalThroughputLimit"));
+        Assert.Equal(true, Scalar(graph, "cosmos", "disableLocalAuth"));
         Assert.Equal(0.15, Scalar(graph, "workspace", "dailyQuotaGb"));
     }
 
