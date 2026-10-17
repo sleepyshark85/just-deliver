@@ -21,8 +21,6 @@ internal static class ReleaseDeployCli
     private const int Invalid = 1;
     private const int UsageError = 2;
 
-    private const string RecordsDirectoryVariable = "JD_RECORDS_DIR";
-
     private sealed record Options(string Set, string Environment, string Catalog, bool DryRun, bool Qualify);
 
     // What a recorded run has before anything is deployed: where the records go, who deploys, and the kept set's hash.
@@ -42,9 +40,9 @@ internal static class ReleaseDeployCli
         }
 
         // A preview deploys nothing, so it records nothing and needs no directory; a qualification records the check.
-        var records = environmentVariable(RecordsDirectoryVariable);
+        var records = environmentVariable(Cli.RecordsDirectoryVariable);
         problem = Arguments.Unreadable(options.Set, options.Environment, options.Catalog) ?? (backend is null ? Cli.BackendSettingsProblem(environmentVariable) : null)
-            ?? (options.DryRun || Directory.Exists(records) ? null : $"{RecordsDirectoryVariable} must name an existing directory where release records are kept (it is {(string.IsNullOrEmpty(records) ? "not set" : $"'{records}'")}).");
+            ?? (options.DryRun ? null : Cli.RecordsDirectoryProblem(records));
         if (problem is not null)
         {
             stderr.WriteLine($"jd: {problem}");
@@ -194,14 +192,8 @@ internal static class ReleaseDeployCli
         string recordsDirectory, IDeployerIdentity? identity, Func<string, string?> environmentVariable, ReadOnlyMemory<byte> setBytes, string label, string environmentName,
         TextWriter stderr, CancellationToken cancellationToken)
     {
-        DeployerIdentity principal;
-        try
+        if (await Cli.GetIdentityAsync(identity, environmentVariable, stderr, cancellationToken) is not { } principal)
         {
-            principal = await (identity ?? Cli.CreateDeployerIdentity(environmentVariable)).GetAsync(cancellationToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            stderr.WriteLine($"jd: {ex.Message}");
             return null;
         }
 

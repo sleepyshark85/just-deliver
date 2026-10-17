@@ -1,6 +1,6 @@
 # Approvals and the protected tier
 
-> Status: design note for S18 (MVP). **S18a built** (the policy, the gate, `stage`); **S18b built** (the qualification reader, `jd.resolver/release/QualificationReader`); S18c and S19 are not. Addresses [F54](../open-questions.md) for the MVP (F37, the full approval model, stays open);
+> Status: design note for S18 (MVP). **S18a built** (the policy, the gate, `stage`); **S18b built** (the qualification reader, `jd.resolver/release/QualificationReader`); **S18c built** (the approval record and `jd approve`; the approval reader moved to S19); S19 is not. Addresses [F54](../open-questions.md) for the MVP (F37, the full approval model, stays open);
 > S19 (`jd promote`) consumes it. Builds on [release-record.md](release-record.md) (records, `set.yaml`, identity, "qualified"),
 > [release.md](release.md) and [ADR 0008](../decisions/0008-enforcement-in-landing-zone.md) (stage and production are platform-owned shared
 > environments), [ADR 0010](../decisions/0010-replacement-protection-classes.md).
@@ -149,11 +149,12 @@ directory, where S19 looks; the set is read from the source environment's direct
 - **Refusals** (exit 1 with a message that names the cause; usage errors, exit 2, are a missing or empty `--meaning`, a bad label, a missing
   `JD_RECORDS_DIR`, an unreadable `--env`):
   1. the descriptor has no approval policy (the environment is not gated);
-  2. **unknown label**: `<records>/<qualifiedOn>/<label>/set.yaml` does not exist;
+  2. **unknown label**: `<records>/<qualifiedOn>/<label>/set.yaml` does not exist (a `set.yaml` or directory that cannot be read is refused too, with that reason, not as unknown);
   3. **not qualified** on `qualifiedOn` (section 5), with every reason listed;
   4. the approver is not in `approvers`;
   5. `separateFromDeployer` and the approver deployed this label on `qualifiedOn`;
-  6. **repeated**: this `objectId` already has a valid approval of this set on this environment.
+  6. **repeated**: this `objectId` already has an approval of this set on this environment. As built (S18c) this reads only the approval files in the target directory that
+     name the same environment, set and `qualifiedOn` (`ApprovalRecord.ApproversAsync`); the full valid-approval filter is S19's.
 - **A repeat is a UX refusal, not a lock.** Two simultaneous runs by one principal could both write; S19 counts distinct principals, so a duplicate
   file never counts twice. Approvals are never revoked in the MVP; a withdrawn release is a new label (a rejection record is out of the MVP).
 - Prints `approved <label> for <env> (<n> of <required>)` and `record: <path>`.
@@ -189,10 +190,10 @@ an edit of `set.yaml` after approving each withdraw the right to promote without
 |---|---|---|
 | **S18a policy, gate, stage** | the `approval` block (definition and descriptor schemas with the `protected` coupling, record, parser, composer), `ApprovalPolicy.Counts`/`Evaluate`, the refusal in `release deploy`, `release qualify` and `deploy`, `samples/environments/stage.yaml`, usage.md; Azure test: `stage` up (section 1) | ~110 |
 | **S18b qualification** | the reader of a label's records: consistency checks, the qualified rule of section 5 step 2, the deployers, reasons; no CLI | ~120 |
-| **S18c approve** | `ApprovalRecord` (builder, schema, write through the store, reader for S19), `jd approve` (arguments, order, refusals, output); Azure test: the approve flow on real records | ~200 |
+| **S18c approve** | `ApprovalRecord` (builder, schema, write through the store), `jd approve` (arguments, order, refusals, output), and the minimal look at earlier approvals that refuses a repeat and counts (`ApprovalRecord.ApproversAsync`: same environment, set and `qualifiedOn`); Azure test: the approve flow on real records | ~150 |
+| **S19 promote** | the approval reader (the valid-approval filter of section 5 step 3, with its tests: edited `setSha256`, another directory, a schema failure, an edited `set.yaml`, another `qualifiedOn`, hand-placed approvals), `Evaluate` over the files, `jd promote` | |
 
-~430 in total; each part stands alone and keeps the gate green. **Split point for S18c:** the approval reader (the valid-approval filter of section 5 step 3) has no
-consumer until S19 and can move there (about 50 lines), leaving S18c at ~150; the lead decides when it sees S18c's size. S18b has no consumer until S18c, which is
+~430 in total; each part stands alone and keeps the gate green. **Split of S18c (taken):** the approval reader (the valid-approval filter of section 5 step 3) has no consumer until S19 and moved there with its tests (section 7); S18c keeps ~150 lines. S18b has no consumer until S18c, which is
 acceptable because its tests are the point. S18a can be built in parallel with S17c2 **except for the Azure gate**: S18a edits `EnvUpAzureTests` (the `stage` steps and the cleanup order),
 as S17c2 does, so their Azure runs are serial (one free-tier account, one lock) and the second to merge rebases. S18a needs S17c1 (it refuses `jd release qualify`, which S17c1 adds), S18b needs S17c1 (the `iq` field) and S18c needs S18a and S18b.
 
@@ -210,14 +211,13 @@ Security boundaries are tests, each shown to fail when the guard is removed (sta
   record beats an older passing one; `set.yaml` edited after the records is unqualified; OQ `unchanged` without an earlier `passed` is unqualified;
   an old IQ before a newer deploy, no `iq` at all, `iq: notRun` and `failed` are unqualified; an unreadable file is a reason, not a crash.
 - **S18c:**
-  - *Forging by editing a file:* an approval whose `setSha256` was edited, which sits in another label's or environment's directory, or that fails the
-    schema (extra property, missing identity) does not count; `set.yaml` edited after the approval makes it not count; an approval file is never opened for write
-    twice (an existing path fails, the old bytes stay); an approval whose `qualifiedOn` differs from the policy's does not count.
+  - *Forging by editing a file:* an approval file is never opened for write twice (an existing path fails, the old bytes stay). **S19** (the reader): an approval whose `setSha256` was edited, which sits in another label's or
+    environment's directory, or that fails the schema (extra property, missing identity) does not count; `set.yaml` edited after the approval makes it not count; an approval whose `qualifiedOn` differs from the policy's does not count.
   - *By a definition or a set:* text in a definition, set or `--meaning` that looks like an identity, a policy or JSON (`","identity":{…}`) cannot change
     the record: `identity` equals the port's value, the policy is the descriptor's, and the meaning appears only as the string; control characters in
     `--meaning` and a path in the label are rejected.
-  - *The deployer approving their own set:* refused when `separateFromDeployer`, accepted when not; a hand-placed approval by a deployer does not
-    count in `Evaluate` when separation is on; an unlisted approver is refused and a hand-placed approval by one does not count.
+  - *The deployer approving their own set:* refused when `separateFromDeployer`, accepted when not; an unlisted approver is refused. **S19:** a hand-placed approval by a deployer does not
+    count in `Evaluate` when separation is on, nor one by an unlisted approver.
   - Refusals 1 to 6 of section 4 each write nothing; a bad credential stops before the records are read; a repeat by the same principal is refused and a second principal is
     accepted with `required: 2`; the golden approval validates against its schema; nothing is written on a refusal.
 
@@ -228,7 +228,7 @@ Both are steps appended to `EnvUpAzureTests` (one scenario, because of the one f
 - **S18a:** `shared`, `dev` and `stage` up; the `stage` descriptor says `protected` and carries the policy; `db-stage` has 400 RU/s, the account limit is 1000, and no
   workload container has its own throughput; running `stage` again changes nothing. Cleanup deletes both environment groups before the shared one.
   The refusal of a direct deploy is proved offline only.
-- **S18c:** the test rewrites the `stage` definition before use, as it already renames environments: its `qualifiedOn` to the renamed `dev` (`s12dv<suffix>`) and the all-zero approver to the principal's
+- **S18c:** the test rewrites the `stage` descriptor that `env up` wrote (not the definition), each rewrite failing if its pattern does not match: its `qualifiedOn` to the renamed `dev` (`s12dv<suffix>`) and the all-zero approver to the principal's
   object id, read from a `dev` deploy record. After the existing deploy and qualify on `dev` (a record with `iq` passed): `approve` of an unknown label is refused; with the strict `stage` descriptor
   (the sandbox principal listed, `separateFromDeployer: true`) it is refused because the same principal deployed the set; with a relaxed copy it succeeds, the file's
   `identity.objectId` equals the `dev` deploy record's and `setSha256` equals the hash of `dev`'s `set.yaml`; a repeat is refused. After the existing out-of-band image mismatch step

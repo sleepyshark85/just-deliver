@@ -11,6 +11,7 @@ dotnet run --project src/jd.cli -- release create <manifest.yaml> --out <release
 dotnet run --project src/jd.cli -- release show <release-set.yaml>
 dotnet run --project src/jd.cli -- release deploy <release-set.yaml> --env <environment.yaml> --catalog <dir> [--preview]
 dotnet run --project src/jd.cli -- release qualify <release-set.yaml> --env <environment.yaml> --catalog <dir>
+dotnet run --project src/jd.cli -- approve <label> --env <environment.yaml> --meaning <text>
 dotnet run --project src/jd.cli -- deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
 dotnet run --project src/jd.cli -- env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
 dotnet run --project src/jd.cli -- --help
@@ -117,7 +118,7 @@ An environment whose **descriptor carries an `approval` block** is gated, whatev
 schemas only require the block for tier `protected`, so one cannot be written without it. A `protected` environment without an `approval` block fails the schema check (`NotAnyOf … PropertyRequired: #/approval`). `jd deploy`, `jd release deploy` and `jd release qualify`
 on a gated descriptor exit 1 with "environment '<name>' is gated by an approval policy: use `jd promote`" before the principal, `JD_RECORDS_DIR` or the
 backend is touched: no call, no record, no `set.yaml`. `--preview` is not refused (it creates nothing), and neither is `jd env up` (the substrate is not a
-release). `jd approve` and `jd promote`, the only way a set reaches a gated environment, are not built yet
+release). `jd approve` records an approval for a gated environment (below); `jd promote`, the only way a set reaches one, is not built yet
 ([approvals.md](architecture/approvals.md)).
 
 | Exit code | Meaning |
@@ -200,3 +201,22 @@ Checks, never changes: it makes no deploy call. It runs every check and lists ev
   it and the `iq` verdict (`passed` or `failed`, its time and each check); it has no run, no OQ and no deploy time.
 - Exit 0 when IQ passes; exit 1 when it fails (each failure is a `jd: IQ failed: <workload>: <reason>` line) or when the record cannot be written.
   The deployment is left as it is.
+
+### `jd approve`
+
+`jd approve <label> --env <stage.env.yaml> --meaning <text>` records that the principal of the `ARM_*` credential approves the set that is kept for `<label>`
+(`<JD_RECORDS_DIR>/<qualifiedOn>/<label>/set.yaml`) for a gated environment. `--env` is the target's descriptor, which carries the `approval` policy
+(`qualifiedOn`, `required`, `approvers`, `separateFromDeployer`). The approver is a **service principal**, so `approvers` lists principals, and
+separation from the deployer means something only when each approver and each deployer has its own. Needs `JD_RECORDS_DIR` and the `ARM_*` variables
+(no catalog, no backend). `--meaning` is required: 1 to 500 characters, no control characters; it is recorded and printed, never interpreted.
+
+Exit 1 with a message naming the cause, and nothing written, when: the descriptor has no `approval` block; the label is unknown on `qualifiedOn`
+(or its `set.yaml` or directory cannot be read, which is said as such); the set is not qualified on `qualifiedOn` (every reason is listed); the principal
+is not in `approvers`; `separateFromDeployer` is on and the principal deployed the label on `qualifiedOn`; or the principal already approved this set for this
+environment. A bad credential stops before any record is read (exit 1). Exit 2: a missing or empty `--meaning`, a label that is not a release label (or is a path), an unreadable `--env`,
+a missing `JD_RECORDS_DIR`.
+
+It writes `<JD_RECORDS_DIR>/<target>/<label>/<UTC time>-approve.json` (`kind: ApprovalRecord`, [schema](../schemas/approval-record.schema.json); created once,
+never edited) and prints `approved <label> for <env> (<n> of <required>)` and `record: <path>`. The record names the target, the label, the SHA-256 of the
+kept `set.yaml` (the approval binds the set, not a record), `qualifiedOn`, the principal as the credential reports it and the meaning. A repeat is refused as a
+convenience, not a lock; `jd promote` counts distinct principals. Approvals are not revoked: a withdrawn release gets a new label.

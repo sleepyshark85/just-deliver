@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using jd.bp.pulumi;
@@ -17,8 +18,9 @@ namespace jd.cli.tests;
 /// deployed on <c>dev</c> (<c>jd release create</c>, <c>jd release deploy</c>): the workloads get distinct containers in the dev database
 /// without throughput of their own, so the free-tier RU/s budget holds, and a second deploy changes nothing. Then a release whose first
 /// workload's <c>/health</c> fails (its container does not exist) stops at the probe with traffic still on the good revision and the
-/// later workload untouched, and the good release deployed again goes live as a new revision. Last, <c>jd release qualify</c> passes on the live
-/// good release, then fails after the worker's image is changed out of band, naming the image check. It is one scenario because
+/// later workload untouched, and the good release deployed again goes live as a new revision. Then <c>jd release qualify</c> passes on the live
+/// good release; <c>jd approve</c> refuses an unknown label and, under the strict <c>stage</c> policy, the principal that deployed the set, then records an approval
+/// under a relaxed policy and refuses a repeat. Last, the worker's image is changed out of band: <c>qualify</c> fails naming the image check and <c>approve</c> is refused as not qualified. It is one scenario because
 /// Azure allows one free-tier Cosmos account per subscription and the substrate here is that account. Always deletes the resource
 /// groups it created. Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>,
 /// <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI, and a subscription
@@ -54,8 +56,8 @@ public sealed class EnvUpAzureTests : IDisposable
     }
 
     // The groups are named after their environment, so the suffix finds them even when a deploy failed before writing a descriptor.
-    // A failed teardown fails the test: a resource group left behind must never go unnoticed. The shared group goes last: the
-    // Container Apps environment of every other group logs to its workspace.
+    // A failed teardown fails the test: a resource group left behind must never go unnoticed. The environment groups are deleted in
+    // parallel (each takes about 27 minutes), the shared group last: the Container Apps environment of every other group logs to its workspace.
     private List<string> TestGroups()
     {
         var list = _az.Run("group", "list", "--subscription", _az.Subscription, "--query", $"[?tags.project=='just-deliver-mvp' && contains(name, '{_suffix}')].name", "-o", "tsv");
@@ -66,19 +68,40 @@ public sealed class EnvUpAzureTests : IDisposable
 
     private void DeleteResourceGroups()
     {
-        foreach (var group in TestGroups())
+        var groups = TestGroups();
+        var environments = groups.Where(g => !g.Contains(SharedName, StringComparison.Ordinal)).ToList();
+        foreach (var group in environments)
         {
-            var delete = _az.Run("group", "delete", "--name", group, "--subscription", _az.Subscription, "--yes");
-            if (delete.Code != 0)
+            Delete(group, "--no-wait");
+        }
+
+        foreach (var group in environments)
+        {
+            var wait = _az.Run("group", "wait", "--deleted", "--name", group, "--subscription", _az.Subscription, "--timeout", "3600");
+            if (wait.Code != 0)
             {
-                throw new InvalidOperationException($"Could not delete resource group {group}; run tools/azure/cleanup.sh --yes --all. {delete.Error}");
+                throw new InvalidOperationException($"Resource group {group} was not deleted; run tools/azure/cleanup.sh --yes --all. {wait.Error}");
             }
+        }
+
+        foreach (var group in groups.Except(environments))
+        {
+            Delete(group);
         }
 
         var left = TestGroups();
         if (left.Count > 0)
         {
             throw new InvalidOperationException($"Resource groups left behind: {string.Join(", ", left)}; run tools/azure/cleanup.sh --yes --all.");
+        }
+    }
+
+    private void Delete(string group, params string[] extra)
+    {
+        var delete = _az.Run(["group", "delete", "--name", group, "--subscription", _az.Subscription, "--yes", .. extra]);
+        if (delete.Code != 0)
+        {
+            throw new InvalidOperationException($"Could not delete resource group {group}; run tools/azure/cleanup.sh --yes --all. {delete.Error}");
         }
     }
 
@@ -146,6 +169,33 @@ public sealed class EnvUpAzureTests : IDisposable
     private static string Iq(JsonElement record) => record.GetProperty("iq").GetProperty("status").GetString() ?? string.Empty;
 
     private static string Oq(JsonElement record, int workload) => record.GetProperty("workloads")[workload].GetProperty("oq").GetProperty("status").GetString() ?? string.Empty;
+
+    // The stage descriptor with its policy pointed at the renamed dev and at the principal that ran the deploys (the sandbox has one), strict or relaxed about separation.
+    private string StagePolicy(string stageDescriptor, string file, string principal, bool separate)
+    {
+        var text = ReplaceRequired(File.ReadAllText(stageDescriptor), @"qualifiedOn:\s*dev\b", $"qualifiedOn: {DevName}");
+        text = ReplaceRequired(text, "00000000-0000-0000-0000-000000000000", principal);
+        var path = Path.Combine(_root, file);
+        File.WriteAllText(path, ReplaceRequired(text, @"separateFromDeployer:\s*true", $"separateFromDeployer: {(separate ? "true" : "false")}"));
+        return path;
+    }
+
+    // A rewrite of a descriptor that must change it: a pattern that no longer matches fails the test instead of leaving the text as it was.
+    private static string ReplaceRequired(string text, string pattern, string replacement)
+    {
+        Assert.Matches(pattern, text);
+        return Regex.Replace(text, pattern, replacement.Replace("$", "$$", StringComparison.Ordinal));
+    }
+
+    private async Task<(int Code, string Output)> ApproveAsync(string label, string stageDescriptor)
+    {
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var code = await Cli.RunAsync(
+            ["approve", label, "--env", stageDescriptor, "--meaning", "Azure test: reviewed the evidence."], stdout, stderr, CancellationToken.None,
+            environmentVariable: name => name == "JD_RECORDS_DIR" ? Records : System.Environment.GetEnvironmentVariable(name));
+        return (code, stdout + stderr.ToString());
+    }
 
     // The value of an environment variable of the Container App's container (its Azure resource id).
     private string AppEnv(string appId, string name)
@@ -376,6 +426,30 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal("passed", qualified.GetProperty("iq").GetProperty("status").GetString());
         Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), qualified.GetProperty("identity").GetProperty("clientId").GetString());
 
+        // Approval: the stage policy names the renamed dev and the principal that ran the deploys. An unknown label is refused; under the strict policy the
+        // principal is refused as the deployer of the set; under the relaxed copy it is approved, the record names the deployer's own identity and the hash of dev's
+        // set.yaml, and a repeat is refused. (Separation between different principals is proved offline: the sandbox has one.)
+        var principal = RecordsOf("1.0.0")[0].GetProperty("identity").GetProperty("objectId").GetString()!;
+        var strictStage = StagePolicy(stageDescriptor, "strict.stage.env.yaml", principal, separate: true);
+        var relaxedStage = StagePolicy(stageDescriptor, "relaxed.stage.env.yaml", principal, separate: false);
+        var (unknownCode, unknownOutput) = await ApproveAsync("9.9.9", relaxedStage);
+        Assert.Equal(1, unknownCode);
+        Assert.Contains("unknown label", unknownOutput, StringComparison.Ordinal);
+        var (strictCode, strictOutput) = await ApproveAsync("1.0.0", strictStage);
+        Assert.Equal(1, strictCode);
+        Assert.Contains($"principal {principal} deployed 1.0.0 on {DevName}", strictOutput, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(Records, StageName)), "a refusal wrote a record");
+        var (approvedCode, approvedOutput) = await ApproveAsync("1.0.0", relaxedStage);
+        Assert.True(approvedCode == 0, approvedOutput);
+        Assert.Contains($"approved 1.0.0 for {StageName} (1 of 1)", approvedOutput, StringComparison.Ordinal);
+        using var approval = JsonDocument.Parse(File.ReadAllText(Assert.Single(Directory.GetFiles(Path.Combine(Records, StageName, "1.0.0"), "*-approve.json"))));
+        Assert.Equal(principal, approval.RootElement.GetProperty("identity").GetProperty("objectId").GetString());
+        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), approval.RootElement.GetProperty("identity").GetProperty("clientId").GetString());
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(Records, DevName, "1.0.0", "set.yaml")))), approval.RootElement.GetProperty("release").GetProperty("setSha256").GetString());
+        var (repeatCode, repeatOutput) = await ApproveAsync("1.0.0", relaxedStage);
+        Assert.Equal(1, repeatCode);
+        Assert.Contains("already approved", repeatOutput, StringComparison.Ordinal);
+
         // The image of the worker's app is changed out of band, and that revision is given all the traffic. The quickstart image is a small public
         // Microsoft image that needs no registry login; it listens on port 80, so the app's ingress is pointed there first, for the new revision to start serving.
         const string OtherImage = "mcr.microsoft.com/k8se/quickstart:latest";
@@ -404,5 +478,11 @@ public sealed class EnvUpAzureTests : IDisposable
         var failedIq = QualifyRecordsOf("1.0.0");
         Assert.Equal(2, failedIq.Count);
         Assert.Equal("failed", failedIq[1].GetProperty("iq").GetProperty("status").GetString());
+
+        // Approval follows the current evidence: with the image out of band the newest record says IQ failed, so the set is no longer qualified and nothing more is written.
+        var (staleCode, staleOutput) = await ApproveAsync("1.0.0", relaxedStage);
+        Assert.Equal(1, staleCode);
+        Assert.Contains($"release 1.0.0 is not qualified on {DevName}", staleOutput, StringComparison.Ordinal);
+        Assert.Single(Directory.GetFiles(Path.Combine(Records, StageName, "1.0.0"), "*-approve.json"));
     }
 }

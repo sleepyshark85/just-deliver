@@ -15,7 +15,7 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
   not in the environment descriptor: the descriptor is generated from the substrate's outputs and describes the environment, not where
   the operator keeps evidence.
 - **One file per attempt, never per label:** `<records>/<environment>/<label>/<UTC yyyyMMddTHHmmssfffZ>-<activity>.json`, activity
-  `deploy` or `qualify`. The environment name and the label are both format-restricted (they match the id and label patterns), and the store
+  `deploy` or `qualify` (the approvals of [approvals.md](approvals.md) are `<time>-approve.json` files of the same store, in the gated environment's directory; they are not release records). The environment name and the label are both format-restricted (they match the id and label patterns), and the store
   rejects anything with a separator or `..` anyway.
 - **Write-once:** the file is created with `FileMode.CreateNew` (as `ReleaseSetFile` does), so an existing path is an error and
   nothing is ever opened for write twice. The time in the name is the **finish** time (when the file is written), so the newest file is the

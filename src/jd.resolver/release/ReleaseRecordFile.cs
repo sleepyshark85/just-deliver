@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace jd.resolver.release;
 
@@ -17,6 +18,9 @@ public static class ReleaseRecordFile
 
     /// <summary>The activity of a record written by <c>release qualify</c>.</summary>
     public const string QualifyActivity = "qualify";
+
+    /// <summary>The activity of an approval record written by <c>jd approve</c>; not a release record, so <see cref="SplitName"/> does not know it.</summary>
+    public const string ApproveActivity = "approve";
 
     /// <summary>The outcome of a deploy in which every workload succeeded.</summary>
     public const string SucceededOutcome = "succeeded";
@@ -81,16 +85,33 @@ public static class ReleaseRecordFile
             ? (fileName[..^NameEnd(activity).Length], activity)
             : null;
 
-    private static string NameEnd(string activity) => $"-{activity}.json";
+    internal static string NameEnd(string activity) => $"-{activity}.json";
 
-    // Both names come from validated formats; the store still refuses anything that could leave its directory.
-    internal static string LabelDirectory(string recordsDirectory, string environment, string label)
+    // The shape of a release label: the pattern of release.label in schemas/approval-record.schema.json, except that it ends in \z. The schema
+    // reads $ as the end of the string; in .NET $ also matches before a final newline, which would let "1.0.0\n" name a directory.
+    private const string LabelPattern = @"^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?\z";
+
+    /// <summary>Why <paramref name="label"/> cannot name a release (it is not label-shaped, or not one path segment); null when it can.</summary>
+    public static string? LabelProblem(string label) =>
+        SegmentProblem(label) ?? (Regex.IsMatch(label, LabelPattern, RegexOptions.CultureInvariant) ? null : $"'{label}' is not a release label (like 1.0.0 or 1.0.0-rc.1).");
+
+    /// <summary>Why <paramref name="segment"/> cannot name a directory of the store (empty, or contains '..', '/' or '\\'); null when it can.</summary>
+    private static string? SegmentProblem(string segment) =>
+        segment.Length == 0 || segment.Contains("..", StringComparison.Ordinal) || segment.AsSpan().IndexOfAny('/', '\\') >= 0
+            ? $"'{segment}' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'."
+            : null;
+
+    /// <summary>
+    /// The directory of a label's files. Both names come from validated formats; the store still refuses anything that could leave its directory:
+    /// throws <see cref="ArgumentException"/> for an environment or label that is not a single path segment.
+    /// </summary>
+    public static string LabelDirectory(string recordsDirectory, string environment, string label)
     {
         foreach (var segment in new[] { environment, label })
         {
-            if (segment.Length == 0 || segment.Contains("..", StringComparison.Ordinal) || segment.AsSpan().IndexOfAny('/', '\\') >= 0)
+            if (SegmentProblem(segment) is { } problem)
             {
-                throw new ArgumentException($"'{segment}' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.");
+                throw new ArgumentException(problem);
             }
         }
 
