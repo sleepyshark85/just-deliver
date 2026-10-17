@@ -7,6 +7,7 @@
     <EmbeddedResource Include="../../schemas/environment-definition.schema.json" LogicalName="schemas/environment-definition.schema.json" />
     <EmbeddedResource Include="../../schemas/release-manifest.schema.json" LogicalName="schemas/release-manifest.schema.json" />
     <EmbeddedResource Include="../../schemas/release-set.schema.json" LogicalName="schemas/release-set.schema.json" />
+    <EmbeddedResource Include="../../schemas/release-record.schema.json" LogicalName="schemas/release-record.schema.json" />
   </ItemGroup>
 
   <ItemGroup>

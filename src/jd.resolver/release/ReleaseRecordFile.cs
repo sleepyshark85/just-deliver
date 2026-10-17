@@ -10,9 +10,9 @@ namespace jd.resolver.release;
 /// </summary>
 public static class ReleaseRecordFile
 {
-    private const string SetFileName = "set.yaml";
+    internal const string SetFileName = "set.yaml";
 
-    private const string TimeFormat = "yyyyMMdd'T'HHmmssfff'Z'";
+    internal const string TimeFormat = "yyyyMMdd'T'HHmmssfff'Z'";
 
     /// <summary>
     /// Keeps the set's bytes beside the label's records: creates <c>set.yaml</c> on the label's first attempt, and on every later one
@@ -55,7 +55,7 @@ public static class ReleaseRecordFile
     }
 
     // Both names come from validated formats; the store still refuses anything that could leave its directory.
-    private static string LabelDirectory(string recordsDirectory, string environment, string label)
+    internal static string LabelDirectory(string recordsDirectory, string environment, string label)
     {
         foreach (var segment in new[] { environment, label })
         {
