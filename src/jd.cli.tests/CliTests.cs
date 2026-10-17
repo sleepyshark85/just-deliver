@@ -129,6 +129,21 @@ public sealed class CliTests : IDisposable
         Assert.Contains("  variables.APPLICATIONINSIGHTS_CONNECTION_STRING = pending: ${appinsights.connectionString}   [PolicySet: enforce-monitoring (policies/enforce-monitoring.yaml)]", stdout);
     }
 
+    // Success criterion 5: a policy that exists only as a catalog file changes what preview shows, with the policy named as the provenance.
+    [Fact]
+    public async Task A_policy_added_as_a_catalog_file_only_shows_in_the_preview()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        WriteTemp("catalog/policies/limit-revisions.yaml", "kind: Policy\nname: limit-revisions\nreason: Keep fewer inactive revisions\nmatch: { template: azure/container-app }\nset: { maxInactiveRevisions: 2 }\n");
+
+        var (code, stdout, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.True(code == 0, stderr);
+        Assert.Contains("  maxInactiveRevisions = 2   [PolicySet: limit-revisions (policies/limit-revisions.yaml)]", stdout);
+        Assert.DoesNotContain("  maxInactiveRevisions = 5   [Mapping: mappings/runtime/container-app.yaml]", stdout);
+    }
+
     [Fact]
     public async Task Preview_json_equals_the_golden_snapshot()
     {
