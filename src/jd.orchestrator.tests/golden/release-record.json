@@ -297,5 +297,25 @@
   ],
   "outcome": "succeeded",
   "deploySeconds": 42.5,
+  "iq": {
+    "status": "passed",
+    "elapsedSeconds": 12.5,
+    "checks": [
+      {
+        "workload": "shop",
+        "kind": "drift",
+        "subject": "shop/dev/@workload/runtime",
+        "status": "passed",
+        "detail": ""
+      },
+      {
+        "workload": "shop",
+        "kind": "image",
+        "subject": "app--r1",
+        "status": "passed",
+        "detail": ""
+      }
+    ]
+  },
   "notStarted": []
 }

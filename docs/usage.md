@@ -149,7 +149,11 @@ Exit codes are the same as above (a manifest, set or `--out` path problem is 2; 
   (and the failing workload and node, and the workloads not started), who deployed, what was pinned (hashes, not config), what ran with change
   **counts**, timings, and the operational qualification (OQ) of each workload read from its probe: `passed`, `failed`, `unchanged` (the revision
   was already live) or `notRun`. Contract: `schemas/release-record.schema.json`; design: [release-record.md](architecture/release-record.md).
-  A deploy does not run IQ yet (a later slice); `jd release qualify` does.
+  A deploy that succeeded then runs **IQ** (the same checks as `jd release qualify`, below) and the record carries it as `iq`: `passed`, `failed`, or `notRun`
+  when a workload failed (a failed deploy runs no IQ). `deploySeconds` is the deploy walk alone; the IQ time is `iq.elapsedSeconds`, so the IQ walk (roughly
+  one more pass over every node) is slower than the deploy time suggests. **If IQ fails, the command exits 1** and prints each failure as
+  `jd: IQ failed: <workload>: <reason>`; the record reads `outcome: succeeded` with `iq.status: failed` and the deployment is left as it is (no rollback). It needs
+  the `ARM_*` principal to read the live revisions.
   - `JD_RECORDS_DIR` is **required**: an existing directory (exit 2 and what to set otherwise, before anything is created). Keep it
     somewhere durable; it is the evidence, and nothing in it is a secret.
   - **Who deployed** is the service principal in `ARM_TENANT_ID`, `ARM_CLIENT_ID` and `ARM_CLIENT_SECRET` (the variables Pulumi uses too),

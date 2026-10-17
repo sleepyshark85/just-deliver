@@ -335,10 +335,34 @@ public partial class OrchestratorTests
     }
 
     [Fact]
+    public async Task A_deploy_record_never_holds_a_secret_output_or_a_changed_property_value_in_its_iq()
+    {
+        var (backend, graphs, catalog) = await DeployedAsync();
+        var secret = backend.State["shop.dev.thing.group"]["key"].Value;
+        Assert.False(string.IsNullOrEmpty(secret));
+        backend.PreviewSummaries["shop.dev.thing.app"] = new() { ["Update"] = 1 };
+        backend.PreviewChanges["shop.dev.thing.app"] =
+            [new ResourceChange { Urn = "urn", Type = "t", Operation = "update", ChangedProperties = [new PropertyChange { Path = "p", OldValue = "old-secret-value", NewValue = "new-secret-value" }] }];
+        var iq = await QualifyAsync(backend, graphs, catalog, new FakeLiveRevisions(id => OneAnswer(id)));
+        Assert.Contains(iq.Checks, c => !c.Passed);
+
+        var (set, deployedGraphs, runs) = await ReleaseRunAsync(new FakeBackend(), null, "shop");
+        var json = Record(set, deployedGraphs, runs, iq: iq);
+
+        foreach (var hidden in new[] { secret!, "old-secret-value", "new-secret-value" })
+        {
+            Assert.DoesNotContain(hidden, json, StringComparison.Ordinal);
+        }
+
+        await AssertValidAsync(json);
+        Assert.Equal("failed", (string?)Parse(json)["iq"]!["status"]);
+    }
+
+    [Fact]
     public async Task The_schema_requires_the_deploy_fields_of_a_deploy_and_the_iq_and_no_deploy_field_of_a_qualify()
     {
         var (set, graphs, runs) = await ReleaseRunAsync(new FakeBackend(), null, "shop");
-        var deploy = Parse(Record(set, graphs, runs));
+        var deploy = Parse(Record(set, graphs, runs, iq: PassingIq));
         var (qualify, _) = await QualifyRecordAsync();
 
         foreach (var field in new[] { "outcome", "deploySeconds", "notStarted" })
@@ -348,6 +372,18 @@ public partial class OrchestratorTests
             await AssertInvalidAsync(without.ToString());
         }
 
+        var noDeployIq = (JObject)deploy.DeepClone();
+        noDeployIq.Remove("iq");
+        await AssertInvalidAsync(noDeployIq.ToString());
+        var notRunQualify = Parse(qualify);
+        notRunQualify["iq"]!["status"] = "notRun";
+        await AssertInvalidAsync(notRunQualify.ToString());
+        var notRunDeploy = (JObject)deploy.DeepClone();
+        notRunDeploy["iq"]!["status"] = "notRun";
+        await AssertValidAsync(notRunDeploy.ToString());
+        var unknownStatus = (JObject)deploy.DeepClone();
+        unknownStatus["iq"]!["status"] = "skipped";
+        await AssertInvalidAsync(unknownStatus.ToString());
         var noOq = (JObject)deploy.DeepClone();
         ((JObject)noOq["workloads"]![0]!).Remove("oq");
         await AssertInvalidAsync(noOq.ToString());

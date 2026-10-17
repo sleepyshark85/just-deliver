@@ -65,6 +65,7 @@ public sealed partial class ReleaseDeployCliTests
         await RunAsync(new RecordingBackend(), Deploy(set));
         var other = await CreateSetAsync(app => app.Replace("LOG_LEVEL: info", "LOG_LEVEL: debug"), "other.yaml");
         var backend = new RecordingBackend { Deployed = true };
+        _live.Calls.Clear(); // the deploy above qualified itself
 
         var (code, _, stderr) = await RunAsync(backend, Qualify(other));
 

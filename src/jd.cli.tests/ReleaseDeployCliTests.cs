@@ -1,4 +1,5 @@
 using jd.core.identity;
+using jd.core.revisions;
 using Xunit;
 
 namespace jd.cli.tests;
@@ -20,6 +21,7 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     private IDeployerIdentity? _port;
     private StepClock _clock = new();
     private readonly FakeLiveRevisions _live = new();
+    private ILiveRevisions? _reader; // what the run is given; null makes it build its own from the ARM_* variables
 
     // JD_RECORDS_DIR as the run sees it: the temp records directory unless a test changes it.
     private readonly string _records;
@@ -31,6 +33,7 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     public ReleaseDeployCliTests()
     {
         _port = _identity;
+        _reader = _live;
         Directory.CreateDirectory(_records = Path.Combine(_temp, "records"));
         _recordsVariable = _records;
     }
@@ -41,7 +44,7 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, name => name == "JD_RECORDS_DIR" ? _recordsVariable : _variables.GetValueOrDefault(name), backend, _port, _clock, _live);
+        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, name => name == "JD_RECORDS_DIR" ? _recordsVariable : _variables.GetValueOrDefault(name), backend, _port, _clock, _reader);
         return (code, stdout.ToString(), stderr.ToString());
     }
 
@@ -78,13 +81,14 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
         Assert.Equal(0, code);
         Assert.Empty(stderr);
         // Per workload: its infrastructure, its runtime, the grants (inside the runtime's Grants step), then the probe of the new revision and the shift.
-        Assert.Equal(14, backend.Calls.Count);
+        var walk = backend.Calls.Where(c => !c.StartsWith("preview ", StringComparison.Ordinal)).ToList(); // the IQ after it only previews
+        Assert.Equal(14, walk.Count);
         foreach (var (name, first) in new[] { (Worker, 0), (App, 7) })
         {
-            Assert.Equal([$"deploy {name}.dev._workload.appinsights", $"deploy {name}.dev.database.container", $"deploy {name}.dev._workload.runtime"], backend.Calls.Skip(first).Take(3));
-            Assert.Equal([$"deploy {name}.dev._workload.appinsights-access", $"deploy {name}.dev.database.access"], backend.Calls.Skip(first + 3).Take(2).Order(StringComparer.Ordinal));
-            Assert.Equal("probe out-latestRevisionFqdn/health", backend.Calls[first + 5]);
-            Assert.Equal($"deploy {name}.dev._workload.runtime", backend.Calls[first + 6]); // the shift
+            Assert.Equal([$"deploy {name}.dev._workload.appinsights", $"deploy {name}.dev.database.container", $"deploy {name}.dev._workload.runtime"], walk.Skip(first).Take(3));
+            Assert.Equal([$"deploy {name}.dev._workload.appinsights-access", $"deploy {name}.dev.database.access"], walk.Skip(first + 3).Take(2).Order(StringComparer.Ordinal));
+            Assert.Equal("probe out-latestRevisionFqdn/health", walk[first + 5]);
+            Assert.Equal($"deploy {name}.dev._workload.runtime", walk[first + 6]); // the shift
         }
 
         var lines = stdout.ReplaceLineEndings("\n");
