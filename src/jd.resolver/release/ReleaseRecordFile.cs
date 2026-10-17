@@ -12,17 +12,26 @@ public static class ReleaseRecordFile
 {
     internal const string SetFileName = "set.yaml";
 
+    /// <summary>The activity of a record written by <c>release deploy</c>.</summary>
     public const string DeployActivity = "deploy";
+
+    /// <summary>The activity of a record written by <c>release qualify</c>.</summary>
     public const string QualifyActivity = "qualify";
+
+    /// <summary>The outcome of a deploy in which every workload succeeded.</summary>
+    public const string SucceededOutcome = "succeeded";
 
     /// <summary>The status a passing OQ or IQ has in a record.</summary>
     public const string PassedStatus = "passed";
+
+    /// <summary>The OQ status of a workload that was not changed by the deploy, so its OQ did not run again.</summary>
+    public const string UnchangedStatus = "unchanged";
 
     /// <summary>The format of the times inside a release set and a release record (UTC, to the second).</summary>
     public const string DocumentTimeFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
     // The time in a record's file name (to the millisecond, so two attempts in one second do not collide).
-    internal const string TimeFormat = "yyyyMMdd'T'HHmmssfff'Z'";
+    internal const string NameTimeFormat = "yyyyMMdd'T'HHmmssfff'Z'";
 
     private static readonly string[] Activities = [DeployActivity, QualifyActivity];
 
@@ -60,7 +69,7 @@ public static class ReleaseRecordFile
     {
         var directory = LabelDirectory(recordsDirectory, environment, label);
         Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, at.UtcDateTime.ToString(TimeFormat, CultureInfo.InvariantCulture) + NameEnd(activity));
+        var path = Path.Combine(directory, at.UtcDateTime.ToString(NameTimeFormat, CultureInfo.InvariantCulture) + NameEnd(activity));
         await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
         await stream.WriteAsync(new UTF8Encoding(false).GetBytes(json), cancellationToken);
         return path;

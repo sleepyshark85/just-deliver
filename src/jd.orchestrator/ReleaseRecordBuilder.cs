@@ -35,7 +35,7 @@ public static class ReleaseRecordBuilder
         var failed = runs.FirstOrDefault(r => !r.Run.Succeeded);
         var record = Head(ReleaseRecordFile.DeployActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
             set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), runs.FirstOrDefault(r => r.Workload == name), deploy: true));
-        record["outcome"] = failed is null ? "succeeded" : "failed";
+        record["outcome"] = failed is null ? ReleaseRecordFile.SucceededOutcome : "failed";
         record["deploySeconds"] = Seconds(deployElapsed);
         record["iq"] = Iq(iq);
         record["notStarted"] = new JArray(set.Order.Where(name => runs.All(r => r.Workload != name)));
@@ -164,7 +164,7 @@ public static class ReleaseRecordBuilder
         var probe = run?.Run.Nodes.FirstOrDefault(n => n.NodeId == runtime.Id)?.Steps?.FirstOrDefault(s => s.Step == Step.Probe);
         var oq = new JObject
         {
-            ["status"] = probe?.Outcome switch { StepOutcome.Done => ReleaseRecordFile.PassedStatus, StepOutcome.Failed => "failed", StepOutcome.Skipped => "unchanged", _ => "notRun" },
+            ["status"] = probe?.Outcome switch { StepOutcome.Done => ReleaseRecordFile.PassedStatus, StepOutcome.Failed => "failed", StepOutcome.Skipped => ReleaseRecordFile.UnchangedStatus, _ => "notRun" },
             ["contract"] = new JObject { ["path"] = spec.Path, ["expectedStatus"] = spec.ExpectedStatus },
         };
         if (probe is { Outcome: StepOutcome.Done or StepOutcome.Failed })

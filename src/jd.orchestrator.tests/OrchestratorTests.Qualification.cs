@@ -204,19 +204,29 @@ public partial class OrchestratorTests
         await File.WriteAllTextAsync(Path.Combine(ledger.LabelDirectory, "20261017T080200000Z-deploy.json"), string.Empty);
         await File.WriteAllTextAsync(Path.Combine(ledger.LabelDirectory, "20261017T080300000Z-qualify.json"), "[1, 2]");
         File.CreateSymbolicLink(Path.Combine(ledger.LabelDirectory, "20261017T080400000Z-deploy.json"), Path.Combine(ledger.Records, "gone.json"));
-        var noAccess = Path.Combine(ledger.LabelDirectory, "20261017T080500000Z-deploy.json");
-        await File.WriteAllTextAsync(noAccess, "{}");
-        var restricted = TryRestrict(noAccess, UnixFileMode.None);
-        if (!restricted)
-        {
-            File.Delete(noAccess);
-        }
 
         var result = await ledger.ReadAsync();
 
         Assert.False(result.Qualified);
-        Assert.Equal(restricted ? 4 : 3, result.Reasons.Count);
+        Assert.Equal(3, result.Reasons.Count);
         Assert.All(result.Reasons, r => Assert.Contains(": cannot be read: ", r, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_record_without_read_permission_is_a_reason_not_a_crash()
+    {
+        using var ledger = await Ledger.CreateAsync();
+        await ledger.DeployAsync(1, PassingIq);
+        var noAccess = Path.Combine(ledger.LabelDirectory, "20261017T080200000Z-deploy.json");
+        await File.WriteAllTextAsync(noAccess, "{}");
+        if (!TryRestrict(noAccess, UnixFileMode.None))
+        {
+            return;
+        }
+
+        var result = await ledger.ReadAsync();
+
+        Assert.StartsWith($"{Name(noAccess)}: cannot be read: ", OneReason(result), StringComparison.Ordinal);
     }
 
     [Fact]

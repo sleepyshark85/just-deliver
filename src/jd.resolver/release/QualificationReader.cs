@@ -128,7 +128,7 @@ public static class QualificationReader
         }
 
         var finished = (string?)body["finishedAt"];
-        return DateTimeOffset.TryParseExact(time, ReleaseRecordFile.TimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var named)
+        return DateTimeOffset.TryParseExact(time, ReleaseRecordFile.NameTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var named)
             && named.UtcDateTime.ToString(ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture) == finished
             ? null
             : $"finishedAt {finished} does not match the time '{time}' in its name.";
@@ -145,7 +145,7 @@ public static class QualificationReader
         }
 
         var newest = deploys[^1];
-        if ((string?)newest.Body["outcome"] != "succeeded")
+        if ((string?)newest.Body["outcome"] != ReleaseRecordFile.SucceededOutcome)
         {
             yield return $"the newest deploy ({newest.Name}) failed.";
         }
@@ -155,9 +155,9 @@ public static class QualificationReader
             var name = (string)workload["name"]!;
             var status = (string)workload["oq"]!["status"]!;
             // An unchanged workload counts only on an earlier pass; the newest deploy itself says unchanged here, so it cannot be the pass.
-            if (status != ReleaseRecordFile.PassedStatus && !(status == "unchanged" && deploys.Any(d => PassedOq(d, name))))
+            if (status != ReleaseRecordFile.PassedStatus && !(status == ReleaseRecordFile.UnchangedStatus && deploys.Any(d => PassedOq(d, name))))
             {
-                yield return $"workload {name}: OQ is {status}{(status == "unchanged" ? " and no earlier deploy passed it" : string.Empty)}.";
+                yield return $"workload {name}: OQ is {status}{(status == ReleaseRecordFile.UnchangedStatus ? " and no earlier deploy passed it" : string.Empty)}.";
             }
         }
 
