@@ -21,5 +21,8 @@ export JD_RECORDS_DIR="<absolute path to an existing directory>"
 # The walkthrough's own working directory: descriptors, release sets, catalog copy, policy variants.
 export JD_WALK="<absolute path to an existing directory>"
 
+# az signed in as the deployer in its own config directory, apart from any personal login (as the Azure tests do).
+export AZURE_CONFIG_DIR="$JD_WALK/az"
+
 # jd from source, run from the repository root.
 jd() { dotnet run --project src/jd.cli -- "$@"; }
