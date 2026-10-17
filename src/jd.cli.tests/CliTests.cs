@@ -144,6 +144,43 @@ public sealed class CliTests : IDisposable
         Assert.DoesNotContain("  maxInactiveRevisions = 5   [Mapping: mappings/runtime/container-app.yaml]", stdout);
     }
 
+    // The manual-test kit (samples/walkthrough, docs/walkthrough.md) cannot rot unseen: every workload previews, every manifest makes a set whose
+    // deploy preview (set check, resolution of every workload, template check, the walk) passes with the app before the worker, and the
+    // scenario-5 policy, copied into a catalog copy, shows in the preview.
+    [Fact]
+    public async Task The_walkthrough_kit_passes_the_offline_checks_and_its_policy_shows_in_the_preview()
+    {
+        var kit = Path.Combine(AppContext.BaseDirectory, "samples", "walkthrough");
+        var workloads = Directory.GetFiles(Path.Combine(kit, "workloads"), "*.yaml");
+        var manifests = Directory.GetFiles(Path.Combine(kit, "releases"), "*.manifest.yaml");
+        Assert.NotEmpty(workloads);
+        Assert.NotEmpty(manifests);
+        foreach (var workload in workloads)
+        {
+            var (code, _, stderr) = await RunAsync("preview", workload, "--env", Environment, "--catalog", Catalog);
+            Assert.True(code == 0, $"{workload}: {stderr}");
+        }
+
+        foreach (var manifest in manifests)
+        {
+            var set = Path.Combine(_temp, Path.GetFileName(manifest) + ".set.yaml");
+            var (created, _, createError) = await RunAsync("release", "create", manifest, "--out", set);
+            Assert.True(created == 0, $"{manifest}: {createError}");
+            var (code, stdout, stderr) = await RunWithAsync(new RecordingBackend(), "release", "deploy", set, "--env", Environment, "--catalog", Catalog, "--preview");
+            Assert.True(code == 0, $"{manifest}: {stderr}");
+            Assert.Matches(@"release \S+ on dev: 2 previewed, 0 failed, 0 not started\.", stdout);
+            var app = stdout.IndexOf("workload just-deliver-sample-app", StringComparison.Ordinal);
+            Assert.True(app >= 0 && app < stdout.IndexOf("workload just-deliver-sample-worker", StringComparison.Ordinal), stdout);
+        }
+
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        File.Copy(Path.Combine(kit, "policies", "limit-revisions.yaml"), Path.Combine(catalog, "policies", "limit-revisions.yaml"));
+        var (previewed, preview, previewError) = await RunAsync("preview", Path.Combine(kit, "workloads", "app.yaml"), "--env", Environment, "--catalog", catalog);
+        Assert.True(previewed == 0, previewError);
+        Assert.Contains("  maxInactiveRevisions = 2   [PolicySet: limit-revisions (policies/limit-revisions.yaml)]", preview);
+    }
+
     [Fact]
     public async Task Preview_json_equals_the_golden_snapshot()
     {

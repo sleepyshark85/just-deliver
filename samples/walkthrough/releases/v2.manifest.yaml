@@ -1,0 +1,10 @@
+# Release v2: only the second workload (the worker) changes (scenario 3).
+kind: ReleaseManifest
+label: 1.2.0
+
+# The worker depends on the app (ordering only), so the app is deployed first. Paths are relative to this file.
+workloads:
+  - definition: ../workloads/app.yaml
+  - definition: ../workloads/worker.v2.yaml
+    dependsOn:
+      - just-deliver-sample-app
