@@ -243,7 +243,9 @@ Both are steps appended to `EnvUpAzureTests` (one scenario, because of the one f
 - No Entra groups or roles, no PIM, no notifications, no expiry, no revocation or rejection record, no approval of a set that was qualified elsewhere than `qualifiedOn`,
   no per-tier SKUs, no separate subscription for stage, no Azure lock, no RBAC on the stage subscription (ADR 0008's control), no gate on substrate changes, no per-person sign-in (Open choices, 3).
 
-## Open choices for the user
+## Choices taken by the user (2026-10-17)
+
+The user chose **(a)** for each of the three; the options are kept for the record.
 
 1. **Where the approval policy lives.** (a, recommended) the environment definition and descriptor, as in section 3: one file per environment carries it, and per-installation
    data (environment names, Entra object ids) stays out of a catalog shared across subscriptions. (b) A catalog policy per tier (`kind: ApprovalPolicy`, `match: { tier: protected }`) for the
