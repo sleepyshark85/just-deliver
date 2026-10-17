@@ -108,6 +108,25 @@ public partial class OrchestratorTests
         Assert.Contains(Failures(result), f => f.StartsWith("node shop/dev/thing/app2 cannot be previewed (PendingUpstream)", StringComparison.Ordinal));
     }
 
+    // A preview that throws must never qualify: the failed node fails, and every node the walk did not reach after it fails as not checked.
+    [Fact]
+    public async Task A_node_whose_preview_fails_fails_and_every_node_after_it_fails_as_not_checked()
+    {
+        var (backend, graphs, catalog) = await DeployedAsync();
+        backend.PreviewFailOn = "shop.dev.thing.group";
+
+        var result = await QualifyAsync(backend, graphs, catalog, new FakeLiveRevisions(id => OneAnswer(id)));
+
+        Assert.False(result.Passed);
+        var drift = result.Checks.Where(c => c.Kind == IqCheckKind.Drift).ToList();
+        Assert.Equal(graphs[0].Nodes.Count, drift.Count);
+        Assert.All(drift, c => Assert.False(c.Passed, c.Subject));
+        Assert.Contains(drift, c => c.Failure == "node shop/dev/thing/group cannot be previewed (Failed): provider exploded");
+        Assert.All(drift.Where(c => c.Subject != "shop/dev/thing/group"), c => Assert.Contains("not checked", c.Failure, StringComparison.Ordinal));
+        // All checks run: the image check still read the live revisions.
+        Assert.Contains(result.Checks, c => c.Kind == IqCheckKind.Image && c.Passed);
+    }
+
     [Fact]
     public async Task A_different_image_with_a_clean_preview_fails_saying_what_was_pinned_and_what_runs_on_which_revision()
     {
