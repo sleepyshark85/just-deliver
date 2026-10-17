@@ -209,17 +209,21 @@ public sealed partial class ReleaseDeployCliTests
     }
 
     [Theory]
-    [InlineData("../1.0.0")]
-    [InlineData("a/b")]
-    [InlineData("a\\b")]
-    public async Task A_label_with_a_path_in_it_is_a_usage_error_before_the_credential_and_nothing_is_created(string label)
+    [InlineData("../1.0.0", "cannot name a directory")]
+    [InlineData("a/b", "cannot name a directory")]
+    [InlineData("a\\b", "cannot name a directory")]
+    [InlineData("1.0.0-a..b", "cannot name a directory")]
+    [InlineData("foo", "is not a release label")]
+    [InlineData(".", "is not a release label")]
+    public async Task A_label_that_is_not_label_shaped_is_a_usage_error_before_the_descriptor_the_records_and_the_credential(string label, string expected)
     {
-        var stage = await StageAsync();
+        _recordsVariable = null;
 
-        var (code, _, stderr) = await ApproveAsync(stage, label: label);
+        var (code, _, stderr) = await ApproveAsync(Environment, label: label); // an ungated descriptor and no records directory: only the label can be what is refused
 
         Assert.Equal(2, code);
-        Assert.Contains("cannot name a directory", stderr);
+        Assert.Contains(expected, stderr);
+        Assert.Contains("Usage:", stderr);
         Assert.Equal(0, _identity.Calls);
         Assert.Empty(Directory.GetFileSystemEntries(_records));
     }

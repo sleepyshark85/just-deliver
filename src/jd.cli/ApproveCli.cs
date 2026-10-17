@@ -54,11 +54,10 @@ internal static class ApproveCli
             return Invalid;
         }
 
-        var records = environmentVariable(ReleaseDeployCli.RecordsDirectoryVariable) ?? string.Empty;
-        problem = ReleaseDeployCli.RecordsDirectoryProblem(records) ?? LabelProblem(records, target.Name, options.Label);
-        if (problem is not null)
+        var records = environmentVariable(Cli.RecordsDirectoryVariable) ?? string.Empty;
+        if (Cli.RecordsDirectoryProblem(records) is { } recordsProblem)
         {
-            stderr.WriteLine($"jd: {problem}");
+            stderr.WriteLine($"jd: {recordsProblem}");
             return UsageError;
         }
 
@@ -100,14 +99,19 @@ internal static class ApproveCli
         }
 
         var approver = principal.ObjectId;
-        var earlier = await ApprovalRecord.ApproversAsync(records, target, label, setSha256, cancellationToken);
         var refusal = !policy.Counts(approver, []) ? $"principal {approver} is not listed in the approvers of '{target.Name}'."
             : !policy.Counts(approver, qualification.Deployers) ? $"principal {approver} deployed {label} on {policy.QualifiedOn}, and '{target.Name}' requires approvers separate from the deployer."
-            : earlier.Contains(approver, StringComparer.OrdinalIgnoreCase) ? $"principal {approver} already approved {label} for '{target.Name}'."
             : null;
         if (refusal is not null)
         {
             stderr.WriteLine($"jd: approve: {refusal}");
+            return Invalid;
+        }
+
+        var earlier = await ApprovalRecord.ApproversAsync(records, target, label, setSha256, cancellationToken);
+        if (earlier.Contains(approver, StringComparer.OrdinalIgnoreCase))
+        {
+            stderr.WriteLine($"jd: approve: principal {approver} already approved {label} for '{target.Name}'.");
             return Invalid;
         }
 
@@ -128,20 +132,6 @@ internal static class ApproveCli
         stdout.WriteLine($"approved {label} for {target.Name} ({counted.ToString(CultureInfo.InvariantCulture)} of {policy.Required.ToString(CultureInfo.InvariantCulture)})");
         stdout.WriteLine($"record: {path}");
         return Success;
-    }
-
-    // The label names a directory of the store; the store's own rule, applied before the credential so that a bad label is a usage error.
-    private static string? LabelProblem(string records, string environment, string label)
-    {
-        try
-        {
-            _ = ReleaseRecordFile.LabelDirectory(records, environment, label);
-            return null;
-        }
-        catch (ArgumentException ex)
-        {
-            return ex.Message;
-        }
     }
 
     private static (Options? Options, string Problem) Parse(string[] args)
@@ -171,6 +161,11 @@ internal static class ApproveCli
         if (positional.Count != 1)
         {
             return (null, "expected exactly one release label.");
+        }
+
+        if (ReleaseRecordFile.LabelProblem(positional[0]) is { } labelProblem)
+        {
+            return (null, labelProblem);
         }
 
         if (environment is null)

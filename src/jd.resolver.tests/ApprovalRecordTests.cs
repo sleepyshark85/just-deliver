@@ -132,6 +132,9 @@ public sealed class ApprovalRecordTests : IDisposable
         Place("20261017T000007000Z-approve.json", "not json");
         Place("20261017T000008000Z-approve.json", """{ "environment": "stage", "release": 1, "identity": [] }""");
         Place("20261017T000009000Z-approve.json", """{ "environment": { "name": "stage" }, "release": { "setSha256": "%SET%" }, "qualifiedOn": "dev" }""".Replace("%SET%", Set, StringComparison.Ordinal)); // no identity
+        Place("20261017T000012000Z-approve.json", """{ "environment": { "name": {} }, "release": { "setSha256": [] }, "qualifiedOn": {}, "identity": { "objectId": {} } }"""); // a field of another type
+        Place("20261017T000013000Z-approve.json", "[]"); // not an object
+        Place("20261017T000014000Z-approve.json", "null");
         Place("20261017T000010000Z-deploy.json", Approval("object-f")); // not an approval file
         Place("20261017T000011000Z-approve.json", Approval("object-g"), label: "2.0.0"); // another label
 

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace jd.resolver.release;
 
@@ -86,6 +87,19 @@ public static class ReleaseRecordFile
 
     internal static string NameEnd(string activity) => $"-{activity}.json";
 
+    /// <summary>The shape of a release label; the pattern of <c>release.label</c> in schemas/approval-record.schema.json.</summary>
+    public const string LabelPattern = @"^[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?$";
+
+    /// <summary>Why <paramref name="label"/> cannot name a release (it is not label-shaped, or not one path segment); null when it can.</summary>
+    public static string? LabelProblem(string label) =>
+        SegmentProblem(label) ?? (Regex.IsMatch(label, LabelPattern, RegexOptions.CultureInvariant) ? null : $"'{label}' is not a release label (like 1.0.0 or 1.0.0-rc.1).");
+
+    /// <summary>Why <paramref name="segment"/> cannot name a directory of the store (empty, or contains '..', '/' or '\\'); null when it can.</summary>
+    public static string? SegmentProblem(string segment) =>
+        segment.Length == 0 || segment.Contains("..", StringComparison.Ordinal) || segment.AsSpan().IndexOfAny('/', '\\') >= 0
+            ? $"'{segment}' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'."
+            : null;
+
     /// <summary>
     /// The directory of a label's files. Both names come from validated formats; the store still refuses anything that could leave its directory:
     /// throws <see cref="ArgumentException"/> for an environment or label that is not a single path segment.
@@ -94,9 +108,9 @@ public static class ReleaseRecordFile
     {
         foreach (var segment in new[] { environment, label })
         {
-            if (segment.Length == 0 || segment.Contains("..", StringComparison.Ordinal) || segment.AsSpan().IndexOfAny('/', '\\') >= 0)
+            if (SegmentProblem(segment) is { } problem)
             {
-                throw new ArgumentException($"'{segment}' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.");
+                throw new ArgumentException(problem);
             }
         }
 

@@ -2,7 +2,7 @@ using System.Globalization;
 using jd.core.identity;
 using jd.resolver.environment;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 namespace jd.resolver.release;
 
@@ -13,23 +13,36 @@ namespace jd.resolver.release;
 /// </summary>
 public static class ApprovalRecord
 {
+    // The record's fields, in file order, camelCase as the schema spells them: Build writes it and ApproversAsync reads it, so the keys are named once.
+    // Members are nullable because a file placed by hand may lack any of them.
+    private sealed record Stored(string? Kind, string? ApprovedAt, StoredEnvironment? Environment, StoredRelease? Release, string? QualifiedOn, StoredIdentity? Identity, string? Meaning);
+
+    private sealed record StoredEnvironment(string? Name, string? Tier);
+
+    private sealed record StoredRelease(string? Label, string? SetSha256);
+
+    private sealed record StoredIdentity(string? TenantId, string? ClientId, string? ObjectId);
+
+    private static readonly JsonSerializerSettings Settings = new() { ContractResolver = new CamelCasePropertyNamesContractResolver(), DateParseHandling = DateParseHandling.None };
+
     /// <summary>The record of <paramref name="identity"/> approving the set <paramref name="setSha256"/> of <paramref name="label"/> for the gated <paramref name="target"/>.</summary>
     public static string Build(EnvironmentDescriptor target, string label, string setSha256, DeployerIdentity identity, string meaning, DateTimeOffset approvedAt) =>
-        new JObject
-        {
-            ["kind"] = "ApprovalRecord",
-            ["approvedAt"] = approvedAt.UtcDateTime.ToString(ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture),
-            ["environment"] = new JObject { ["name"] = target.Name, ["tier"] = target.Tier },
-            ["release"] = new JObject { ["label"] = label, ["setSha256"] = setSha256 },
-            ["qualifiedOn"] = Policy(target).QualifiedOn,
-            ["identity"] = new JObject { ["tenantId"] = identity.TenantId, ["clientId"] = identity.ClientId, ["objectId"] = identity.ObjectId },
-            ["meaning"] = meaning,
-        }.ToString(Formatting.Indented) + "\n";
+        JsonConvert.SerializeObject(
+            new Stored(
+                "ApprovalRecord",
+                approvedAt.UtcDateTime.ToString(ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture),
+                new StoredEnvironment(target.Name, target.Tier),
+                new StoredRelease(label, setSha256),
+                Policy(target).QualifiedOn,
+                new StoredIdentity(identity.TenantId, identity.ClientId, identity.ObjectId),
+                meaning),
+            Formatting.Indented,
+            Settings) + "\n";
 
     /// <summary>
     /// The distinct object ids in the approval files of <paramref name="label"/> on <paramref name="target"/> that name the same environment, the same set and the same
     /// <c>qualifiedOn</c> as <paramref name="target"/>'s policy. Not the valid-approval filter of approvals.md section 5 (S19): it only lets <c>jd approve</c> refuse a
-    /// repeat and count, so a file that is not JSON, or lacks a field, is skipped.
+    /// repeat and count, so a file that is not JSON, lacks a field or holds a field of another type is skipped.
     /// </summary>
     public static async Task<IReadOnlyList<string>> ApproversAsync(
         string recordsDirectory, EnvironmentDescriptor target, string label, string setSha256, CancellationToken cancellationToken = default)
@@ -46,9 +59,9 @@ public static class ApprovalRecord
         {
             try
             {
-                var body = JObject.Parse(await File.ReadAllTextAsync(path, cancellationToken));
-                if ((string?)body.SelectToken("environment.name") == target.Name && (string?)body.SelectToken("release.setSha256") == setSha256
-                    && (string?)body.SelectToken("qualifiedOn") == policy.QualifiedOn && (string?)body.SelectToken("identity.objectId") is { } approver)
+                var stored = JsonConvert.DeserializeObject<Stored>(await File.ReadAllTextAsync(path, cancellationToken), Settings);
+                if (stored is { Environment.Name: { } name, Release.SetSha256: { } sha256, QualifiedOn: { } qualifiedOn, Identity.ObjectId: { } approver }
+                    && name == target.Name && sha256 == setSha256 && qualifiedOn == policy.QualifiedOn)
                 {
                     approvers.Add(approver);
                 }

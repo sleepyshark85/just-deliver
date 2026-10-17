@@ -173,15 +173,15 @@ public sealed class EnvUpAzureTests : IDisposable
     // The stage descriptor with its policy pointed at the renamed dev and at the principal that ran the deploys (the sandbox has one), strict or relaxed about separation.
     private string StagePolicy(string stageDescriptor, string file, string principal, bool separate)
     {
-        var text = ReplaceOnce(File.ReadAllText(stageDescriptor), @"qualifiedOn:\s*dev\b", $"qualifiedOn: {DevName}");
-        text = ReplaceOnce(text, "00000000-0000-0000-0000-000000000000", principal);
+        var text = ReplaceRequired(File.ReadAllText(stageDescriptor), @"qualifiedOn:\s*dev\b", $"qualifiedOn: {DevName}");
+        text = ReplaceRequired(text, "00000000-0000-0000-0000-000000000000", principal);
         var path = Path.Combine(_root, file);
-        File.WriteAllText(path, ReplaceOnce(text, @"separateFromDeployer:\s*true", $"separateFromDeployer: {(separate ? "true" : "false")}"));
+        File.WriteAllText(path, ReplaceRequired(text, @"separateFromDeployer:\s*true", $"separateFromDeployer: {(separate ? "true" : "false")}"));
         return path;
     }
 
     // A rewrite of a descriptor that must change it: a pattern that no longer matches fails the test instead of leaving the text as it was.
-    private static string ReplaceOnce(string text, string pattern, string replacement)
+    private static string ReplaceRequired(string text, string pattern, string replacement)
     {
         Assert.Matches(pattern, text);
         return Regex.Replace(text, pattern, replacement.Replace("$", "$$", StringComparison.Ordinal));

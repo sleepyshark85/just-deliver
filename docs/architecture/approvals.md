@@ -228,7 +228,7 @@ Both are steps appended to `EnvUpAzureTests` (one scenario, because of the one f
 - **S18a:** `shared`, `dev` and `stage` up; the `stage` descriptor says `protected` and carries the policy; `db-stage` has 400 RU/s, the account limit is 1000, and no
   workload container has its own throughput; running `stage` again changes nothing. Cleanup deletes both environment groups before the shared one.
   The refusal of a direct deploy is proved offline only.
-- **S18c:** the test rewrites the `stage` definition before use, as it already renames environments: its `qualifiedOn` to the renamed `dev` (`s12dv<suffix>`) and the all-zero approver to the principal's
+- **S18c:** the test rewrites the `stage` descriptor that `env up` wrote (not the definition), each rewrite failing if its pattern does not match: its `qualifiedOn` to the renamed `dev` (`s12dv<suffix>`) and the all-zero approver to the principal's
   object id, read from a `dev` deploy record. After the existing deploy and qualify on `dev` (a record with `iq` passed): `approve` of an unknown label is refused; with the strict `stage` descriptor
   (the sandbox principal listed, `separateFromDeployer: true`) it is refused because the same principal deployed the set; with a relaxed copy it succeeds, the file's
   `identity.objectId` equals the `dev` deploy record's and `setSha256` equals the hash of `dev`'s `set.yaml`; a repeat is refused. After the existing out-of-band image mismatch step

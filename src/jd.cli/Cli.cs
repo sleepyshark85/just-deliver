@@ -50,7 +50,7 @@ public static class Cli
                   --force: overwrite an existing --out.
         Gated (deploy, release deploy, release qualify): an environment whose descriptor has an approval block refuses them (exit 1; --preview is allowed): it is deployed to only by promotion.
         Backend (deploy, release deploy, release qualify, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
-        Records (release deploy, not --preview; release qualify; approve): JD_RECORDS_DIR, an existing directory, and the deploying service principal in ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET.
+        Records (release deploy, not --preview; release qualify; approve): JD_RECORDS_DIR, an existing directory, and the service principal that deploys or approves in ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET.
         Exit codes: 0 success, 1 validation, resolution or deployment errors, 2 usage errors.
 
         """;
@@ -244,6 +244,12 @@ public static class Cli
 
         return (Success, run);
     }
+
+    internal const string RecordsDirectoryVariable = "JD_RECORDS_DIR";
+
+    // Null when records names an existing directory.
+    internal static string? RecordsDirectoryProblem(string? records) =>
+        Directory.Exists(records) ? null : $"{RecordsDirectoryVariable} must name an existing directory where release records are kept (it is {(string.IsNullOrEmpty(records) ? "not set" : $"'{records}'")}).";
 
     // State location and secrets passphrase must be set explicitly: a default would lose track of stacks between runs, or
     // encrypt with a passphrase nobody chose. An empty passphrase is a choice (local/dev); a passphrase file is another.
