@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/approval-record.schema.json",
+  "title": "just-deliver approval record",
+  "description": "Written by `jd approve`, one file per approval, never edited: the local evidence that the principal in `identity` approved the release set `release.setSha256` (label `release.label`) for the gated environment `environment`, which required it qualified on `qualifiedOn` (docs/architecture/approvals.md). It binds the set, not a record. `meaning` is what the approver asserts and is never interpreted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "approvedAt", "environment", "release", "qualifiedOn", "identity", "meaning"],
+  "properties": {
+    "kind": { "enum": ["ApprovalRecord"] },
+    "approvedAt": { "description": "UTC, to the second.", "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
+    "environment": {
+      "description": "The gated environment approved for, as its descriptor names it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "tier"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$" },
+        "tier": { "enum": ["team", "protected"] }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "setSha256"],
+      "properties": {
+        "label": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z0-9.]+)?$" },
+        "setSha256": { "description": "SHA-256 of the exact bytes of the label's kept set.yaml on `qualifiedOn`.", "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "qualifiedOn": { "description": "The environment whose records showed the set qualified, from the approval policy.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$" },
+    "identity": {
+      "description": "The approving principal as Entra reports it, never as any file or variable claims.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenantId", "clientId", "objectId"],
+      "properties": {
+        "tenantId": { "type": "string", "minLength": 1 },
+        "clientId": { "type": "string", "minLength": 1 },
+        "objectId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "meaning": { "description": "What the approver asserts by approving, verbatim: 1 to 500 characters, no control characters.", "type": "string", "minLength": 1, "maxLength": 500, "not": { "pattern": "[\\u0000-\\u001f\\u007f-\\u009f]" } }
+  }
+}

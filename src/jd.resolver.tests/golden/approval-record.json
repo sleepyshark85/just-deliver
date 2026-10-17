@@ -1,0 +1,19 @@
+{
+  "kind": "ApprovalRecord",
+  "approvedAt": "2026-10-17T03:04:05Z",
+  "environment": {
+    "name": "stage",
+    "tier": "protected"
+  },
+  "release": {
+    "label": "1.0.0",
+    "setSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "qualifiedOn": "dev",
+  "identity": {
+    "tenantId": "tenant-1",
+    "clientId": "client-1",
+    "objectId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+  },
+  "meaning": "Reviewed the test evidence; ready for stage."
+}

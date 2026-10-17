@@ -32,6 +32,7 @@ public static class Cli
           jd release show <release-set.yaml>
           jd release deploy <release-set.yaml> --env <environment.yaml> --catalog <dir> [--preview]
           jd release qualify <release-set.yaml> --env <environment.yaml> --catalog <dir>
+          jd approve <label> --env <environment.yaml> --meaning <text>
           jd deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
           jd env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
           jd --help
@@ -41,13 +42,15 @@ public static class Cli
         release   create writes an immutable release set (pinned workloads, deploy order) from a manifest; show prints one;
                   deploy resolves every workload of a set, then deploys them in deploy order, stopping at the first failure, and writes a release record
                   (not with --preview); qualify re-checks a deployed set without deploying (no drift, the pinned image on every revision that serves traffic) and writes a record.
+        approve   records that the principal of the ARM_* credential approves the kept set of <label> for a gated environment (its descriptor has an approval block);
+                  refused unless the set is qualified on the policy's qualifiedOn environment and the principal may approve it; --meaning (1 to 500 characters) says what the approval asserts.
         deploy    provisions the infrastructure nodes in order, then releases the runtime: dark revision, grants, probe, traffic shift (--preview: only shows the changes; nothing is created).
         env up    provisions an environment's substrate from its definition and writes the environment descriptor from the outputs.
                   --base: the descriptor of the layer below (the new values are added to it); --region defaults to JD_REGION;
                   --force: overwrite an existing --out.
         Gated (deploy, release deploy, release qualify): an environment whose descriptor has an approval block refuses them (exit 1; --preview is allowed): it is deployed to only by promotion.
         Backend (deploy, release deploy, release qualify, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
-        Records (release deploy, not --preview; release qualify): JD_RECORDS_DIR, an existing directory, and the deploying service principal in ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET.
+        Records (release deploy, not --preview; release qualify; approve): JD_RECORDS_DIR, an existing directory, and the deploying service principal in ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET.
         Exit codes: 0 success, 1 validation, resolution or deployment errors, 2 usage errors.
 
         """;
@@ -84,6 +87,11 @@ public static class Cli
         if (args.FirstOrDefault() == "release")
         {
             return await ReleaseCli.RunAsync(args[1..], stdout, stderr, backend, probe, identity, liveRevisions, time ?? TimeProvider.System, environmentVariable, cancellationToken);
+        }
+
+        if (args.FirstOrDefault() == "approve")
+        {
+            return await ApproveCli.RunAsync(args[1..], stdout, stderr, identity, time ?? TimeProvider.System, environmentVariable, cancellationToken);
         }
 
         if (args.FirstOrDefault() == "env")
@@ -253,6 +261,21 @@ public static class Cli
 
     // The principal the run authenticates with, from the ARM_* variables Pulumi uses too. Throws InvalidOperationException naming the unset ones.
     internal static IDeployerIdentity CreateDeployerIdentity(Func<string, string?> environmentVariable) => new ArmDeployerIdentity(ArmCredential(environmentVariable));
+
+    // The principal the run authenticates as; null, with the reason on stderr, when the credential is missing, malformed or refused.
+    internal static async Task<DeployerIdentity?> GetIdentityAsync(
+        IDeployerIdentity? identity, Func<string, string?> environmentVariable, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await (identity ?? CreateDeployerIdentity(environmentVariable)).GetAsync(cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            stderr.WriteLine($"jd: {ex.Message}");
+            return null;
+        }
+    }
 
     // The live revisions are read with the same credential as the identity, so the principal named in a record is the one that observed.
     internal static ILiveRevisions CreateLiveRevisions(Func<string, string?> environmentVariable) => new ArmLiveRevisions(ArmCredential(environmentVariable));

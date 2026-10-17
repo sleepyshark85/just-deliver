@@ -122,7 +122,7 @@ internal static class ReleaseCli
     private static string Format(ReleaseSet set)
     {
         var text = new StringBuilder()
-            .AppendLine(CultureInfo.InvariantCulture, $"release {set.Label} (created {set.CreatedAt:yyyy-MM-dd'T'HH:mm:ss'Z'})")
+            .AppendLine(CultureInfo.InvariantCulture, $"release {set.Label} (created {set.CreatedAt.ToString(ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture)})")
             .AppendLine("deploy order:");
         for (var i = 0; i < set.Order.Count; i++)
         {
