@@ -1,0 +1,7 @@
+# Scenario 5: an IT Ops policy that exists only as a catalog file. Copy it into a copy of the catalog (never into catalog/):
+#   cp -r catalog "$JD_WALK/catalog" && cp samples/walkthrough/policies/limit-revisions.yaml "$JD_WALK/catalog/policies/"
+kind: Policy
+name: limit-revisions
+reason: Keep fewer inactive revisions
+match: { template: azure/container-app }
+set: { maxInactiveRevisions: 2 }

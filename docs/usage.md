@@ -242,6 +242,7 @@ stay refused on the gated environment.
 
 From a clean subscription to a release promoted to `stage`, then teardown. Commands only; each is described above. `jd` stands for
 `dotnet run --project src/jd.cli --`. Free tier only: the subscription must have no free-tier Cosmos account yet (Azure allows one).
+To test every check by hand (bad release, drift, refused approvals, tampering), follow [walkthrough.md](walkthrough.md) instead.
 
 **1. Prerequisites.** The .NET SDK, the `pulumi` CLI and the `az` CLI. A deploying service principal and, because `stage` keeps approval separate
 from deploying (`separateFromDeployer: true`), a second one that approves. Set (names only; never commit the values):

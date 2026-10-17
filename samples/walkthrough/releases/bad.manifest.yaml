@@ -1,0 +1,10 @@
+# A bad release: the first workload (the app) fails its probe, so the worker is not started (scenario 4).
+kind: ReleaseManifest
+label: 1.3.0-bad
+
+# The worker depends on the app (ordering only), so the app is deployed first. Paths are relative to this file.
+workloads:
+  - definition: ../workloads/app.bad.yaml
+  - definition: ../workloads/worker.v2.yaml
+    dependsOn:
+      - just-deliver-sample-app
