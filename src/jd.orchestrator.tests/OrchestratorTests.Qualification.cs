@@ -49,14 +49,14 @@ public partial class OrchestratorTests
             var finished = RecordStart.AddMinutes(minute);
             var identity = new DeployerIdentity("tenant-1", "client-1", objectId);
             var json = ReleaseRecordBuilder.Build(_set, SetSha256, Env, _graphs, failed ? _failed : _passed, identity, finished.AddSeconds(-90), finished, TimeSpan.FromSeconds(42.5), iq);
-            return await ReleaseRecordFile.WriteAsync(Records, "dev", "1.0.0", finished, ReleaseRecordBuilder.DeployActivity, json);
+            return await ReleaseRecordFile.WriteAsync(Records, "dev", "1.0.0", finished, ReleaseRecordFile.DeployActivity, json);
         }
 
         public async Task<string> QualifyAsync(int minute, IqResult iq)
         {
             var finished = RecordStart.AddMinutes(minute);
             var json = ReleaseRecordBuilder.BuildQualify(_set, SetSha256, Env, _graphs, Principal, finished.AddSeconds(-90), finished, iq);
-            return await ReleaseRecordFile.WriteAsync(Records, "dev", "1.0.0", finished, ReleaseRecordBuilder.QualifyActivity, json);
+            return await ReleaseRecordFile.WriteAsync(Records, "dev", "1.0.0", finished, ReleaseRecordFile.QualifyActivity, json);
         }
 
         public Task<Qualification> ReadAsync() => QualificationReader.ReadAsync(Records, "dev", "1.0.0");
@@ -69,6 +69,18 @@ public partial class OrchestratorTests
             edit(body);
             File.WriteAllText(path, body.ToString(Formatting.Indented));
         }
+    }
+
+    // Sets a file mode, or says false when it would change nothing: file modes do not stop a privileged process, and Windows has none.
+    private static bool TryRestrict(string path, UnixFileMode mode)
+    {
+        if (OperatingSystem.IsWindows() || System.Environment.IsPrivilegedProcess)
+        {
+            return false;
+        }
+
+        File.SetUnixFileMode(path, mode);
+        return true;
     }
 
     private static string Name(string path) => Path.GetFileName(path);
@@ -181,6 +193,7 @@ public partial class OrchestratorTests
         Assert.False(result.Qualified);
         Assert.Equal(3, result.Reasons.Count);
         Assert.All(new[] { extra, noIdentity, noIq }, path => Assert.Contains(result.Reasons, r => r.StartsWith($"{Name(path)}: is not a valid release record: ", StringComparison.Ordinal)));
+        Assert.All(result.Reasons, r => Assert.DoesNotContain(ledger.Records, r, StringComparison.Ordinal)); // the file name says where, not the full path again
     }
 
     [Fact]
@@ -191,31 +204,60 @@ public partial class OrchestratorTests
         await File.WriteAllTextAsync(Path.Combine(ledger.LabelDirectory, "20261017T080200000Z-deploy.json"), string.Empty);
         await File.WriteAllTextAsync(Path.Combine(ledger.LabelDirectory, "20261017T080300000Z-qualify.json"), "[1, 2]");
         File.CreateSymbolicLink(Path.Combine(ledger.LabelDirectory, "20261017T080400000Z-deploy.json"), Path.Combine(ledger.Records, "gone.json"));
+        var noAccess = Path.Combine(ledger.LabelDirectory, "20261017T080500000Z-deploy.json");
+        await File.WriteAllTextAsync(noAccess, "{}");
+        var restricted = TryRestrict(noAccess, UnixFileMode.None);
+        if (!restricted)
+        {
+            File.Delete(noAccess);
+        }
 
         var result = await ledger.ReadAsync();
 
         Assert.False(result.Qualified);
-        Assert.Equal(3, result.Reasons.Count);
+        Assert.Equal(restricted ? 4 : 3, result.Reasons.Count);
         Assert.All(result.Reasons, r => Assert.Contains(": cannot be read: ", r, StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task A_set_yaml_that_cannot_be_read_is_a_reason_and_an_unknown_set()
     {
-        if (OperatingSystem.IsWindows() || System.Environment.IsPrivilegedProcess)
-        {
-            return; // file modes do not stop a privileged process, and Windows has none
-        }
-
         using var ledger = await Ledger.CreateAsync();
         await ledger.DeployAsync(1, PassingIq);
         var setPath = Path.Combine(ledger.LabelDirectory, "set.yaml");
-        File.SetUnixFileMode(setPath, UnixFileMode.None);
+        if (!TryRestrict(setPath, UnixFileMode.None))
+        {
+            return;
+        }
 
         var result = await ledger.ReadAsync();
 
         Assert.Null(result.SetSha256);
-        Assert.StartsWith($"'{setPath}' cannot be read: ", OneReason(result), StringComparison.Ordinal);
+        Assert.StartsWith($"'{ledger.LabelDirectory}' cannot be read: ", OneReason(result), StringComparison.Ordinal);
+        Assert.Contains(setPath, OneReason(result), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_label_directory_that_cannot_be_listed_is_a_reason_and_an_unknown_set()
+    {
+        using var ledger = await Ledger.CreateAsync();
+        await ledger.DeployAsync(1, PassingIq);
+        if (!TryRestrict(ledger.LabelDirectory, UnixFileMode.UserExecute)) // set.yaml is still reachable, the names in the directory are not
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await ledger.ReadAsync();
+
+            Assert.Null(result.SetSha256);
+            Assert.StartsWith($"'{ledger.LabelDirectory}' cannot be read: ", OneReason(result), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryRestrict(ledger.LabelDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
     }
 
     [Fact]
@@ -243,7 +285,14 @@ public partial class OrchestratorTests
         await ledger.DeployAsync(4, PassingIq);
         var passedLast = await ledger.ReadAsync();
 
-        Assert.Contains(failedLast.Reasons, r => r == $"the newest deploy ({Name(failing)}) failed.");
+        Assert.Equal(
+            [
+                $"the newest deploy ({Name(failing)}) failed.",
+                "workload shop: OQ is notRun.",
+                "workload cart: OQ is notRun.",
+                $"IQ of the newest record ({Name(failing)}) is notRun.",
+            ],
+            failedLast.Reasons);
         Assert.True(passedLast.Qualified, string.Join("; ", passedLast.Reasons));
     }
 

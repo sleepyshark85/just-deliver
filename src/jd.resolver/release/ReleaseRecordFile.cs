@@ -12,7 +12,19 @@ public static class ReleaseRecordFile
 {
     internal const string SetFileName = "set.yaml";
 
+    public const string DeployActivity = "deploy";
+    public const string QualifyActivity = "qualify";
+
+    /// <summary>The status a passing OQ or IQ has in a record.</summary>
+    public const string PassedStatus = "passed";
+
+    /// <summary>The format of the times inside a release set and a release record (UTC, to the second).</summary>
+    public const string DocumentTimeFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+
+    // The time in a record's file name (to the millisecond, so two attempts in one second do not collide).
     internal const string TimeFormat = "yyyyMMdd'T'HHmmssfff'Z'";
+
+    private static readonly string[] Activities = [DeployActivity, QualifyActivity];
 
     /// <summary>
     /// Keeps the set's bytes beside the label's records: creates <c>set.yaml</c> on the label's first attempt, and on every later one
@@ -48,11 +60,19 @@ public static class ReleaseRecordFile
     {
         var directory = LabelDirectory(recordsDirectory, environment, label);
         Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, $"{at.UtcDateTime.ToString(TimeFormat, CultureInfo.InvariantCulture)}-{activity}.json");
+        var path = Path.Combine(directory, at.UtcDateTime.ToString(TimeFormat, CultureInfo.InvariantCulture) + NameEnd(activity));
         await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
         await stream.WriteAsync(new UTF8Encoding(false).GetBytes(json), cancellationToken);
         return path;
     }
+
+    /// <summary>Splits <c>&lt;time&gt;-&lt;activity&gt;.json</c> into its time part and activity; null when the name is not that of a record.</summary>
+    internal static (string Time, string Activity)? SplitName(string fileName) =>
+        Activities.FirstOrDefault(a => fileName.EndsWith(NameEnd(a), StringComparison.Ordinal)) is { } activity
+            ? (fileName[..^NameEnd(activity).Length], activity)
+            : null;
+
+    private static string NameEnd(string activity) => $"-{activity}.json";
 
     // Both names come from validated formats; the store still refuses anything that could leave its directory.
     internal static string LabelDirectory(string recordsDirectory, string environment, string label)
