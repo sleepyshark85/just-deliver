@@ -114,7 +114,7 @@ the service principals that may approve before anything can be promoted.
 #### Gated environments
 
 An environment whose **descriptor carries an `approval` block** is gated, whatever its tier (the tool tests for the block, never for a tier name). The
-schemas only require the block for tier `protected`, so one cannot be written without it. `jd deploy`, `jd release deploy` and `jd release qualify`
+schemas only require the block for tier `protected`, so one cannot be written without it. A `protected` environment without an `approval` block fails the schema check (`NotAnyOf … PropertyRequired: #/approval`). `jd deploy`, `jd release deploy` and `jd release qualify`
 on a gated descriptor exit 1 with "environment '<name>' is gated by an approval policy: use `jd promote`" before the principal, `JD_RECORDS_DIR` or the
 backend is touched: no call, no record, no `set.yaml`. `--preview` is not refused (it creates nothing), and neither is `jd env up` (the substrate is not a
 release). `jd approve` and `jd promote`, the only way a set reaches a gated environment, are not built yet

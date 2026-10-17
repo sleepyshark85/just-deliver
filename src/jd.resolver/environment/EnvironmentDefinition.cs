@@ -7,7 +7,7 @@ namespace jd.resolver.environment;
 /// What <c>jd env up</c> provisions: substrate requirements (like a workload's) and the layout of the descriptor written from
 /// their outputs. Format: schemas/environment-definition.schema.json. <see cref="Values"/> leaves are expressions.
 /// </summary>
-public sealed record EnvironmentDefinition(string Name, string Tier, JArray Requires, JObject Values, IReadOnlyList<string> Grantable, ApprovalPolicy? Approval = null)
+public sealed record EnvironmentDefinition(string Name, string Tier, JArray Requires, JObject Values, IReadOnlyList<string> Grantable, ApprovalPolicy? Approval)
 {
     /// <summary>The environment the definition is resolved in: its own name, tier and approval policy, the given region, and the base descriptor's values.</summary>
     public EnvironmentDescriptor Over(string region, EnvironmentDescriptor? baseDescriptor) =>

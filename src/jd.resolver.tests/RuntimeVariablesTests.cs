@@ -14,7 +14,7 @@ namespace jd.resolver.tests;
 public class RuntimeVariablesTests
 {
     private static readonly EnvironmentDescriptor Env =
-        new("dev", "region", "team", new Dictionary<string, string> { ["host"] = "h1" }, []);
+        new("dev", "region", "team", new Dictionary<string, string> { ["host"] = "h1" }, [], null);
 
     private const string RuntimeMapping = """
         kind: Mapping

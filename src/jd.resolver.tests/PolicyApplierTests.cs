@@ -27,7 +27,7 @@ public class PolicyApplierTests
         $"kind: Policy\nname: {name}\nreason: because\nmatch: {match}\n{body}";
 
     private static EnvironmentDescriptor Env(string tier = "team") =>
-        new("dev", "region", tier, new Dictionary<string, string> { ["host"] = "h1" }, []);
+        new("dev", "region", tier, new Dictionary<string, string> { ["host"] = "h1" }, [], null);
 
     private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string tier = "team", bool expectExpansionErrors = false)
     {
@@ -386,7 +386,8 @@ public class PolicyApplierTests
                 ["cosmos.endpoint"] = "https://acct",
                 ["logAnalytics.id"] = "/law",
             },
-            []);
+            [],
+            null);
         var expansion = new Expander(catalog, environment).Expand(workload, "workload.yaml");
         Assert.Empty(expansion.Errors);
 

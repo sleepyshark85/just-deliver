@@ -134,7 +134,8 @@ public class SubstrateTests
         Assert.Equal(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", "stage-environment.yaml")), composed.Yaml);
         var descriptor = (await EnvironmentParser.ParseAsync("stage.env.yaml", composed.Yaml!)).Descriptor!;
         Assert.Equal(("stage", "protected"), (descriptor.Name, descriptor.Tier));
-        Assert.Equal(new ApprovalPolicy("dev", 1, ["00000000-0000-0000-0000-000000000000"], true).ToJson().ToString(), descriptor.Approval!.ToJson().ToString());
+        Assert.Equal(("dev", 1, true), (descriptor.Approval!.QualifiedOn, descriptor.Approval.Required, descriptor.Approval.SeparateFromDeployer));
+        Assert.Equal(["00000000-0000-0000-0000-000000000000"], descriptor.Approval.Approvers);
     }
 
     [Fact]
@@ -215,7 +216,7 @@ public class SubstrateTests
             "kind: Mapping\nmatch: { type: thing }\nnodes:\n  group:\n    template: t/group\n    config:\n      groupName: ${name('rg')}\nexports:\n  out: ${group.groupName}\n",
         }.Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var catalog = (await CatalogParser.ParseAsync(files)).Catalog!;
-        var definition = new EnvironmentDefinition("dev", "team", [new JObject { ["type"] = "thing", ["id"] = "substrate" }], [], []);
+        var definition = new EnvironmentDefinition("dev", "team", [new JObject { ["type"] = "thing", ["id"] = "substrate" }], [], [], null);
         var environment = definition.Over(Region, null);
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: dev, team: crew }\nrequires:\n  - type: thing\n    id: substrate\n");
 

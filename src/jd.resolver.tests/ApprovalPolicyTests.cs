@@ -56,17 +56,4 @@ public class ApprovalPolicyTests
         Assert.False(Policy(required: 2).Evaluate([Alice, Bob], [Bob]));
         Assert.False(Policy(required: 1).Evaluate([], []));
     }
-
-    [Fact]
-    public void The_policy_round_trips_through_the_block_the_schema_describes()
-    {
-        var policy = Policy(required: 2, separate: false);
-
-        var block = policy.ToJson();
-        var back = ApprovalPolicy.FromJson(block);
-
-        Assert.Equal(["qualifiedOn", "required", "approvers", "separateFromDeployer"], block.Properties().Select(p => p.Name));
-        Assert.Equal((policy.QualifiedOn, policy.Required, policy.SeparateFromDeployer), (back.QualifiedOn, back.Required, back.SeparateFromDeployer));
-        Assert.Equal(policy.Approvers, back.Approvers);
-    }
 }

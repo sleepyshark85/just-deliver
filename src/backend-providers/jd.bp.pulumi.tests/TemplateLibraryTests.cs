@@ -267,7 +267,7 @@ public partial class TemplateLibraryTests
         var loaded = await CatalogParser.ParseAsync(sources);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\ncontainer:\n  image: reg/app:1\nrequires: []\n");
-        var graph = jd.resolver.Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, new EnvironmentDescriptor("dev", "region-1", "team", new Dictionary<string, string>(), []));
+        var graph = jd.resolver.Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, new EnvironmentDescriptor("dev", "region-1", "team", new Dictionary<string, string>(), [], null));
         Assert.Empty(graph.Errors);
 
         var error = Assert.Single(RuntimeLibrary().Check(graph));

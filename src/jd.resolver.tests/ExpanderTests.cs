@@ -23,7 +23,7 @@ public class ExpanderTests
         $"kind: Mapping\nmatch: {match}\nnodes:\n{nodes}exports:\n{exports}";
 
     private static EnvironmentDescriptor Env(string tier = "team") =>
-        new("dev", "region", tier, new Dictionary<string, string> { ["host"] = "h1" }, []);
+        new("dev", "region", tier, new Dictionary<string, string> { ["host"] = "h1" }, [], null);
 
     private static async Task<Catalog> LoadAsync(params string[] mappings)
     {
@@ -302,7 +302,8 @@ public class ExpanderTests
                 ["cosmos.accountId"] = "/acct",
                 ["cosmos.endpoint"] = "https://acct",
             },
-            []);
+            [],
+            null);
 
         var result = new Expander(catalog, environment).Expand(workload, "workload.yaml");
 

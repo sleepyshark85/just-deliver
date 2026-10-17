@@ -13,7 +13,7 @@ public sealed record EnvironmentDescriptor(
     string Tier,
     IReadOnlyDictionary<string, string> Values,
     IReadOnlyList<string> Grantable,
-    ApprovalPolicy? Approval = null)
+    ApprovalPolicy? Approval)
 {
     // Top-level fields addressed as env.<key>; values may not shadow them.
     private const string NameKey = "name";

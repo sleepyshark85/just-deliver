@@ -18,10 +18,10 @@ public sealed record ApprovalPolicy(string QualifiedOn, int Required, IReadOnlyL
     private static readonly JsonSerializer CamelCase = JsonSerializer.Create(new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver() });
 
     /// <summary>The policy of a block that passed the schema.</summary>
-    public static ApprovalPolicy FromJson(JToken block) => block.ToObject<ApprovalPolicy>(CamelCase)!;
+    internal static ApprovalPolicy FromJson(JToken block) => block.ToObject<ApprovalPolicy>(CamelCase)!;
 
     /// <summary>The block as the schema writes it.</summary>
-    public JObject ToJson() => JObject.FromObject(this, CamelCase);
+    internal JObject ToJson() => JObject.FromObject(this, CamelCase);
 
     /// <summary>Whether <paramref name="approver"/>'s approval may count: listed in <see cref="Approvers"/>, and not among <paramref name="deployers"/> when they must be separate.</summary>
     public bool Counts(string approver, IReadOnlyCollection<string> deployers) =>

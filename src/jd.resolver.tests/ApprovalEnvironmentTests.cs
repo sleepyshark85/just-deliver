@@ -57,8 +57,8 @@ public class ApprovalEnvironmentTests
 
         Assert.Null(descriptor.Descriptor);
         Assert.Null(definition.Definition);
-        Assert.NotEmpty(descriptor.Errors);
-        Assert.NotEmpty(definition.Errors);
+        Assert.Contains("PropertyRequired: #/approval", Assert.Single(descriptor.Errors).Message);
+        Assert.Contains("PropertyRequired: #/approval", Assert.Single(definition.Errors).Message);
     }
 
     [Theory]
@@ -74,17 +74,17 @@ public class ApprovalEnvironmentTests
     }
 
     [Theory]
-    [InlineData("required: 1", "required: 0")]
-    [InlineData("required: 1", "required: 1.5")]
-    [InlineData("qualifiedOn: dev", "qualifiedOn: Dev")]
-    [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: []")]
-    [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: [not-a-guid]")]
-    [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: [\"11111111-1111-1111-1111-111111111111\", \"11111111-1111-1111-1111-111111111111\"]")]
-    [InlineData("  separateFromDeployer: true\n", "")]
-    [InlineData("separateFromDeployer: true", "separateFromDeployer: \"yes\"")]
-    [InlineData("  required: 1\n", "")]
-    [InlineData("separateFromDeployer: true", "separateFromDeployer: true\n  roles: [x]")]
-    public async Task A_malformed_policy_is_a_schema_error_in_the_descriptor_and_the_definition(string original, string replacement)
+    [InlineData("required: 1", "required: 0", "approval.required")]
+    [InlineData("required: 1", "required: 1.5", "approval.required")]
+    [InlineData("qualifiedOn: dev", "qualifiedOn: Dev", "approval.qualifiedOn")]
+    [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: []", "approval.approvers")]
+    [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: [not-a-guid]", "approval.approvers[0]")]
+    [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: [\"11111111-1111-1111-1111-111111111111\", \"11111111-1111-1111-1111-111111111111\"]", "approval.approvers")]
+    [InlineData("  separateFromDeployer: true\n", "", "approval.separateFromDeployer")]
+    [InlineData("separateFromDeployer: true", "separateFromDeployer: \"yes\"", "approval.separateFromDeployer")]
+    [InlineData("  required: 1\n", "", "approval.required")]
+    [InlineData("separateFromDeployer: true", "separateFromDeployer: true\n  roles: [x]", "approval.roles")]
+    public async Task A_malformed_policy_is_a_schema_error_located_at_the_field_in_the_descriptor_and_the_definition(string original, string replacement, string location)
     {
         var block = Block.Replace(original, replacement, StringComparison.Ordinal);
         Assert.NotEqual(Block, block);
@@ -94,7 +94,7 @@ public class ApprovalEnvironmentTests
 
         Assert.Null(descriptor.Descriptor);
         Assert.Null(definition.Definition);
-        Assert.NotEmpty(descriptor.Errors);
-        Assert.NotEmpty(definition.Errors);
+        Assert.Equal(location, Assert.Single(descriptor.Errors).Location);
+        Assert.Equal(location, Assert.Single(definition.Errors).Location);
     }
 }
