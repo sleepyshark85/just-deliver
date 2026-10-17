@@ -6,7 +6,7 @@
 ## Now
 
 - **Next slice:** S18a — approval policy, the gate, `stage` (brief in the scratchpad, `s18a-brief.md`; from approvals.md §6–8 S18a).
-  The S18 design note (`mvp/s18-design`, approved, user chose (a) for its three choices) merges first.
+  The S18 design note is merged (PR #42).
 - **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
   required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
   leaves the deployment live; ADR 0007 kept (the set file's bytes are stored write-once as `set.yaml` per label).
@@ -48,7 +48,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S17b | Release record + OQ + timings | done | PR #35 | 2 | Record per attempt under `JD_RECORDS_DIR/<env>/<label>/`, write-once; `set.yaml` holds the set's bytes (hash-checked, ADR 0007); schema `release-record.schema.json` (`iq` to be added as optional in S17c); OQ from runtime steps; step/node/deploy timings; identity from the port; `AuthenticationFailedException` → clear CLI error. Round 1: 3 blocking — a `..` label crashed instead of a clear error, a probe with 0 attempts violated the schema, the preview-writes-nothing test was weak. ~233 production lines. Azure gate green (CLI 112/112, 1 h 6 min; good/bad/revert records, same-label refusal; nothing left). |
 | S17c1 | IQ (drift + live images) + `jd release qualify` | done | [#40](https://github.com/sleepyshark85/just-deliver/pull/40) | 3 + final | Blocked after 3 rounds (each found new test gaps); user chose: lead finishes. Lead added the preview-failure test and round-3 hardening (jd.azure guard refuses Target/Import/UsingTask/Sdk and Directory.Build files, allowlists FrameworkReference; qualify records refuse deploy fields); one scoped final review (2 findings, fixed, APPROVE). Azure gate failed first: the new qualify step expected env name `dev` (test renames it) — drift on the runtime node **is** reported on Azure (`Update 1`), design note §7 confirmed. `verify.sh` now prints failure messages. Gate green: CLI 126/126, 1 h 6 min, nothing left. Not done (reasoned): narrowing the qualify `try` (Qualifier throws for a mapping without a release block). |
 | S17c2 | IQ inside `jd release deploy` | done | [#41](https://github.com/sleepyshark85/just-deliver/pull/41) | 2 | **Trial, Sonnet developer:** round 1 found 3 blocking (a real-clock sleep in a test instead of the run's `TimeProvider`, duplicated provider/qualifier wiring, a schema line with no effect), fixed by a fresh Sonnet developer; round 2 APPROVE. Early Azure test (new rule) passed on the first head; gate green on the approved head: CLI 133/133, 1 h 6 min, nothing left. Older deploy records without `iq` no longer validate — no reader exists yet (release-record.md §1). |
-| S18 | Second environment + approvals | todo | | | |
+| S18 | Second environment + approvals | in-progress | design [#42](https://github.com/sleepyshark85/just-deliver/pull/42) | 3 (design) | Design note `docs/architecture/approvals.md` (Sonnet developer, Opus reviewer; round 2 fixed by the fixer). User chose (a) ×3. Built as S18a (policy, gate, `stage`, ~110), S18b (qualification reader, ~120), S18c (`jd approve`, ~200; reader may move to S19). |
 | S19 | Promotion | todo | | | |
 | S20 | E2E run and docs | todo | | | |
 
