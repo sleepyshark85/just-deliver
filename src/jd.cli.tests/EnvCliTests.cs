@@ -10,6 +10,8 @@ public sealed class EnvCliTests : IDisposable
     private static readonly string Shared = Path.Combine(AppContext.BaseDirectory, "samples", "environments", "shared.yaml");
     private static readonly string Dev = Path.Combine(AppContext.BaseDirectory, "samples", "environments", "dev.yaml");
 
+    private static readonly string Stage = Path.Combine(AppContext.BaseDirectory, "samples", "environments", "stage.yaml");
+
     private readonly string _temp = Directory.CreateTempSubdirectory("jd-env-tests").FullName;
 
     public void Dispose() => Directory.Delete(_temp, recursive: true);
@@ -70,6 +72,32 @@ public sealed class EnvCliTests : IDisposable
         Assert.Equal("cosmos-1", descriptor.Values["cosmos.accountName"]);
         Assert.Equal("db-dev", descriptor.Values["cosmos.databaseName"]);
         Assert.Contains($"{dev}: environment dev", second.Out);
+    }
+
+    [Fact]
+    public async Task Up_of_the_protected_stage_writes_its_policy_into_the_descriptor_and_a_protected_definition_without_one_deploys_nothing()
+    {
+        var backend = new OutputBackend();
+        var shared = Path.Combine(_temp, "shared.env.yaml");
+        var stage = Path.Combine(_temp, "stage.env.yaml");
+        await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", shared);
+        backend.Calls.Clear();
+        var open = Path.Combine(_temp, "open.yaml");
+        var definition = await File.ReadAllTextAsync(Stage);
+        await File.WriteAllTextAsync(open, definition[..definition.IndexOf("approval:", StringComparison.Ordinal)]);
+
+        var refused = await RunAsync(backend, Region, "up", open, "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "open.env.yaml"));
+        var refusedCalls = backend.Calls.Count;
+        var up = await RunAsync(backend, Region, "up", Stage, "--catalog", Catalog, "--base", shared, "--out", stage);
+
+        Assert.Equal((1, 0), (refused.Code, up.Code));
+        Assert.Equal(0, refusedCalls);
+        Assert.Contains("approval", refused.Err);
+        var descriptor = (await jd.resolver.environment.EnvironmentFile.LoadAsync(stage)).Descriptor!;
+        Assert.Equal(("stage", "protected"), (descriptor.Name, descriptor.Tier));
+        Assert.Equal(("dev", 1, true), (descriptor.Approval!.QualifiedOn, descriptor.Approval.Required, descriptor.Approval.SeparateFromDeployer));
+        Assert.Equal(["00000000-0000-0000-0000-000000000000"], descriptor.Approval.Approvers);
+        Assert.Equal(["_stage.stage.substrate.apps", "_stage.stage.substrate.database", "_stage.stage.substrate.group"], backend.Calls.Order().ToList());
     }
 
     [Fact]

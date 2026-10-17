@@ -1,0 +1,93 @@
+{
+  "catalogVersion": "0.1.0",
+  "environment": "stage",
+  "workload": "@stage",
+  "nodes": [
+    {
+      "id": "@stage/stage/substrate/database",
+      "scope": "substrate",
+      "name": "database",
+      "template": "azure/cosmos-sql-database",
+      "kind": "Create",
+      "stack": "_stage.stage.substrate.database",
+      "phase": "Infrastructure",
+      "hash": "f618a1e1a142956c57a27921d1f8fe6a25c2e049e1152ad67dc442fa9f547ba0",
+      "dependsOn": [],
+      "config": {
+        "accountName": "cosmos-shared",
+        "databaseName": "db-stage",
+        "resourceGroupName": "rg-shared",
+        "throughput": 400
+      },
+      "provenance": {
+        "accountName": "Mapping: mappings/env-substrate/standard.yaml",
+        "databaseName": "Mapping: mappings/env-substrate/standard.yaml",
+        "resourceGroupName": "Mapping: mappings/env-substrate/standard.yaml",
+        "throughput": "Mapping: mappings/env-substrate/standard.yaml"
+      }
+    },
+    {
+      "id": "@stage/stage/substrate/group",
+      "scope": "substrate",
+      "name": "group",
+      "template": "azure/resource-group",
+      "kind": "Create",
+      "stack": "_stage.stage.substrate.group",
+      "phase": "Infrastructure",
+      "hash": "768787a4968035f3c5aec5cb26313ec64ebbd6dd2d7d7d3eafb6f680f0fa72ed",
+      "dependsOn": [],
+      "config": {
+        "location": "region-1",
+        "resourceGroupName": "rg-stage-868fe9",
+        "tags": {
+          "project": "just-deliver-mvp",
+          "tier": "substrate"
+        }
+      },
+      "provenance": {
+        "location": "Mapping: mappings/env-substrate/standard.yaml",
+        "resourceGroupName": "Mapping: mappings/env-substrate/standard.yaml",
+        "tags.project": "Mapping: mappings/env-substrate/standard.yaml",
+        "tags.tier": "Mapping: mappings/env-substrate/standard.yaml"
+      }
+    },
+    {
+      "id": "@stage/stage/substrate/apps",
+      "scope": "substrate",
+      "name": "apps",
+      "template": "azure/container-apps-environment",
+      "kind": "Create",
+      "stack": "_stage.stage.substrate.apps",
+      "phase": "Infrastructure",
+      "hash": "a65536b8a6fd5d1d88c1cc52d0505a5b802ad103afc3923466aaae28e82d0e61",
+      "dependsOn": [
+        "@stage/stage/substrate/group"
+      ],
+      "config": {
+        "environmentName": "cae-stage-32fe4c",
+        "location": "${group.location}",
+        "resourceGroupName": "${group.resourceGroupName}",
+        "workspaceCustomerId": "00000000-0000-0000-0000-000000000001",
+        "workspaceName": "law-shared",
+        "workspaceResourceGroupName": "rg-shared"
+      },
+      "provenance": {
+        "environmentName": "Mapping: mappings/env-substrate/standard.yaml",
+        "location": "Mapping: mappings/env-substrate/standard.yaml",
+        "resourceGroupName": "Mapping: mappings/env-substrate/standard.yaml",
+        "workspaceCustomerId": "Mapping: mappings/env-substrate/standard.yaml",
+        "workspaceName": "Mapping: mappings/env-substrate/standard.yaml",
+        "workspaceResourceGroupName": "Mapping: mappings/env-substrate/standard.yaml"
+      }
+    }
+  ],
+  "exports": {
+    "substrate": {
+      "containerAppsEnvironmentId": "${apps.environmentId}",
+      "databaseId": "${database.databaseId}",
+      "databaseName": "${database.databaseName}",
+      "defaultDomain": "${apps.defaultDomain}",
+      "resourceGroupName": "${group.resourceGroupName}"
+    }
+  }
+}

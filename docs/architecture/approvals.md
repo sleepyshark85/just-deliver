@@ -1,6 +1,6 @@
 # Approvals and the protected tier
 
-> Status: design note for S18 (MVP); nothing is built. Addresses [F54](../open-questions.md) for the MVP (F37, the full approval model, stays open);
+> Status: design note for S18 (MVP). **S18a built** (the policy, the gate, `stage`); S18b, S18c and S19 are not. Addresses [F54](../open-questions.md) for the MVP (F37, the full approval model, stays open);
 > S19 (`jd promote`) consumes it. Builds on [release-record.md](release-record.md) (records, `set.yaml`, identity, "qualified"),
 > [release.md](release.md) and [ADR 0008](../decisions/0008-enforcement-in-landing-zone.md) (stage and production are platform-owned shared
 > environments), [ADR 0010](../decisions/0010-replacement-protection-classes.md).

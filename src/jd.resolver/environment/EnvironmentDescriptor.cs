@@ -4,14 +4,16 @@ namespace jd.resolver.environment;
 
 /// <summary>
 /// What an environment publishes for <c>${env.…}</c> resolution. Format: schemas/environment.schema.json.
-/// <see cref="Values"/> is keyed by the flattened dot path of each scalar leaf.
+/// <see cref="Values"/> is keyed by the flattened dot path of each scalar leaf. A descriptor with an <see cref="Approval"/> policy is gated:
+/// it takes deploys only through <c>jd promote</c> (docs/architecture/approvals.md section 2).
 /// </summary>
 public sealed record EnvironmentDescriptor(
     string Name,
     string Region,
     string Tier,
     IReadOnlyDictionary<string, string> Values,
-    IReadOnlyList<string> Grantable)
+    IReadOnlyList<string> Grantable,
+    ApprovalPolicy? Approval = null)
 {
     // Top-level fields addressed as env.<key>; values may not shadow them.
     private const string NameKey = "name";

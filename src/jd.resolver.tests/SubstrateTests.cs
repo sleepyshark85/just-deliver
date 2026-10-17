@@ -119,6 +119,37 @@ public class SubstrateTests
     }
 
     [Fact]
+    public async Task The_stage_definition_composes_a_protected_descriptor_with_its_policy_as_the_committed_golden()
+    {
+        var (_, shared) = await PrepareAsync(await DefinitionAsync());
+        var sharedDescriptor = await ComposeAsync(shared, SharedOutputs);
+        var (_, stage) = await PrepareAsync(await DefinitionAsync("stage.yaml"), sharedDescriptor);
+        var outputs = DevOutputs.ToDictionary(o => o.Key.Replace("@dev/dev", "@stage/stage", StringComparison.Ordinal), o => o.Value);
+        outputs["@stage/stage/substrate/group"] = new() { ["resourceGroupName"] = "rg-stage-1", ["location"] = Region };
+        outputs["@stage/stage/substrate/database"] = new() { ["databaseId"] = "/db/id", ["databaseName"] = "db-stage" };
+
+        var composed = await stage.ComposeAsync(Outputs(outputs));
+
+        Assert.Empty(composed.Errors);
+        Assert.Equal(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", "stage-environment.yaml")), composed.Yaml);
+        var descriptor = (await EnvironmentParser.ParseAsync("stage.env.yaml", composed.Yaml!)).Descriptor!;
+        Assert.Equal(("stage", "protected"), (descriptor.Name, descriptor.Tier));
+        Assert.Equal(new ApprovalPolicy("dev", 1, ["00000000-0000-0000-0000-000000000000"], true).ToJson().ToString(), descriptor.Approval!.ToJson().ToString());
+    }
+
+    [Fact]
+    public async Task A_definition_whose_policy_cannot_be_met_is_found_before_anything_is_created()
+    {
+        var definition = await DefinitionAsync("stage.yaml", text => text.Replace("required: 1", "required: 2", StringComparison.Ordinal));
+        var (_, shared) = await PrepareAsync(await DefinitionAsync());
+        var (_, composer) = await PrepareAsync(definition, await ComposeAsync(shared, SharedOutputs));
+
+        var error = Assert.Single((await composer.ComposeAsync(null)).Errors);
+
+        Assert.Equal("approval.required", error.Location);
+    }
+
+    [Fact]
     public async Task Before_the_deploy_values_are_checked_against_the_exports_and_nothing_needs_outputs()
     {
         var (_, composer) = await PrepareAsync(await DefinitionAsync());
