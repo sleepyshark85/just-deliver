@@ -15,7 +15,7 @@ rule says and this page for how it is applied; raise the conflict so one of them
 
   | Agent | Model | Used for |
   |---|---|---|
-  | `developer` | Opus | a slice; review findings that need design work |
+  | `developer` | Sonnet | a slice; review findings that need design work |
   | `fixer` | Sonnet | review findings that are all small, with an obvious fix, a few files each |
   | `reviewer` | Opus | judging a branch against its brief; never edits |
 
