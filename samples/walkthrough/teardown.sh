@@ -16,6 +16,13 @@ for descriptor in "$@"; do
   groups+=("$(sed -n 's/^  resourceGroup: *//p' "$descriptor")")
 done
 
+for group in "$shared" "${groups[@]}"; do
+  if [[ -z $group ]]; then
+    echo "a descriptor has no resourceGroup; nothing deleted" >&2
+    exit 1
+  fi
+done
+
 for group in "${groups[@]}"; do az group delete --name "$group" --yes --no-wait; echo "deleting $group"; done
 for group in "${groups[@]}"; do az group wait --name "$group" --deleted --timeout 3600; done
 echo "deleting $shared"

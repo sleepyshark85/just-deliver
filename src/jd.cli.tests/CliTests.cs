@@ -145,8 +145,8 @@ public sealed class CliTests : IDisposable
     }
 
     // The manual-test kit (samples/walkthrough, docs/walkthrough.md) cannot rot unseen: every workload previews, every manifest makes a set whose
-    // deploy preview (set check, resolution of every workload, template check, the walk) passes with the app before the worker, and the
-    // scenario-5 policy, copied into a catalog copy, shows in the preview.
+    // deploy preview (set check, resolution of every workload, template check, the walk) passes with the app before the worker, `release show` names the app as the worker's dependsOn (the order alone
+    // could be an alphabetical tie-break), and the scenario-5 policy, copied into a catalog copy, shows in the preview.
     [Fact]
     public async Task The_walkthrough_kit_passes_the_offline_checks_and_its_policy_shows_in_the_preview()
     {
@@ -171,6 +171,9 @@ public sealed class CliTests : IDisposable
             Assert.Matches(@"release \S+ on dev: 2 previewed, 0 failed, 0 not started\.", stdout);
             var app = stdout.IndexOf("workload just-deliver-sample-app", StringComparison.Ordinal);
             Assert.True(app >= 0 && app < stdout.IndexOf("workload just-deliver-sample-worker", StringComparison.Ordinal), stdout);
+            var (shown, show, showError) = await RunAsync("release", "show", set);
+            Assert.True(shown == 0, showError);
+            Assert.Contains("    depends on: just-deliver-sample-app", show);
         }
 
         var catalog = Path.Combine(_temp, "catalog");

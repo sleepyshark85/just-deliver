@@ -1,0 +1,10 @@
+# Release v3: the worker changes again, the recovery from the out-of-band drift (scenario 6).
+kind: ReleaseManifest
+label: 1.4.0
+
+# The worker depends on the app (ordering only), so the app is deployed first. Paths are relative to this file.
+workloads:
+  - definition: ../workloads/app.yaml
+  - definition: ../workloads/worker.v3.yaml
+    dependsOn:
+      - just-deliver-sample-app

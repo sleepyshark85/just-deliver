@@ -24,5 +24,6 @@ export JD_WALK="<absolute path to an existing directory>"
 # az signed in as the deployer in its own config directory, apart from any personal login (as the Azure tests do).
 export AZURE_CONFIG_DIR="$JD_WALK/az"
 
-# jd from source, run from the repository root.
-jd() { dotnet run --project src/jd.cli -- "$@"; }
+# jd from source, built once into the walkthrough directory (no restore warnings on every call); run from the repository root.
+dotnet build src/jd.cli --configuration Release --nologo --verbosity quiet --output "$JD_WALK/jd"
+jd() { "$JD_WALK/jd/jd" "$@"; }

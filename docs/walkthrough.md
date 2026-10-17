@@ -95,7 +95,7 @@ free-tier Cosmos account** yet; a deploying service principal. Run everything fr
 
 ```bash
 cp samples/walkthrough/env.example.sh ~/jd-walkthrough.env.sh      # outside the repo; fill in the placeholders
-source ~/jd-walkthrough.env.sh
+source ~/jd-walkthrough.env.sh                                     # also builds jd once into $JD_WALK/jd
 mkdir -p "$JD_WALK" "$JD_RECORDS_DIR" "${PULUMI_BACKEND_URL#file://}"
 az login --service-principal --username "$ARM_CLIENT_ID" --password="$ARM_CLIENT_SECRET" --tenant "$ARM_TENANT_ID" --output none
 az account set --subscription "$ARM_SUBSCRIPTION_ID"
@@ -115,6 +115,11 @@ Look at: the Cosmos account is free tier, capped at 1,000 RU/s, refuses keys; `d
 
 ```bash
 az cosmosdb list --query "[].{name:name, free:enableFreeTier, limit:capacity.totalThroughputLimit, noKeys:disableLocalAuth}" -o table
+COSMOS=$(az cosmosdb list --query "[0].name" -o tsv)
+COSMOS_RG=$(az cosmosdb list --query "[0].resourceGroup" -o tsv)
+for db in db-dev db-stage; do
+  az cosmosdb sql database throughput show -a "$COSMOS" -g "$COSMOS_RG" -n "$db" --query "resource.throughput" -o tsv     # 400 each
+done
 ```
 
 Re-running an `env up` (with `--force`) reports every node `unchanged (no changes, …)` and rewrites the same descriptor. `stage` ships with the all-zero
@@ -235,8 +240,16 @@ jd release deploy "$JD_WALK/v2.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog
 revisions "$APP"                                     # a revision not seen before at 100
 ```
 
-Also refused here (exit 1, nothing deployed): the bad set under a label that already holds another set, e.g. a copy of `bad.manifest.yaml` with
-`label: 1.2.0` gives `jd: '…/dev/1.2.0/set.yaml' holds a different release set for label 1.2.0 on dev (sha256 …, this one …); a label names one set, so use a new label.`
+Also refused here (exit 1, nothing deployed): a set of other bytes under a label that already holds one. Make a copy of the bad manifest with label
+`1.2.0` (its relative workload paths made absolute) and create and deploy its set:
+
+```bash
+sed -e 's/^label: .*/label: 1.2.0/' -e "s#\.\./workloads#$PWD/samples/walkthrough/workloads#" samples/walkthrough/releases/bad.manifest.yaml > "$JD_WALK/clash.manifest.yaml"
+jd release create "$JD_WALK/clash.manifest.yaml" --out "$JD_WALK/clash.set.yaml"
+jd release deploy "$JD_WALK/clash.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog catalog; echo "exit $?"
+```
+
+Expected: exit 1, `jd: '…/dev/1.2.0/set.yaml' holds a different release set for label 1.2.0 on dev (sha256 …, this one …); a label names one set, so use a new label.`
 
 ### 5. A policy added as a catalog file only (offline)
 
@@ -270,10 +283,27 @@ jd release qualify "$JD_WALK/v2.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalo
 Expected: exit 1; stdout `release 1.2.0 on dev: IQ failed, <n> checks, <m> failed.` and `record: …-qualify.json`; on stderr
 `jd: IQ failed: just-deliver-sample-worker: pinned ghcr.io/…@sha256:267b…, live mcr.microsoft.com/k8se/quickstart:latest on revision <WORKER>--oob1`
 and `jd: IQ failed: just-deliver-sample-worker: node just-deliver-sample-worker/dev/@workload/runtime differs from what is deployed …`; nothing for the app's image.
-`jq .iq.status "$(newest dev 1.2.0 qualify)"` is `"failed"`, and `jd approve`/`jd promote` of `1.2.0` now answer "not qualified on dev".
+`jq .iq.status "$(newest dev 1.2.0 qualify)"` is `"failed"`, and `1.2.0` is not approvable or promotable now:
 
-Reset (not exercised by the Azure test): `jd release deploy "$JD_WALK/v2.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog catalog` deploys the
-worker's runtime again (pinned image, port 8080) as a new revision and runs IQ; then `jd release qualify` passes.
+```bash
+jd approve 1.2.0 --env "$JD_WALK/stage.env.yaml" --meaning "Drift check."; echo "exit $?"
+jd promote 1.2.0 --to "$JD_WALK/stage.env.yaml" --catalog catalog; echo "exit $?"
+```
+
+Expected, exit 1 each: `jd: approve: release 1.2.0 is not qualified on dev:` and `jd: promote: release 1.2.0 cannot be promoted to 'stage':` with
+`  not qualified on dev: …` below it.
+
+Reset (not exercised by the Azure test): redeploying `v2` does **not** work: its worker config is unchanged, so the deploy reuses the revision suffix of the
+last deploy, which names an existing revision, and Azure rejects it at the dark step (exit 1). Recover with a release whose worker config changes, a new
+label (`v3`, label `1.4.0`: the same app, the worker with `APP_VERSION: "3"`):
+
+```bash
+jd release create samples/walkthrough/releases/v3.manifest.yaml --out "$JD_WALK/v3.set.yaml"
+jd release deploy "$JD_WALK/v3.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog catalog
+```
+
+Expected (exit 0): the worker's runtime `deployed` as a new revision (pinned image, port 8080) that takes all the traffic, the app `unchanged`; `release 1.4.0 on
+dev: 1 deployed, 1 unchanged, 0 failed, 0 not started.` and IQ passed. `dev` is healthy again; `1.2.0` stays unqualified, and the later scenarios use `1.1.0`.
 
 ### 7. Promotion refused until approved
 
