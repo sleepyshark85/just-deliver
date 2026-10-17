@@ -10,6 +10,7 @@ internal static class ReleaseDocument
     public const string ManifestSchema = "schemas/release-manifest.schema.json";
     public const string SetSchema = "schemas/release-set.schema.json";
     public const string RecordSchema = "schemas/release-record.schema.json";
+    public const string ApprovalSchema = "schemas/approval-record.schema.json";
 
     private static readonly YamlSchemaValidator Validator = new();
 

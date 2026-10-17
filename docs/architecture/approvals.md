@@ -1,6 +1,6 @@
 # Approvals and the protected tier
 
-> Status: design note for S18 (MVP). **S18a built** (the policy, the gate, `stage`); **S18b built** (the qualification reader, `jd.resolver/release/QualificationReader`); **S18c built** (the approval record and `jd approve`; the approval reader moved to S19); S19 is not. Addresses [F54](../open-questions.md) for the MVP (F37, the full approval model, stays open);
+> Status: design note for S18 (MVP). **S18a built** (the policy, the gate, `stage`); **S18b built** (the qualification reader, `jd.resolver/release/QualificationReader`); **S18c built** (the approval record and `jd approve`); **S19a built** (the approval reader and the decision `PromotionCheck`, no CLI); S19b (`jd promote`) is not. Addresses [F54](../open-questions.md) for the MVP (F37, the full approval model, stays open);
 > S19 (`jd promote`) consumes it. Builds on [release-record.md](release-record.md) (records, `set.yaml`, identity, "qualified"),
 > [release.md](release.md) and [ADR 0008](../decisions/0008-enforcement-in-landing-zone.md) (stage and production are platform-owned shared
 > environments), [ADR 0010](../decisions/0010-replacement-protection-classes.md).
@@ -153,8 +153,7 @@ directory, where S19 looks; the set is read from the source environment's direct
   3. **not qualified** on `qualifiedOn` (section 5), with every reason listed;
   4. the approver is not in `approvers`;
   5. `separateFromDeployer` and the approver deployed this label on `qualifiedOn`;
-  6. **repeated**: this `objectId` already has an approval of this set on this environment. As built (S18c) this reads only the approval files in the target directory that
-     name the same environment, set and `qualifiedOn` (`ApprovalRecord.ApproversAsync`); the full valid-approval filter is S19's.
+  6. **repeated**: this `objectId` already has an approval of this set on this environment. This reads the approval files through the one reader of section 5 step 3 (`ApprovalRecord.ReadAsync`, S19a); a file it ignores (unreadable, invalid, naming another environment, label, set or `qualifiedOn`) is not an earlier approval; `jd approve` ignores it and reports it on stderr (`jd: approve: ignored <file>: <why>`), and still goes ahead. A file whose name is not `<time>-approve.json` with a valid time is ignored the same way.
 - **A repeat is a UX refusal, not a lock.** Two simultaneous runs by one principal could both write; S19 counts distinct principals, so a duplicate
   file never counts twice. Approvals are never revoked in the MVP; a withdrawn release is a new label (a rejection record is out of the MVP).
 - Prints `approved <label> for <env> (<n> of <required>)` and `record: <path>`.
@@ -190,10 +189,11 @@ an edit of `set.yaml` after approving each withdraw the right to promote without
 |---|---|---|
 | **S18a policy, gate, stage** | the `approval` block (definition and descriptor schemas with the `protected` coupling, record, parser, composer), `ApprovalPolicy.Counts`/`Evaluate`, the refusal in `release deploy`, `release qualify` and `deploy`, `samples/environments/stage.yaml`, usage.md; Azure test: `stage` up (section 1) | ~110 |
 | **S18b qualification** | the reader of a label's records: consistency checks, the qualified rule of section 5 step 2, the deployers, reasons; no CLI | ~120 |
-| **S18c approve** | `ApprovalRecord` (builder, schema, write through the store), `jd approve` (arguments, order, refusals, output), and the minimal look at earlier approvals that refuses a repeat and counts (`ApprovalRecord.ApproversAsync`: same environment, set and `qualifiedOn`); Azure test: the approve flow on real records | ~150 |
-| **S19 promote** | the approval reader (the valid-approval filter of section 5 step 3, with its tests: edited `setSha256`, another directory, a schema failure, an edited `set.yaml`, another `qualifiedOn`, hand-placed approvals), `Evaluate` over the files, `jd promote` | |
+| **S18c approve** | `ApprovalRecord` (builder, schema, write through the store), `jd approve` (arguments, order, refusals, output), and the minimal look at earlier approvals that refuses a repeat and counts (`ApprovalRecord.ApproversAsync`: same environment, set and `qualifiedOn`; replaced by the S19a reader); Azure test: the approve flow on real records | ~150 |
+| **S19a approved** | the approval reader (`ApprovalRecord.ReadAsync`: the valid-approval filter of section 5 step 3, ignored files reported, with its tests: edited `setSha256`, another directory, a schema failure, an edited `set.yaml`, another `qualifiedOn`, hand-placed approvals) and `PromotionCheck.CheckAsync` (steps 1 to 4: `h`, qualified, `Evaluate`, every reason); `jd approve` reads earlier approvals through the reader; no CLI | ~100 |
+| **S19b promote** | `jd promote` (arguments, order, output, the release walk of the kept set on the target), and the Azure test: a promote to `stage` | |
 
-~430 in total; each part stands alone and keeps the gate green. **Split of S18c (taken):** the approval reader (the valid-approval filter of section 5 step 3) has no consumer until S19 and moved there with its tests (section 7); S18c keeps ~150 lines. S18b has no consumer until S18c, which is
+~430 in total; each part stands alone and keeps the gate green. **Split of S18c (taken):** the approval reader (the valid-approval filter of section 5 step 3) had no consumer until S19 and moved there with its tests (section 7); S18c keeps ~150 lines. S18b has no consumer until S18c, which is
 acceptable because its tests are the point. S18a can be built in parallel with S17c2 **except for the Azure gate**: S18a edits `EnvUpAzureTests` (the `stage` steps and the cleanup order),
 as S17c2 does, so their Azure runs are serial (one free-tier account, one lock) and the second to merge rebases. S18a needs S17c1 (it refuses `jd release qualify`, which S17c1 adds), S18b needs S17c1 (the `iq` field) and S18c needs S18a and S18b.
 

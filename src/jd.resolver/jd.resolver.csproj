@@ -8,6 +8,7 @@
     <EmbeddedResource Include="../../schemas/release-manifest.schema.json" LogicalName="schemas/release-manifest.schema.json" />
     <EmbeddedResource Include="../../schemas/release-set.schema.json" LogicalName="schemas/release-set.schema.json" />
     <EmbeddedResource Include="../../schemas/release-record.schema.json" LogicalName="schemas/release-record.schema.json" />
+    <EmbeddedResource Include="../../schemas/approval-record.schema.json" LogicalName="schemas/approval-record.schema.json" />
   </ItemGroup>
 
   <ItemGroup>

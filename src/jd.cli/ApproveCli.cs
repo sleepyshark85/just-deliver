@@ -61,18 +61,10 @@ internal static class ApproveCli
             return UsageError;
         }
 
-        try
-        {
-            // A bad credential stops here, before any record is read.
-            return await Cli.GetIdentityAsync(identity, environmentVariable, stderr, cancellationToken) is { } principal
-                ? await ApproveAsync(new Request(options, target, policy, records), principal, time, stdout, stderr, cancellationToken)
-                : Invalid;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            stderr.WriteLine($"jd: {ex.Message}");
-            return UsageError;
-        }
+        // A bad credential stops here, before any record is read.
+        return await Cli.GetIdentityAsync(identity, environmentVariable, stderr, cancellationToken) is { } principal
+            ? await ApproveAsync(new Request(options, target, policy, records), principal, time, stdout, stderr, cancellationToken)
+            : Invalid;
     }
 
     private static async Task<int> ApproveAsync(Request request, DeployerIdentity principal, TimeProvider time, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
@@ -108,7 +100,13 @@ internal static class ApproveCli
             return Invalid;
         }
 
-        var earlier = await ApprovalRecord.ApproversAsync(records, target, label, setSha256, cancellationToken);
+        var reading = await ApprovalRecord.ReadAsync(records, target, label, setSha256, cancellationToken);
+        foreach (var ignored in reading.Ignored)
+        {
+            stderr.WriteLine($"jd: approve: ignored {ignored}");
+        }
+
+        var earlier = reading.Approvers;
         if (earlier.Contains(approver, StringComparer.OrdinalIgnoreCase))
         {
             stderr.WriteLine($"jd: approve: principal {approver} already approved {label} for '{target.Name}'.");
