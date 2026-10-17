@@ -278,7 +278,7 @@ public sealed partial class ReleaseDeployCliTests
 
         var stderr = new StringWriter();
         var code = await ReleaseDeployCli.PromoteAsync(
-            kept, stage, Catalog, changed, new StringWriter(), stderr, backend, null, _live, _clock, name => name == "JD_RECORDS_DIR" ? _records : null, CancellationToken.None);
+            kept, stage, Catalog, changed, new StringWriter(), stderr, backend, backend, _live, _clock, name => name == "JD_RECORDS_DIR" ? _records : null, CancellationToken.None);
 
         Assert.Equal(1, code);
         Assert.Contains("changed since it was checked", stderr.ToString());

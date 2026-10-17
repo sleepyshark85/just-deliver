@@ -17,15 +17,18 @@ internal static class PromoteCli
     private const int Invalid = 1;
     private const int UsageError = 2;
 
+    private const string ToOption = "--to";
+    private const string CatalogOption = "--catalog";
+
     // args are the arguments after "promote".
     public static async Task<int> RunAsync(
         string[] args, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions,
         TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken)
     {
-        var (label, values, problem) = Arguments.ScanLabel(args, "--to", "--catalog");
-        if (label is null || !values.TryGetValue("--to", out var to) || !values.TryGetValue("--catalog", out var catalog))
+        var (label, values, problem) = Arguments.ScanLabel(args, ToOption, CatalogOption);
+        if (label is null || !values.TryGetValue(ToOption, out var to) || !values.TryGetValue(CatalogOption, out var catalog))
         {
-            stderr.WriteLine($"jd: {(label is null ? problem : "promote needs --to and --catalog.")}");
+            stderr.WriteLine($"jd: {(label is null ? problem : $"promote needs {ToOption} and {CatalogOption}.")}");
             stderr.Write(Cli.Usage);
             return UsageError;
         }

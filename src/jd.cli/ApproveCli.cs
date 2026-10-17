@@ -15,6 +15,9 @@ internal static class ApproveCli
     private const int Invalid = 1;
     private const int UsageError = 2;
 
+    private const string EnvOption = "--env";
+    private const string MeaningOption = "--meaning";
+
     // The schema's maxLength for a meaning (schemas/approval-record.schema.json).
     private const int MeaningMaxLength = 500;
 
@@ -134,19 +137,19 @@ internal static class ApproveCli
 
     private static (Options? Options, string Problem) Parse(string[] args)
     {
-        var (label, values, problem) = Arguments.ScanLabel(args, "--env", "--meaning");
+        var (label, values, problem) = Arguments.ScanLabel(args, EnvOption, MeaningOption);
         if (label is null)
         {
             return (null, problem);
         }
 
-        if (!values.TryGetValue("--env", out var environment))
+        if (!values.TryGetValue(EnvOption, out var environment))
         {
-            return (null, "approve needs --env.");
+            return (null, $"approve needs {EnvOption}.");
         }
 
-        return !values.TryGetValue("--meaning", out var meaning) || meaning.Length is 0 or > MeaningMaxLength || meaning.Any(char.IsControl)
-            ? (null, $"approve needs --meaning <text>: 1 to {MeaningMaxLength.ToString(CultureInfo.InvariantCulture)} characters, no control characters.")
+        return !values.TryGetValue(MeaningOption, out var meaning) || meaning.Length is 0 or > MeaningMaxLength || meaning.Any(char.IsControl)
+            ? (null, $"approve needs {MeaningOption} <text>: 1 to {MeaningMaxLength.ToString(CultureInfo.InvariantCulture)} characters, no control characters.")
             : (new Options(label, environment, meaning), string.Empty);
     }
 }
