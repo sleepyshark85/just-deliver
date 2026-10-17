@@ -89,7 +89,8 @@ approval:
 - **Schema and rules** (`environment-definition` and `environment` schemas, the loader for what the schema cannot say): `qualifiedOn` has the
   environment-name pattern and is not the environment's own name; `required` is an integer >= 1 and <= `approvers.length` (a policy that can never
   be met is an error at `env up`); `approvers` are unique GUIDs, at least one; `separateFromDeployer` is **required**, not defaulted (a silent
-  default would be a silent weakening). **Tier coupling, in the schemas only:** `tier: protected` requires `approval` (`if`/`then`; no C# rule). That is the
+  default would be a silent weakening). **Tier coupling, in the schemas only:** `tier: protected` requires `approval`, written as `"anyOf": [ { "properties": { "tier": { "enum": ["team"] } } }, { "required": ["approval"] } ]`
+  (NJsonSchema 11.0.2 silently ignores `if`/`then`, so this form is used; no C# rule). That is the
   "policy per tier": the tier decides in the schema whether there must be a policy, the environment definition holds its values.
 - **Evaluation** is two pure functions in `jd.resolver` (no I/O, golden-tested), over the policy, the distinct approvals and the deployers:
   `Counts(approver, deployers)` (the principal is listed in `approvers`, and is not in `deployers` when `separateFromDeployer`) and
@@ -193,13 +194,13 @@ an edit of `set.yaml` after approving each withdraw the right to promote without
 ~430 in total; each part stands alone and keeps the gate green. **Split point for S18c:** the approval reader (the valid-approval filter of section 5 step 3) has no
 consumer until S19 and can move there (about 50 lines), leaving S18c at ~150; the lead decides when it sees S18c's size. S18b has no consumer until S18c, which is
 acceptable because its tests are the point. S18a can be built in parallel with S17c2 **except for the Azure gate**: S18a edits `EnvUpAzureTests` (the `stage` steps and the cleanup order),
-as S17c2 does, so their Azure runs are serial (one free-tier account, one lock) and the second to merge rebases. S18b needs S17c1 (the `iq` field) and S18c needs S18a and S18b.
+as S17c2 does, so their Azure runs are serial (one free-tier account, one lock) and the second to merge rebases. S18a needs S17c1 (it refuses `jd release qualify`, which S17c1 adds), S18b needs S17c1 (the `iq` field) and S18c needs S18a and S18b.
 
 ## 7. Required tests
 
 Security boundaries are tests, each shown to fail when the guard is removed (standards, mutation proof).
 
-- **S18a:** policy golden (descriptor round trip); a `protected` definition or descriptor without `approval` is an error (schema), and a `team` one with it is accepted; `required` > approvers, `qualifiedOn` = own name,
+- **S18a:** policy golden (descriptor round trip); a `protected` definition or descriptor without `approval` is an error (schema, the `anyOf` form), and a `team` one with it or without it is accepted; `required` > approvers, `qualifiedOn` = own name,
   a non-GUID, a missing `separateFromDeployer` are errors; `Counts`: an unlisted principal does not count, a deployer does not count when separation is
   on and does when off; `Evaluate`: the same principal twice counts once, `required: 2` needs two. **`release deploy`, `release qualify` and `deploy` on a descriptor with an
   `approval` block exit 1 with zero backend calls, no identity call, no record and no `set.yaml`** (the check reads the block, so a descriptor with a
