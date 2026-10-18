@@ -2,8 +2,8 @@
 
 Status: **user direction (2026-10-18)**: "nothing need to be set in any machine running jd. Deployments should be stateless, jd should
 decide what to connect", "everything should be tested in my local machine now, so state storage (and any other external concerns of jd)
-should be implemented in an abstract manner and defaulted to local", "it should be part of MVP". Slice **S23** (MVP). The lead's design
-below; the user reviews it.
+should be implemented in an abstract manner and defaulted to local", "it should be part of MVP". Slice **S23** (MVP), **S23 built**. The lead's
+design below; the user reviews it.
 
 ## Problem
 

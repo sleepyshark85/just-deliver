@@ -14,7 +14,7 @@ dotnet run --project src/jd.cli -- release qualify <release-set.yaml> --env <env
 dotnet run --project src/jd.cli -- approve <label> --env <environment.yaml> --meaning <text>
 dotnet run --project src/jd.cli -- promote <label> --to <environment.yaml> --catalog <dir>
 dotnet run --project src/jd.cli -- deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
-dotnet run --project src/jd.cli -- env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
+dotnet run --project src/jd.cli -- env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--force]
 dotnet run --project src/jd.cli -- --help
 ```
 
@@ -31,7 +31,7 @@ release set (`jd release deploy`); the evidence of a deploy comes from there ([r
 Resolves like `preview`, checks the graph against the templates in `<catalog>/templates`, then provisions the
 infrastructure nodes through the Pulumi backend in graph order, then releases the runtime ([Orchestrator](architecture/provisioning.md#orchestrator)).
 This **creates real Azure resources**: use a subscription with the guardrails of [tools/sandbox](../tools/sandbox/README.md)
-and the Azure credentials in the environment (`source ~/.just-deliver/<subscription>.env`).
+signed in with `az login` (or a service principal's `ARM_*`, see [Data and identity](#data-and-identity)).
 
 - One line per node as it completes: `<node id>: <outcome> (<changes>, <seconds>s)`, then the resources changed.
   Outcomes: `deployed`, `unchanged` (the stack already matched), `previewed`, `pending upstream` (`--preview` only: a
@@ -45,14 +45,7 @@ and the Azure credentials in the environment (`source ~/.just-deliver/<subscript
 - The first failure stops the run (exit 1) and names the node and reason; nodes already deployed stay deployed. Running
   the command again resumes: deployed nodes report `unchanged`.
 - `--preview` shows what would change and creates nothing; nodes whose upstream outputs are not in state yet are `pending upstream`.
-- Environment variables. Two are **required**; if either is missing `jd deploy` exits 2 and says what to set:
-  - `PULUMI_BACKEND_URL`: where Pulumi keeps state, for example `file:///home/me/jd-state` or an Azure blob URL. There is no
-    default, because a silent default location loses track of the stacks between runs. The sandbox credentials file does
-    not set it: export it yourself, and use the same value every time.
-  - `PULUMI_CONFIG_PASSPHRASE`: encrypts secrets in state. Set it explicitly; an empty value is accepted (the sandbox
-    credentials file sets it empty; acceptable for local/dev only). `PULUMI_CONFIG_PASSPHRASE_FILE` instead of the
-    variable also satisfies the check.
-  - Optional: `PULUMI_HOME` (plugin cache), `JD_SCRATCH_DIR` (working directories; default the system temp directory).
+- Nothing needs to be set: the Pulumi state is in jd's data directory ([Data and identity](#data-and-identity)).
 
 Errors from any stage are printed to stderr with file and location; results go to stdout.
 
@@ -75,16 +68,15 @@ A workload without it fails to resolve with `requires: policy 'enforce-monitorin
 **Upgrading a workload deployed before S21c**, when App Insights came from the policy: the next deploy creates `monitoring/appinsights` and
 `monitoring/access` and rolls a new revision (probe, then shift). jd deletes nothing, so the old App Insights and its role assignment stay in
 the stacks `<workload>.<env>._workload.appinsights` and `<workload>.<env>._workload.appinsights-access`, with the telemetry history. They
-cost nothing and go with the environment's resource group at teardown. To remove them earlier, with the same `PULUMI_BACKEND_URL` and
-passphrase, from the template's directory (`catalog/templates/azure/role-assignment`, then `catalog/templates/azure/application-insights`):
+cost nothing and go with the environment's resource group at teardown. To remove them earlier, with `PULUMI_BACKEND_URL=file://<data>/state`,
+`PULUMI_CONFIG_PASSPHRASE_FILE=<data>/state.key` and `PULUMI_CONFIG_PASSPHRASE` unset (Pulumi prefers it to the file), from the template's directory (`catalog/templates/azure/role-assignment`, then `catalog/templates/azure/application-insights`):
 `pulumi destroy --stack <stack> --yes`, then `pulumi stack rm <stack> --yes`.
 
 ### `jd env up`
 
 Provisions an environment's **substrate** from an environment definition and writes the environment descriptor
 ([resolver.md](architecture/resolver.md#environment-descriptor)) from the real outputs, so no Azure id is typed by hand.
-It uses the same resolver and orchestrator as `jd deploy`, and the same backend variables
-(`PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE`) and Azure credentials. **It creates real Azure resources**: free tier only,
+It uses the same resolver and orchestrator as `jd deploy`, the same state in jd's data directory and the same sign-in. **It creates real Azure resources**: free tier only,
 see [standards §6](engineering/standards.md).
 
 ```
@@ -102,7 +94,8 @@ jd env up samples/environments/dev.yaml    --catalog catalog --base shared.env.y
   another as `${cosmos-account.name}`, in place when it is deployed in the same run, else from the base. The written descriptor is the
   base's values plus each deployed part's exports. A shared resource the offers reach must be in the base (an environment never deploys
   one), and a part the base already has is an error.
-- `--region` defaults to `JD_REGION`; one of them is required. The descriptor takes its name and type from the definition.
+- The definition's `region` (required) is the descriptor's region, the same on every machine; the descriptor takes its name and type from
+  the definition too.
 - `--out` must not exist unless `--force` is given; this is checked before anything is created.
 - Before anything is created the definition's type (and the base's) must be one `catalog.yaml` declares under `environmentTypes`, and a
   definition of a type with `approval: true` must carry an `approval` block; otherwise the error names the type (and the declared ones) and
@@ -121,6 +114,7 @@ An environment definition (`kind: EnvironmentDefinition`, [schema](../schemas/en
 ```yaml
 kind: EnvironmentDefinition
 name: dev                       # the environment's name
+region: southeastasia          # where it is deployed (required): the descriptor's region, the same on every machine
 type: dev                       # an environment type catalog.yaml declares (shared, dev, stage, prod in the seed)
 offers: [container-app, database, monitoring]   # catalog components and at most one runtime; the parts follow from them
 approval:                       # optional, required for a type with approval: true (stage, prod); copied as it is into the descriptor
@@ -141,7 +135,7 @@ the service principals that may approve before anything can be promoted.
 An environment whose **descriptor carries an `approval` block** is gated, whatever its type (the tool tests for the block, never for a type name). The
 catalog requires the block for a type declared with `approval: true` (`stage`, `prod`), so one cannot be written without it: such a definition or
 descriptor without the block fails with "environment type 'stage' requires an 'approval' block". `jd deploy`, `jd release deploy` and `jd release qualify`
-on a gated descriptor exit 1 with "environment '<name>' is gated by an approval policy: use `jd promote`" before the principal, `JD_RECORDS_DIR` or the
+on a gated descriptor exit 1 with "environment '<name>' is gated by an approval policy: use `jd promote`" before the principal, the records or the
 backend is touched: no call, no record, no `set.yaml`. `--preview` is not refused (it creates nothing), and neither is `jd env up` (the substrate is not a
 release). `jd approve` records an approval for a gated environment (below); `jd promote`, the only way a set reaches one, is below ([approvals.md](architecture/approvals.md)).
 
@@ -171,7 +165,7 @@ workloads:
 | `release create <manifest> --out <set>` | Validates every listed workload definition, requires each image to be pinned by digest (`@sha256:` and 64 hex digits; a tag is rejected), checks names and dependencies, works out the deploy order and writes the release set. Refuses to overwrite an existing file: sets are immutable, so a changed release gets a new file. Prints every problem as `file: location: message`. |
 | `release show <set>` | Re-verifies each embedded definition against its recorded SHA-256 and re-applies the create rules, then prints (derived from the definitions) the label, the deploy order and, per workload, team, definition SHA-256, image and dependencies. A modified set, or one that breaks a rule, is an error (exit 1). |
 
-| `release deploy <set> --env <environment> --catalog <dir> [--preview]` | Loads the set (re-verifying it like `show`), resolves **every** workload on the environment and checks every graph against the templates, and only then deploys each workload (infrastructure, then the runtime release) in the set's deploy order. Same resolver, template check and orchestrator as `jd deploy`, and the same backend variables (`PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE`), plus `JD_RECORDS_DIR` and the `ARM_*` principal (below) unless `--preview`. **Creates real Azure resources.** |
+| `release deploy <set> --env <environment> --catalog <dir> [--preview]` | Loads the set (re-verifying it like `show`), resolves **every** workload on the environment and checks every graph against the templates, and only then deploys each workload (infrastructure, then the runtime release) in the set's deploy order. Same resolver, template check and orchestrator as `jd deploy`, and the same state and sign-in ([Data and identity](#data-and-identity)), plus the records (below) unless `--preview`. **Creates real Azure resources.** |
 | `release qualify <set> --env <environment> --catalog <dir>` | Re-checks a deployed set without deploying anything (installation qualification, IQ): resolves like `release deploy`, then checks that no node of any workload has drifted and that every revision serving traffic runs the pinned image. Same variables as a recorded `release deploy`. Writes a record (below). |
 
 Exit codes are the same as above (a manifest, set or `--out` path problem is 2; invalid content is 1).
@@ -190,26 +184,24 @@ Exit codes are the same as above (a manifest, set or `--out` path problem is 2; 
   nodes report `unchanged`. Rolling earlier workloads back is not done (open question E31).
 - `--preview` walks the same order and creates nothing; the summary says `previewed`.
 - **The release record** (not with `--preview`): one JSON file per attempt, written at the end of the run (also when it failed), never edited:
-  `<JD_RECORDS_DIR>/<environment>/<label>/<UTC yyyyMMddTHHmmssfffZ>-deploy.json`; the line `record: <path>` names it. It holds the outcome
+  `<data>/records/<environment>/<label>/<UTC yyyyMMddTHHmmssfffZ>-deploy.json`; the line `record: <path>` names it. It holds the outcome
   (and the failing workload and node, and the workloads not started), who deployed, what was pinned (hashes, not config), what ran with change
   **counts**, timings, and the operational qualification (OQ) of each workload read from its probe: `passed`, `failed`, `unchanged` (the revision
   was already live) or `notRun`. Contract: `schemas/release-record.schema.json`; design: [release-record.md](architecture/release-record.md).
   A deploy that succeeded then runs **IQ** (the same checks as `jd release qualify`, below) and the record carries it as `iq`: `passed`, `failed`, or `notRun`
   when a workload failed (a failed deploy runs no IQ). `deploySeconds` is the deploy walk alone; the IQ time is `iq.elapsedSeconds`, so the whole run (roughly
   one more pass over every node for IQ) takes longer than `deploySeconds`. **If IQ fails, the command exits 1** and prints each failure as
-  `jd: IQ failed: <workload>: <reason>`; the record reads `outcome: succeeded` with `iq.status: failed` and the deployment is left as it is (no rollback). It needs
-  the `ARM_*` principal to read the live revisions.
-  - `JD_RECORDS_DIR` is **required**: an existing directory (exit 2 and what to set otherwise, before anything is created). Keep it
-    somewhere durable; it is the evidence, and nothing in it is a secret.
-  - **Who deployed** is the service principal in `ARM_TENANT_ID`, `ARM_CLIENT_ID` and `ARM_CLIENT_SECRET` (the variables Pulumi uses too),
-    as Entra reports it for an access token obtained in this run. Missing variables or a refused credential stop the run (exit 1) before
-    anything is deployed; the secret is never printed.
+  `jd: IQ failed: <workload>: <reason>`; the record reads `outcome: succeeded` with `iq.status: failed` and the deployment is left as it is (no rollback). It reads
+  the live revisions as the signed-in principal.
+  - The records are in jd's data directory (`<data>/records`, [Data and identity](#data-and-identity)); keep it somewhere durable: it is the
+    evidence, and nothing in it is a secret.
+  - **Who deployed** is the signed-in principal ([Data and identity](#data-and-identity)) as Entra reports it for an access token obtained in
+    this run. A partial `ARM_*` set or a refused credential stops the run (exit 1) before anything is deployed; the secret is never printed.
   - `<records>/<environment>/<label>/set.yaml` is the set file's exact bytes, kept on the label's first attempt. A later attempt under the same
     label with a different set is refused (exit 1) before anything is deployed: use a new label. It is never overwritten.
   - If the record itself cannot be written, the run exits 1 and says the release was deployed; the deployment stays.
   - Also exit 1, before anything is deployed and with nothing created: a credential Entra refuses or that is malformed (for example `ARM_TENANT_ID`
     neither a directory id nor a domain name), and a label the record store rejects (it must not contain a path separator or `..`, since it names a directory).
-    A missing or invalid `JD_RECORDS_DIR` is exit 2.
 
 ### `jd release qualify`
 
@@ -220,7 +212,7 @@ Checks, never changes: it makes no deploy call. It runs every check and lists ev
 - **The running image:** the runtime's revisions are read live from Azure (not from state or the record); every image of every revision with traffic must equal
   the workload's pinned image, and at least one revision must hold traffic. A failure reads
   `pinned <image>, live <image> on revision <name>`. If Azure cannot answer (the app is gone, access refused, no network) that is a failed check with the reason.
-- Starts like a recorded `release deploy` (needs `JD_RECORDS_DIR`, the `ARM_*` principal and the backend variables; creates `set.yaml` when the label has none,
+- Starts like a recorded `release deploy` (the records, the signed-in principal and the state; creates `set.yaml` when the label has none,
   refuses a different set under the label), then writes `...-qualify.json` and prints `record: <path>`. The record holds the pinned release and graphs, who ran
   it and the `iq` verdict (`passed` or `failed`, its time and each check); it has no run, no OQ and no deploy time.
 - Exit 0 when IQ passes; exit 1 when it fails (each failure is a `jd: IQ failed: <workload>: <reason>` line) or when the record cannot be written.
@@ -228,19 +220,18 @@ Checks, never changes: it makes no deploy call. It runs every check and lists ev
 
 ### `jd approve`
 
-`jd approve <label> --env <stage.env.yaml> --meaning <text>` records that the principal of the `ARM_*` credential approves the set that is kept for `<label>`
-(`<JD_RECORDS_DIR>/<qualifiedOn>/<label>/set.yaml`) for a gated environment. `--env` is the target's descriptor, which carries the `approval` policy
+`jd approve <label> --env <stage.env.yaml> --meaning <text>` records that the signed-in principal approves the set that is kept for `<label>`
+(`<data>/records/<qualifiedOn>/<label>/set.yaml`) for a gated environment. `--env` is the target's descriptor, which carries the `approval` policy
 (`qualifiedOn`, `required`, `approvers`, `separateFromDeployer`). The approver is a **service principal**, so `approvers` lists principals, and
-separation from the deployer means something only when each approver and each deployer has its own. Needs `JD_RECORDS_DIR` and the `ARM_*` variables
-(no catalog, no backend). `--meaning` is required: 1 to 500 characters, no control characters; it is recorded and printed, never interpreted.
+separation from the deployer means something only when each approver and each deployer has its own. Needs the records and the sign-in (no catalog, no
+backend). `--meaning` is required: 1 to 500 characters, no control characters; it is recorded and printed, never interpreted.
 
 Exit 1 with a message naming the cause, and nothing written, when: the descriptor has no `approval` block; the label is unknown on `qualifiedOn`
 (or its `set.yaml` or directory cannot be read, which is said as such); the set is not qualified on `qualifiedOn` (every reason is listed); the principal
 is not in `approvers`; `separateFromDeployer` is on and the principal deployed the label on `qualifiedOn`; or the principal already approved this set for this
-environment. A bad credential stops before any record is read (exit 1). Exit 2: a missing or empty `--meaning`, a label that is not a release label (or is a path), an unreadable `--env`,
-a missing `JD_RECORDS_DIR`.
+environment. A bad credential stops before any record is read (exit 1). Exit 2: a missing or empty `--meaning`, a label that is not a release label (or is a path), an unreadable `--env`.
 
-It writes `<JD_RECORDS_DIR>/<target>/<label>/<UTC time>-approve.json` (`kind: ApprovalRecord`, [schema](../schemas/approval-record.schema.json); created once,
+It writes `<data>/records/<target>/<label>/<UTC time>-approve.json` (`kind: ApprovalRecord`, [schema](../schemas/approval-record.schema.json); created once,
 never edited) and prints `approved <label> for <env> (<n> of <required>)` and `record: <path>`. The record names the target, the label, the SHA-256 of the
 kept `set.yaml` (the approval binds the set, not a record), `qualifiedOn`, the principal as the credential reports it and the meaning. A repeat is refused as a
 convenience, not a lock; `jd promote` counts distinct principals. Approvals are not revoked: a withdrawn release gets a new label.
@@ -248,19 +239,39 @@ convenience, not a lock; `jd promote` counts distinct principals. Approvals are 
 ### `jd promote`
 
 `jd promote <label> --to <stage.env.yaml> --catalog <dir>` deploys a set to a gated environment. It takes **no set file**: the set is the bytes kept on the
-policy's `qualifiedOn` environment, `<JD_RECORDS_DIR>/<qualifiedOn>/<label>/set.yaml`, which become the target's own `set.yaml` unchanged, so both
-environments run the same digests and the same set hash. `--to` is the target's descriptor (it carries the `approval` policy). Needs `JD_RECORDS_DIR`,
-the `ARM_*` principal and the backend variables, as `release deploy` does.
+policy's `qualifiedOn` environment, `<data>/records/<qualifiedOn>/<label>/set.yaml`, which become the target's own `set.yaml` unchanged, so both
+environments run the same digests and the same set hash. `--to` is the target's descriptor (it carries the `approval` policy). Needs the records, the
+signed-in principal and the state, as `release deploy` does.
 
 The set is promoted only when it is **qualified** on `qualifiedOn` (the newest deploy succeeded and the newest IQ passed, judged from the records now) and
 **approved** by enough distinct principals (`jd approve`, counted by the environment's policy). Whoever runs `promote` is not checked against `approvers`.
 Otherwise exit 1 lists every reason (and every approval file that was ignored and why) and nothing is written, no backend is called. Exit 1 also when the descriptor has no
-`approval` block. Exit 2: a missing or bad argument, a label that is not a release label, an unreadable `--to` or `--catalog`, a missing `JD_RECORDS_DIR` or
-backend variable.
+`approval` block. Exit 2: a missing or bad argument, a label that is not a release label, an unreadable `--to` or `--catalog`.
 
 When it may go ahead it prints `promoting <label> from <source> (set sha256 <h>)`, then runs the walk of `jd release deploy` on the target with its output, exit
 codes, deploy record (with IQ) and `set.yaml` check. The record's `release.setSha256` is `<h>`. `jd release deploy`, `jd deploy` and `jd release qualify`
 stay refused on the gated environment.
+
+## Data and identity
+
+Nothing needs to be set on the machine ([connections.md](architecture/connections.md)).
+
+- **jd's data directory** `<data>` is `jd` in the local application data folder (`~/.local/share/jd` on Linux), created on first use;
+  `JD_DATA_DIR` moves it (to keep runs apart). It holds:
+  - `state/`: the Pulumi state (a `file://` backend);
+  - `state.key`: the passphrase that encrypts the state's secrets, random, generated on first use (mode 600) and kept; without it the state's
+    secrets cannot be read, so keep it with `state/`;
+  - `records/`: the release and approval records, `<environment>/<label>/…` (the evidence).
+- **Region:** each environment definition's `region` (required).
+- **Identity:** the Azure CLI sign-in (`az login`, and `az account set` for the subscription), for jd and for Pulumi. A service principal
+  (CI, the Azure tests) sets all three of `ARM_TENANT_ID`, `ARM_CLIENT_ID` and `ARM_CLIENT_SECRET` (and `ARM_SUBSCRIPTION_ID` for Pulumi) instead;
+  a partial set is refused (exit 1) and names the missing ones.
+- Optional: `PULUMI_HOME` (plugin cache), `JD_SCRATCH_DIR` (working directories; default the system temp directory).
+
+**Upgrading from before S23**, when the state and records were where `PULUMI_BACKEND_URL` and `JD_RECORDS_DIR` pointed and the region came from
+`JD_REGION` or `--region`: jd reads none of them any more, so the old state and records are not found. Add `region:` to your definitions. Then either
+start clean (tear down, then run from an empty data directory), or move them by hand: the old state folder to `<data>/state`, the old records
+folder to `<data>/records`, and the old passphrase into `<data>/state.key` (no trailing newline) before jd generates one.
 
 ## Walkthrough
 
@@ -268,18 +279,10 @@ From a clean subscription to a release promoted to `stage`, then teardown. Comma
 `dotnet run --project src/jd.cli --`. Free tier only: the subscription must have no free-tier Cosmos account yet (Azure allows one).
 To test every check by hand (bad release, drift, refused approvals, tampering), follow [walkthrough.md](walkthrough.md) instead.
 
-**1. Prerequisites.** The .NET SDK, the `pulumi` CLI and the `az` CLI. A deploying service principal and, because `stage` keeps approval separate
-from deploying (`separateFromDeployer: true`), a second one that approves. Set (names only; never commit the values):
-
-| Variable | For |
-|---|---|
-| `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_TENANT_ID`, `ARM_SUBSCRIPTION_ID` | the principal that runs the command (Pulumi, the records' identity) |
-| `JD_REGION` | the region of everything (or `--region` on `env up`) |
-| `PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE` (or `PULUMI_CONFIG_PASSPHRASE_FILE`) | the Pulumi state; the same values on every run |
-| `JD_RECORDS_DIR` | an existing directory for the release records (the evidence) |
-
-Log `az` in as the same principal (the walkthrough's `az` checks and the teardown need it):
-`az login --service-principal -u "$ARM_CLIENT_ID" --password="$ARM_CLIENT_SECRET" --tenant "$ARM_TENANT_ID" -o none && az account set -s "$ARM_SUBSCRIPTION_ID"`.
+**1. Prerequisites.** The .NET SDK, the `pulumi` CLI and the `az` CLI. A deploying principal and, because `stage` keeps approval separate
+from deploying (`separateFromDeployer: true`), a second one that approves. Nothing is set ([Data and identity](#data-and-identity)): sign in as
+the deployer with `az login` and `az account set -s <subscription id>`, and set each definition's `region` (`southeastasia` in the samples) to the
+region the subscription allows.
 
 Before `stage` is brought up, put the approver's object id (`az ad sp show --id <approver client id> --query id -o tsv`) in `approvers` of
 `samples/environments/stage.yaml`.
@@ -308,18 +311,18 @@ jd release deploy  release.yaml --env dev.env.yaml --catalog catalog
 jd release qualify release.yaml --env dev.env.yaml --catalog catalog
 ```
 
-**5. Approve and promote to `stage`.** `jd approve` as the approver (its `ARM_*` values in the environment), then `jd promote` as the deployer (whoever runs it is not checked against `approvers`):
+**5. Approve and promote to `stage`.** `jd approve` signed in as the approver (`az login` as the second principal), then `jd promote` signed in as the deployer again (whoever runs it is not checked against `approvers`):
 
 ```
-jd approve 1.0.0 --env stage.env.yaml --meaning "Reviewed the dev evidence for 1.0.0."
+jd approve 1.0.0 --env stage.env.yaml --meaning "Reviewed the dev evidence for 1.0.0."     # az login as the approver first
 jd promote 1.0.0 --to stage.env.yaml --catalog catalog
 ```
 
 **6. Read the records.** Every attempt is one JSON file, never edited (`schemas/release-record.schema.json`, `schemas/approval-record.schema.json`):
 
 ```
-ls "$JD_RECORDS_DIR"/dev/1.0.0     # set.yaml, …-deploy.json, …-qualify.json
-ls "$JD_RECORDS_DIR"/stage/1.0.0   # set.yaml (dev's bytes), …-approve.json, …-deploy.json
+ls ~/.local/share/jd/records/dev/1.0.0     # set.yaml, …-deploy.json, …-qualify.json
+ls ~/.local/share/jd/records/stage/1.0.0   # set.yaml (dev's bytes), …-approve.json, …-deploy.json
 ```
 
 `outcome`, `oq` per workload, `iq.status`, `deploySeconds` and `identity` are the fields to read first ([release-record.md](architecture/release-record.md)).
@@ -339,5 +342,5 @@ az group delete --name <shared resourceGroup> --yes
 az group list --query "[?tags.project=='just-deliver-mvp'].name" -o tsv    # prints nothing when all are gone
 ```
 
-Then remove the Pulumi state at `PULUMI_BACKEND_URL` (its stacks now describe deleted resources) and the descriptors. Keep `JD_RECORDS_DIR` if the
-evidence is wanted; nothing in it is a secret.
+Then remove the Pulumi state, `<data>/state` and `<data>/state.key` (its stacks now describe deleted resources), and the descriptors. Keep
+`<data>/records` if the evidence is wanted; nothing in it is a secret.

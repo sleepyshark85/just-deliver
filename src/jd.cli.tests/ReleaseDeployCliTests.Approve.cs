@@ -199,19 +199,6 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal(0, _identity.Calls);
     }
 
-    [Fact]
-    public async Task Without_a_records_directory_it_exits_2_before_the_credential()
-    {
-        var stage = await StageAsync();
-        _recordsVariable = null;
-
-        var (code, _, stderr) = await ApproveAsync(stage);
-
-        Assert.Equal(2, code);
-        Assert.Contains("JD_RECORDS_DIR must name an existing directory", stderr);
-        Assert.Equal(0, _identity.Calls);
-    }
-
     [Theory]
     [InlineData("../1.0.0", "cannot name a directory")]
     [InlineData("a/b", "cannot name a directory")]
@@ -222,9 +209,7 @@ public sealed partial class ReleaseDeployCliTests
     [InlineData(".", "is not a release label")]
     public async Task A_label_that_is_not_label_shaped_is_a_usage_error_before_the_descriptor_the_records_and_the_credential(string label, string expected)
     {
-        _recordsVariable = null;
-
-        var (code, _, stderr) = await ApproveAsync(Environment, label: label); // an ungated descriptor and no records directory: only the label can be what is refused
+        var (code, _, stderr) = await ApproveAsync(Environment, label: label); // an ungated descriptor: only the label can be what is refused
 
         Assert.Equal(2, code);
         Assert.Contains(expected, stderr);

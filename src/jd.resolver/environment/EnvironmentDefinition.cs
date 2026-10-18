@@ -4,14 +4,14 @@ using Newtonsoft.Json.Linq;
 namespace jd.resolver.environment;
 
 /// <summary>
-/// What <c>jd env up</c> provisions: what the <see cref="Offers"/> (component and runtime names) reach in its type's layer. Format:
-/// schemas/environment-definition.schema.json.
+/// What <c>jd env up</c> provisions in <see cref="Region"/>: what the <see cref="Offers"/> (component and runtime names) reach in its type's layer.
+/// Format: schemas/environment-definition.schema.json.
 /// </summary>
-public sealed record EnvironmentDefinition(string Name, string Type, IReadOnlyList<string> Offers, ApprovalPolicy? Approval)
+public sealed record EnvironmentDefinition(string Name, string Region, string Type, IReadOnlyList<string> Offers, ApprovalPolicy? Approval)
 {
-    /// <summary>The environment the definition is resolved in: its own name, type, offers and approval policy, the given region, and the base descriptor's values.</summary>
-    public EnvironmentDescriptor Over(string region, EnvironmentDescriptor? baseDescriptor) =>
-        new(Name, region, Type, baseDescriptor?.Values ?? new Dictionary<string, string>(), Offers, Approval);
+    /// <summary>The environment the definition is resolved in: its own name, region, type, offers and approval policy, and the base descriptor's values.</summary>
+    public EnvironmentDescriptor Over(EnvironmentDescriptor? baseDescriptor) =>
+        new(Name, Region, Type, baseDescriptor?.Values ?? new Dictionary<string, string>(), Offers, Approval);
 }
 
 /// <summary><see cref="Definition"/> is set exactly when <see cref="Errors"/> is empty.</summary>
@@ -51,7 +51,7 @@ public static class EnvironmentDefinitionFile
         // The schema guarantees these exist and have these shapes.
         return new EnvironmentDefinitionLoadResult(
             new EnvironmentDefinition(
-                (string)body["name"]!, (string)body["type"]!, Strings(body["offers"]),
+                (string)body["name"]!, (string)body["region"]!, (string)body["type"]!, Strings(body["offers"]),
                 body["approval"] is { } approval ? ApprovalPolicy.FromJson(approval) : null),
             []);
     }

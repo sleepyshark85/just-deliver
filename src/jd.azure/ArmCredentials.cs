@@ -4,9 +4,9 @@ using Azure.Identity;
 namespace jd.azure;
 
 /// <summary>
-/// The service principal the deploy authenticates with: the <c>ARM_*</c> variables Pulumi's Azure provider reads too, so the principal
-/// named here is the one the stacks are deployed as. The composition root reads them and passes the values in. A class, not a record:
-/// a record's generated <c>ToString</c> would print the secret.
+/// The principal the deploy authenticates with: the service principal in the <c>ARM_*</c> variables when all are set, the Azure CLI sign-in when
+/// none is. Pulumi's Azure provider makes the same choice, so the principal named here is the one the stacks are deployed as. The composition
+/// root reads the variables and passes the values in. A class, not a record: a record's generated <c>ToString</c> would print the secret.
 /// </summary>
 public sealed class ArmCredentials(string? tenantId, string? clientId, string? clientSecret)
 {
@@ -14,25 +14,26 @@ public sealed class ArmCredentials(string? tenantId, string? clientId, string? c
     public const string ClientVariable = "ARM_CLIENT_ID";
     public const string SecretVariable = "ARM_CLIENT_SECRET";
 
-    /// <summary>Names the variables that are not set, never any value; null when all are set.</summary>
-    public string? Problem
-    {
-        get
-        {
-            var missing = new[] { (TenantVariable, tenantId), (ClientVariable, clientId), (SecretVariable, clientSecret) }
-                .Where(v => string.IsNullOrEmpty(v.Item2)).Select(v => v.Item1).ToList();
-            return missing.Count == 0
-                ? null
-                : $"the deploying principal is the service principal in the environment, and {string.Join(", ", missing)} {(missing.Count == 1 ? "is" : "are")} not set.";
-        }
-    }
+    /// <summary>What to check when Azure refuses the credential, for either kind.</summary>
+    public const string CheckHint = $"check {TenantVariable}, {ClientVariable} and {SecretVariable} when they are set (is the secret correct and unexpired?), else the Azure CLI sign-in (az login)";
 
-    /// <summary>Throws <see cref="InvalidOperationException"/> with <see cref="Problem"/> when a variable is missing, or with a clear message when the SDK refuses a malformed value.</summary>
+    /// <summary>
+    /// The Azure CLI sign-in when no variable is set, else the service principal. Throws <see cref="InvalidOperationException"/> naming the variables
+    /// that are not set when only some are (never any value), or with a clear message when the SDK refuses a malformed value.
+    /// </summary>
     public TokenCredential ToCredential()
     {
-        if (Problem is { } problem)
+        var missing = new[] { (TenantVariable, tenantId), (ClientVariable, clientId), (SecretVariable, clientSecret) }
+            .Where(v => string.IsNullOrEmpty(v.Item2)).Select(v => v.Item1).ToArray();
+        if (missing.Length == 3)
         {
-            throw new InvalidOperationException(problem);
+            return new AzureCliCredential();
+        }
+
+        if (missing.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"the deploying principal is the service principal in the environment, and {string.Join(", ", missing)} {(missing.Length == 1 ? "is" : "are")} not set; set all three, or none to use the Azure CLI sign-in (az login).");
         }
 
         try

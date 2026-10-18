@@ -37,9 +37,9 @@ public class SubstrateTests
     }
 
     private static IReadOnlyList<LoadError> Errors(EnvironmentDefinition definition, EnvironmentDescriptor? baseDescriptor, Catalog catalog) =>
-        Resolver.ResolveSubstrate(definition, "definition.yaml", catalog, definition.Over(Region, baseDescriptor), baseDescriptor).Errors;
+        Resolver.ResolveSubstrate(definition, "definition.yaml", catalog, definition.Over(baseDescriptor), baseDescriptor).Errors;
 
-    private static EnvironmentDefinition Offering(string name, string type, params string[] offers) => new(name, type, offers, null);
+    private static EnvironmentDefinition Offering(string name, string type, params string[] offers) => new(name, Region, type, offers, null);
 
     private static async Task<EnvironmentDescriptor> SharedDescriptorAsync() => await ComposeAsync((await PrepareAsync(await DefinitionAsync())).Composer, SharedOutputs);
 
@@ -85,7 +85,7 @@ public class SubstrateTests
         EnvironmentDefinition definition, EnvironmentDescriptor? baseDescriptor = null, Catalog? fixture = null)
     {
         var catalog = fixture ?? await CatalogAsync();
-        var environment = definition.Over(Region, baseDescriptor);
+        var environment = definition.Over(baseDescriptor);
         var graph = Resolver.ResolveSubstrate(definition, "definition.yaml", catalog, environment, baseDescriptor);
         Assert.Empty(graph.Errors);
         return (graph, new DescriptorComposer(definition, "definition.yaml", catalog, environment, graph));
@@ -220,7 +220,7 @@ public class SubstrateTests
         var definition = await DefinitionAsync("dev.yaml");
         var shared = await SharedDescriptorAsync();
 
-        var graph = Resolver.ResolveSubstrate(definition, "dev.yaml", catalog, definition.Over(Region, shared), shared);
+        var graph = Resolver.ResolveSubstrate(definition, "dev.yaml", catalog, definition.Over(shared), shared);
 
         Assert.Empty(graph.Errors);
         var name = Assert.IsType<Pending>(((ConfigText)graph.Nodes.Single(n => n.Name == "apps").Config["environmentName"]).Result);
@@ -235,7 +235,7 @@ public class SubstrateTests
 
         var descriptor = await ComposeAsync(dev, DevOutputs);
 
-        Assert.Equal(("dev", Region, "dev"), (descriptor.Name, descriptor.Region, descriptor.Type));
+        Assert.Equal(("dev", "southeastasia", "dev"), (descriptor.Name, descriptor.Region, descriptor.Type));
         // A chained export: cosmos-account.resourceGroup is ${shared-group.name}, which is ${group.resourceGroupName}.
         Assert.Equal("rg-shared-1", shared.Values["cosmos-account.resourceGroup"]);
         Assert.Equal("cosmos-1", descriptor.Values["cosmos-account.name"]);
@@ -263,7 +263,8 @@ public class SubstrateTests
     [Fact]
     public async Task The_stage_definition_composes_a_protected_descriptor_with_its_policy_as_the_committed_golden()
     {
-        var (_, stage) = await PrepareAsync(await DefinitionAsync("stage.yaml"), await SharedDescriptorAsync());
+        // The golden is in the tests' region; the sample's is the walkthrough's.
+        var (_, stage) = await PrepareAsync(await DefinitionAsync("stage.yaml", text => text.Replace("region: southeastasia", $"region: {Region}", StringComparison.Ordinal)), await SharedDescriptorAsync());
         var outputs = DevOutputs.ToDictionary(o => o.Key.Replace("@dev/dev", "@stage/stage", StringComparison.Ordinal), o => o.Value);
         outputs["@stage/stage/substrate/group"] = new() { ["resourceGroupName"] = "rg-stage-1", ["location"] = Region };
         outputs["@stage/stage/substrate/database"] = new() { ["databaseId"] = "/db/id", ["databaseName"] = "db-stage" };
@@ -348,7 +349,7 @@ public class SubstrateTests
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var definition = Offering("dev", "dev", "thing");
-        var environment = definition.Over(Region, null);
+        var environment = definition.Over(null);
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: dev, team: crew }\nrequires:\n  - type: thing\n    id: substrate\n    class: substrate\n");
 
         var substrate = Resolver.ResolveSubstrate(definition, "definition.yaml", loaded.Catalog!, environment, null).Nodes.Single();
@@ -370,6 +371,27 @@ public class SubstrateTests
         var (_, composer) = await PrepareAsync(definition, await SharedDescriptorAsync(), catalog);
 
         Assert.Contains((await composer.ComposeAsync(null)).Errors, e => e.Location == "values.region");
+    }
+
+    [Fact]
+    public async Task The_definitions_region_is_the_descriptors_and_a_definition_without_one_is_a_schema_error()
+    {
+        var (_, dev) = await PrepareAsync(await DefinitionAsync("dev.yaml", text => text.Replace("region: southeastasia", "region: region-9", StringComparison.Ordinal)), await SharedDescriptorAsync());
+        var directory = Directory.CreateTempSubdirectory("jd-def").FullName;
+        try
+        {
+            var path = Path.Combine(directory, "dev.yaml");
+            await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(Sample("dev.yaml"))).Replace("region: southeastasia\n", string.Empty, StringComparison.Ordinal));
+
+            Assert.Equal("region-9", (await ComposeAsync(dev, DevOutputs)).Region);
+            var loaded = await EnvironmentDefinitionFile.LoadAsync(path);
+            Assert.Null(loaded.Definition);
+            Assert.Contains(loaded.Errors, e => e.File == path && e.Message.Contains("region", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
@@ -396,7 +418,7 @@ public class SubstrateTests
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
 
-        var graph = Resolver.ResolveSubstrate(Offering("dev", "dev", "user"), "definition.yaml", loaded.Catalog!, Offering("dev", "dev", "user").Over(Region, null), null);
+        var graph = Resolver.ResolveSubstrate(Offering("dev", "dev", "user"), "definition.yaml", loaded.Catalog!, Offering("dev", "dev", "user").Over(null), null);
         var (layer, _) = await PrepareAsync(await DefinitionAsync());
 
         var error = Assert.Single(graph.Errors);

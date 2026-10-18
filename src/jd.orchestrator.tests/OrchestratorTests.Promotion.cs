@@ -22,10 +22,10 @@ public partial class OrchestratorTests
     {
         var at = RecordStart.AddMinutes(minute);
         var json = ApprovalRecord.Build(Stage(), "1.0.0", setSha256 ?? ledger.SetSha256, new DeployerIdentity("tenant-1", "client-1", objectId), "ready", at);
-        await ReleaseRecordFile.WriteAsync(ledger.Records, "stage", "1.0.0", at, ReleaseRecordFile.ApproveActivity, json);
+        await ReleaseRecordFile.WriteAsync(new LocalRecordStore(ledger.Records), "stage", "1.0.0", at, ReleaseRecordFile.ApproveActivity, json);
     }
 
-    private static Task<PromotionDecision> CheckAsync(Ledger ledger, EnvironmentDescriptor target) => PromotionCheck.CheckAsync(ledger.Records, target, "1.0.0");
+    private static Task<PromotionDecision> CheckAsync(Ledger ledger, EnvironmentDescriptor target) => PromotionCheck.CheckAsync(new LocalRecordStore(ledger.Records), target, "1.0.0");
 
     [Fact]
     public async Task A_qualified_label_with_enough_approvals_may_be_promoted()
@@ -58,7 +58,7 @@ public partial class OrchestratorTests
         var at = RecordStart.AddMinutes(2);
         var approval = JObject.Parse(ApprovalRecord.Build(Stage(), "1.0.0", ledger.SetSha256, new DeployerIdentity("tenant-1", "client-1", Alice), "ready", at));
         Untyped(approval, "protected");
-        await ReleaseRecordFile.WriteAsync(ledger.Records, "stage", "1.0.0", at, ReleaseRecordFile.ApproveActivity, approval.ToString());
+        await ReleaseRecordFile.WriteAsync(new LocalRecordStore(ledger.Records), "stage", "1.0.0", at, ReleaseRecordFile.ApproveActivity, approval.ToString());
 
         var decision = await CheckAsync(ledger, Stage());
 
@@ -162,7 +162,7 @@ public partial class OrchestratorTests
     {
         using var ledger = await Ledger.CreateAsync();
 
-        var decision = await PromotionCheck.CheckAsync(ledger.Records, Stage(), "9.9.9");
+        var decision = await PromotionCheck.CheckAsync(new LocalRecordStore(ledger.Records), Stage(), "9.9.9");
 
         Assert.False(decision.MayPromote);
         Assert.Null(decision.SetSha256);

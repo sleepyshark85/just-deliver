@@ -9,7 +9,7 @@ namespace jd.cli.tests;
 /// zero, one replica at most). Every value comes from the test catalog, none from the template. Deploys it with the real Pulumi backend
 /// on a local file state, checks revision mode, scale, identity and the variable through <c>az</c>, deploys again for zero changes, and
 /// always deletes the resource group. It creates no Cosmos account, so it can run next to the env-up test.
-/// Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>, <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI.
+/// Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>, <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment and the pulumi CLI.
 /// </summary>
 [Trait("Category", "Azure")]
 public sealed class ContainerAppAzureTests : ProbeAzureTest
@@ -99,7 +99,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     [Fact]
     public async Task Deploy_creates_a_multi_revision_app_scaled_to_zero_with_an_identity_and_the_variable_and_a_second_deploy_changes_nothing()
     {
-        var (backend, workload, environment, catalog) = Prepare();
+        var (backend, workload, environment, catalog) = await PrepareAsync();
         WriteCatalog("a", LatestRevisionTraffic);
 
         var (firstCode, first) = await DeployAsync(backend, workload, environment, catalog);
@@ -134,7 +134,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     [Fact]
     public async Task A_dark_revision_gets_no_traffic_and_the_shift_moves_all_of_it_to_the_new_revision_without_creating_one()
     {
-        var (backend, workload, environment, catalog) = Prepare();
+        var (backend, workload, environment, catalog) = await PrepareAsync();
 
         WriteCatalog("a", LatestRevisionTraffic);
         var (liveCode, live) = await DeployAsync(backend, workload, environment, catalog);
@@ -167,9 +167,9 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     private const string LatestRevisionTraffic = "[{ latestRevision: true, weight: 100 }]";
 
     // The backend, workload, environment and catalog directory of one probe; the catalog files are written by WriteCatalog.
-    private (IBackEndProvider Backend, string Workload, string Environment, string Catalog) Prepare()
+    private async Task<(IBackEndProvider Backend, string Workload, string Environment, string Catalog)> PrepareAsync()
     {
-        var environment = Write("environment.yaml", $"kind: Environment\nname: s15a-{Suffix}\nregion: {Region}\ntype: dev\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
+        var environment = Write("environment.yaml", $"kind: Environment\nname: s15a-{Suffix}\nregion: {await RegionAsync()}\ntype: dev\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
         var workload = Write("workload.yaml", "apiVersion: just-deliver/v1\nkind: Workload\nmetadata: { name: s15a-probe, team: platform-team }\ncontainer:\n  image: example.invalid/probe:1\nrequires:\n  - type: probe\n");
         return (CreateBackend(), workload, environment, Path.Combine(Root, "catalog"));
     }

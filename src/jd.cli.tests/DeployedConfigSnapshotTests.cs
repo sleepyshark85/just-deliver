@@ -20,14 +20,14 @@ namespace jd.cli.tests;
 public sealed class DeployedConfigSnapshotTests : IDisposable
 {
     private static readonly string Catalog = Path.Combine(AppContext.BaseDirectory, "catalog");
-    private static readonly string Environments = Path.Combine(AppContext.BaseDirectory, "samples", "environments");
     private static readonly string Workload = Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml");
     private static readonly string Walkthrough = Path.Combine(AppContext.BaseDirectory, "samples", "walkthrough", "releases");
-    private static readonly Dictionary<string, string> Variables = new() { ["JD_REGION"] = "region-1" };
 
     private readonly string _temp = Directory.CreateTempSubdirectory("jd-snapshot-tests").FullName;
 
-    private string _records => Path.Combine(_temp, "records");
+    private string _data => Path.Combine(_temp, "data");
+
+    private string _records => Path.Combine(_data, "records");
 
     public void Dispose() => Directory.Delete(_temp, recursive: true);
 
@@ -64,24 +64,22 @@ public sealed class DeployedConfigSnapshotTests : IDisposable
 
     private async Task Run(SnapshotBackend backend, params string[] args)
     {
-        var variables = new Dictionary<string, string>(Variables) { ["JD_RECORDS_DIR"] = _records };
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, new StringWriter(), stderr, CancellationToken.None, backend, name => variables.GetValueOrDefault(name), backend, _identity, _clock, _live);
+        var code = await Cli.RunAsync(args, new StringWriter(), stderr, CancellationToken.None, backend, name => name == "JD_DATA_DIR" ? _data : null, backend, _identity, _clock, _live);
         Assert.True(code == 0, $"jd {string.Join(' ', args)}: exit {code}: {stderr}");
     }
 
     [Fact]
     public async Task Every_package_handed_to_the_backend_matches_the_committed_snapshot()
     {
-        Directory.CreateDirectory(_records);
         var backend = new SnapshotBackend();
         var shared = Path.Combine(_temp, "shared.env.yaml");
         var dev = Path.Combine(_temp, "dev.env.yaml");
         var stage = Path.Combine(_temp, "stage.env.yaml");
 
-        await Run(backend, "env", "up", Path.Combine(Environments, "shared.yaml"), "--catalog", Catalog, "--out", shared);
-        await Run(backend, "env", "up", Path.Combine(Environments, "dev.yaml"), "--catalog", Catalog, "--base", shared, "--out", dev);
-        await Run(backend, "env", "up", Path.Combine(Environments, "stage.yaml"), "--catalog", Catalog, "--base", shared, "--out", stage);
+        await Run(backend, "env", "up", await DefinitionAsync("shared"), "--catalog", Catalog, "--out", shared);
+        await Run(backend, "env", "up", await DefinitionAsync("dev"), "--catalog", Catalog, "--base", shared, "--out", dev);
+        await Run(backend, "env", "up", await DefinitionAsync("stage"), "--catalog", Catalog, "--base", shared, "--out", stage);
         await Run(backend, "deploy", Workload, "--env", dev, "--catalog", Catalog);
 
         var set = Path.Combine(_temp, "v1.release.yaml");
@@ -112,6 +110,16 @@ public sealed class DeployedConfigSnapshotTests : IDisposable
         }
 
         Assert.Equal(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", "deployed-config.json")), actual);
+    }
+
+    // A sample definition in the snapshot's region, region-1: the region is the definition's, and the snapshot stays the same wherever the samples deploy.
+    private async Task<string> DefinitionAsync(string sample)
+    {
+        var text = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "environments", sample + ".yaml"));
+        Assert.Contains("\nregion: southeastasia\n", text, StringComparison.Ordinal);
+        var path = Path.Combine(_temp, sample + ".yaml");
+        await File.WriteAllTextAsync(path, text.Replace("\nregion: southeastasia\n", "\nregion: region-1\n", StringComparison.Ordinal));
+        return path;
     }
 
     private static string SnapshotSource([CallerFilePath] string testFile = "") => Path.Combine(Path.GetDirectoryName(testFile)!, "golden", "deployed-config.json");

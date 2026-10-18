@@ -16,7 +16,7 @@ where a step is not covered by a test, it says so.
 | Orchestrator + Pulumi Automation | Deploys the graph node by node, one Pulumi stack each, in order; the runtime node last as a release: dark revision, grants, probe, traffic shift. | [provisioning.md](architecture/provisioning.md#orchestrator) |
 | `jd.azure` | The Azure adapter: who the principal is (claims of an ARM token) and the live revisions of a Container App (for IQ). | [release-record.md](architecture/release-record.md#3-machine-identity) |
 | Release manifest → set | A label plus workloads in dependency order; `jd release create` pins every definition (SHA-256) and image (digest) into an immutable set. | [release.md](architecture/release.md) |
-| Release records | One JSON file per deploy, qualify and approval under `JD_RECORDS_DIR`, never edited: outcome, identity, OQ, IQ, timings. | [release-record.md](architecture/release-record.md) |
+| Release records | One JSON file per deploy, qualify and approval in jd's data directory (`<data>/records`), never edited: outcome, identity, OQ, IQ, timings. | [release-record.md](architecture/release-record.md) |
 | Approvals, promotion | `jd approve` records that a listed principal approves a qualified set; `jd promote` deploys the set kept on `dev` to `stage` when enough approvals count. | [approvals.md](architecture/approvals.md) |
 
 ```mermaid
@@ -27,7 +27,7 @@ flowchart LR
   S --> R[resolver] 
   D --> R
   R -->|graph per workload| O[orchestrator] -->|Pulumi Automation| AZ[(Azure)]
-  O --> REC[(JD_RECORDS_DIR<br/>set.yaml, deploy, qualify,<br/>approve records)]
+  O --> REC[(data/records<br/>set.yaml, deploy, qualify,<br/>approve records)]
   JA[jd.azure: identity,<br/>live revisions] --> O
   REC -->|qualified? approved?| P[jd approve / jd promote]
   P --> O
@@ -40,7 +40,7 @@ sequenceDiagram
   participant U as you
   participant J as jd
   participant A as Azure
-  participant R as JD_RECORDS_DIR
+  participant R as data/records
   U->>J: env up shared, dev, stage
   J->>A: substrate stacks
   J-->>U: descriptors
@@ -78,7 +78,7 @@ sequenceDiagram
 Records layout (after this walkthrough):
 
 ```
-$JD_RECORDS_DIR/
+$RECORDS/
   dev/1.1.0/      set.yaml  <time>-deploy.json
   dev/1.2.0/      set.yaml  <time>-deploy.json (one per attempt)  <time>-qualify.json (one per qualify)
   dev/1.3.0-bad/  set.yaml  <time>-deploy.json (outcome failed)
@@ -91,15 +91,20 @@ $JD_RECORDS_DIR/
 ## 3. Setup
 
 Prerequisites: .NET SDK, `pulumi` CLI, `az` CLI, `jq`; a subscription with the guardrails of [tools/sandbox](../tools/sandbox/README.md) and **no
-free-tier Cosmos account** yet; a deploying service principal. Run everything from the repository root.
+free-tier Cosmos account** yet; a deploying principal. Run everything from the repository root. Nothing else is set: jd keeps its state (and
+the state's generated key) and the records in its data directory (`~/.local/share/jd` on Linux, or `JD_DATA_DIR`), takes the region from each
+environment definition (`southeastasia` in the samples: set it to the sandbox's allowed region) and runs as the Azure CLI sign-in.
 
 ```bash
-cp samples/walkthrough/env.example.sh ~/jd-walkthrough.env.sh      # outside the repo; fill in the placeholders
+cp samples/walkthrough/env.example.sh ~/jd-walkthrough.env.sh      # outside the repo; fill in JD_WALK
 source ~/jd-walkthrough.env.sh                                     # also builds jd once into $JD_WALK/jd
-mkdir -p "$JD_WALK" "$JD_RECORDS_DIR" "${PULUMI_BACKEND_URL#file://}"
-az login --service-principal --username "$ARM_CLIENT_ID" --password="$ARM_CLIENT_SECRET" --tenant "$ARM_TENANT_ID" --output none
-az account set --subscription "$ARM_SUBSCRIPTION_ID"
+az login --output none                                             # as the deployer, in $AZURE_CONFIG_DIR
+az account set --subscription "<subscription id>"
+RECORDS="${JD_DATA_DIR:-$HOME/.local/share/jd}/records"             # where the records are read below
 ```
+
+Signed in as a service principal instead (`az login --service-principal …`)? Pulumi's CLI authentication does not cover one: export
+`ARM_TENANT_ID`, `ARM_CLIENT_ID` and `ARM_CLIENT_SECRET` (all three; jd refuses a partial set) and `ARM_SUBSCRIPTION_ID` for Pulumi.
 
 Environments (exit 0 each; one node line per substrate node, then the descriptor path):
 
@@ -147,7 +152,7 @@ Helpers used below (offline: the names come from `jd preview`):
 APP=$(jd preview samples/walkthrough/workloads/app.yaml --env "$JD_WALK/dev.env.yaml" --catalog catalog | sed -n 's/^  containerAppName = \([^ ]*\).*/\1/p')
 WORKER=$(jd preview samples/walkthrough/workloads/worker.v1.yaml --env "$JD_WALK/dev.env.yaml" --catalog catalog | sed -n 's/^  containerAppName = \([^ ]*\).*/\1/p')
 revisions() { az containerapp revision list --all -g "$DEV_RG" -n "$1" --query "[].{revision:name, weight:properties.trafficWeight, image:properties.template.containers[0].image}" -o table; }
-newest() { ls "$JD_RECORDS_DIR/$1/$2/"*-"$3".json | tail -1; }       # newest <env> <label> <deploy|qualify|approve> record
+newest() { ls "$RECORDS/$1/$2/"*-"$3".json | tail -1; }       # newest <env> <label> <deploy|qualify|approve> record
 summary() { jq '{activity, outcome, iq: .iq.status, notStarted, workloads: [.workloads[] | {name, oq: .oq.status, nodes: [.run.nodes[]? | .outcome]}]}' "$1"; }
 ```
 
@@ -190,11 +195,11 @@ jd release deploy "$JD_WALK/v1.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog
 
 Expected (exit 0): `workload just-deliver-sample-app` before `workload just-deliver-sample-worker`; each runtime `deployed` with `probe: done (HTTP 200)` and
 `shift: done …`; then `release 1.1.0 on dev: 2 deployed, 0 unchanged, 0 failed, 0 not started.`, `release 1.1.0 on dev: IQ passed, <n> checks, 0 failed.`
-and `record: <JD_RECORDS_DIR>/dev/1.1.0/<time>-deploy.json`. The app had a live revision (scenario 1), so its new one was dark until probed; the worker's
+and `record: <data>/records/dev/1.1.0/<time>-deploy.json`. The app had a live revision (scenario 1), so its new one was dark until probed; the worker's
 first revision served before its probe (a first deploy cannot be protected).
 
 ```bash
-ls "$JD_RECORDS_DIR/dev/1.1.0"                       # set.yaml  <time>-deploy.json
+ls "$RECORDS/dev/1.1.0"                       # set.yaml  <time>-deploy.json
 summary "$(newest dev 1.1.0 deploy)"                 # outcome succeeded, iq passed, oq passed for both
 jq '[.iq.checks[] | {workload, kind, status}]' "$(newest dev 1.1.0 deploy)"   # five drift checks per workload, an image check per serving revision; all passed
 jq '{identity, deploySeconds, iqSeconds: .iq.elapsedSeconds}' "$(newest dev 1.1.0 deploy)"
@@ -256,7 +261,7 @@ jd release create "$JD_WALK/clash.manifest.yaml" --out "$JD_WALK/clash.set.yaml"
 jd release deploy "$JD_WALK/clash.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog catalog; echo "exit $?"
 ```
 
-Expected: exit 1, `jd: '…/dev/1.2.0/set.yaml' holds a different release set for label 1.2.0 on dev (sha256 …, this one …); a label names one set, so use a new label.`
+Expected: exit 1, `jd: the kept set.yaml holds a different release set for label 1.2.0 on dev (sha256 …, this one …); a label names one set, so use a new label.`
 
 ### 5. A policy added as a catalog file only (offline)
 
@@ -323,7 +328,7 @@ samples/walkthrough/stage-policy.sh "$JD_WALK/stage.env.yaml" "$JD_WALK/stage.re
 jd promote 1.1.0 --to "$JD_WALK/stage.relaxed.env.yaml" --catalog catalog; echo "exit $?"
 ```
 
-Expected: exit 1, `jd: promote: release 1.1.0 cannot be promoted to 'stage':` and `  0 of 1 required approvals for 'stage' count.`; `$JD_RECORDS_DIR/stage`
+Expected: exit 1, `jd: promote: release 1.1.0 cannot be promoted to 'stage':` and `  0 of 1 required approvals for 'stage' count.`; `$RECORDS/stage`
 does not exist.
 
 ```bash
@@ -335,15 +340,15 @@ Expected: `approved 1.1.0 for stage (1 of 1)` and `record: …/stage/1.1.0/<time
 release walk on `stage` (both workloads deployed), `release 1.1.0 on stage: 2 deployed, 0 unchanged, 0 failed, 0 not started.`, IQ passed, `record: …`.
 
 ```bash
-cmp "$JD_RECORDS_DIR/dev/1.1.0/set.yaml" "$JD_RECORDS_DIR/stage/1.1.0/set.yaml" && echo same      # same bytes
-sha256sum "$JD_RECORDS_DIR/dev/1.1.0/set.yaml"; jq -r .release.setSha256 "$(newest stage 1.1.0 deploy)"   # equal
+cmp "$RECORDS/dev/1.1.0/set.yaml" "$RECORDS/stage/1.1.0/set.yaml" && echo same      # same bytes
+sha256sum "$RECORDS/dev/1.1.0/set.yaml"; jq -r .release.setSha256 "$(newest stage 1.1.0 deploy)"   # equal
 diff <(jq '[.workloads[].image]' "$(newest dev 1.1.0 deploy)") <(jq '[.workloads[].image]' "$(newest stage 1.1.0 deploy)") && echo "same digests"
 jq '{release, identity, meaning}' "$(newest stage 1.1.0 approve)"
 ```
 
 With a second principal (the strict path of `samples/environments/stage.yaml`): make the variant with the approver's object id and `true`
-(`stage-policy.sh … stage.second.env.yaml 1 true <approver object id>`), run `jd approve` with the approver's `ARM_*` values in the environment, then
-`jd promote` as the deployer (whoever runs `promote` is not checked against `approvers`).
+(`stage-policy.sh … stage.second.env.yaml 1 true <approver object id>`), `az login` as the approver (the second principal) and run `jd approve`,
+then `az login` as the deployer again and run `jd promote` (whoever runs `promote` is not checked against `approvers`).
 
 ### 8. Approvals that do not count
 
@@ -365,7 +370,7 @@ M="Walkthrough scenario 8."
 | Repeat | `jd approve 1.1.0 --env "$JD_WALK/stage.relaxed.env.yaml" --meaning "$M"` | `jd: approve: principal <ME> already approved 1.1.0 for 'stage'.` |
 | Two required, one given | `jd promote 1.1.0 --to "$P.two.env.yaml" --catalog catalog` | `  1 of 2 required approvals for 'stage' count.` |
 
-`ls "$JD_RECORDS_DIR/stage/1.1.0"` still shows one `-approve.json` and one `-deploy.json`. Approvals are counted by the policy of the descriptor
+`ls "$RECORDS/stage/1.1.0"` still shows one `-approve.json` and one `-deploy.json`. Approvals are counted by the policy of the descriptor
 `promote` is given, so the same file counts under one policy and not under another.
 
 ### 9. Tampering
@@ -376,22 +381,22 @@ into `succeeded`), a whole forged record with a consistent hash, or a deleted fa
 valid, not in its place, or pins another set; an approval that names another environment, label, set or `qualifiedOn`. Back up first:
 
 ```bash
-cp -a "$JD_RECORDS_DIR" "$JD_WALK/records.bak"
+cp -a "$RECORDS" "$JD_WALK/records.bak"
 DEPLOY=$(newest dev 1.1.0 deploy)
 ```
 
 | Edit | Then | Expected (exit 1) |
 |---|---|---|
 | A deploy record made invalid: `sed -i 's/"outcome": "succeeded"/"outcome": "ok"/' "$DEPLOY"` | `jd approve 1.1.0 --env "$JD_WALK/stage.relaxed.env.yaml" --meaning "$M"` | `jd: approve: release 1.1.0 is not qualified on dev:` and `  <time>-deploy.json: is not a valid release record: …` |
-| A record copied to a later name: `cp "$DEPLOY" "$JD_RECORDS_DIR/dev/1.1.0/29991231T235959000Z-deploy.json"` | `jd promote 1.1.0 --to "$JD_WALK/stage.relaxed.env.yaml" --catalog catalog` | `  not qualified on dev: 29991231T235959000Z-deploy.json: finishedAt … does not match the time '29991231T235959000Z' in its name.` |
-| The approval edited: `sed -i 's/"label": "1.1.0"/"label": "1.2.0"/' "$JD_RECORDS_DIR"/stage/1.1.0/*-approve.json` | `jd promote 1.1.0 --to "$JD_WALK/stage.relaxed.env.yaml" --catalog catalog` | `jd: promote: ignored <time>-approve.json: approves label '1.2.0', not '1.1.0'.` and `  0 of 1 required approvals for 'stage' count.` |
-| The kept set edited: `echo "# edited" >> "$JD_RECORDS_DIR/dev/1.1.0/set.yaml"` | `jd approve …` or `jd promote …` as above | every record: `<time>-deploy.json: pins set <old>, but set.yaml hashes to <new>.` |
-| (same) | `jd release deploy "$JD_WALK/v1.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog catalog` | `jd: '…/dev/1.1.0/set.yaml' holds a different release set for label 1.1.0 on dev (sha256 <new>, this one <old>); a label names one set, so use a new label.` |
+| A record copied to a later name: `cp "$DEPLOY" "$RECORDS/dev/1.1.0/29991231T235959000Z-deploy.json"` | `jd promote 1.1.0 --to "$JD_WALK/stage.relaxed.env.yaml" --catalog catalog` | `  not qualified on dev: 29991231T235959000Z-deploy.json: finishedAt … does not match the time '29991231T235959000Z' in its name.` |
+| The approval edited: `sed -i 's/"label": "1.1.0"/"label": "1.2.0"/' "$RECORDS"/stage/1.1.0/*-approve.json` | `jd promote 1.1.0 --to "$JD_WALK/stage.relaxed.env.yaml" --catalog catalog` | `jd: promote: ignored <time>-approve.json: approves label '1.2.0', not '1.1.0'.` and `  0 of 1 required approvals for 'stage' count.` |
+| The kept set edited: `echo "# edited" >> "$RECORDS/dev/1.1.0/set.yaml"` | `jd approve …` or `jd promote …` as above | every record: `<time>-deploy.json: pins set <old>, but set.yaml hashes to <new>.` |
+| (same) | `jd release deploy "$JD_WALK/v1.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog catalog` | `jd: the kept set.yaml holds a different release set for label 1.1.0 on dev (sha256 <new>, this one <old>); a label names one set, so use a new label.` |
 
 Run one edit at a time and restore after each:
 
 ```bash
-rm -rf "$JD_RECORDS_DIR" && cp -a "$JD_WALK/records.bak" "$JD_RECORDS_DIR"
+rm -rf "$RECORDS" && cp -a "$JD_WALK/records.bak" "$RECORDS"
 ```
 
 ### 10. A gated environment refuses direct deploys
@@ -405,7 +410,7 @@ jd release qualify "$JD_WALK/v2.set.yaml" --env "$JD_WALK/stage.env.yaml" --cata
 ```
 
 Expected, exit 1 each: ``jd: deploy: environment 'stage' is gated by an approval policy: use `jd promote`.`` (`release deploy`, `release qualify` for the others);
-`$JD_RECORDS_DIR/stage/1.2.0` is not created. `--preview` on either deploy command is not refused (it creates nothing).
+`$RECORDS/stage/1.2.0` is not created. `--preview` on either deploy command is not refused (it creates nothing).
 
 ### 11. Teardown
 
@@ -415,14 +420,14 @@ samples/walkthrough/teardown.sh "$JD_WALK/dev.env.yaml" "$JD_WALK/stage.env.yaml
 
 Deletes the `dev` and `stage` groups in parallel, waits, then deletes the shared group (the workspace and the Cosmos account) and lists what is left.
 Expected: `deleting …` lines, then **nothing** from the final `az group list --query "[?tags.project=='just-deliver-mvp'].name"`. Then remove the Pulumi
-state at `PULUMI_BACKEND_URL` (its stacks describe deleted resources), `$JD_WALK` and `AZURE_CONFIG_DIR`. Keep `JD_RECORDS_DIR` if the evidence is
-wanted; nothing in it is a secret. If anything was left: `tools/azure/cleanup.sh --yes --all`.
+state, `<data>/state` and `<data>/state.key` (its stacks describe deleted resources), `$JD_WALK` and `AZURE_CONFIG_DIR`. Keep `<data>/records` if
+the evidence is wanted; nothing in it is a secret. If anything was left: `tools/azure/cleanup.sh --yes --all`.
 
 ## 5. Gotchas
 
-- **Variables** (names only; values in your copy of `env.example.sh`, never committed): `ARM_TENANT_ID`, `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`,
-  `ARM_SUBSCRIPTION_ID`, `JD_REGION`, `PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE` (or `_FILE`), `JD_RECORDS_DIR`; the walkthrough's own `JD_WALK` and
-  `AZURE_CONFIG_DIR`; optional `PULUMI_HOME`, `JD_SCRATCH_DIR`. Change `PULUMI_BACKEND_URL` between runs and the stacks are lost.
+- **Variables:** only the walkthrough's own `JD_WALK` and `AZURE_CONFIG_DIR` (your copy of `env.example.sh`, never committed); optional
+  `JD_DATA_DIR`, `PULUMI_HOME`, `JD_SCRATCH_DIR`; `ARM_TENANT_ID`, `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET` only for a service principal. Change
+  `JD_DATA_DIR` (or delete `<data>/state.key`) between runs and the stacks are lost.
 - **Free tier:** one free-tier Cosmos account per subscription, so one walkthrough (or Azure test run) at a time, and not while `tools/verify.sh --azure`
   runs. `dev` and `stage` use 800 of the 1,000 free RU/s; a third environment does not fit.
 - **Labels and sets:** create each set once and reuse the file; a changed release needs a new label. An `unchanged` workload counts towards

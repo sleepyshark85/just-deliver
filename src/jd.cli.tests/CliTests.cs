@@ -1,3 +1,4 @@
+using jd.bp.pulumi;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -22,14 +23,6 @@ public sealed class CliTests : IDisposable
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, probe: backend);
-        return (code, stdout.ToString(), stderr.ToString());
-    }
-
-    private static async Task<(int Code, string Out, string Err)> RunWithEnvironmentAsync(Dictionary<string, string> variables, params string[] args)
-    {
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, null, name => variables.GetValueOrDefault(name));
         return (code, stdout.ToString(), stderr.ToString());
     }
 
@@ -396,39 +389,27 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
-    public async Task Deploy_without_a_backend_url_exits_2_and_explains()
+    public void The_pulumi_backend_keeps_its_state_in_the_data_directory_with_its_key_whatever_the_removed_variables_say()
     {
-        var (code, _, stderr) = await RunWithEnvironmentAsync(new() { ["PULUMI_CONFIG_PASSPHRASE"] = string.Empty }, "deploy", Workload, "--env", Environment, "--catalog", Catalog);
+        var data = Path.Combine(_temp, "data");
+        var variables = new Dictionary<string, string>
+        {
+            ["JD_DATA_DIR"] = data,
+            ["PULUMI_HOME"] = "/pulumi-home",
+            ["JD_SCRATCH_DIR"] = "/scratch",
+            ["PULUMI_BACKEND_URL"] = "file:///elsewhere",
+            ["PULUMI_CONFIG_PASSPHRASE"] = "other",
+            ["PULUMI_CONFIG_PASSPHRASE_FILE"] = "/elsewhere.key",
+        };
+        var options = new PulumiBackendOptions();
 
-        Assert.Equal(2, code);
-        Assert.Contains("jd: PULUMI_BACKEND_URL is not set", stderr);
-        Assert.Contains("file://<directory>", stderr);
-    }
+        Cli.PulumiSettings(name => variables.GetValueOrDefault(name))(options);
 
-    [Fact]
-    public async Task Deploy_without_a_passphrase_exits_2_and_explains()
-    {
-        var (code, _, stderr) = await RunWithEnvironmentAsync(new() { ["PULUMI_BACKEND_URL"] = "file://x" }, "deploy", Workload, "--env", Environment, "--catalog", Catalog);
-
-        Assert.Equal(2, code);
-        Assert.Contains("jd: PULUMI_CONFIG_PASSPHRASE is not set", stderr);
-        Assert.Contains("PULUMI_CONFIG_PASSPHRASE_FILE", stderr);
-    }
-
-    [Theory]
-    [InlineData("PULUMI_CONFIG_PASSPHRASE", "")]
-    [InlineData("PULUMI_CONFIG_PASSPHRASE_FILE", "/some/file")]
-    public async Task An_empty_passphrase_or_a_passphrase_file_is_accepted(string name, string value)
-    {
-        // A catalog without the templates stops the run (exit 1) after the settings check and before any backend is created.
-        var catalog = Path.Combine(_temp, "catalog");
-        CopyDirectory(Catalog, catalog);
-        Directory.Delete(Path.Combine(catalog, "templates"), recursive: true);
-
-        var (code, _, stderr) = await RunWithEnvironmentAsync(new() { ["PULUMI_BACKEND_URL"] = "file://x", [name] = value }, "deploy", Workload, "--env", Environment, "--catalog", catalog);
-
-        Assert.Equal(1, code);
-        Assert.Contains("template directory not found", stderr);
+        Assert.Equal(
+            ("file://" + Path.Combine(data, "state"), Path.Combine(data, "state.key"), "/pulumi-home", "/scratch"),
+            (options.BackendUrl, options.ConfigPassPhraseFile, options.PulumiHome, options.ScratchDirectory));
+        Assert.True(Directory.Exists(Path.Combine(data, "state")));
+        Assert.True(File.Exists(Path.Combine(data, "state.key")));
     }
 
     internal static void CopyDirectory(string from, string to)

@@ -3,5 +3,6 @@
 #   jd env up samples/environments/shared.yaml --catalog catalog --out shared.env.yaml
 kind: EnvironmentDefinition
 name: shared
+region: southeastasia
 type: shared
 offers: [container-app, database, monitoring]

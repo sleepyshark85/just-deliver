@@ -72,7 +72,8 @@ public sealed class ArmDeployerIdentityTests
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => new ArmDeployerIdentity(new RefusingCredential(sdkMessage)).GetAsync(CancellationToken.None));
 
-        Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_ID and ARM_CLIENT_SECRET", error.Message, StringComparison.Ordinal);
+        Assert.Contains("check ARM_TENANT_ID, ARM_CLIENT_ID and ARM_CLIENT_SECRET when they are set", error.Message, StringComparison.Ordinal);
+        Assert.Contains("else the Azure CLI sign-in (az login)", error.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("AADSTS", error.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("the-secret", error.Message, StringComparison.Ordinal);
     }
@@ -104,15 +105,20 @@ public sealed class ArmDeployerIdentityTests
     [InlineData("tenant", null, "the-secret", "ARM_CLIENT_ID is not set")]
     [InlineData("tenant", "client", null, "ARM_CLIENT_SECRET is not set")]
     [InlineData("", "", "the-secret", "ARM_TENANT_ID, ARM_CLIENT_ID are not set")]
-    public void Missing_variables_are_named_and_the_secret_is_never_echoed(string? tenant, string? client, string? secret, string expected)
+    public void A_partial_set_of_variables_is_an_error_naming_the_missing_ones_and_never_echoing_the_secret(string? tenant, string? client, string? secret, string expected)
     {
-        var credentials = new ArmCredentials(tenant, client, secret);
+        var error = Assert.Throws<InvalidOperationException>(new ArmCredentials(tenant, client, secret).ToCredential);
 
-        Assert.Contains(expected, credentials.Problem, StringComparison.Ordinal);
-        Assert.DoesNotContain("the-secret", credentials.Problem, StringComparison.Ordinal);
-        var error = Assert.Throws<InvalidOperationException>(credentials.ToCredential);
-        Assert.Equal(credentials.Problem, error.Message);
+        Assert.Contains(expected, error.Message, StringComparison.Ordinal);
+        Assert.Contains("set all three, or none to use the Azure CLI sign-in (az login)", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("the-secret", error.Message, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void No_variable_set_gives_the_azure_cli_sign_in(string? unset) =>
+        Assert.IsType<AzureCliCredential>(new ArmCredentials(unset, unset, unset).ToCredential());
 
     [Fact]
     public void A_malformed_tenant_id_is_a_clear_error_naming_the_variables_without_the_secret_or_the_sdk_text()
@@ -134,11 +140,6 @@ public sealed class ArmDeployerIdentityTests
     }
 
     [Fact]
-    public void All_three_variables_set_give_a_credential_without_a_problem()
-    {
-        var credentials = new ArmCredentials("tenant", "client", "secret");
-
-        Assert.Null(credentials.Problem);
-        Assert.NotNull(credentials.ToCredential());
-    }
+    public void All_three_variables_set_give_the_service_principal() =>
+        Assert.IsType<ClientSecretCredential>(new ArmCredentials("tenant", "client", "secret").ToCredential());
 }

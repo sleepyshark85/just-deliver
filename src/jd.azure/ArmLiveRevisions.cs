@@ -44,7 +44,7 @@ public sealed class ArmLiveRevisions(TokenCredential credential, ArmClientOption
         }
         catch (AuthenticationFailedException ex)
         {
-            throw new InvalidOperationException($"Azure did not accept the credential while listing the revisions of '{resourceId}'; check {ArmCredentials.TenantVariable}, {ArmCredentials.ClientVariable} and {ArmCredentials.SecretVariable}.", ex);
+            throw new InvalidOperationException($"Azure did not accept the credential while listing the revisions of '{resourceId}'; {ArmCredentials.CheckHint}.", ex);
         }
     }
 }

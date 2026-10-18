@@ -3,5 +3,6 @@
 #   jd env up samples/environments/dev.yaml --catalog catalog --base shared.env.yaml --out dev.env.yaml
 kind: EnvironmentDefinition
 name: dev
+region: southeastasia
 type: dev
 offers: [container-app, database, monitoring]

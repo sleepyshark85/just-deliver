@@ -6,7 +6,7 @@ namespace jd.cli.tests;
 /// Real resources, free tier only: a test-only catalog whose one type maps to a resource group and a Log Analytics workspace
 /// (daily cap 0.15 GB, the template's default 30-day retention) that references the group's outputs. Deploys it with the real
 /// Pulumi backend on a local file state, deploys again for zero changes, and always deletes the resource group.
-/// Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>, <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI.
+/// Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>, <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment and the pulumi CLI.
 /// </summary>
 [Trait("Category", "Azure")]
 public sealed class DeployAzureTests : ProbeAzureTest
@@ -50,7 +50,7 @@ public sealed class DeployAzureTests : ProbeAzureTest
         WriteProbeGroup();
         CopyTemplates("resource-group", "log-analytics");
 
-        var environment = Write("environment.yaml", $"kind: Environment\nname: s11-{Suffix}\nregion: {Region}\ntype: dev\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
+        var environment = Write("environment.yaml", $"kind: Environment\nname: s11-{Suffix}\nregion: {await RegionAsync()}\ntype: dev\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
         var workload = Write("workload.yaml", "apiVersion: just-deliver/v1\nkind: Workload\nmetadata: { name: s11-probe, team: platform-team }\ncontainer:\n  image: example.invalid/probe:1\nrequires:\n  - type: probe\n");
 
         var backend = CreateBackend();

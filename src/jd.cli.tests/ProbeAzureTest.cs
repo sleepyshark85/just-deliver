@@ -1,8 +1,6 @@
-using jd.bp.pulumi;
 using jd.core.bp;
 using jd.orchestrator;
 using jd.resolver.catalog;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace jd.cli.tests;
 
@@ -24,8 +22,7 @@ public abstract class ProbeAzureTest : IDisposable
 
     protected string ResourceGroup => $"rg-jd-{Tag}-{Suffix}";
 
-    protected static string Region => System.Environment.GetEnvironmentVariable("JD_REGION")
-        ?? throw new InvalidOperationException("The Azure tests need JD_REGION (see docs/plans/status.md, Environment).");
+    protected static Task<string> RegionAsync() => AzureCli.RegionAsync();
 
     public void Dispose()
     {
@@ -146,20 +143,8 @@ public abstract class ProbeAzureTest : IDisposable
         }
     }
 
-    /// <summary>The real Pulumi backend on a local file state under <see cref="Root"/>.</summary>
-    protected IBackEndProvider CreateBackend()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.RegisterPulumiBackend(options =>
-        {
-            options.BackendUrl = "file://" + Path.Combine(Root, "state");
-            options.ConfigPassPhrase = "test-passphrase";
-            options.ScratchDirectory = Path.Combine(Root, "scratch");
-        });
-        Directory.CreateDirectory(Path.Combine(Root, "state"));
-        return services.BuildServiceProvider().GetRequiredService<IBackEndProvider>();
-    }
+    /// <summary>The real Pulumi backend on jd's state in a data directory under <see cref="Root"/>.</summary>
+    protected IBackEndProvider CreateBackend() => Cli.CreatePulumiBackend(AzureCli.Variables(Root));
 
     protected static async Task<(int Code, string Output)> DeployAsync(IBackEndProvider backend, string workload, string environment, string catalog)
     {

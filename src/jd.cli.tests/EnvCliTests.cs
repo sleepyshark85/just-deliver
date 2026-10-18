@@ -53,8 +53,6 @@ public sealed class EnvCliTests : IDisposable
         return (code, stdout.ToString(), stderr.ToString());
     }
 
-    private static readonly Dictionary<string, string> Region = new() { ["JD_REGION"] = "region-1" };
-
     [Fact]
     public async Task Up_deploys_the_substrate_and_writes_a_descriptor_that_loads_and_serves_as_the_base_of_the_next()
     {
@@ -62,16 +60,16 @@ public sealed class EnvCliTests : IDisposable
         var shared = Path.Combine(_temp, "shared.env.yaml");
         var dev = Path.Combine(_temp, "dev.env.yaml");
 
-        var first = await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", shared);
-        var second = await RunAsync(backend, Region, "up", Dev, "--catalog", Catalog, "--base", shared, "--out", dev);
+        var first = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", shared);
+        var second = await RunAsync(backend, null, "up", Dev, "--catalog", Catalog, "--base", shared, "--out", dev);
 
         Assert.Equal((0, 0), (first.Code, second.Code));
         Assert.Equal(["_dev.dev.substrate.apps", "_dev.dev.substrate.database", "_dev.dev.substrate.group", "_shared.shared.substrate.cosmos", "_shared.shared.substrate.group", "_shared.shared.substrate.workspace"], backend.Calls.Order().ToList());
         var descriptor = (await jd.resolver.environment.EnvironmentFile.LoadAsync(dev)).Descriptor!;
-        Assert.Equal(("dev", "region-1"), (descriptor.Name, descriptor.Region));
+        Assert.Equal(("dev", "southeastasia"), (descriptor.Name, descriptor.Region));
         Assert.Equal("cosmos-1", descriptor.Values["cosmos-account.name"]);
         Assert.Equal("db-dev", descriptor.Values["database.databaseName"]);
-        Assert.Contains($"{dev}: environment dev (region-1, dev) written.", second.Out);
+        Assert.Contains($"{dev}: environment dev (southeastasia, dev) written.", second.Out);
     }
 
     [Fact]
@@ -80,15 +78,15 @@ public sealed class EnvCliTests : IDisposable
         var backend = new OutputBackend();
         var shared = Path.Combine(_temp, "shared.env.yaml");
         var stage = Path.Combine(_temp, "stage.env.yaml");
-        await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", shared);
+        await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", shared);
         backend.Calls.Clear();
         var open = Path.Combine(_temp, "open.yaml");
         var definition = await File.ReadAllTextAsync(Stage);
         await File.WriteAllTextAsync(open, definition[..definition.IndexOf("approval:", StringComparison.Ordinal)]);
 
-        var refused = await RunAsync(backend, Region, "up", open, "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "open.env.yaml"));
+        var refused = await RunAsync(backend, null, "up", open, "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "open.env.yaml"));
         var refusedCalls = backend.Calls.Count;
-        var up = await RunAsync(backend, Region, "up", Stage, "--catalog", Catalog, "--base", shared, "--out", stage);
+        var up = await RunAsync(backend, null, "up", Stage, "--catalog", Catalog, "--base", shared, "--out", stage);
 
         Assert.Equal((1, 0), (refused.Code, up.Code));
         Assert.Equal(0, refusedCalls);
@@ -106,15 +104,15 @@ public sealed class EnvCliTests : IDisposable
     {
         var backend = new OutputBackend();
         var shared = Path.Combine(_temp, "shared.env.yaml");
-        await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", shared);
+        await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", shared);
         backend.Calls.Clear();
         var gold = Path.Combine(_temp, "gold.yaml");
         await File.WriteAllTextAsync(gold, (await File.ReadAllTextAsync(Dev)).Replace("type: dev", "type: gold", StringComparison.Ordinal));
         var goldBase = Path.Combine(_temp, "gold.env.yaml");
         await File.WriteAllTextAsync(goldBase, (await File.ReadAllTextAsync(shared)).Replace("type: shared", "type: gold", StringComparison.Ordinal));
 
-        var definition = await RunAsync(backend, Region, "up", gold, "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "a.env.yaml"));
-        var onBase = await RunAsync(backend, Region, "up", Dev, "--catalog", Catalog, "--base", goldBase, "--out", Path.Combine(_temp, "b.env.yaml"));
+        var definition = await RunAsync(backend, null, "up", gold, "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "a.env.yaml"));
+        var onBase = await RunAsync(backend, null, "up", Dev, "--catalog", Catalog, "--base", goldBase, "--out", Path.Combine(_temp, "b.env.yaml"));
 
         Assert.Equal((1, 1), (definition.Code, onBase.Code));
         Assert.Empty(backend.Calls);
@@ -130,8 +128,8 @@ public sealed class EnvCliTests : IDisposable
         var path = Path.Combine(_temp, "out.yaml");
         await File.WriteAllTextAsync(path, "old");
 
-        var refused = await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", path);
-        var forced = await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", path, "--force");
+        var refused = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", path);
+        var forced = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", path, "--force");
 
         Assert.Equal(2, refused.Code);
         Assert.Contains("already exists", refused.Err);
@@ -141,18 +139,18 @@ public sealed class EnvCliTests : IDisposable
     }
 
     [Fact]
-    public async Task The_region_comes_from_the_option_or_JD_REGION()
+    public async Task The_region_is_the_definitions_and_neither_JD_REGION_nor_a_region_option_has_a_say()
     {
         var backend = new OutputBackend();
         var path = Path.Combine(_temp, "out.yaml");
 
-        var none = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", path);
-        var option = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", path, "--region", "region-2");
+        var variable = await RunAsync(backend, new() { ["JD_REGION"] = "region-2" }, "up", Shared, "--catalog", Catalog, "--out", path);
+        var option = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", path, "--force", "--region", "region-2");
 
-        Assert.Equal(2, none.Code);
-        Assert.Contains("JD_REGION", none.Err);
-        Assert.Equal(0, option.Code);
-        Assert.Contains("region: region-2", await File.ReadAllTextAsync(path));
+        Assert.Equal(0, variable.Code);
+        Assert.Contains("region: southeastasia", await File.ReadAllTextAsync(path));
+        Assert.Equal(2, option.Code);
+        Assert.Contains("unknown option '--region'", option.Err);
     }
 
     [Fact]
@@ -161,15 +159,15 @@ public sealed class EnvCliTests : IDisposable
         var backend = new OutputBackend();
         var shared = Path.Combine(_temp, "shared.env.yaml");
         var dev = Path.Combine(_temp, "dev.env.yaml");
-        await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", shared);
-        await RunAsync(backend, Region, "up", Dev, "--catalog", Catalog, "--base", shared, "--out", dev);
+        await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", shared);
+        await RunAsync(backend, null, "up", Dev, "--catalog", Catalog, "--base", shared, "--out", dev);
         backend.Calls.Clear();
         var broken = Path.Combine(_temp, "broken.yaml");
         await File.WriteAllTextAsync(broken, (await File.ReadAllTextAsync(Dev)).Replace("offers: [container-app, database", "offers: [container-app, nosql"));
 
-        var collision = await RunAsync(backend, Region, "up", Dev, "--catalog", Catalog, "--base", dev, "--out", Path.Combine(_temp, "a.yaml"));
-        var unknown = await RunAsync(backend, Region, "up", broken, "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "b.yaml"));
-        var noBase = await RunAsync(backend, Region, "up", Dev, "--catalog", Catalog, "--out", Path.Combine(_temp, "c.yaml"));
+        var collision = await RunAsync(backend, null, "up", Dev, "--catalog", Catalog, "--base", dev, "--out", Path.Combine(_temp, "a.yaml"));
+        var unknown = await RunAsync(backend, null, "up", broken, "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "b.yaml"));
+        var noBase = await RunAsync(backend, null, "up", Dev, "--catalog", Catalog, "--out", Path.Combine(_temp, "c.yaml"));
 
         Assert.Equal((1, 1, 1), (collision.Code, unknown.Code, noBase.Code));
         Assert.Contains("offers: part 'apps-env' is already in the base descriptor's values", collision.Err);
@@ -184,7 +182,7 @@ public sealed class EnvCliTests : IDisposable
         var backend = new OutputBackend { SecretOutput = "documentEndpoint" };
         var path = Path.Combine(_temp, "out.yaml");
 
-        var (code, stdout, stderr) = await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", path);
+        var (code, stdout, stderr) = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", path);
 
         Assert.Equal(1, code);
         Assert.Contains("values.cosmos-account.endpoint", stderr);
@@ -198,7 +196,7 @@ public sealed class EnvCliTests : IDisposable
     [InlineData("up")]
     public async Task Usage_problems_exit_with_2(string command)
     {
-        var (code, _, err) = await RunAsync(new OutputBackend(), Region, command);
+        var (code, _, err) = await RunAsync(new OutputBackend(), null, command);
 
         Assert.Equal(2, code);
         Assert.Contains("jd:", err);

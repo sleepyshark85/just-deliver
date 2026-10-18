@@ -14,9 +14,8 @@ internal static class EnvCli
     private const int Success = 0;
     private const int Invalid = 1;
     private const int UsageError = 2;
-    private const string RegionVariable = "JD_REGION";
 
-    private sealed record Options(string Definition, string Catalog, string Out, string? Base, string? Region, bool Force);
+    private sealed record Options(string Definition, string Catalog, string Out, string? Base, bool Force);
 
     // args are the arguments after "env".
     public static async Task<int> RunAsync(
@@ -30,14 +29,7 @@ internal static class EnvCli
             return UsageError;
         }
 
-        var configured = options.Region ?? environmentVariable(RegionVariable);
-        if (configured is not { } region)
-        {
-            stderr.WriteLine($"jd: no region: pass --region or set {RegionVariable}.");
-            return UsageError;
-        }
-
-        problem = Unreadable(options) ?? (backend is null ? Cli.BackendSettingsProblem(environmentVariable) : null);
+        problem = Unreadable(options);
         if (problem is not null)
         {
             stderr.WriteLine($"jd: {problem}");
@@ -46,7 +38,7 @@ internal static class EnvCli
 
         try
         {
-            return await UpAsync(options, region, backend, environmentVariable, stdout, stderr, cancellationToken);
+            return await UpAsync(options, backend, environmentVariable, stdout, stderr, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -56,7 +48,7 @@ internal static class EnvCli
     }
 
     private static async Task<int> UpAsync(
-        Options options, string region, IBackEndProvider? backend, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        Options options, IBackEndProvider? backend, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var definitionResult = await EnvironmentDefinitionFile.LoadAsync(options.Definition, cancellationToken);
         var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog, cancellationToken);
@@ -68,7 +60,7 @@ internal static class EnvCli
         }
 
         // The definition's type, and the base's, must be the catalog's; a gated type's environment cannot be written without its block.
-        var environment = definition.Over(region, baseResult?.Descriptor);
+        var environment = definition.Over(baseResult?.Descriptor);
         var definitionRefused = Cli.RefuseType(catalog, environment, options.Definition, stderr);
         var baseRefused = options.Base is { } basePath && baseResult?.Descriptor is { } baseDescriptor && Cli.RefuseType(catalog, baseDescriptor, basePath, stderr);
         if (definitionRefused || baseRefused)
@@ -148,7 +140,7 @@ internal static class EnvCli
                 case "--force":
                     force = true;
                     break;
-                case "--catalog" or "--out" or "--base" or "--region":
+                case "--catalog" or "--out" or "--base":
                     if (i + 1 == args.Length)
                     {
                         return (null, $"{args[i]} needs a value.");
@@ -171,7 +163,7 @@ internal static class EnvCli
         }
 
         return values.TryGetValue("--catalog", out var catalog) && values.TryGetValue("--out", out var output)
-            ? (new Options(positional[0], catalog, output, values.GetValueOrDefault("--base"), values.GetValueOrDefault("--region"), force), string.Empty)
+            ? (new Options(positional[0], catalog, output, values.GetValueOrDefault("--base"), force), string.Empty)
             : (null, "env up needs --catalog and --out.");
     }
 }

@@ -1,5 +1,6 @@
 using System.Globalization;
 using jd.core.identity;
+using jd.core.records;
 using jd.resolver.environment;
 using jd.resolver.release;
 
@@ -24,7 +25,7 @@ internal static class ApproveCli
     private sealed record Options(string Label, string Environment, string Meaning);
 
     // What an approval is checked against: the gated environment, its policy and where the records are.
-    private sealed record Request(Options Options, EnvironmentDescriptor Target, ApprovalPolicy Policy, string Records);
+    private sealed record Request(Options Options, EnvironmentDescriptor Target, ApprovalPolicy Policy, IRecordStore Records);
 
     // args are the arguments after "approve".
     public static async Task<int> RunAsync(
@@ -57,16 +58,9 @@ internal static class ApproveCli
             return Invalid;
         }
 
-        var records = environmentVariable(Cli.RecordsDirectoryVariable) ?? string.Empty;
-        if (Cli.RecordsDirectoryProblem(records) is { } recordsProblem)
-        {
-            stderr.WriteLine($"jd: {recordsProblem}");
-            return UsageError;
-        }
-
         // A bad credential stops here, before any record is read.
         return await Cli.GetIdentityAsync(identity, environmentVariable, stderr, cancellationToken) is { } principal
-            ? await ApproveAsync(new Request(options, target, policy, records), principal, time, stdout, stderr, cancellationToken)
+            ? await ApproveAsync(new Request(options, target, policy, Cli.Records(environmentVariable)), principal, time, stdout, stderr, cancellationToken)
             : Invalid;
     }
 

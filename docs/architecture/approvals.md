@@ -39,7 +39,7 @@ types; scale may differ) holds trivially; per-type SKUs are out of the MVP.
   under its cap or are dropped past it, which costs nothing.
 - **Container Apps grant.** From S19 on, `stage` runs the same workloads as `dev`; their apps share the per-subscription monthly Container Apps free grant with `dev`'s
   ([standards](../engineering/standards.md) section 6: Consumption only, `minReplicas: 0`, smallest size), so the grant is split across both environments (*Unverified* that a test run stays far below it).
-- **Same subscription, same region (`JD_REGION`).** Real stage is platform-owned and in its own subscription (ADR 0008, landing-zone); the sandbox
+- **Same subscription, same region (the definitions' `region`).** Real stage is platform-owned and in its own subscription (ADR 0008, landing-zone); the sandbox
   has one subscription and one free Cosmos account, so the MVP shares it. Stated, not hidden.
 - **Teardown.** The test's cleanup deletes the environment groups before the shared one (their Container Apps environments log to the shared
   workspace). It currently puts only the `dev` group first; S18a changes that to "every group except the shared one first".
@@ -116,7 +116,7 @@ shown against Azure, and a record says which principal approved, not which human
 
 **The approval record** is the `approve` activity of the store of [release-record.md](release-record.md) section 1: JSON, `kind: ApprovalRecord`,
 `schemas/approval-record.schema.json`, `additionalProperties: false`, a committed golden validated against it.
-File: `<JD_RECORDS_DIR>/<target env>/<label>/<UTC yyyyMMddTHHmmssfffZ>-approve.json`, created with `FileMode.CreateNew` through the
+File: `<data>/records/<target env>/<label>/<UTC yyyyMMddTHHmmssfffZ>-approve.json`, created with `FileMode.CreateNew` through the
 same store (never opened for write twice; a name collision is an error that says to run again). It sits in the **target** environment's
 directory, where S19 looks; the set is read from the source environment's directory.
 
@@ -144,10 +144,10 @@ directory, where S19 looks; the set is read from the source environment's direct
 - **Why the record does not pin a qualifying record.** An approval that names a record file and its hash is not needed: S19 derives "qualified" **now** from the current files (section 5), so a record edited after the approval is re-judged, and a pin
   would prove only that a file was unedited, which the derivation already needs. The approval binds the set; the evidence is re-read when it is used.
   (Decisions, 3.) release-record.md section 1 points here for both the derivation and the approval files.
-- **Order** (as a recorded `release deploy`): parse arguments and the label; load the descriptor; `JD_RECORDS_DIR`; the identity (a bad credential
+- **Order** (as a recorded `release deploy`): parse arguments and the label; load the descriptor; the identity (a bad credential
   stops here); the source set and the qualification; the policy; the repeat check; then the one write. Nothing is written on any refusal.
-- **Refusals** (exit 1 with a message that names the cause; usage errors, exit 2, are a missing or empty `--meaning`, a bad label, a missing
-  `JD_RECORDS_DIR`, an unreadable `--env`):
+- **Refusals** (exit 1 with a message that names the cause; usage errors, exit 2, are a missing or empty `--meaning`, a bad label, an unreadable
+  `--env`):
   1. the descriptor has no approval policy (the environment is not gated);
   2. **unknown label**: `<records>/<qualifiedOn>/<label>/set.yaml` does not exist (a `set.yaml` or directory that cannot be read is refused too, with that reason, not as unknown);
   3. **not qualified** on `qualifiedOn` (section 5), with every reason listed;

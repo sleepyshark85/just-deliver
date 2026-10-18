@@ -39,10 +39,11 @@ public sealed class PulumiProviderTests : IDisposable
         services.RegisterPulumiBackend(options =>
         {
             options.BackendUrl = "file://" + Path.Combine(_root, "state");
-            options.ConfigPassPhrase = "test-passphrase";
+            options.ConfigPassPhraseFile = Path.Combine(_root, "state.key");
             options.ScratchDirectory = Path.Combine(_root, "scratch");
         });
         Directory.CreateDirectory(Path.Combine(_root, "state"));
+        File.WriteAllText(Path.Combine(_root, "state.key"), "test-passphrase");
         _provider = services.BuildServiceProvider().GetRequiredService<IBackEndProvider>();
     }
 

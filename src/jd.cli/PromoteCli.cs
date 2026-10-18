@@ -52,18 +52,13 @@ internal static class PromoteCli
             return Invalid;
         }
 
-        var records = environmentVariable(Cli.RecordsDirectoryVariable) ?? string.Empty;
-        if (Cli.RecordsDirectoryProblem(records) is { } recordsProblem)
-        {
-            stderr.WriteLine($"jd: {recordsProblem}");
-            return UsageError;
-        }
-
         // A bad credential stops here, before any record is read.
         if (await Cli.GetIdentityAsync(identity, environmentVariable, stderr, cancellationToken) is not { } principal)
         {
             return Invalid;
         }
+
+        var records = Cli.Records(environmentVariable);
 
         // Nothing below this check runs unless the label is qualified and approved; the walk reads the kept bytes and refuses them unless they hash to the checked set.
         var decision = await PromotionCheck.CheckAsync(records, target, label, cancellationToken);
@@ -84,7 +79,7 @@ internal static class PromoteCli
         }
 
         stdout.WriteLine($"promoting {label} from {policy.QualifiedOn} (set sha256 {setSha256})");
-        var kept = ReleaseRecordFile.KeptSetPath(records, policy.QualifiedOn, label);
-        return await ReleaseDeployCli.PromoteAsync(kept, to, catalog, new ReleaseDeployCli.Promotion(principal, setSha256), stdout, stderr, backend, probe, liveRevisions, time, environmentVariable, cancellationToken);
+        return await ReleaseDeployCli.PromoteAsync(
+            to, catalog, new ReleaseDeployCli.Promotion(principal, policy.QualifiedOn, label, setSha256), stdout, stderr, backend, probe, liveRevisions, time, environmentVariable, cancellationToken);
     }
 }

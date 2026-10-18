@@ -174,7 +174,7 @@ Where does the data-plane grant step run, as what identity, over what network pa
 
 ### D25. Platform bootstrap `OPEN`
 - What credential provisions the first environment?
-- Where does the Pulumi state encryption key live once state moves to Blob Storage? An empty `PULUMI_CONFIG_PASSPHRASE` is fine locally, not otherwise. See [plans/phase-0-bootstrap.md](plans/phase-0-bootstrap.md).
+- Where does the Pulumi state encryption key live once state moves to Blob Storage? Locally jd generates a random passphrase into its data directory (`<data>/state.key`, S23); a remote state needs the key kept elsewhere. See [plans/phase-0-bootstrap.md](plans/phase-0-bootstrap.md).
 
 ### D26. Identity cleanup on deletion `OPEN`
 - **Reduced but not eliminated by D17:** system-assigned identities die with their resource, so no orphaned *identities*.

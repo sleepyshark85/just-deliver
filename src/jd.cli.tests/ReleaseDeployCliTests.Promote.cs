@@ -257,10 +257,8 @@ public sealed partial class ReleaseDeployCliTests
     }
 
     [Fact]
-    public async Task An_environment_without_an_approval_policy_is_exit_1_even_without_a_records_directory()
+    public async Task An_environment_without_an_approval_policy_is_exit_1()
     {
-        _recordsVariable = null;
-
         var (code, _, stderr) = await RunAsync(null, "promote", "1.0.0", "--to", Environment, "--catalog", Catalog);
 
         Assert.Equal(1, code);
@@ -273,12 +271,11 @@ public sealed partial class ReleaseDeployCliTests
     {
         var stage = await ApprovedAsync();
         var backend = new RecordingBackend();
-        var kept = Path.Combine(_records, "dev", "1.0.0", "set.yaml");
-        var changed = new ReleaseDeployCli.Promotion(new DeployerIdentity("tenant-1", "client-1", Dave), new string('0', 64));
+        var changed = new ReleaseDeployCli.Promotion(new DeployerIdentity("tenant-1", "client-1", Dave), "dev", "1.0.0", new string('0', 64));
 
         var stderr = new StringWriter();
         var code = await ReleaseDeployCli.PromoteAsync(
-            kept, stage, Catalog, changed, new StringWriter(), stderr, backend, backend, _live, _clock, name => name == "JD_RECORDS_DIR" ? _records : null, CancellationToken.None);
+            stage, Catalog, changed, new StringWriter(), stderr, backend, backend, _live, _clock, name => name == "JD_DATA_DIR" ? _data : null, CancellationToken.None);
 
         Assert.Equal(1, code);
         Assert.Contains("changed since it was checked", stderr.ToString());
@@ -318,18 +315,14 @@ public sealed partial class ReleaseDeployCliTests
     }
 
     [Fact]
-    public async Task A_descriptor_or_catalog_that_does_not_exist_or_no_records_directory_is_exit_2_before_any_identity_or_record()
+    public async Task A_descriptor_or_catalog_that_does_not_exist_is_exit_2_before_any_identity_or_record()
     {
         var stage = await StageAsync();
-        _recordsVariable = null;
 
-        var missingRecords = await RunAsync(null, "promote", "1.0.0", "--to", stage, "--catalog", Catalog);
-        _recordsVariable = _records;
         var missingDescriptor = await RunAsync(null, "promote", "1.0.0", "--to", Path.Combine(_temp, "nope.yaml"), "--catalog", Catalog);
         var missingCatalog = await RunAsync(null, "promote", "1.0.0", "--to", stage, "--catalog", Path.Combine(_temp, "nope"));
 
-        Assert.Equal((2, 2, 2), (missingRecords.Code, missingDescriptor.Code, missingCatalog.Code));
-        Assert.Contains("JD_RECORDS_DIR", missingRecords.Err);
+        Assert.Equal((2, 2), (missingDescriptor.Code, missingCatalog.Code));
         Assert.Contains("nope.yaml", missingDescriptor.Err);
         Assert.Contains("nope", missingCatalog.Err);
         Assert.Equal(0, _identity.Calls);

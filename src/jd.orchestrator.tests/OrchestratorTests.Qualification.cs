@@ -37,7 +37,7 @@ public partial class OrchestratorTests
             var (_, graphs, passed) = await ReleaseRunAsync(new FakeBackend(), null, "shop", "cart");
             var (_, _, failed) = await ReleaseRunAsync(new FakeBackend { FailOn = "shop.dev.thing.group" }, null, "shop", "cart");
             var records = Directory.CreateTempSubdirectory("jd-qualification-tests").FullName;
-            var (sha256, _) = await ReleaseRecordFile.KeepSetAsync(records, "dev", "1.0.0", "the set"u8.ToArray());
+            var (sha256, _) = await ReleaseRecordFile.KeepSetAsync(new LocalRecordStore(records), "dev", "1.0.0", "the set"u8.ToArray());
             return new Ledger(records, sha256, graphs, passed, failed);
         }
 
@@ -49,17 +49,17 @@ public partial class OrchestratorTests
             var finished = RecordStart.AddMinutes(minute);
             var identity = new DeployerIdentity("tenant-1", "client-1", objectId);
             var json = ReleaseRecordBuilder.Build(_set, SetSha256, Env, _graphs, failed ? _failed : _passed, identity, finished.AddSeconds(-90), finished, TimeSpan.FromSeconds(42.5), iq);
-            return await ReleaseRecordFile.WriteAsync(Records, "dev", "1.0.0", finished, ReleaseRecordFile.DeployActivity, json);
+            return await ReleaseRecordFile.WriteAsync(new LocalRecordStore(Records), "dev", "1.0.0", finished, ReleaseRecordFile.DeployActivity, json);
         }
 
         public async Task<string> QualifyAsync(int minute, IqResult iq)
         {
             var finished = RecordStart.AddMinutes(minute);
             var json = ReleaseRecordBuilder.BuildQualify(_set, SetSha256, Env, _graphs, Principal, finished.AddSeconds(-90), finished, iq);
-            return await ReleaseRecordFile.WriteAsync(Records, "dev", "1.0.0", finished, ReleaseRecordFile.QualifyActivity, json);
+            return await ReleaseRecordFile.WriteAsync(new LocalRecordStore(Records), "dev", "1.0.0", finished, ReleaseRecordFile.QualifyActivity, json);
         }
 
-        public Task<Qualification> ReadAsync() => QualificationReader.ReadAsync(Records, "dev", "1.0.0");
+        public Task<Qualification> ReadAsync() => QualificationReader.ReadAsync(new LocalRecordStore(Records), "dev", "1.0.0");
 
         // Edits a written file in place, as someone with the records directory could.
         public static void Forge(string path, Action<JObject> edit)
@@ -106,7 +106,7 @@ public partial class OrchestratorTests
         using var ledger = await Ledger.CreateAsync();
 
         var empty = await ledger.ReadAsync();
-        var unknown = await QualificationReader.ReadAsync(ledger.Records, "dev", "9.9.9");
+        var unknown = await QualificationReader.ReadAsync(new LocalRecordStore(ledger.Records), "dev", "9.9.9");
 
         Assert.Contains("never deployed", OneReason(empty), StringComparison.Ordinal);
         Assert.Equal(ledger.SetSha256, empty.SetSha256);
@@ -245,7 +245,7 @@ public partial class OrchestratorTests
         var result = await ledger.ReadAsync();
 
         Assert.Null(result.SetSha256);
-        Assert.StartsWith($"'{ledger.LabelDirectory}' cannot be read: ", OneReason(result), StringComparison.Ordinal);
+        Assert.StartsWith("the records of label 1.0.0 on dev cannot be read: ", OneReason(result), StringComparison.Ordinal);
         Assert.Contains(setPath, OneReason(result), StringComparison.Ordinal);
     }
 
@@ -264,7 +264,7 @@ public partial class OrchestratorTests
             var result = await ledger.ReadAsync();
 
             Assert.Null(result.SetSha256);
-            Assert.StartsWith($"'{ledger.LabelDirectory}' cannot be read: ", OneReason(result), StringComparison.Ordinal);
+            Assert.StartsWith("the records of label 1.0.0 on dev cannot be read: ", OneReason(result), StringComparison.Ordinal);
         }
         finally
         {

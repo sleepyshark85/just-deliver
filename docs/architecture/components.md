@@ -226,7 +226,7 @@ approval: { ... }             # unchanged; required by the type
 ```
 
 `tier`, `requires`, `values` and `grantable` leave the definition. Offers are names only. `jd env up` keeps its command line (`--base`,
-`--region`, `--out`).
+`--out`; `--region` went in S23: the definition carries `region`).
 
 | `jd env up` of layer | Collects (one graph, owner `@<name>`, scope `substrate`) | Must already exist |
 |---|---|---|

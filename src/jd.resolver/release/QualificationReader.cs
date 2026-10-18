@@ -1,4 +1,5 @@
 using System.Globalization;
+using jd.core.records;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -16,7 +17,7 @@ public sealed record Qualification(string? SetSha256, IReadOnlyList<string> Reas
 }
 
 /// <summary>
-/// Reads the records of a label and derives "qualified" from them now; nothing is stored or repaired. The records directory is the trust boundary
+/// Reads the records of a label and derives "qualified" from them now; nothing is stored or repaired. The record store is the trust boundary
 /// (approvals.md section 9): every file that is not what its place says is a reason, so a copied, renamed or edited record can only make the answer "not qualified".
 /// </summary>
 public static class QualificationReader
@@ -26,70 +27,68 @@ public static class QualificationReader
     private sealed record Expected(string Environment, string Label, string SetSha256);
 
     /// <summary>
-    /// Judges label <paramref name="label"/> on <paramref name="environment"/> from <c>&lt;records&gt;/&lt;environment&gt;/&lt;label&gt;/</c>. Files that are not
+    /// Judges label <paramref name="label"/> on <paramref name="environment"/> from its files in <paramref name="records"/>. Files that are not
     /// <c>&lt;time&gt;-deploy.json</c> or <c>&lt;time&gt;-qualify.json</c> (approvals, notes) are not records and are left alone. Throws <see cref="ArgumentException"/>
     /// for an environment or label that is not a single path segment.
     /// </summary>
-    public static async Task<Qualification> ReadAsync(string recordsDirectory, string environment, string label, CancellationToken cancellationToken = default)
+    public static async Task<Qualification> ReadAsync(IRecordStore records, string environment, string label, CancellationToken cancellationToken = default)
     {
-        var directory = ReleaseRecordFile.LabelDirectory(recordsDirectory, environment, label);
-        var setPath = ReleaseRecordFile.KeptSetPath(recordsDirectory, environment, label);
-        if (!File.Exists(setPath))
-        {
-            return new Qualification(null, [$"unknown label: '{setPath}' does not exist."], []);
-        }
-
         string setSha256;
-        string[] paths;
+        IReadOnlyList<string> names;
         try
         {
-            setSha256 = ReleaseDocument.Sha256(await File.ReadAllBytesAsync(setPath, cancellationToken));
-            paths = Directory.EnumerateFiles(directory).Order(StringComparer.Ordinal).ToArray();
+            names = await records.ListAsync(environment, label, cancellationToken);
+            if (!names.Contains(ReleaseRecordFile.SetFileName))
+            {
+                return new Qualification(null, [$"unknown label: there is no {ReleaseRecordFile.SetFileName} for label {label} on {environment}."], []);
+            }
+
+            setSha256 = ReleaseDocument.Sha256(await records.ReadAsync(environment, label, ReleaseRecordFile.SetFileName, cancellationToken));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return new Qualification(null, [$"'{directory}' cannot be read: {ex.Message}"], []);
+            return new Qualification(null, [$"the records of label {label} on {environment} cannot be read: {ex.Message}"], []);
         }
 
         var expected = new Expected(environment, label, setSha256);
         var reasons = new List<string>();
-        var records = new List<Entry>();
-        foreach (var path in paths)
+        var entries = new List<Entry>();
+        foreach (var name in names)
         {
-            var name = Path.GetFileName(path);
             if (ReleaseRecordFile.SplitName(name) is not { } split)
             {
                 continue;
             }
 
-            var (body, problem) = await LoadAsync(path, name, split.Time, split.Activity, expected, cancellationToken);
+            var (body, problem) = await LoadAsync(records, name, split.Time, split.Activity, expected, cancellationToken);
             if (body is null)
             {
                 reasons.Add($"{name}: {problem}");
             }
             else
             {
-                records.Add(new Entry(name, split.Activity, body));
+                entries.Add(new Entry(name, split.Activity, body));
             }
         }
 
         // An inconsistent record is a failure by itself; judging the rest could only say less than the whole.
         if (reasons.Count == 0)
         {
-            reasons.AddRange(Judge(records));
+            reasons.AddRange(Judge(entries));
         }
 
-        var deployers = records.Where(r => r.Activity == ReleaseRecordFile.DeployActivity).Select(r => (string)r.Body["identity"]!["objectId"]!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var deployers = entries.Where(r => r.Activity == ReleaseRecordFile.DeployActivity).Select(r => (string)r.Body["identity"]!["objectId"]!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         return new Qualification(setSha256, reasons, deployers);
     }
 
     // The body when the file is a valid record that belongs here, else why not.
-    private static async Task<(JObject? Body, string? Problem)> LoadAsync(string path, string name, string time, string activity, Expected expected, CancellationToken cancellationToken)
+    private static async Task<(JObject? Body, string? Problem)> LoadAsync(IRecordStore records, string name, string time, string activity, Expected expected, CancellationToken cancellationToken)
     {
         JObject body;
         try
         {
-            using var reader = new JsonTextReader(new StringReader(await File.ReadAllTextAsync(path, cancellationToken))) { DateParseHandling = DateParseHandling.None };
+            var text = await ReleaseRecordFile.ReadTextAsync(records, expected.Environment, expected.Label, name, cancellationToken);
+            using var reader = new JsonTextReader(new StringReader(text)) { DateParseHandling = DateParseHandling.None };
             body = JObject.Load(reader);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)

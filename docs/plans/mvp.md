@@ -27,7 +27,7 @@ approvals, so the MVP proves the shape of that early, when it is cheap to change
 
 | In | Out (deferred deliberately) |
 |---|---|
-| Two environments, `dev` (tier team) and `stage` (tier protected), one subscription ([sandbox](../../tools/sandbox/README.md)), one region from `JD_REGION` | Landing zone, platform identity model (D19), more environments, multi-region (E53) |
+| Two environments, `dev` (tier team) and `stage` (tier protected), one subscription ([sandbox](../../tools/sandbox/README.md)), one region (the environment definitions' `region`) | Landing zone, platform identity model (D19), more environments, multi-region (E53) |
 | Substrate from data per environment: resource group, Container Apps Environment, a Cosmos SQL database (400 RU/s shared throughput); one Log Analytics workspace and one free-tier Cosmos account shared by both environments | Substrate versioning (B7) |
 | One resource type `database` (platform maps it to Cosmos SQL): a container per workload in its environment's database, grant scoped to that container (free tier: 2 environments × 400 RU/s ≤ 1,000) | Other types, `class` values beyond default, applying overrides (rejected for now) |
 | One policy `enforce-monitoring`: per-workload App Insights | More policies — adding one is a test of goal 1, not scope |
