@@ -100,6 +100,7 @@ D          -> Full automation, Ops handles approvals and exceptions only
 3. **Secrets in a vault from day one.** Secret values go in a secrets backend (Azure Key Vault for this platform; Vault and AWS Secrets Manager were listed as generic examples), never in the platform DB. In D, apps read them directly from the vault.
 4. **Pluggable deployment actions.** A deployment record has a `trigger` field: `manual_instruction` in B/C, `api_call` in D. Same record, different executor.
 5. **Never let work happen outside the platform.** Shadow processes break the audit trail and block future automation.
+6. **Explicit over implicit.** A workload gets only what it declares; guardrails require rather than silently add; implicit platform-owned resources are few and named. See [conventions](engineering/conventions.md#design-rules-that-code-must-keep).
 
 ### North star: workloads as components (the user's vision, not designed yet)
 

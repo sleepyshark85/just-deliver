@@ -116,6 +116,13 @@ How it is applied:
 
 These hold across slices; a change to one changes its design note or ADR first.
 
+- **Explicit over implicit** (the user's principle, 2026-10-18). What a workload gets, it asks for: every resource, grant and
+  setting comes from something written down — the workload's `requires`, a component's `uses`, an environment's offers. No
+  silent additions: a guardrail policy *requires* (and fails a workload that lacks it), it does not add behind the
+  team's back. Implicit, platform-owned resources (resource groups, the Container Apps environment, the shared Cosmos
+  account) are a short named list, and workloads are never granted on them. A grant targets only what the workload's
+  own requirements created. Prefer exact lookups to matching rules. A design that adds an implicit resource, grant,
+  default or match needs the user's go-ahead.
 - **Data drives the platform.** Templates, mappings, policies and the environment descriptor carry every resource
   fact; the code knows formats and names *from the data* (a mapping's `release:` block names the outputs the release
   flow reads).
