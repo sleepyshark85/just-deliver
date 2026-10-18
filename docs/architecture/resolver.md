@@ -289,7 +289,7 @@ grantable:                # paths under values that workloads may grant on
   - cosmos.accountId
 ```
 
-- **Type:** `catalog.yaml` declares the environment types (`environmentTypes`: type → `layer`, optional `approval: true`). A descriptor or
+- **Type:** `catalog.yaml` declares the environment types (`environmentTypes`: type → optional `approval: true`). A descriptor or
   definition of an undeclared type is an error naming the declared ones, and one of a type with `approval: true` must carry `approval`
   (`EnvironmentTypeCheck`, called by the CLI with the catalog before anything resolves or deploys).
 - **Lookup:** `env.name`, `env.region` and `env.type` are reserved and come from the top-level

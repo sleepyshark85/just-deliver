@@ -16,7 +16,7 @@ public sealed class ReleaseResolverTests
     {
         var files = new[]
         {
-            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
+            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
             "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n",
             "kind: Mapping\nmatch: { type: thing }\nnodes:\n  n:\n    template: t/n\n    config: { k: 1 }\nexports:\n  out: x\n",
             TestCatalog.RuntimeMapping,

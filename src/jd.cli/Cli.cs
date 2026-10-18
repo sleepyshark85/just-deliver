@@ -163,9 +163,8 @@ public static class Cli
             return Invalid;
         }
 
-        if (EnvironmentTypeCheck.Check(catalog, environment.Type, environment.Approval, resolve.Environment) is { Count: > 0 } typeErrors)
+        if (RefuseType(catalog, environment, resolve.Environment, stderr))
         {
-            Print(typeErrors, stderr);
             return Invalid;
         }
 
@@ -205,6 +204,18 @@ public static class Cli
         }
 
         stderr.WriteLine($"jd: {command}: environment '{environment.Name}' is gated by an approval policy: use `jd promote`.");
+        return true;
+    }
+
+    // An environment's type must be the catalog's, and a type that requires an approval block must carry it (security boundary 13). Prints what is wrong, naming the file.
+    internal static bool RefuseType(Catalog catalog, EnvironmentDescriptor environment, string file, TextWriter stderr)
+    {
+        if (EnvironmentTypeCheck.Check(catalog, environment.Type, environment.Approval, file) is not { Count: > 0 } errors)
+        {
+            return false;
+        }
+
+        Print(errors, stderr);
         return true;
     }
 

@@ -17,7 +17,7 @@ public sealed class DeployAzureTests : ProbeAzureTest
     public async Task Deploy_creates_a_group_and_a_workspace_in_it_and_a_second_deploy_changes_nothing()
     {
         var catalog = Path.Combine(Root, "catalog");
-        Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
+        Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n");
         Write("catalog/types/probe.yaml", "kind: ResourceType\nname: probe\ndescription: Test-only type.\nclasses: [standard]\nexports: [workspace]\n");
         Write("catalog/naming.yaml", "kind: Naming\nrules:\n  law:\n    pattern: \"law-{env}-{hash}\"\n    maxLength: 63\n    allowed: \"[a-z0-9-]\"\n");
         Write("catalog/mappings/probe.yaml", """

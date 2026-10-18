@@ -22,7 +22,7 @@ against a real descriptor. And a policy adds resources (App Insights) that no wo
 
 | Kind | Fields | Replaces |
 |---|---|---|
-| `Catalog` | `version`, **`environmentTypes`** (type → `layer`, optional `approval: true`) | `tier` enums in the schemas |
+| `Catalog` | `version`, **`environmentTypes`** (type → optional `approval: true`; S21e adds `layer`, see below) | `tier` enums in the schemas |
 | `SharedResource` | `name`, `description`, `scope` (`shared` \| `environment`), `uses`, `nodes`, `exports` | the substrate mappings' nodes |
 | `Component` | `name`, `description`, `exports` (the contract), `uses`, `implementations` (environment type or `default` → `environment` part (optional), `classes` (class → `nodes`, `exports`)) | `ResourceType` + its mappings + its slice of the substrate |
 | `Runtime` | `name`, `description`, `uses`, `implementations` (environment type or `default` → `probe`, `release`, `nodes`, which must include `runtime`) | the runtime mapping (`match: { kind: runtime }`) |
@@ -46,16 +46,18 @@ at resolve). Today's `tier` (`team`/`protected`) becomes the **type**.
 kind: Catalog
 version: "0.1.0"
 environmentTypes:
-  shared: { layer: shared }                     # the shared layer's own type
-  dev:    { layer: environment }
-  stage:  { layer: environment, approval: true }  # a definition of this type must carry an `approval` block
-  prod:   { layer: environment, approval: true }
+  shared: {}                                    # S21e: { layer: shared }, the shared layer's own type
+  dev:    {}                                    # S21e: { layer: environment }
+  stage:  { approval: true }                    # a definition of this type must carry an `approval` block
+  prod:   { approval: true }
 ```
+
+`layer` (`shared` \| `environment`, S21e) says which `jd env up` layer a type is; S21a does not declare or read it.
 
 - **One contract, implementations per type.** A component or runtime is looked up as `implementations.<type>`, else
   `implementations.default`, else an error naming the component and the type. Exact key lookup: no matching, no specificity, no ties. An
   implementation replaces `default` whole (no merging).
-- **Load checks:** implementation keys are declared types of layer `environment`, or `default`; every implementation declares the same
+- **Load checks:** implementation keys are declared types (S21e: of layer `environment`), or `default`; every implementation declares the same
   classes (so a workload's `class` is valid in every environment); every class part exports exactly the contract.
 - `approval: true` replaces the schema coupling `tier: protected` → `approval` ([approvals.md](approvals.md) §2): a definition or descriptor
   of such a type without the block is an error. As today, any type may carry a block, and the CLI gates on the block, never on the type.

@@ -18,7 +18,7 @@ public class GraphBuilderTests
 
     private static readonly string[] BaseFiles =
     [
-        "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
+        "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
         "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard]\nexports: [endpoint]\n",
         "kind: ResourceType\nname: other\ndescription: d\nclasses: [standard]\nexports: [endpoint]\n",
     ];

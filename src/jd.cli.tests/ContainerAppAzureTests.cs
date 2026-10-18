@@ -28,7 +28,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     // The test catalog; the revision suffix and the traffic (flow YAML) are what the tests vary between deploys.
     private void WriteCatalog(string revisionSuffix, string traffic)
     {
-        Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
+        Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n");
         Write("catalog/types/probe.yaml", "kind: ResourceType\nname: probe\ndescription: Test-only type.\nclasses: [standard]\nexports: [app]\n");
         Write("catalog/naming.yaml", """
             kind: Naming

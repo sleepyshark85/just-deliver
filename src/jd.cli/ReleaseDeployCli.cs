@@ -94,9 +94,8 @@ internal static class ReleaseDeployCli
             return Invalid;
         }
 
-        if (EnvironmentTypeCheck.Check(catalog, environment.Type, environment.Approval, options.Environment) is { Count: > 0 } typeErrors)
+        if (Cli.RefuseType(catalog, environment, options.Environment, stderr))
         {
-            Cli.Print(typeErrors, stderr);
             return Invalid;
         }
 

@@ -12,7 +12,8 @@ using Xunit;
 namespace jd.cli.tests;
 
 // The refactor's acceptance (docs/architecture/components.md section 5): `env up` of the sample shared, dev and stage definitions, then
-// `jd deploy` of the seed workload on dev and `jd release deploy` of the walkthrough's v1 release (two workloads) on dev, against a fake
+// `jd deploy` of the seed workload on dev, `jd release deploy` of the walkthrough's v1 release (two workloads) on dev and its `jd promote` to
+// the gated stage (approved by the sample's approver, whose approval is placed by hand), against a fake
 // backend whose outputs are deterministic. Every package the backend is handed (stack, every config entry, its secret flag, and the SHA-256
 // of its Pulumi program) is compared with a committed snapshot, so a change in what reaches Azure shows in the diff.
 // Regenerate with JD_UPDATE_GOLDEN=1 and review the diff.
@@ -76,15 +77,26 @@ public sealed class DeployedConfigSnapshotTests : IDisposable
         var backend = new SnapshotBackend();
         var shared = Path.Combine(_temp, "shared.env.yaml");
         var dev = Path.Combine(_temp, "dev.env.yaml");
+        var stage = Path.Combine(_temp, "stage.env.yaml");
 
         await Run(backend, "env", "up", Path.Combine(Environments, "shared.yaml"), "--catalog", Catalog, "--out", shared);
         await Run(backend, "env", "up", Path.Combine(Environments, "dev.yaml"), "--catalog", Catalog, "--base", shared, "--out", dev);
-        await Run(backend, "env", "up", Path.Combine(Environments, "stage.yaml"), "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "stage.env.yaml"));
+        await Run(backend, "env", "up", Path.Combine(Environments, "stage.yaml"), "--catalog", Catalog, "--base", shared, "--out", stage);
         await Run(backend, "deploy", Workload, "--env", dev, "--catalog", Catalog);
 
         var set = Path.Combine(_temp, "v1.release.yaml");
         await Run(backend, "release", "create", Path.Combine(Walkthrough, "v1.manifest.yaml"), "--out", set);
         await Run(backend, "release", "deploy", set, "--env", dev, "--catalog", Catalog);
+
+        // The sample stage needs one approval from its all-zero approver, on the bytes of the set kept on dev.
+        var kept = Path.Combine(_records, "dev", "1.1.0", "set.yaml");
+        var approvals = Directory.CreateDirectory(Path.Combine(_records, "stage", "1.1.0")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(approvals, "20261017T090000000Z-approve.json"), $$"""
+            { "kind": "ApprovalRecord", "approvedAt": "2026-10-17T09:00:00Z", "environment": { "name": "stage", "type": "stage" },
+              "release": { "label": "1.1.0", "setSha256": "{{Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(kept)))}}" }, "qualifiedOn": "dev",
+              "identity": { "tenantId": "tenant-1", "clientId": "client-1", "objectId": "00000000-0000-0000-0000-000000000000" }, "meaning": "ready for stage" }
+            """);
+        await Run(backend, "promote", "1.1.0", "--to", stage, "--catalog", Catalog);
 
         // In call order (a runtime is deployed twice: dark, then the shift); config entries by key.
         var actual = new JArray(backend.Packages.Select(p => new JObject

@@ -68,16 +68,14 @@ internal static class EnvCli
         }
 
         // The definition's type, and the base's, must be the catalog's; a gated type's environment cannot be written without its block.
-        var typeErrors = EnvironmentTypeCheck.Check(catalog, definition.Type, definition.Approval, options.Definition)
-            .Concat(options.Base is { } basePath && baseResult?.Descriptor is { } baseDescriptor ? EnvironmentTypeCheck.Check(catalog, baseDescriptor.Type, baseDescriptor.Approval, basePath) : [])
-            .ToList();
-        if (typeErrors.Count > 0)
+        var environment = definition.Over(region, baseResult?.Descriptor);
+        var definitionRefused = Cli.RefuseType(catalog, environment, options.Definition, stderr);
+        var baseRefused = options.Base is { } basePath && baseResult?.Descriptor is { } baseDescriptor && Cli.RefuseType(catalog, baseDescriptor, basePath, stderr);
+        if (definitionRefused || baseRefused)
         {
-            Cli.Print(typeErrors, stderr);
             return Invalid;
         }
 
-        var environment = definition.Over(region, baseResult?.Descriptor);
         var graph = Resolver.ResolveSubstrate(definition, options.Definition, catalog, environment);
         var composer = new DescriptorComposer(definition, options.Definition, catalog, environment, graph);
 
