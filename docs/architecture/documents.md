@@ -11,8 +11,8 @@
 
 The C# mirrors every document format. Each file kind has a model (`Catalog`, `Component`, `EnvironmentDefinition`, `EnvironmentDescriptor`,
 `ReleaseSet`, `ApprovalRecord.Stored`, …), a loader (`*File.cs`, `*Parser.cs`) returning its own result type (`*LoadResult`), and field
-names spelled in code (`body["environmentTypes"]`, `workload["container"]["image"]`, `record["iq"]`). Appendix A lists every place, in
-files in 7 projects. So a renamed field, a new kind or a new component shape is a C# change, and the schemas in `schemas/` are only a
+names spelled in code (`body["environmentTypes"]`, `workload["container"]["image"]`, `record["iq"]`). Appendix A lists every place,
+in seven projects. So a renamed field, a new kind or a new component shape is a C# change, and the schemas in `schemas/` are only a
 first gate in front of a second, hand-written model of the same shape. Standards §1 even allows it ("Allowed in code: the catalog/schema
 *formats*"); the user does not.
 
