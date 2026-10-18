@@ -53,19 +53,19 @@ public sealed class DeployedConfigSnapshotTests : IDisposable
         public Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(string stackName, string deploymentContent, CancellationToken cancellationToken) =>
             Task.FromResult(_deployed.GetValueOrDefault(stackName));
 
-    public Task<ProbeResult> ProbeAsync(string fqdn, Probe probe, CancellationToken cancellationToken) => Task.FromResult(new ProbeResult(true, "HTTP 200"));
+        public Task<ProbeResult> ProbeAsync(string fqdn, Probe probe, CancellationToken cancellationToken) => Task.FromResult(new ProbeResult(true, "HTTP 200"));
     }
 
     // The release flow's seams: a fixed principal, a clock that starts at a fixed time, and a platform with one revision holding all traffic.
-    private readonly StepClock Clock = new();
-    private readonly FakeIdentity Identity = new();
-    private readonly FakeLiveRevisions Live = new();
+    private readonly StepClock _clock = new();
+    private readonly FakeIdentity _identity = new();
+    private readonly FakeLiveRevisions _live = new();
 
     private async Task Run(SnapshotBackend backend, params string[] args)
     {
         var variables = new Dictionary<string, string>(Variables) { ["JD_RECORDS_DIR"] = _records };
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, new StringWriter(), stderr, CancellationToken.None, backend, name => variables.GetValueOrDefault(name), backend, Identity, Clock, Live);
+        var code = await Cli.RunAsync(args, new StringWriter(), stderr, CancellationToken.None, backend, name => variables.GetValueOrDefault(name), backend, _identity, _clock, _live);
         Assert.True(code == 0, $"jd {string.Join(' ', args)}: exit {code}: {stderr}");
     }
 
