@@ -167,7 +167,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
             && pending.References.SetEquals([new Reference(ReferenceKind.Node, single.Node, single.Output)])))
         {
             var origin = node.Provenance.GetValueOrDefault(input);
-            errors.Add(new LoadError(origin?.Source ?? id, input, $"node '{id}': {CatalogParser.GrantTargetRule(input)}"));
+            errors.Add(new LoadError(origin?.Source ?? id, input, $"node '{id}': {ExpressionEvaluator.GrantTargetRule(input)}"));
         }
     }
 

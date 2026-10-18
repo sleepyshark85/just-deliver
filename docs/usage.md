@@ -112,8 +112,8 @@ jd env up samples/environments/dev.yaml    --catalog catalog --base shared.env.y
   validated by the descriptor loader and only then written. Secret or null outputs are never written; a value that needs
   one is an error.
 - Running a command again reports every node `unchanged` and rewrites the same descriptor (with `--force`).
-- A descriptor written before S21e (values keyed by layout, not by part) is refused: run the `env up`s again with `--force`; every node is
-  `unchanged` and the descriptors are rewritten in the new layout.
+- A descriptor written before S21f is refused (before S21e its values were keyed by layout, not by part; S21e ones carry `grantable`): run the
+  `env up`s again with `--force`; every node is `unchanged` and the descriptors are rewritten in the new layout.
 - If a deploy fails nothing is written; running again resumes (deployed nodes are `unchanged`).
 
 An environment definition (`kind: EnvironmentDefinition`, [schema](../schemas/environment-definition.schema.json)):

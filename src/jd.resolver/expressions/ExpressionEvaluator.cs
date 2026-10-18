@@ -68,6 +68,14 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
         }
     }
 
+    /// <summary>The env.* limit as the loader and the evaluator report it.</summary>
+    internal static string EnvLimit(string path) =>
+        $"'{path}' is not an environment field; env.* reads only {string.Join(", ", EnvironmentDescriptor.ReservedKeys.Select(k => $"{EnvNamespace}.{k}"))}; read a deployed part's export as ${{<name>.<export>}} through uses.";
+
+    /// <summary>The grant target rule, as the loader and the graph builder report it.</summary>
+    internal static string GrantTargetRule(string input) =>
+        $"a grant's target ('{input}') must be exactly ${{<node>.<output>}} of a node of its own part or the runtime: no literal, no text around it, no shared or environment resource, no env.*, resource.*, role.* or function.";
+
     /// <summary>
     /// The node and output of <paramref name="text"/> when it is exactly one <c>${&lt;node&gt;.&lt;output&gt;}</c>: no text around it, no function,
     /// no literal, two segments. Null otherwise. What a grant's target must be (docs/architecture/components.md section 3).
@@ -270,7 +278,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
                     return Known(envValue);
                 }
 
-                fail($"'{path}' is not an environment field; env.* reads only {string.Join(", ", EnvironmentDescriptor.ReservedKeys.Select(k => $"{EnvNamespace}.{k}"))}; read a deployed part's export as ${{<name>.<export>}} through uses.");
+                fail(EnvLimit(path));
                 return null;
 
             case RoleNamespace:

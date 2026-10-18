@@ -10,8 +10,6 @@ public class GrantTargetTests
 {
     private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
 
-    private const string GrantsFile = "kind: Grants\ntargets: { t/g: scope }\n";
-
     private const string SharedGroup = "kind: SharedResource\nname: shared-group\ndescription: d\nscope: shared\nnodes:\n  group: { template: t/x, config: {} }\nexports: { name: '${group.name}' }\n";
 
     // The account's resourceGroup export chains to another part's node.
@@ -35,7 +33,7 @@ public class GrantTargetTests
     private static Task<CatalogLoadResult> Parse(string component, string runtime = "", string sharedGroup = SharedGroup) =>
         CatalogParser.ParseAsync(new[]
         {
-            ("catalog.yaml", CatalogFile), ("grants.yaml", GrantsFile), ("shared/a.yaml", sharedGroup), ("shared/b.yaml", CosmosAccount),
+            ("catalog.yaml", CatalogFile), ("grants.yaml", TestCatalog.GrantsFile), ("shared/a.yaml", sharedGroup), ("shared/b.yaml", CosmosAccount),
             ("c.yaml", component), ("r.yaml", runtime.Length > 0 ? runtime : Runtime()),
         }.Select(f => new CatalogSource(f.Item1, f.Item2)));
 

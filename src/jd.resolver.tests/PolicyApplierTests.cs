@@ -26,7 +26,7 @@ public class PolicyApplierTests
         $"kind: Policy\nname: {name}\nreason: because\nmatch: {match}\n{body}";
 
     private static EnvironmentDescriptor Env(string type = "dev") =>
-        new("dev", "region", type, new Dictionary<string, string> { ["host"] = "region" }, ["sqldb", "container-app"], null);
+        new("dev", "region", type, new Dictionary<string, string>(), ["sqldb", "container-app"], null);
 
     private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string type = "dev", bool expectExpansionErrors = false)
     {

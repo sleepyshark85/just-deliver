@@ -352,7 +352,7 @@ public static class CatalogParser
                     var exports = reader.Uses.Contains(root) ? shared.GetValueOrDefault(root)?.Part.Exports : root == reader.OwnComponent ? reader.OwnEnvironment?.Exports : null;
                     var problem =
                         root == ExpressionEvaluator.EnvNamespace && !(segments.Length == 2 && EnvironmentDescriptor.ReservedKeys.Contains(segments[1]))
-                            ? $"'{path}': env.* reads only {string.Join(", ", EnvironmentDescriptor.ReservedKeys.Select(k => $"env.{k}"))}; read a shared resource's export as ${{<name>.<export>}} through uses."
+                            ? ExpressionEvaluator.EnvLimit(path)
                         : ExpressionEvaluator.ReservedRoots.Contains(root) || reader.Part.Nodes.ContainsKey(root) ? null
                         : reader.Uses.Contains(root) && exports is null ? null // its file failed its schema, or uses names no shared resource: reported on its own
                         : exports is not null ? (segments.Length == 2 && exports.ContainsKey(segments[1]) ? null : $"'{path}': '{root}' exports {string.Join(", ", exports.Keys)}.")
@@ -416,15 +416,11 @@ public static class CatalogParser
                     && ExpressionEvaluator.SingleReference(Text(target)) is { } reference
                     && (reader.Part.Nodes.ContainsKey(reference.Node) || reference.Node == ExpressionEvaluator.RuntimeNode)))
                 {
-                    errors.Add(new LoadError(reader.Source, $"{location}.config.{input}", GrantTargetRule(input)));
+                    errors.Add(new LoadError(reader.Source, $"{location}.config.{input}", ExpressionEvaluator.GrantTargetRule(input)));
                 }
             }
         }
     }
-
-    /// <summary>The grant target rule, as the loader and the graph builder report it.</summary>
-    internal static string GrantTargetRule(string input) =>
-        $"a grant's target ('{input}') must be exactly ${{<node>.<output>}} of a node of its own part or the runtime: no literal, no text around it, no shared or environment resource, no env.*, resource.*, role.* or function.";
 
     // Every policy must apply to node scope or workload scope (resolver.md, Policy scope); one that fits neither would silently do nothing.
     private static void CheckPolicyScopes(List<Policy> policies, List<LoadError> errors)

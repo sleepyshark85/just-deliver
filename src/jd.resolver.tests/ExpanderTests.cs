@@ -30,7 +30,7 @@ public class ExpanderTests
         + "  stage:\n    classes:\n      standard: { nodes: { n: { template: t/n, config: {} } }, exports: { endpoint: guarded } }\n";
 
     private static EnvironmentDescriptor Env(string type = "dev") =>
-        new("dev", "region", type, new Dictionary<string, string> { ["host"] = "region" }, ["sqldb", "container-app"], null);
+        new("dev", "region", type, new Dictionary<string, string>(), ["sqldb", "container-app"], null);
 
     private static async Task<Catalog> LoadAsync(params string[] components)
     {

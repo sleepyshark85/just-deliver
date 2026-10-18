@@ -56,5 +56,5 @@ public static class EnvironmentDefinitionFile
             []);
     }
 
-    private static List<string> Strings(JToken? token) => token is JArray array ? array.Select(t => (string)t!).ToList() : [];
+    internal static List<string> Strings(JToken? token) => token is JArray array ? array.Select(t => (string)t!).ToList() : [];
 }

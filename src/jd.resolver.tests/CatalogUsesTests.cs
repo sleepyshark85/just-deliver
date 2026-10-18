@@ -184,7 +184,7 @@ public class CatalogUsesTests
             ("r.yaml", Runtime("[]", runtime ?? "{}"))));
 
         Assert.Equal((file, location), (error.File, error.Location));
-        Assert.Contains("env.* reads only env.name, env.region, env.type; read a shared resource's export as ${<name>.<export>} through uses.", error.Message);
+        Assert.Contains("env.* reads only env.name, env.region, env.type; read a deployed part's export as ${<name>.<export>} through uses.", error.Message);
     }
 
     // Every part kind is checked: a shared resource, an environment part, a class part (config and exports, inside a function call) and the runtime.

@@ -14,7 +14,7 @@ namespace jd.resolver.tests;
 public class RuntimeVariablesTests
 {
     private static readonly EnvironmentDescriptor Env =
-        new("dev", "region", "dev", new Dictionary<string, string> { ["host"] = "region" }, ["sqldb", "container-app"], null);
+        new("dev", "region", "dev", new Dictionary<string, string>(), ["sqldb", "container-app"], null);
 
     private const string RuntimeFile = """
         kind: Runtime
