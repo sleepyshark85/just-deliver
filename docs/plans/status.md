@@ -6,7 +6,7 @@
 ## Now
 
 - **Phase:** 1 — components, base ([roadmap](roadmap.md)); phase 0 (MVP) done, awaiting the user's manual run.
-- **Next slice:** —
+- **Next slice:** S21a. **Waiting for the user:** roadmap phase 1 exit wording (proposed: "same resources for the same inputs, except the one-time move of monitoring into a requirement, which the upgrade gate checks").
 - **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
   required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
   leaves the deployment live; ADR 0007 kept (the set file's bytes are stored write-once as `set.yaml` per label).
@@ -53,6 +53,13 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S19 | Promotion | done | S19a #47, S19b #48 | 2 (S19a), 3 (S19b) | Split: S19a (approval reader + `PromotionCheck`, no CLI) and S19b (`jd promote`, Azure test). **S19a done** (PR #47, 2 rounds: 4 → 0 blocking — `jd approve` silently dropped ignored approvals (lead: ignore, but report on stderr), a dead catch, two API nits; Sonnet developer, fixes by the fixer; ~110 lines; no Azure gate, not Azure-facing). Flaky test found on main: `A_failed_workload_runs_no_iq…` asserts no "IQ" in output that contains a random temp path — fix in S19b. **S19b done** (PR #48, 3 rounds: 4 → 1 → 0 blocking — promote re-entered the walk by rebuilding argv with a gate-skip flag, identity after the check (lead had waived the brief's order; reversed), no bad-credential test, a copied label parser; then option strings spelled twice; Sonnet developer, round 1 by a fresh developer, round 2 by the fixer; ~145 lines; the walk refuses kept bytes whose hash is not the checked `h`). Azure gate run once on the hand-back head 6820880: green, 1 h 21 m (`promote` refused without approval, promoted after, same `set.yaml` and digests on both environments, refused after drift); later rounds changed only the CLI entry, not what is sent to Azure; subscription empty. |
 | S20 | E2E run and docs | done | S20 PR (this) | 1 | **Opus developer** (first slice after the trial). Evidence map `docs/plans/e2e-evidence.md`: criteria 1–9 each tied to an assertion. Gaps closed in `EnvUpAzureTests`: telemetry arrives in App Insights (bounded poll), write + read-back through managed identity, no app secrets, Cosmos `disableLocalAuth` (**lead accepted a catalog change**: the account allowed keys, so criterion 1 could not hold), dependency order and zero worker drift on the first workload, record timings, Consumption/`minReplicas: 0`; criterion 5 by a new offline test. Left: the Container Apps environment still sends logs with the Log Analytics shared key (substrate only; recorded in the map). Usage walkthrough + teardown. Azure gate run once on the hand-back head 14aa671: green first time, 1 h 20 m, CLI 204/204, subscription empty. APPROVE round 1. **M5 / MVP complete.** |
 | S20w | Manual-test walkthrough + sample kit | done | S20w PR | 2 | User request. `docs/walkthrough.md` (architecture, flow, 11 scenarios, gotchas) and `samples/walkthrough/` (workloads, manifests v1/v2/v3/bad, policy, `stage-policy.sh`, `teardown.sh`, env template); an offline test loads every kit file. Opus developer; round 1: 2 blocking (scenario 6's reset could not work — same config reuses the revision suffix; the dependency was unguarded by the test), fixed by the fixer. No Azure gate (not Azure-facing); scripts not run against Azure. |
+| S21 | Catalog by component — design note | done | S21 PR | 3 (design) | Phase 1. Note `docs/architecture/components.md` (Opus developer). Round 1: 4 blocking (names over the pattern; secret-to-descriptor rule lost; an over-built in-run reference kind; an Azure proof that could not prove upgrade); round 2 APPROVE; user then took the choices (separate shared layer; offers names only; environment types with implementations per type, no matcher; grants only on the workload's own required nodes, no `grantable`; monitoring an explicit requirement, policies require not add); round 3 APPROVE. Lead decisions: one-time App Insights recreation (ids move to `monitoring/…`; old component left until teardown) — **an exception to principle 13 for the user's review**; workloads map the connection string explicitly; policy `add` removed. |
+| S21a | Environment types replace tier | todo | | | ~120; Azure E2E |
+| S21b | Components and runtimes (implementations per type) | todo | | | ~200; no gate |
+| S21c | Monitoring as a requirement; policies require | todo | | | ~80; E2E + upgrade gate (only monitoring nodes change) |
+| S21d | Shared resources, `uses`, load checks | todo | | | ~180; no gate |
+| S21e | Environments from offers | todo | | | ~200; E2E + upgrade gate |
+| S21f | Workloads through `uses`; grant target rule; `grantable` removed | todo | | | ~220; E2E + upgrade gate |
 
 ## Carry-forward notes
 
@@ -106,6 +113,12 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-18 (roadmap, principles, S21 design)** — User: a north star (workloads as components), broken into ideas N1–N10 and
+  phases 0–5 (`roadmap.md`; every brief names its phase goal). Design principles 6–14 from the discussions (explicit over implicit,
+  simplification over complication, cohesion, contracts, one definition everywhere, one owner, least privilege by construction, prove then
+  extend, serve the north star) bind code via conventions and the review checklist (#53, #54). S21 design note approved in 3 rounds with
+  the user's choices; implementation S21a–f next.
 
 - **2026-10-18 (S20, MVP done)** — User left the developer model to the lead ("use opus if you think it's better"); lead switched the
   developer to Opus (CLAUDE.md, agent file). S20 by an Opus developer: APPROVE in round 1, Azure gate green first time (1 h 20 m), so all
