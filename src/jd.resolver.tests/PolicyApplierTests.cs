@@ -228,6 +228,16 @@ public class PolicyApplierTests
     }
 
     [Fact]
+    public async Task A_declared_requirement_that_failed_to_expand_still_satisfies_the_policy()
+    {
+        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], "  - type: sqldb\n    class: premium\n", expectExpansionErrors: true);
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("requires[0]", error.Location);
+        Assert.Contains("class 'premium'", error.Message);
+    }
+
+    [Fact]
     public async Task Runtime_targeted_set_and_default_entries_are_not_applied_or_stored()
     {
         var result = await ApplyAsync([Policy("runtime-fields", "{ kind: runtime }", RuntimeFields)]);

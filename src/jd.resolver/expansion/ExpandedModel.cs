@@ -49,6 +49,7 @@ public enum OwnerKind
 /// <param name="WorkloadImage">The workload's <c>container.image</c>; null for an environment definition.</param>
 /// <param name="WorkloadPort">The first port of the workload's <c>container.ports</c>, if any.</param>
 /// <param name="Requirements">Requirements that expanded cleanly; a requirement with any error is left out.</param>
+/// <param name="DeclaredTypes">The <c>type</c> of every entry in the owner's <c>requires</c>, including those that failed to expand.</param>
 /// <param name="Runtime">The runtime nodes of a workload; null for an environment definition, and when the runtime failed to expand.</param>
 /// <param name="Errors">Everything that kept a requirement from expanding.</param>
 public sealed record ExpansionResult(
@@ -59,5 +60,6 @@ public sealed record ExpansionResult(
     string? WorkloadImage,
     int? WorkloadPort,
     IReadOnlyList<ExpandedRequirement> Requirements,
+    IReadOnlySet<string> DeclaredTypes,
     ExpandedRuntime? Runtime,
     IReadOnlyList<LoadError> Errors);

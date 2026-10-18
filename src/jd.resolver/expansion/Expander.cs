@@ -45,10 +45,12 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
     {
         var requirements = new List<ExpandedRequirement>();
         var errors = new List<LoadError>();
+        var declaredTypes = new HashSet<string>();
         var index = 0;
         foreach (var entry in requires)
         {
             var type = (string?)entry["type"] ?? string.Empty;
+            declaredTypes.Add(type);
             var requirement = new Requirement(
                 (string?)entry["id"] ?? type,
                 type,
@@ -61,7 +63,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         }
 
         var runtime = owner.Kind == OwnerKind.Workload ? ExpandRuntime(owner, requirements, ownerFile, errors) : null;
-        return new ExpansionResult(owner.Kind, ownerFile, owner.Name, owner.Team, owner.Image, owner.Port, requirements, runtime, errors);
+        return new ExpansionResult(owner.Kind, ownerFile, owner.Name, owner.Team, owner.Image, owner.Port, requirements, declaredTypes, runtime, errors);
     }
 
     private ExpressionEvaluator EvaluatorFor(Owner owner, string currentId, IEnumerable<string> nodeNames, IReadOnlyDictionary<Reference, string>? known = null) => new(new ExpressionContext(
