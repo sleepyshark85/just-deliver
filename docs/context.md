@@ -119,6 +119,26 @@ and a release set's `dependsOn` gives ordering only. Points to settle when this 
   reaching workloads as `env.*` through the descriptor.
 - **Promotion and teardown:** promoting a consumer needs a compatible provider on the target; a provider with consumers cannot be removed.
 
+### Catalog by component (agreed with the user, 2026-10-18; being designed in S21)
+
+Discussion: the knowledge about one component is scattered by file kind. For `database`: its type, its mapping, two templates, a part
+of the environment substrate mapping, a part of the shared substrate mapping, a role line and naming entries, in 5 directories. The
+substrate decides on its own what exists (`env.cosmos.*`), and the database mapping assumes those names: the dependency is implicit.
+
+Agreed direction:
+- **The component definition is the top layer.** One definition per component holds its contract (today's type `exports`), what each
+  workload that requires it gets (today's mapping, per class), and what it needs once per environment.
+- **Shared resources are explicit.** A component names the shared resources it uses (`uses:`); a shared resource is defined once, by
+  name, and referenced, never copied (Log Analytics serves several components). References to it are checked at load.
+- **The substrate follows from the components** an environment offers: an environment that offers no database gets no Cosmos account.
+- **Who deploys does not change:** `jd env up` (the platform identity) deploys the shared and environment scopes; a workload deploy never
+  creates a shared resource (ADR 0009 rights split; no race between first deploys).
+- **Each environment says which components it offers**, with their values.
+- Policies, naming, roles and generic templates stay shared on purpose; components reference them.
+- Grantable targets follow from a component's `uses:` instead of a separate list.
+
+Related, not decided: `kind` stays on every file; `types` merge into the component (one contract per component, many classes).
+
 ## Related
 
 - Decisions: [0001 custom build](decisions/0001-custom-build-api-and-clients.md), [0002 Pulumi Automation API](decisions/0002-pulumi-automation-api.md), [0004 two-layer definitions](decisions/0004-two-layer-definition-model.md), [0005 B/C first](decisions/0005-build-bc-first-design-for-d.md)
