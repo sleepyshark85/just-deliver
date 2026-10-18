@@ -101,6 +101,24 @@ D          -> Full automation, Ops handles approvals and exceptions only
 4. **Pluggable deployment actions.** A deployment record has a `trigger` field: `manual_instruction` in B/C, `api_call` in D. Same record, different executor.
 5. **Never let work happen outside the platform.** Shadow processes break the audit trail and block future automation.
 
+### North star: workloads as components (the user's vision, not designed yet)
+
+Applications always run on compute, so an application and its compute are one unit: a **workload**, like the `runtime` node today.
+There are two layers of components: **base components** from the cloud provider (or containers), provided by the catalog's mappings
+(database, service bus, …), and **custom components**, which are our workloads. Eventually, with many workloads, a workload uses another
+workload exactly as it uses a base component (`requires: orders-api` beside `requires: database`).
+
+Not built and not proposed yet: verify the MVP first. Today, cross-workload references are deliberately forbidden ([D19](open-questions.md)),
+and a release set's `dependsOn` gives ordering only. Points to settle when this is designed (lead notes, 2026-10-18):
+- **Binding, not creating:** `requires: database` creates a resource the workload owns; `requires: orders-api` binds to an instance another
+  team owns and releases on its own schedule. A third pattern is mixed: a consumer's subscription on a producer's topic.
+- **Provider contract:** a workload declares its exports and becomes a type. The contract is explicit and versioned, and breaking changes
+  are caught at release time.
+- **Access opt-in:** the provider declares what access consumers may get (invoke, publish) and possibly to whom, like `grantable`.
+- **Deployed values:** a consumer resolves against what the provider deployed in that environment. The precedent is substrate values
+  reaching workloads as `env.*` through the descriptor.
+- **Promotion and teardown:** promoting a consumer needs a compatible provider on the target; a provider with consumers cannot be removed.
+
 ## Related
 
 - Decisions: [0001 custom build](decisions/0001-custom-build-api-and-clients.md), [0002 Pulumi Automation API](decisions/0002-pulumi-automation-api.md), [0004 two-layer definitions](decisions/0004-two-layer-definition-model.md), [0005 B/C first](decisions/0005-build-bc-first-design-for-d.md)
