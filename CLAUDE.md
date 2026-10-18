@@ -26,9 +26,9 @@ How the team works together (independence, rounds, short reports, context cost):
 1. **Session start:** read `docs/plans/status.md`. Resume the slice in progress, or take the next `todo` slice.
 2. **Brief:** expand the slice (from `mvp.md` or the phase's design note) into a brief — **the phase and phase goal it serves
    ([roadmap](docs/plans/roadmap.md))**, goal, acceptance criteria, files in scope, out of scope, ADRs/docs that apply. Mark the slice `in-progress` in status.md.
-3. **Develop:** dispatch `developer` with the brief. If the slice is Azure-facing, run the Azure gate once, after the
-   hand-back and before the review; other slices have no Azure gate
-   ([conventions](docs/engineering/conventions.md#how-we-work)).
+3. **Develop:** dispatch `developer` with the brief. Run the Azure gate once, after the hand-back and before the review, only if
+   what reaches Azure changed — the deployed-config snapshot or the direct-Azure code — and at each phase's end
+   ([conventions](docs/engineering/conventions.md#how-we-work)). An unchanged snapshot is the refactor's proof.
 4. **Review:** dispatch a new `reviewer` with **only the brief and the branch name** — never the developer's report.
 5. **Iterate:** on CHANGES REQUIRED, send the blocking findings to the `fixer` (all small and obvious) or the
    `developer` (same branch; resume it only while under 150k context, else a fresh one). Then send the **same**

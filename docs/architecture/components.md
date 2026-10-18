@@ -369,7 +369,9 @@ The same resources on Azure for the same inputs, **except the one change the use
   workload with a fake backend whose outputs are deterministic (`<stack>/<output>`); it snapshots every package (stack, config entries,
   secret flags). Byte-identical through every slice except S21c, whose diff is exactly the monitoring change below.
 - **Golden graphs** (`GoldenGraphTests`, `GoldenSubstrateTests`): each diff touches only "may differ" items (S21c: plus monitoring).
-- **Upgrade gate** (lead-run, after the normal Azure gate, in S21c, S21e and S21f). On one `PULUMI_BACKEND_URL` and `$JD_WALK`
+- **Upgrade gate** (lead-run, after the normal Azure gate, in S21c only: the one slice whose snapshot changes on purpose. S21e and S21f
+  are proven by an unchanged snapshot, which per the Azure gate rule ([conventions](../engineering/conventions.md#how-we-work), 2026-10-18) means no
+  Azure gate for them; phase 1 ends with one gate as its exit evidence). On one `PULUMI_BACKEND_URL` and `$JD_WALK`
   (walkthrough set-up, `JD_REGION` fixed): (1) `jd` from `main`'s head with `main`'s `catalog/` and `samples/`: `env up` shared, then dev
   (`--base`); `jd release create samples/walkthrough/releases/v1.manifest.yaml`; `jd release deploy` to dev. (2) `jd` from the slice head with
   its `catalog/` and `samples/`: the same two `env up` with `--force`, then `jd release create` and `release deploy` of v1 to dev. (3) Pass: step
