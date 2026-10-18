@@ -15,11 +15,12 @@ public static class CatalogParser
     private const string CatalogKind = "Catalog";
     private const string ComponentKind = "Component";
     private const string RuntimeKind = "Runtime";
+    private const string SharedResourceKind = "SharedResource";
     private const string PolicyKind = "Policy";
     private const string NamingKind = "Naming";
     private const string RolesKind = "Roles";
 
-    private static readonly string[] Kinds = [CatalogKind, ComponentKind, RuntimeKind, PolicyKind, NamingKind, RolesKind];
+    private static readonly string[] Kinds = [CatalogKind, ComponentKind, RuntimeKind, SharedResourceKind, PolicyKind, NamingKind, RolesKind];
 
     // Kinds of earlier catalogs, and what replaced them (docs/architecture/components.md section 2).
     private static readonly Dictionary<string, string> ReplacedKinds = new()
@@ -38,6 +39,15 @@ public static class CatalogParser
     // Valid is false when the file failed its schema. Such a file still counts toward the cross-file checks
     // that only need its kind or name, so one mistake is not reported a second time as a missing or undeclared item.
     private sealed record Document(string Source, string Kind, JObject Body, bool Valid);
+
+    // One part, with what its config and exports may read besides its own nodes and the reserved roots: the shared resources in Uses and,
+    // for a class part, its own component (OwnComponent) and that implementation's environment part. Prefix locates the part in its file;
+    // Scope is null for the workload's parts, so a runtime's part is the workload part without an own component.
+    private sealed record Reader(
+        string Source, string Prefix, string Owner, SharedScope? Scope, Part Part, IReadOnlyList<string> Uses, string? OwnComponent, Part? OwnEnvironment)
+    {
+        public bool IsRuntime => Scope is null && OwnComponent is null;
+    }
 
     public static async Task<CatalogLoadResult> ParseAsync(IEnumerable<CatalogSource> sources, CancellationToken cancellationToken = default)
     {
@@ -60,9 +70,11 @@ public static class CatalogParser
         var catalogs = OfKind(documents, CatalogKind);
         var componentDocuments = OfKind(documents, ComponentKind);
         var runtimeDocuments = OfKind(documents, RuntimeKind);
+        var sharedDocuments = OfKind(documents, SharedResourceKind);
         var policyDocuments = OfKind(documents, PolicyKind);
         var components = componentDocuments.Where(d => d.Valid).Select(ToComponent).ToList();
         var runtimes = runtimeDocuments.Where(d => d.Valid).Select(ToRuntime).ToList();
+        var shared = sharedDocuments.Where(d => d.Valid).Select(ToSharedResource).ToList();
         var policies = policyDocuments.Where(d => d.Valid).Select(ToPolicy).ToList();
         var namingDocuments = OfKind(documents, NamingKind).Where(d => d.Valid).ToList();
         var naming = Merge(namingDocuments, "rules", ToNamingRule, errors);
@@ -71,8 +83,21 @@ public static class CatalogParser
 
         // A file whose kind could not be read might have been the missing Catalog, so do not claim it is missing.
         CheckSingleCatalog(catalogs, unreadable == 0, errors);
-        // Components and runtimes share one namespace: a requirement's type names one, an environment will offer either.
-        CheckUnique([.. componentDocuments, .. runtimeDocuments], errors);
+        // Shared resources, components and runtimes share one namespace: each is a root a part reads (${<name>.<export>}), a
+        // requirement's type names a component, an environment will offer components and a runtime.
+        // Files that failed their schema still count as declared, so their mistake is not reported again at each use.
+        var named = documents.Where(d => d.Kind is ComponentKind or RuntimeKind or SharedResourceKind).ToList();
+        CheckUnique(named, errors);
+        CheckReservedNames(named, errors);
+        var kinds = named.SelectMany(d => NameOf(d) is { } name ? [(Name: name, d.Kind)] : Array.Empty<(string Name, string Kind)>())
+            .DistinctBy(n => n.Name).ToDictionary(n => n.Name, n => n.Kind);
+        // A duplicate name is reported by CheckUnique; the checks below read the first.
+        var sharedByName = shared.DistinctBy(s => s.Name).ToDictionary(s => s.Name);
+        CheckUses(sharedByName, components, runtimes, kinds, errors);
+        var readers = Readers(shared, components, runtimes);
+        CheckNodeNames(readers, errors);
+        CheckReads(readers, sharedByName, kinds, errors);
+        CheckScopeNodeNames(readers, errors);
         CheckUnique(policyDocuments, errors);
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
         var environmentTypes = catalogs.FirstOrDefault() is { Valid: true } first
@@ -82,8 +107,6 @@ public static class CatalogParser
         CheckPolicyScopes(policies, errors);
         CheckPolicyRequires(policies, componentDocuments, errors);
         CheckPolicyPaths(policies, errors);
-        CheckNodeNames(components, runtimes, errors);
-        CheckRuntimeNode(components, errors);
         CheckReleases(runtimes, errors);
         CheckSameClasses(components, errors);
         CheckExportsContract(components, errors);
@@ -99,6 +122,7 @@ public static class CatalogParser
             version,
             environmentTypes,
             components.ToDictionary(c => c.Name),
+            sharedByName,
             runtimes.ToDictionary(r => r.Name),
             policies,
             naming,
@@ -225,31 +249,132 @@ public static class CatalogParser
         }
     }
 
-    // Node names become parts of graph node ids and backend stack names, so they are lowercase kebab. Enforced here, not in the
-    // schema: the schema validator ignores the propertyNames keyword.
-    private static void CheckNodeNames(List<Component> components, List<Runtime> runtimes, List<LoadError> errors)
+    // A name equal to a reserved root could never be read: ${env.x} always means the environment.
+    private static void CheckReservedNames(List<Document> named, List<LoadError> errors)
     {
-        var named = components.SelectMany(c => ClassParts(c).Select(p => (c.Source, Field: $"{p.Path}.nodes", Names: p.Part.Nodes.Keys)))
-            .Concat(runtimes.SelectMany(r => r.Implementations.Select(i => (r.Source, Field: $"implementations.{i.Key}.nodes", Names: i.Value.Nodes.Keys))));
-        foreach (var (source, field, names) in named)
+        foreach (var document in named.Where(d => NameOf(d) is { } name && ExpressionEvaluator.ReservedRoots.Contains(name)))
         {
-            foreach (var name in names.Where(n => !NodeNamePattern.IsMatch(n)))
+            errors.Add(new LoadError(document.Source, "name", $"'{NameOf(document)}' is a reserved root of expressions ({string.Join(", ", ExpressionEvaluator.ReservedRoots.Order())}); choose another name."));
+        }
+    }
+
+    // uses names shared resources only (a component's parts are read through its contract), in a direction their deploy order allows:
+    // the shared layer is deployed before any environment, so a shared-scope resource cannot read an environment-scope one. No cycles,
+    // so reading a used resource's exports always ends.
+    private static void CheckUses(
+        Dictionary<string, SharedResource> shared, List<Component> components, List<Runtime> runtimes, Dictionary<string, string> kinds, List<LoadError> errors)
+    {
+        var declared = kinds.Where(k => k.Value == SharedResourceKind).Select(k => k.Key).Order(StringComparer.Ordinal).ToList();
+        var users = shared.Values.Select(s => (s.Source, s.Uses, Scope: (SharedScope?)s.Scope))
+            .Concat(components.Select(c => (c.Source, c.Uses, Scope: (SharedScope?)null)))
+            .Concat(runtimes.Select(r => (r.Source, r.Uses, Scope: (SharedScope?)null)));
+        foreach (var (source, uses, scope) in users)
+        {
+            foreach (var used in uses)
             {
-                errors.Add(new LoadError(source, $"{field}.{name}", $"'{name}' is not a valid node name; use lowercase letters, digits and hyphens, starting with a letter and not ending in a hyphen."));
+                var problem = kinds.GetValueOrDefault(used) switch
+                {
+                    SharedResourceKind => scope == SharedScope.Shared && shared.GetValueOrDefault(used)?.Scope == SharedScope.Environment
+                        ? $"'{used}' is environment scope; a shared-scope resource uses only shared-scope ones, since the shared layer is deployed first."
+                        : null,
+                    null => $"'{used}' is not a shared resource in the catalog (shared resources: {string.Join(", ", declared)}).",
+                    _ => $"'{used}' is a component or runtime; uses lists shared resources only.",
+                };
+                if (problem is not null)
+                {
+                    errors.Add(new LoadError(source, "uses", problem));
+                }
+            }
+        }
+
+        // A name in uses that is no (valid) shared resource is reported above, so the order runs over the shared resources only.
+        var (_, cycle) = TopologicalOrder.Sort(shared.ToDictionary(s => s.Key, s => (IReadOnlyCollection<string>)s.Value.Uses.Where(shared.ContainsKey).ToList()));
+        if (cycle is not null)
+        {
+            errors.Add(new LoadError(shared[cycle[0]].Source, "uses", $"uses cycle: {string.Join(" -> ", cycle)}."));
+        }
+    }
+
+    private static List<Reader> Readers(List<SharedResource> shared, List<Component> components, List<Runtime> runtimes) =>
+    [
+        .. shared.Select(s => new Reader(s.Source, string.Empty, s.Name, s.Scope, s.Part, s.Uses, OwnComponent: null, OwnEnvironment: null)),
+        .. components.SelectMany(c => c.Implementations.SelectMany(i => i.Value.Environment is { } environment
+            ? [new Reader(c.Source, $"implementations.{i.Key}.environment.", c.Name, SharedScope.Environment, environment, c.Uses, OwnComponent: null, OwnEnvironment: null)]
+            : Array.Empty<Reader>())),
+        .. components.SelectMany(c => ClassParts(c).Select(p => new Reader(c.Source, $"{p.Path}.", c.Name, Scope: null, p.Part, c.Uses, c.Name, p.Environment))),
+        .. runtimes.SelectMany(r => r.Implementations.Select(i => new Reader(
+            r.Source, $"implementations.{i.Key}.", r.Name, Scope: null, new Part(i.Value.Nodes, new Dictionary<string, string>()), r.Uses, OwnComponent: null, OwnEnvironment: null))),
+    ];
+
+    // Node names become parts of graph node ids and backend stack names, so they are lowercase kebab (enforced here: the schema validator
+    // ignores the propertyNames keyword). A node may not take a name its part reads as a root, or one of the two would be unreachable;
+    // the runtime's own 'runtime' node is the reserved root.
+    private static void CheckNodeNames(List<Reader> readers, List<LoadError> errors)
+    {
+        foreach (var reader in readers)
+        {
+            foreach (var node in reader.Part.Nodes.Keys)
+            {
+                var problem =
+                    !NodeNamePattern.IsMatch(node) ? $"'{node}' is not a valid node name; use lowercase letters, digits and hyphens, starting with a letter and not ending in a hyphen."
+                    : node == ExpressionEvaluator.RuntimeNode ? (reader.IsRuntime ? null : $"'{node}' is the runtime node, declared only by a {RuntimeKind}.")
+                    : ExpressionEvaluator.ReservedRoots.Contains(node) || reader.Uses.Contains(node) || node == reader.OwnComponent ? $"'{node}' is a name this part reads as a root; rename the node."
+                    : null;
+                if (problem is not null)
+                {
+                    errors.Add(new LoadError(reader.Source, $"{reader.Prefix}nodes.{node}", problem));
+                }
             }
         }
     }
 
-    // The node named 'runtime' is the workload's runtime: only a Runtime declares it (its schema requires it), since every
-    // ${runtime.<output>} points to it.
-    private static void CheckRuntimeNode(List<Component> components, List<LoadError> errors)
+    // Every root a part reads is one of its own nodes, a reserved root, a shared resource in its uses or (a class part) its own
+    // component, and <name>.<export> names a declared export.
+    private static void CheckReads(List<Reader> readers, Dictionary<string, SharedResource> shared, Dictionary<string, string> kinds, List<LoadError> errors)
     {
-        const string reserved = ExpressionEvaluator.RuntimeNode;
-        foreach (var component in components)
+        foreach (var reader in readers)
         {
-            foreach (var (path, _) in ClassParts(component).Where(p => p.Part.Nodes.ContainsKey(reserved)))
+            var texts = reader.Part.Nodes.Values.SelectMany(n => n.Config.Values.SelectMany(v => v is JContainer container ? container.DescendantsAndSelf() : [v]))
+                .OfType<JValue>().Where(v => v.Type == JTokenType.String).Select(v => (Location: v.Path, Text: Text(v)))
+                .Concat(reader.Part.Exports.Select(e => (Location: $"{reader.Prefix}exports.{e.Key}", Text: e.Value)));
+            foreach (var (location, text) in texts)
             {
-                errors.Add(new LoadError(component.Source, $"{path}.nodes.{reserved}", $"'{reserved}' is the runtime node, declared only by a {RuntimeKind}."));
+                foreach (var path in ExpressionEvaluator.Paths(text))
+                {
+                    var segments = path.Split('.');
+                    var root = segments[0];
+                    var kind = kinds.GetValueOrDefault(root);
+                    var exports = reader.Uses.Contains(root) ? shared.GetValueOrDefault(root)?.Part.Exports : root == reader.OwnComponent ? reader.OwnEnvironment?.Exports : null;
+                    var problem =
+                        ExpressionEvaluator.ReservedRoots.Contains(root) || reader.Part.Nodes.ContainsKey(root) ? null
+                        : reader.Uses.Contains(root) && exports is null ? null // its file failed its schema, or uses names no shared resource: reported on its own
+                        : exports is not null ? (segments.Length == 2 && exports.ContainsKey(segments[1]) ? null : $"'{path}': '{root}' exports {string.Join(", ", exports.Keys)}.")
+                        : root == reader.OwnComponent ? $"'{path}': component '{root}' has no environment part in this implementation."
+                        : root == reader.Owner && kind == ComponentKind ? $"'{path}': an environment part cannot read its own component."
+                        : kind is ComponentKind or RuntimeKind ? $"'{path}' reads another component or runtime; a part reads only its own nodes, what it uses and, in a class, its own component."
+                        : kind == SharedResourceKind ? $"'{path}' reads '{root}', which is not in uses; add it to the file's uses."
+                        : $"'{path}' reads unknown root '{root}'; expected a node of this part ({string.Join(", ", reader.Part.Nodes.Keys)}), a name in uses, {(reader.OwnComponent is null ? string.Empty : $"'{reader.OwnComponent}', ")}or one of {string.Join(", ", ExpressionEvaluator.ReservedRoots.Order())}.";
+                    if (problem is not null)
+                    {
+                        errors.Add(new LoadError(reader.Source, location, problem));
+                    }
+                }
+            }
+        }
+    }
+
+    // The parts of one shared or environment run expand into one scope (docs/architecture/components.md section 3), so their node
+    // names are unique across the parts that can share it; a component's implementations may reuse a name, since one is selected.
+    private static void CheckScopeNodeNames(List<Reader> readers, List<LoadError> errors)
+    {
+        var nodes = readers.Where(r => r.Scope is not null).SelectMany(r => r.Part.Nodes.Keys.Select(n => (Reader: r, Node: n)));
+        foreach (var group in nodes.GroupBy(n => (n.Reader.Scope, n.Node)))
+        {
+            var first = group.First().Reader;
+            foreach (var (reader, node) in group.Where(n => n.Reader.Owner != first.Owner))
+            {
+                errors.Add(new LoadError(reader.Source, $"{reader.Prefix}nodes.{node}",
+                    $"node '{node}' is also declared by '{first.Owner}' ({first.Source}); node names are unique across the parts of one {$"{group.Key.Scope}".ToLowerInvariant()} scope."));
             }
         }
     }
@@ -349,7 +474,7 @@ public static class CatalogParser
     {
         foreach (var component in components)
         {
-            foreach (var (path, part) in ClassParts(component))
+            foreach (var (path, part, _) in ClassParts(component))
             {
                 // An export is evaluated in its own requirement's scope, where another requirement's exports are out of reach.
                 foreach (var export in part.Exports.Where(e => ExpressionEvaluator.ReadsResource(e.Value)).Select(e => e.Key))
@@ -368,8 +493,9 @@ public static class CatalogParser
         }
     }
 
-    private static IEnumerable<(string Path, Part Part)> ClassParts(Component component) =>
-        component.Implementations.SelectMany(i => i.Value.Classes.Select(c => ($"implementations.{i.Key}.classes.{c.Key}", c.Value)));
+    // Each class part with where it is in the file and its implementation's environment part.
+    private static IEnumerable<(string Path, Part Part, Part? Environment)> ClassParts(Component component) =>
+        component.Implementations.SelectMany(i => i.Value.Classes.Select(c => ($"implementations.{i.Key}.classes.{c.Key}", c.Value, i.Value.Environment)));
 
     // A truncated name ends in a lowercase hex hash that is appended after filtering, so every rule must allow those digits.
     private const string HashDigits = "0123456789abcdef";
@@ -426,13 +552,20 @@ public static class CatalogParser
         d.Source,
         Text(d.Body["name"]),
         Strings(d.Body["exports"]),
-        Map(d.Body["implementations"]).ToDictionary(i => i.Key, i => new Implementation(Map(i.Value["classes"]).ToDictionary(c => c.Key, c => ToPart(c.Value)))));
+        Strings(d.Body["uses"]),
+        Map(d.Body["implementations"]).ToDictionary(i => i.Key, i => new Implementation(
+            i.Value["environment"] is { } environment ? ToPart(environment) : null,
+            Map(i.Value["classes"]).ToDictionary(c => c.Key, c => ToPart(c.Value)))));
+
+    private static SharedResource ToSharedResource(Document d) => new(
+        d.Source, Text(d.Body["name"]), Enum.Parse<SharedScope>(Text(d.Body["scope"]), ignoreCase: true), Strings(d.Body["uses"]), ToPart(d.Body));
 
     private static Part ToPart(JToken part) => new(ToNodes(part["nodes"]), Map(part["exports"]).ToDictionary(e => e.Key, e => Text(e.Value)));
 
     private static Runtime ToRuntime(Document d) => new(
         d.Source,
         Text(d.Body["name"]),
+        Strings(d.Body["uses"]),
         Map(d.Body["implementations"]).ToDictionary(i => i.Key, i => ToRuntimeImplementation(i.Value)));
 
     private static RuntimeImplementation ToRuntimeImplementation(JToken implementation)

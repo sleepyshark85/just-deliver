@@ -2,6 +2,7 @@ kind: Component
 name: monitoring
 description: Application Insights for the workload, reporting to the environment's Log Analytics workspace; the workload maps `connectionString` to its own variable.
 exports: [connectionString]                          # the contract
+uses: [env-group, log-analytics]                     # read through env.* until S21f
 implementations:
   default:                                           # every environment type without its own key
     classes:

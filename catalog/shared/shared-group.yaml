@@ -1,0 +1,16 @@
+kind: SharedResource
+name: shared-group
+description: The shared layer's resource group, holding every shared-scope resource.
+scope: shared
+# Loaded and checked; deployed from S21e, when `env up` collects parts from the offers (docs/architecture/components.md section 7). Until
+# then the transitional shared-substrate component deploys these nodes.
+nodes:
+  group:
+    template: azure/resource-group
+    config:
+      resourceGroupName: ${name('rg')}
+      location: ${env.region}
+      tags: { project: just-deliver-mvp, tier: substrate }
+exports:
+  name: ${group.resourceGroupName}
+  location: ${group.location}

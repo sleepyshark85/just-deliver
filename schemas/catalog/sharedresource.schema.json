@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/catalog/sharedresource.schema.json",
+  "title": "just-deliver catalog shared resource",
+  "description": "A platform-owned part (for example the Cosmos DB account), deployed once per scope and read by the parts that name it in 'uses' as ${<name>.<export>} (docs/architecture/components.md section 2). Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across shared resources, components and runtimes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "name", "description", "scope", "nodes", "exports"],
+  "properties": {
+    "kind": { "enum": ["SharedResource"] },
+    "name": { "description": "Same pattern as a component name; how other parts read it.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
+    "description": { "description": "What the resource is for.", "type": "string", "minLength": 1 },
+    "scope": { "description": "shared: deployed once by the shared layer; environment: once per environment.", "enum": ["shared", "environment"] },
+    "uses": {
+      "description": "The shared resources this one reads. A shared-scope resource uses only shared-scope ones; no cycles (checked by the resolver).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "nodes": {
+      "description": "Graph nodes by name; the name is how its own config and exports refer to the node.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/definitions/node" }
+    },
+    "exports": {
+      "description": "Export name -> expression producing it: the only names other parts may read.",
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    }
+  },
+  "definitions": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template", "config"],
+      "properties": {
+        "template": { "description": "Template reference, relative to the catalog's templates directory.", "type": "string", "minLength": 1 },
+        "kind": { "description": "create (default) or grant. Grants are surfaced in the approval diff.", "enum": ["create", "grant"], "default": "create" },
+        "config": { "description": "Template configuration. Values are any YAML scalar or map, kept as written.", "type": "object" }
+      }
+    }
+  }
+}

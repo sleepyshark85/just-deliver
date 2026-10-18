@@ -4,6 +4,7 @@ description: Every workload runs as a Container App on Consumption in the enviro
 # Sized for the free tier (standards section 6). The image and first port come from the workload's definition. This is the runtime node (phase
 # runtime): the infrastructure walk does not deploy it, the release flow does. The release flow owns the revision suffix and the
 # traffic, so the node sets neither; `release` names the template's inputs and outputs it uses, and the shape of a traffic item.
+uses: [env-group, apps-env]                          # read through env.* until S21f
 implementations:
   default:
     probe: { path: /health, expectedStatus: 200, timeoutSeconds: 300, intervalSeconds: 5 }   # grants may take minutes to propagate

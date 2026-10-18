@@ -1,0 +1,19 @@
+kind: SharedResource
+name: log-analytics
+description: The shared Log Analytics workspace every environment's Container Apps environment and Application Insights report to.
+scope: shared
+uses: [shared-group]
+# Loaded and checked; deployed from S21e (see shared-group.yaml).
+nodes:
+  workspace:
+    template: azure/log-analytics
+    config:
+      resourceGroupName: ${shared-group.name}
+      location: ${shared-group.location}
+      workspaceName: ${name('law')}
+      dailyQuotaGb: 0.15
+exports:
+  id: ${workspace.workspaceId}
+  name: ${workspace.workspaceName}
+  customerId: ${workspace.workspaceCustomerId}
+  resourceGroup: ${shared-group.name}

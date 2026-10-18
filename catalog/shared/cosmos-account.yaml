@@ -1,0 +1,22 @@
+kind: SharedResource
+name: cosmos-account
+description: The one free-tier Cosmos DB account (SQL API); each environment that offers database adds its own database to it.
+scope: shared
+uses: [shared-group]
+# Loaded and checked; deployed from S21e (see shared-group.yaml). Free-tier budget (docs/engineering/standards.md section 6): Azure allows
+# one free-tier Cosmos account per subscription, so it lives here once.
+nodes:
+  cosmos:
+    template: azure/cosmos-account
+    config:
+      resourceGroupName: ${shared-group.name}
+      location: ${shared-group.location}
+      accountName: ${name('cosmos')}
+      enableFreeTier: true
+      totalThroughputLimit: 1000                  # Azure itself refuses anything beyond the free RU/s
+      disableLocalAuth: true                      # no account key works: workloads reach the data through their identity only (ADR 0012)
+exports:
+  id: ${cosmos.accountId}
+  name: ${cosmos.accountName}
+  endpoint: ${cosmos.documentEndpoint}
+  resourceGroup: ${shared-group.name}

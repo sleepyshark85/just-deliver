@@ -2,8 +2,23 @@ kind: Component
 name: database
 description: A database for the workload. The platform's implementation decides the engine (today a container in the environment's shared Cosmos DB, SQL API); the `engine` export tells the code which one it got.
 exports: [engine, endpoint, database, container]     # the contract: every class of every implementation exports exactly these
+uses: [cosmos-account]
 implementations:
   default:                                           # every environment type without its own key
+    # Once per environment that offers database. Loaded and checked; deployed from S21e, and read by the class below (as
+    # ${database.databaseName}) from S21f (docs/architecture/components.md section 7). Until then env-substrate deploys this node.
+    environment:
+      nodes:
+        database:
+          template: azure/cosmos-sql-database
+          config:
+            resourceGroupName: ${cosmos-account.resourceGroup}
+            accountName: ${cosmos-account.name}
+            databaseName: ${name('db')}
+            throughput: 400                         # shared by the environment's containers; two environments use 800 of the free 1000
+      exports:
+        databaseName: ${database.databaseName}
+        databaseId: ${database.databaseId}
     classes:
       standard:
         # The account and the shared-throughput database are substrate (env.cosmos.*); a workload adds a container and a grant on it.

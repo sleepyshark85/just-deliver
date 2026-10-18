@@ -10,6 +10,7 @@ public sealed record Catalog(
     string Version,
     IReadOnlyDictionary<string, EnvironmentType> EnvironmentTypes,
     IReadOnlyDictionary<string, Component> Components,
+    IReadOnlyDictionary<string, SharedResource> SharedResources,
     IReadOnlyDictionary<string, Runtime> Runtimes,
     IReadOnlyList<Policy> Policies,
     IReadOnlyDictionary<string, NamingRule> Naming,
@@ -20,18 +21,33 @@ public sealed record EnvironmentType(bool Approval);
 
 /// <summary>
 /// What a workload requires by name: one contract (<see cref="Exports"/>) and an implementation per environment type, keyed by the type or
-/// <see cref="ImplementationKey.Default"/>. Every class of every implementation exports exactly the contract.
+/// <see cref="ImplementationKey.Default"/>. Every class of every implementation exports exactly the contract. <see cref="Uses"/>: the
+/// shared resources its parts may read.
 /// </summary>
-public sealed record Component(string Source, string Name, IReadOnlyList<string> Exports, IReadOnlyDictionary<string, Implementation> Implementations);
+public sealed record Component(
+    string Source, string Name, IReadOnlyList<string> Exports, IReadOnlyList<string> Uses, IReadOnlyDictionary<string, Implementation> Implementations);
 
-/// <summary>A component's implementation for an environment type: class (a requirement's <c>class</c>) to what each requiring workload gets.</summary>
-public sealed record Implementation(IReadOnlyDictionary<string, Part> Classes);
+/// <summary>
+/// A component's implementation for an environment type: <see cref="Environment"/>, deployed once per environment (null when none), and
+/// class (a requirement's <c>class</c>) to what each requiring workload gets.
+/// </summary>
+public sealed record Implementation(Part? Environment, IReadOnlyDictionary<string, Part> Classes);
+
+/// <summary>A platform-owned part deployed once per <see cref="Scope"/>, read by the parts that name it in their <c>uses</c>.</summary>
+public sealed record SharedResource(string Source, string Name, SharedScope Scope, IReadOnlyList<string> Uses, Part Part);
+
+/// <summary>Where a shared resource is deployed: once for the shared layer, or once per environment.</summary>
+public enum SharedScope
+{
+    Shared,
+    Environment,
+}
 
 /// <summary>A set of nodes deployed together, and the exports evaluated from them.</summary>
 public sealed record Part(IReadOnlyDictionary<string, Node> Nodes, IReadOnlyDictionary<string, string> Exports);
 
 /// <summary>The compute every workload gets: no contract, no classes, an implementation per environment type like a <see cref="Component"/>.</summary>
-public sealed record Runtime(string Source, string Name, IReadOnlyDictionary<string, RuntimeImplementation> Implementations);
+public sealed record Runtime(string Source, string Name, IReadOnlyList<string> Uses, IReadOnlyDictionary<string, RuntimeImplementation> Implementations);
 
 /// <summary>A runtime's implementation: its <see cref="Nodes"/> include the runtime node, deployed in steps by the release flow.</summary>
 public sealed record RuntimeImplementation(Probe Probe, RuntimeRelease Release, IReadOnlyDictionary<string, Node> Nodes);
