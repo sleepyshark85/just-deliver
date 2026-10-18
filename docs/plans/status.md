@@ -6,12 +6,13 @@
 ## Now
 
 - **Phase:** 1 — components, base ([roadmap](roadmap.md)); phase 0 (MVP) done, awaiting the user's manual run.
-- **Next slice:** S21a. **Waiting for the user:** roadmap phase 1 exit wording (proposed: "same resources for the same inputs, except the one-time move of monitoring into a requirement, which the upgrade gate checks").
+- **Next slice:** S21d (in progress). **Waiting for the user:** —
 - **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
   required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
   leaves the deployment live; ADR 0007 kept (the set file's bytes are stored write-once as `set.yaml` per label).
 - **In progress:** —
-- **For the user:** manual testing with [walkthrough.md](../walkthrough.md) and `samples/walkthrough/` (S20w, done); its scripts and new commands have not yet run against Azure. Cosmos `disableLocalAuth` (S20) is a lead decision for review.
+- **For the user:** manual testing with [walkthrough.md](../walkthrough.md) and `samples/walkthrough/` after the phase-1 refactor (user, 2026-10-18).
+- **User decisions (2026-10-18):** phase 1 exit wording as proposed (roadmap); the one-time App Insights recreation (components.md §5, option a) accepted as the one exception to principle 13; Cosmos `disableLocalAuth: true` kept; the Log Analytics shared key accepted for now, its removal planned as a slice after phase 1 (below).
 - **Blocked:** —
 
 ## Slices
@@ -60,6 +61,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S21d | Shared resources, `uses`, load checks | todo | | | ~180; no gate |
 | S21e | Environments from offers | todo | | | ~200; no gate (snapshot unchanged) |
 | S21f | Workloads through `uses`; grant target rule; `grantable` removed | todo | | | ~220; no gate (snapshot unchanged); then the phase-exit gate |
+| S22 | Container Apps logs without the workspace shared key | todo | | | After phase 1 (user, 2026-10-18). The apps environment sends logs through Azure Monitor (diagnostic settings) instead of `appLogsConfiguration` with the shared key; changes the environment's artifact → Azure gate + upgrade gate. Phase goal to name in the brief. |
 
 ## Carry-forward notes
 
