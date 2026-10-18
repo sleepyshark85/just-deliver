@@ -43,10 +43,10 @@
         "partitionKeyPath": "/id"
       },
       "provenance": {
-        "accountId": "Mapping: mappings/database/standard.yaml",
-        "containerName": "Mapping: mappings/database/standard.yaml",
-        "databaseName": "Mapping: mappings/database/standard.yaml",
-        "partitionKeyPath": "Mapping: mappings/database/standard.yaml"
+        "accountId": "Implementation: components/database.yaml",
+        "containerName": "Implementation: components/database.yaml",
+        "databaseName": "Implementation: components/database.yaml",
+        "partitionKeyPath": "Implementation: components/database.yaml"
       }
     },
     {
@@ -99,18 +99,18 @@
         ]
       },
       "provenance": {
-        "containerAppName": "Mapping: mappings/runtime/container-app.yaml",
-        "containerAppsEnvironmentId": "Mapping: mappings/runtime/container-app.yaml",
-        "cpu": "Mapping: mappings/runtime/container-app.yaml",
-        "externalIngress": "Mapping: mappings/runtime/container-app.yaml",
-        "image": "Mapping: mappings/runtime/container-app.yaml",
-        "location": "Mapping: mappings/runtime/container-app.yaml",
-        "maxInactiveRevisions": "Mapping: mappings/runtime/container-app.yaml",
-        "maxReplicas": "Mapping: mappings/runtime/container-app.yaml",
-        "memory": "Mapping: mappings/runtime/container-app.yaml",
-        "minReplicas": "Mapping: mappings/runtime/container-app.yaml",
-        "resourceGroupName": "Mapping: mappings/runtime/container-app.yaml",
-        "targetPort": "Mapping: mappings/runtime/container-app.yaml",
+        "containerAppName": "Implementation: runtimes/container-app.yaml",
+        "containerAppsEnvironmentId": "Implementation: runtimes/container-app.yaml",
+        "cpu": "Implementation: runtimes/container-app.yaml",
+        "externalIngress": "Implementation: runtimes/container-app.yaml",
+        "image": "Implementation: runtimes/container-app.yaml",
+        "location": "Implementation: runtimes/container-app.yaml",
+        "maxInactiveRevisions": "Implementation: runtimes/container-app.yaml",
+        "maxReplicas": "Implementation: runtimes/container-app.yaml",
+        "memory": "Implementation: runtimes/container-app.yaml",
+        "minReplicas": "Implementation: runtimes/container-app.yaml",
+        "resourceGroupName": "Implementation: runtimes/container-app.yaml",
+        "targetPort": "Implementation: runtimes/container-app.yaml",
         "variables.APPLICATIONINSIGHTS_CONNECTION_STRING": "PolicySet: enforce-monitoring (policies/enforce-monitoring.yaml)",
         "variables.COSMOS_CONTAINER": "Workload: container.variables",
         "variables.COSMOS_DATABASE": "Workload: container.variables",
@@ -183,11 +183,11 @@
         "scope": "${container.scope}"
       },
       "provenance": {
-        "accountId": "Mapping: mappings/database/standard.yaml",
-        "principalId": "Mapping: mappings/database/standard.yaml",
-        "roleAssignmentId": "Mapping: mappings/database/standard.yaml",
-        "roleGuid": "Mapping: mappings/database/standard.yaml",
-        "scope": "Mapping: mappings/database/standard.yaml"
+        "accountId": "Implementation: components/database.yaml",
+        "principalId": "Implementation: components/database.yaml",
+        "roleAssignmentId": "Implementation: components/database.yaml",
+        "roleGuid": "Implementation: components/database.yaml",
+        "scope": "Implementation: components/database.yaml"
       }
     }
   ],

@@ -7,7 +7,8 @@ namespace jd.resolver.policies;
 /// <summary>Which layer supplied a config field's value.</summary>
 public enum Layer
 {
-    Mapping,
+    /// <summary>The catalog's component or runtime implementation the node comes from.</summary>
+    Implementation,
 
     /// <summary>The workload's own definition: its <c>container.variables</c>.</summary>
     Workload,
@@ -16,15 +17,15 @@ public enum Layer
     PolicyAdd,
 }
 
-/// <summary>Where a config field's value came from: the file and its rule (the mapping file, or the policy name and its file; for the workload's variables, the workload file and `container.variables`).</summary>
+/// <summary>Where a config field's value came from: the file and its rule (the component or runtime file, or the policy name and its file; for the workload's variables, the workload file and `container.variables`).</summary>
 public sealed record Provenance(string Source, string Rule, Layer Layer)
 {
-    /// <summary>The one-line form used by the graph JSON and the preview listing; the file is left out when it is the rule itself (mappings).</summary>
+    /// <summary>The one-line form used by the graph JSON and the preview listing; the file is left out when it is the rule itself (implementations).</summary>
     public string Describe() => Source == Rule || Layer == Layer.Workload ? $"{Layer}: {Rule}" : $"{Layer}: {Rule} ({Source})";
 }
 
 // Provenance: one entry per leaf config field, keyed by dotted path (consistencyPolicy.level); an array is one leaf.
-// Probe and Release are the runtime mapping's, on the runtime node only.
+// Probe and Release are the runtime's, on the runtime node only.
 public sealed record ResolvedNode(
     string Name,
     string Template,
@@ -39,12 +40,12 @@ public sealed record ResolvedRequirement(
     string Id,
     string Type,
     string Class,
-    string Mapping,
+    string Source,
     IReadOnlyDictionary<string, EvalResult> Exports,
     IReadOnlyList<ResolvedNode> Nodes);
 
 /// <summary>
-/// RuntimeNodes are the nodes of the workload's runtime mapping (none for an environment definition); WorkloadNodes are
+/// RuntimeNodes are the nodes of the workload's runtime (none for an environment definition); WorkloadNodes are
 /// the nodes added once per workload by workload-scope policies. The result is usable only when Errors is empty.
 /// </summary>
 public sealed record PolicyResult(

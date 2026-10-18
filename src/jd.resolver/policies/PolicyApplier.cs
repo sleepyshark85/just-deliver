@@ -35,13 +35,13 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             var evaluator = EvaluatorFor(requirement.Id, requirement.Nodes.Select(n => n.Name));
             var nodes = requirement.Nodes
                 .Select(n => ApplyNodePolicies(
-                    n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(requirement.Mapping, requirement.Mapping, Layer.Mapping),
+                    n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(requirement.Source, requirement.Source, Layer.Implementation),
                     requirement.Type, requirement.Class, evaluator, $"{requirement.Id}/{n.Name}", [], string.Empty, errors))
                 .ToList();
-            requirements.Add(new ResolvedRequirement(requirement.Id, requirement.Type, requirement.Class, requirement.Mapping, requirement.Exports, nodes));
+            requirements.Add(new ResolvedRequirement(requirement.Id, requirement.Type, requirement.Class, requirement.Source, requirement.Exports, nodes));
         }
 
-        // The runtime mapping's nodes get node-scope policies like any mapping node; the runtime node also gets the workload-scope
+        // The runtime's nodes get node-scope policies like any component node; the runtime node also gets the workload-scope
         // policies' set and default (their paths start with 'runtime.', which the catalog loader enforces). A node added by a
         // workload-scope policy may be read by those values.
         var workloadPolicies = _policies.Where(p => expansion.Owner == OwnerKind.Workload && IsWorkloadScope(p)).ToList();
@@ -53,7 +53,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             foreach (var n in runtime.Nodes)
             {
                 var node = ApplyNodePolicies(
-                    n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(runtime.Mapping, runtime.Mapping, Layer.Mapping),
+                    n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(runtime.Source, runtime.Source, Layer.Implementation),
                     null, null, EvaluatorFor(n.Name, inScope), n.Name, n.Name == ExpressionEvaluator.RuntimeNode ? workloadPolicies : [], runtime.WorkloadFile, errors);
                 runtimeNodes.Add(n.Name == ExpressionEvaluator.RuntimeNode ? node with { Probe = runtime.Probe, Release = runtime.Release } : node);
             }
@@ -67,7 +67,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             {
                 if (runtimeNames.Contains(name))
                 {
-                    errors.Add(new LoadError(policy.Source, $"add.{name}", $"policy '{policy.Name}' adds a node named '{name}', which the runtime mapping already declares."));
+                    errors.Add(new LoadError(policy.Source, $"add.{name}", $"policy '{policy.Name}' adds a node named '{name}', which the runtime already declares."));
                     continue;
                 }
 
@@ -88,7 +88,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
     }
 
     // Workload scope is kind: runtime, optionally narrowed by environmentType. The 'runtime' key is accepted but not matched yet:
-    // a workload names no runtime (see MappingMatcher.SelectRuntime).
+    // a workload names no runtime.
     private bool IsWorkloadScope(Policy policy)
     {
         var criteria = policy.Match.Criteria;

@@ -156,11 +156,11 @@ public static class ReleaseRecordBuilder
         return report;
     }
 
-    // Read from the probe step of the runtime node; nothing is probed again. The contract is the mapping's probe, as resolved into the graph.
+    // Read from the probe step of the runtime node; nothing is probed again. The contract is the runtime's probe, as resolved into the graph.
     private static JObject Oq(ResolvedGraph graph, WorkloadRun? run)
     {
         var runtime = graph.Nodes.Single(n => n.Phase == Phase.Runtime);
-        var spec = runtime.Probe ?? throw new InvalidOperationException($"node '{runtime.Id}': the runtime mapping has no probe.");
+        var spec = runtime.Probe ?? throw new InvalidOperationException($"node '{runtime.Id}': the runtime has no probe.");
         var probe = run?.Run.Nodes.FirstOrDefault(n => n.NodeId == runtime.Id)?.Steps?.FirstOrDefault(s => s.Step == Step.Probe);
         var oq = new JObject
         {

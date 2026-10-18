@@ -13,13 +13,20 @@ namespace jd.resolver.catalog;
 public static class CatalogParser
 {
     private const string CatalogKind = "Catalog";
-    private const string ResourceTypeKind = "ResourceType";
-    private const string MappingKind = "Mapping";
+    private const string ComponentKind = "Component";
+    private const string RuntimeKind = "Runtime";
     private const string PolicyKind = "Policy";
     private const string NamingKind = "Naming";
     private const string RolesKind = "Roles";
 
-    private static readonly string[] Kinds = [CatalogKind, ResourceTypeKind, MappingKind, PolicyKind, NamingKind, RolesKind];
+    private static readonly string[] Kinds = [CatalogKind, ComponentKind, RuntimeKind, PolicyKind, NamingKind, RolesKind];
+
+    // Kinds of earlier catalogs, and what replaced them (docs/architecture/components.md section 2).
+    private static readonly Dictionary<string, string> ReplacedKinds = new()
+    {
+        ["ResourceType"] = $"a {ComponentKind} file holds the type's contract (exports) beside its implementations",
+        ["Mapping"] = $"a {ComponentKind}'s implementations (per environment type, then class) replace a type's mappings, and a {RuntimeKind} file the runtime mapping",
+    };
 
     private static readonly YamlSchemaValidator Validator = new();
 
@@ -48,10 +55,11 @@ public static class CatalogParser
         }
 
         var catalogs = OfKind(documents, CatalogKind);
-        var typeDocuments = OfKind(documents, ResourceTypeKind);
+        var componentDocuments = OfKind(documents, ComponentKind);
+        var runtimeDocuments = OfKind(documents, RuntimeKind);
         var policyDocuments = OfKind(documents, PolicyKind);
-        var types = typeDocuments.Where(d => d.Valid).Select(ToResourceType).ToList();
-        var mappings = OfKind(documents, MappingKind).Where(d => d.Valid).Select(ToMapping).ToList();
+        var components = componentDocuments.Where(d => d.Valid).Select(ToComponent).ToList();
+        var runtimes = runtimeDocuments.Where(d => d.Valid).Select(ToRuntime).ToList();
         var policies = policyDocuments.Where(d => d.Valid).Select(ToPolicy).ToList();
         var namingDocuments = OfKind(documents, NamingKind).Where(d => d.Valid).ToList();
         var naming = Merge(namingDocuments, "rules", ToNamingRule, errors);
@@ -60,19 +68,24 @@ public static class CatalogParser
 
         // A file whose kind could not be read might have been the missing Catalog, so do not claim it is missing.
         CheckSingleCatalog(catalogs, unreadable == 0, errors);
-        CheckUnique(typeDocuments, "ResourceType", errors);
-        CheckUnique(policyDocuments, "Policy", errors);
+        // Components and runtimes share one namespace: a requirement's type names one, an environment will offer either.
+        CheckUnique([.. componentDocuments, .. runtimeDocuments], errors);
+        CheckUnique(policyDocuments, errors);
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
-        var environmentTypes = catalogs.FirstOrDefault() is { Valid: true } first ? Map(first.Body["environmentTypes"]).Select(e => e.Key).Order().ToList() : null;
-        CheckMappingTypes(mappings, typeDocuments, environmentTypes, errors);
-        CheckMappingMatches(mappings, errors);
-        CheckPolicyScopes(policies, environmentTypes, errors);
+        var environmentTypes = catalogs.FirstOrDefault() is { Valid: true } first
+            ? Map(first.Body["environmentTypes"]).ToDictionary(e => e.Key, e => new EnvironmentType((bool?)e.Value["approval"] ?? false))
+            : null;
+        CheckEnvironmentTypes(components, runtimes, policies, environmentTypes, errors);
+        CheckPolicyScopes(policies, errors);
         CheckPolicyPaths(policies, errors);
-        CheckNodeNames(mappings, policies, errors);
-        CheckRuntimeNode(mappings, policies, errors);
-        CheckExportsContract(mappings, types, errors);
+        CheckNodeNames(components, runtimes, policies, errors);
+        CheckRuntimeNode(components, policies, errors);
+        CheckReleases(runtimes, errors);
+        CheckSameClasses(components, errors);
+        CheckExportsContract(components, errors);
 
-        if (errors.Count > 0)
+        // No errors means exactly one valid Catalog file, so its environment types were read.
+        if (errors.Count > 0 || environmentTypes is null)
         {
             return new CatalogLoadResult(null, errors);
         }
@@ -80,9 +93,9 @@ public static class CatalogParser
         var version = (string?)catalogs[0].Body["version"] ?? string.Empty;
         var catalog = new Catalog(
             version,
-            Map(catalogs[0].Body["environmentTypes"]).ToDictionary(e => e.Key, e => new EnvironmentType((bool?)e.Value["approval"] ?? false)),
-            types,
-            mappings,
+            environmentTypes,
+            components.ToDictionary(c => c.Name),
+            runtimes.ToDictionary(r => r.Name),
             policies,
             naming,
             roles);
@@ -118,7 +131,9 @@ public static class CatalogParser
         if (!Kinds.Contains(kind))
         {
             // Readable, just not ours: it is not a missing Catalog, and no kind-specific check applies to it.
-            errors.Add(new LoadError(source.Path, "kind", $"unknown kind '{kind}'; expected one of {string.Join(", ", Kinds)}."));
+            errors.Add(new LoadError(source.Path, "kind", ReplacedKinds.TryGetValue(kind, out var replacement)
+                ? $"kind '{kind}' is no longer supported: {replacement}."
+                : $"unknown kind '{kind}'; expected one of {string.Join(", ", Kinds)}."));
             return new Document(source.Path, kind, body, false);
         }
 
@@ -147,13 +162,13 @@ public static class CatalogParser
 
     private static string? NameOf(Document d) => d.Body["name"] is { Type: JTokenType.String } name ? (string?)name : null;
 
-    private static void CheckUnique(List<Document> documents, string kind, List<LoadError> errors)
+    private static void CheckUnique(List<Document> documents, List<LoadError> errors)
     {
         foreach (var group in documents.Where(d => NameOf(d) is not null).GroupBy(d => NameOf(d)))
         {
             foreach (var duplicate in group.Skip(1))
             {
-                errors.Add(new LoadError(duplicate.Source, "name", $"{kind} '{group.Key}' is already declared in {group.First().Source}."));
+                errors.Add(new LoadError(duplicate.Source, "name", $"'{group.Key}' is already declared in {group.First().Source}."));
             }
         }
     }
@@ -176,39 +191,34 @@ public static class CatalogParser
         }
     }
 
-    // A runtime mapping is deployed in steps (dark revision, grants, probe, traffic shift): it must say how to probe and which template
-    // inputs and outputs the steps use, and the engine owns those inputs, so the runtime node must not set them.
-    private static void CheckRelease(Mapping mapping, List<LoadError> errors)
+    // A runtime is deployed in steps (dark revision, grants, probe, traffic shift), and the engine owns the inputs its release block
+    // names, so the runtime node must not set them. The schema requires the probe, the release block and the runtime node.
+    private static void CheckReleases(List<Runtime> runtimes, List<LoadError> errors)
     {
-        if (mapping.Probe is null)
+        foreach (var runtime in runtimes)
         {
-            errors.Add(new LoadError(mapping.Source, "probe", "a runtime mapping must have a probe."));
-        }
-        else if (mapping.Probe.IntervalSeconds > mapping.Probe.TimeoutSeconds)
-        {
-            errors.Add(new LoadError(mapping.Source, "probe.intervalSeconds", "must not exceed timeoutSeconds."));
-        }
-
-        if (mapping.Release is not { } release)
-        {
-            errors.Add(new LoadError(mapping.Source, "release", "a runtime mapping must have a release block."));
-            return;
-        }
-
-        if (mapping.Nodes.TryGetValue(ExpressionEvaluator.RuntimeNode, out var runtime))
-        {
-            foreach (var input in new[] { release.SuffixInput, release.TrafficInput }.Where(runtime.Config.ContainsKey))
+            foreach (var (key, implementation) in runtime.Implementations)
             {
-                errors.Add(new LoadError(mapping.Source, $"nodes.{ExpressionEvaluator.RuntimeNode}.config.{input}", "the release flow sets this input; the runtime node must not."));
+                if (implementation.Probe.IntervalSeconds > implementation.Probe.TimeoutSeconds)
+                {
+                    errors.Add(new LoadError(runtime.Source, $"implementations.{key}.probe.intervalSeconds", "must not exceed timeoutSeconds."));
+                }
+
+                var node = implementation.Nodes[ExpressionEvaluator.RuntimeNode];
+                foreach (var input in new[] { implementation.Release.SuffixInput, implementation.Release.TrafficInput }.Where(node.Config.ContainsKey))
+                {
+                    errors.Add(new LoadError(runtime.Source, $"implementations.{key}.nodes.{ExpressionEvaluator.RuntimeNode}.config.{input}", "the release flow sets this input; the runtime node must not."));
+                }
             }
         }
     }
 
     // Node names become parts of graph node ids and backend stack names, so they are lowercase kebab. Enforced here, not in the
     // schema: the schema validator ignores the propertyNames keyword.
-    private static void CheckNodeNames(List<Mapping> mappings, List<Policy> policies, List<LoadError> errors)
+    private static void CheckNodeNames(List<Component> components, List<Runtime> runtimes, List<Policy> policies, List<LoadError> errors)
     {
-        var named = mappings.Select(m => (m.Source, Field: "nodes", Names: m.Nodes.Keys))
+        var named = components.SelectMany(c => ClassParts(c).Select(p => (c.Source, Field: $"{p.Path}.nodes", Names: p.Part.Nodes.Keys)))
+            .Concat(runtimes.SelectMany(r => r.Implementations.Select(i => (r.Source, Field: $"implementations.{i.Key}.nodes", Names: i.Value.Nodes.Keys))))
             .Concat(policies.Select(p => (p.Source, Field: "add", Names: p.Add.Keys)));
         foreach (var (source, field, names) in named)
         {
@@ -219,61 +229,33 @@ public static class CatalogParser
         }
     }
 
-    // The node named 'runtime' is the workload's runtime: a runtime mapping must declare it, nothing else may (the mapping's
-    // other nodes and the policy-added nodes share its scope, and every ${runtime.<output>} points to it).
-    private static void CheckRuntimeNode(List<Mapping> mappings, List<Policy> policies, List<LoadError> errors)
+    // The node named 'runtime' is the workload's runtime: only a Runtime declares it (its schema requires it), since every
+    // ${runtime.<output>} points to it.
+    private static void CheckRuntimeNode(List<Component> components, List<Policy> policies, List<LoadError> errors)
     {
         const string reserved = ExpressionEvaluator.RuntimeNode;
-        foreach (var mapping in mappings)
+        foreach (var component in components)
         {
-            if (!mapping.IsRuntime)
+            foreach (var (path, _) in ClassParts(component).Where(p => p.Part.Nodes.ContainsKey(reserved)))
             {
-                if (mapping.Nodes.ContainsKey(reserved))
-                {
-                    errors.Add(new LoadError(mapping.Source, $"nodes.{reserved}", $"'{reserved}' is the runtime node, declared only by a runtime mapping ('{MatchCriteria.KindKey}: {MatchCriteria.RuntimeKind}')."));
-                }
-
-                if (mapping.Probe is not null)
-                {
-                    errors.Add(new LoadError(mapping.Source, "probe", "only a runtime mapping has a probe."));
-                }
-
-                if (mapping.Release is not null)
-                {
-                    errors.Add(new LoadError(mapping.Source, "release", "only a runtime mapping has a release block."));
-                }
-
-                continue;
+                errors.Add(new LoadError(component.Source, $"{path}.nodes.{reserved}", $"'{reserved}' is the runtime node, declared only by a {RuntimeKind}."));
             }
-
-            if (!mapping.Nodes.ContainsKey(reserved))
-            {
-                errors.Add(new LoadError(mapping.Source, "nodes", $"a runtime mapping must declare a node named '{reserved}'."));
-            }
-
-            if (mapping.Exports.Count > 0)
-            {
-                errors.Add(new LoadError(mapping.Source, "exports", "a runtime mapping has no exports."));
-            }
-
-            CheckRelease(mapping, errors);
         }
 
         foreach (var policy in policies.Where(p => p.Add.ContainsKey(reserved)))
         {
-            errors.Add(new LoadError(policy.Source, $"add.{reserved}", $"'{reserved}' is the runtime node, declared only by a runtime mapping."));
+            errors.Add(new LoadError(policy.Source, $"add.{reserved}", $"'{reserved}' is the runtime node, declared only by a {RuntimeKind}."));
         }
     }
 
     // Every policy must apply to node scope or workload scope (resolver.md, Policy scope); one that fits neither would silently do nothing.
-    private static void CheckPolicyScopes(List<Policy> policies, List<string>? environmentTypes, List<LoadError> errors)
+    private static void CheckPolicyScopes(List<Policy> policies, List<LoadError> errors)
     {
         foreach (var policy in policies)
         {
             var criteria = policy.Match.Criteria;
             var kind = criteria.GetValueOrDefault(MatchCriteria.KindKey);
             void Fail(string location, string message) => errors.Add(new LoadError(policy.Source, location, message));
-            CheckEnvironmentType(policy.Source, criteria, environmentTypes, errors);
 
             if (kind is not null && kind != MatchCriteria.RuntimeKind)
             {
@@ -310,64 +292,67 @@ public static class CatalogParser
         }
     }
 
-    // A mapping with neither would match every type and skip the exports contract check.
-    private static void CheckMappingMatches(List<Mapping> mappings, List<LoadError> errors)
+    // A policy match or an implementation keyed by a type nobody declared would load and never apply.
+    private static void CheckEnvironmentTypes(
+        List<Component> components, List<Runtime> runtimes, List<Policy> policies, Dictionary<string, EnvironmentType>? environmentTypes, List<LoadError> errors)
     {
-        foreach (var mapping in mappings.Where(m => !m.Match.Criteria.ContainsKey(MatchCriteria.TypeKey) && !m.Match.Criteria.ContainsKey(MatchCriteria.KindKey)))
+        if (environmentTypes is null)
         {
-            errors.Add(new LoadError(mapping.Source, "match", $"must have '{MatchCriteria.TypeKey}' (a requirement mapping) or '{MatchCriteria.KindKey}' (a runtime mapping)."));
+            return;
+        }
+
+        var keyed = components.SelectMany(c => c.Implementations.Keys.Select(k => (c.Source, Type: k)))
+            .Concat(runtimes.SelectMany(r => r.Implementations.Keys.Select(k => (r.Source, Type: k))))
+            .Where(i => i.Type != ImplementationKey.Default)
+            .Select(i => (i.Source, Location: $"implementations.{i.Type}", i.Type));
+        var matched = policies.Where(p => p.Match.Criteria.ContainsKey(MatchCriteria.EnvironmentTypeKey))
+            .Select(p => (p.Source, Location: $"match.{MatchCriteria.EnvironmentTypeKey}", Type: p.Match.Criteria[MatchCriteria.EnvironmentTypeKey]));
+        foreach (var (source, location, type) in keyed.Concat(matched).Where(e => !environmentTypes.ContainsKey(e.Type)))
+        {
+            errors.Add(new LoadError(source, location, $"'{type}' is not a declared environment type (declared: {string.Join(", ", environmentTypes.Keys.Order())})."));
         }
     }
 
-    private static void CheckMappingTypes(List<Mapping> mappings, List<Document> typeDocuments, List<string>? environmentTypes, List<LoadError> errors)
+    // A workload's class must be valid in every environment, so every implementation declares the same classes.
+    private static void CheckSameClasses(List<Component> components, List<LoadError> errors)
     {
-        var declared = typeDocuments.Select(NameOf).OfType<string>().Distinct().Order().ToList();
-        foreach (var mapping in mappings)
+        foreach (var component in components)
         {
-            if (mapping.Match.Criteria.TryGetValue(MatchCriteria.TypeKey, out var type) && !declared.Contains(type))
+            var (firstKey, first) = component.Implementations.First();
+            foreach (var (key, implementation) in component.Implementations.Where(i => !i.Value.Classes.Keys.ToHashSet().SetEquals(first.Classes.Keys)))
             {
-                var known = declared.Count == 0 ? "none" : string.Join(", ", declared);
-                errors.Add(new LoadError(mapping.Source, "match.type", $"'{type}' is not a declared ResourceType (declared: {known})."));
+                errors.Add(new LoadError(component.Source, $"implementations.{key}.classes",
+                    $"declares {string.Join(", ", implementation.Classes.Keys)}; every implementation must declare the classes of '{firstKey}' ({string.Join(", ", first.Classes.Keys)})."));
             }
-
-            CheckEnvironmentType(mapping.Source, mapping.Match.Criteria, environmentTypes, errors);
         }
     }
 
-    // A match on an environment type nobody declared would load and never apply.
-    private static void CheckEnvironmentType(string source, IReadOnlyDictionary<string, string> criteria, List<string>? environmentTypes, List<LoadError> errors)
+    // Every class part must export exactly the component's contract, so ${resource.<id>.<export>} resolves in every environment.
+    private static void CheckExportsContract(List<Component> components, List<LoadError> errors)
     {
-        if (environmentTypes is not null && criteria.TryGetValue(MatchCriteria.EnvironmentTypeKey, out var type) && !environmentTypes.Contains(type))
+        foreach (var component in components)
         {
-            errors.Add(new LoadError(source, $"match.{MatchCriteria.EnvironmentTypeKey}", $"'{type}' is not a declared environment type (declared: {string.Join(", ", environmentTypes)})."));
+            foreach (var (path, part) in ClassParts(component))
+            {
+                // An export is evaluated in its own requirement's scope, where another requirement's exports are out of reach.
+                foreach (var export in part.Exports.Where(e => ExpressionEvaluator.ReadsResource(e.Value)).Select(e => e.Key))
+                {
+                    errors.Add(new LoadError(component.Source, $"{path}.exports.{export}", "an export cannot reference ${resource.<id>.<export>}; it may read env.*, its own nodes' outputs and runtime.*."));
+                }
+
+                var missing = component.Exports.Where(e => !part.Exports.ContainsKey(e)).ToList();
+                var extra = part.Exports.Keys.Where(e => !component.Exports.Contains(e)).ToList();
+                if (missing.Count > 0 || extra.Count > 0)
+                {
+                    var problems = new[] { missing.Count > 0 ? $"missing {string.Join(", ", missing)}" : null, extra.Count > 0 ? $"not in the contract: {string.Join(", ", extra)}" : null };
+                    errors.Add(new LoadError(component.Source, $"{path}.exports", $"must export exactly the contract of component '{component.Name}' ({string.Join(", ", component.Exports)}); {string.Join("; ", problems.OfType<string>())}."));
+                }
+            }
         }
     }
 
-    // A mapping must export exactly what its type promises, so ${resource.<id>.<export>} always resolves.
-    private static void CheckExportsContract(List<Mapping> mappings, List<ResourceType> types, List<LoadError> errors)
-    {
-        foreach (var mapping in mappings)
-        {
-            // An export is evaluated in its own requirement's scope, where another requirement's exports are out of reach.
-            foreach (var export in mapping.Exports.Where(e => ExpressionEvaluator.ReadsResource(e.Value)).Select(e => e.Key))
-            {
-                errors.Add(new LoadError(mapping.Source, $"exports.{export}", "an export cannot reference ${resource.<id>.<export>}; it may read env.*, its own nodes' outputs and runtime.*."));
-            }
-
-            if (!mapping.Match.Criteria.TryGetValue(MatchCriteria.TypeKey, out var name) || types.FirstOrDefault(t => t.Name == name) is not { } type)
-            {
-                continue;
-            }
-
-            var missing = type.Exports.Where(e => !mapping.Exports.ContainsKey(e)).ToList();
-            var extra = mapping.Exports.Keys.Where(e => !type.Exports.Contains(e)).ToList();
-            if (missing.Count > 0 || extra.Count > 0)
-            {
-                var problems = new[] { missing.Count > 0 ? $"missing {string.Join(", ", missing)}" : null, extra.Count > 0 ? $"not in the type: {string.Join(", ", extra)}" : null };
-                errors.Add(new LoadError(mapping.Source, "exports", $"must export exactly the exports of type '{name}' ({string.Join(", ", type.Exports)}); {string.Join("; ", problems.OfType<string>())}."));
-            }
-        }
-    }
+    private static IEnumerable<(string Path, Part Part)> ClassParts(Component component) =>
+        component.Implementations.SelectMany(i => i.Value.Classes.Select(c => ($"implementations.{i.Key}.classes.{c.Key}", c.Value)));
 
     // A truncated name ends in a lowercase hex hash that is appended after filtering, so every rule must allow those digits.
     private const string HashDigits = "0123456789abcdef";
@@ -420,22 +405,30 @@ public static class CatalogParser
         return merged;
     }
 
-    private static ResourceType ToResourceType(Document d) => new(
+    private static Component ToComponent(Document d) => new(
         d.Source,
         Text(d.Body["name"]),
-        Text(d.Body["description"]),
-        Strings(d.Body["classes"]),
-        Strings(d.Body["exports"]));
+        Strings(d.Body["exports"]),
+        Map(d.Body["implementations"]).ToDictionary(i => i.Key, i => new Implementation(Map(i.Value["classes"]).ToDictionary(c => c.Key, c => ToPart(c.Value)))));
 
-    private static Mapping ToMapping(Document d) => new(
+    private static Part ToPart(JToken part) => new(ToNodes(part["nodes"]), Map(part["exports"]).ToDictionary(e => e.Key, e => Text(e.Value)));
+
+    private static Runtime ToRuntime(Document d) => new(
         d.Source,
-        ToMatch(d.Body["match"]),
-        Map(d.Body["nodes"]).ToDictionary(e => e.Key, e => ToNode(e.Value)),
-        Map(d.Body["exports"]).ToDictionary(e => e.Key, e => Text(e.Value)),
-        d.Body["probe"] is { } probe ? new Probe(Text(probe["path"]), (int?)probe["expectedStatus"] ?? 0, (int?)probe["timeoutSeconds"] ?? 0, (int?)probe["intervalSeconds"] ?? 0) : null,
-        d.Body["release"] is { } release ? new RuntimeRelease(
-            Text(release["suffixInput"]), Text(release["trafficInput"]), Text(release["trafficOutput"]), Text(release["suffixOutput"]), Text(release["revisionOutput"]),
-            Text(release["fqdnOutput"]), Text(release["revisionKey"]), Text(release["latestKey"]), Text(release["weightKey"]), Text(release["resourceIdOutput"])) : null);
+        Text(d.Body["name"]),
+        Map(d.Body["implementations"]).ToDictionary(i => i.Key, i => ToRuntimeImplementation(i.Value)));
+
+    private static RuntimeImplementation ToRuntimeImplementation(JToken implementation)
+    {
+        var probe = implementation["probe"];
+        var release = implementation["release"];
+        return new RuntimeImplementation(
+            new Probe(Text(probe?["path"]), (int?)probe?["expectedStatus"] ?? 0, (int?)probe?["timeoutSeconds"] ?? 0, (int?)probe?["intervalSeconds"] ?? 0),
+            new RuntimeRelease(
+                Text(release?["suffixInput"]), Text(release?["trafficInput"]), Text(release?["trafficOutput"]), Text(release?["suffixOutput"]), Text(release?["revisionOutput"]),
+                Text(release?["fqdnOutput"]), Text(release?["revisionKey"]), Text(release?["latestKey"]), Text(release?["weightKey"]), Text(release?["resourceIdOutput"])),
+            ToNodes(implementation["nodes"]));
+    }
 
     private static Policy ToPolicy(Document d) => new(
         d.Source,
@@ -444,11 +437,13 @@ public static class CatalogParser
         ToMatch(d.Body["match"]),
         Map(d.Body["set"]),
         Map(d.Body["default"]),
-        Map(d.Body["add"]).ToDictionary(e => e.Key, e => ToNode(e.Value)));
+        ToNodes(d.Body["add"]));
 
     private static NamingRule ToNamingRule(JToken rule) => new(Text(rule["pattern"]), (int?)rule["maxLength"] ?? 0, Text(rule["allowed"]));
 
     private static MatchCriteria ToMatch(JToken? match) => new(Map(match).ToDictionary(e => e.Key, e => Text(e.Value)));
+
+    private static Dictionary<string, Node> ToNodes(JToken? nodes) => Map(nodes).ToDictionary(e => e.Key, e => ToNode(e.Value));
 
     private static Node ToNode(JToken node) => new(
         Text(node["template"]),

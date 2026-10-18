@@ -9,8 +9,8 @@ namespace jd.resolver.catalog;
 public sealed record Catalog(
     string Version,
     IReadOnlyDictionary<string, EnvironmentType> EnvironmentTypes,
-    IReadOnlyList<ResourceType> Types,
-    IReadOnlyList<Mapping> Mappings,
+    IReadOnlyDictionary<string, Component> Components,
+    IReadOnlyDictionary<string, Runtime> Runtimes,
     IReadOnlyList<Policy> Policies,
     IReadOnlyDictionary<string, NamingRule> Naming,
     IReadOnlyDictionary<string, string> Roles);
@@ -18,12 +18,36 @@ public sealed record Catalog(
 /// <summary>A declared environment type; <see cref="Approval"/>: an environment of this type must carry an approval block.</summary>
 public sealed record EnvironmentType(bool Approval);
 
-public sealed record ResourceType(
-    string Source,
-    string Name,
-    string Description,
-    IReadOnlyList<string> Classes,
-    IReadOnlyList<string> Exports);
+/// <summary>
+/// What a workload requires by name: one contract (<see cref="Exports"/>) and an implementation per environment type, keyed by the type or
+/// <see cref="ImplementationKey.Default"/>. Every class of every implementation exports exactly the contract.
+/// </summary>
+public sealed record Component(string Source, string Name, IReadOnlyList<string> Exports, IReadOnlyDictionary<string, Implementation> Implementations);
+
+/// <summary>A component's implementation for an environment type: class (a requirement's <c>class</c>) to what each requiring workload gets.</summary>
+public sealed record Implementation(IReadOnlyDictionary<string, Part> Classes);
+
+/// <summary>A set of nodes deployed together, and the exports evaluated from them.</summary>
+public sealed record Part(IReadOnlyDictionary<string, Node> Nodes, IReadOnlyDictionary<string, string> Exports);
+
+/// <summary>The compute every workload gets: no contract, no classes, an implementation per environment type like a <see cref="Component"/>.</summary>
+public sealed record Runtime(string Source, string Name, IReadOnlyDictionary<string, RuntimeImplementation> Implementations);
+
+/// <summary>A runtime's implementation: its <see cref="Nodes"/> include the runtime node, deployed in steps by the release flow.</summary>
+public sealed record RuntimeImplementation(Probe Probe, RuntimeRelease Release, IReadOnlyDictionary<string, Node> Nodes);
+
+/// <summary>Selects the implementation a component or runtime has for an environment type: by exact key, else <see cref="Default"/>.</summary>
+public static class ImplementationKey
+{
+    /// <summary>The key of the implementation every environment type without its own key uses. Part of the catalog format; not a type.</summary>
+    public const string Default = "default";
+
+    /// <summary>The key of the implementation <paramref name="environmentType"/> uses, or null when there is neither its own nor a default.</summary>
+    public static string? For<T>(IReadOnlyDictionary<string, T> implementations, string environmentType) =>
+        implementations.ContainsKey(environmentType) ? environmentType
+        : implementations.ContainsKey(Default) ? Default
+        : null;
+}
 
 public enum NodeKind
 {
@@ -33,15 +57,15 @@ public enum NodeKind
 
 public sealed record Node(string Template, NodeKind Kind, IReadOnlyDictionary<string, JToken> Config);
 
-/// <summary>Criteria key (type, class, environmentType, kind, runtime, and for policies template) to the value it must equal.</summary>
+/// <summary>A policy's criteria key (type, class, environmentType, kind, runtime, template) to the value it must equal.</summary>
 public sealed record MatchCriteria(IReadOnlyDictionary<string, string> Criteria)
 {
-    // The keys a requirement provides to a mapping match; part of the mapping format.
+    // What a node-scope policy matches: the requirement's type (a component name) and class, and the environment's type.
     public const string TypeKey = "type";
     public const string ClassKey = "class";
     public const string EnvironmentTypeKey = "environmentType";
 
-    // Keys only policies use: a node's template, and the runtime scope (kind: runtime) of a workload-scope policy.
+    // A node's template, and the runtime scope (kind: runtime) of a workload-scope policy.
     public const string TemplateKey = "template";
     public const string KindKey = "kind";
     public const string RuntimeKey = "runtime";
@@ -71,18 +95,6 @@ public sealed record RuntimeRelease(
     string LatestKey,
     string WeightKey,
     string ResourceIdOutput);
-
-/// <summary>A runtime mapping (<c>kind: runtime</c>) has no exports, and a <see cref="Probe"/> and a <see cref="Release"/>.</summary>
-public sealed record Mapping(
-    string Source,
-    MatchCriteria Match,
-    IReadOnlyDictionary<string, Node> Nodes,
-    IReadOnlyDictionary<string, string> Exports,
-    Probe? Probe = null,
-    RuntimeRelease? Release = null)
-{
-    public bool IsRuntime => Match.Criteria.GetValueOrDefault(MatchCriteria.KindKey) == MatchCriteria.RuntimeKind;
-}
 
 public sealed record Policy(
     string Source,

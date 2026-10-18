@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/catalog/component.schema.json",
+  "title": "just-deliver catalog component",
+  "description": "What a workload asks for by name (for example 'database'): one contract, and an implementation per environment type. Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across components and runtimes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "name", "description", "exports", "implementations"],
+  "properties": {
+    "kind": { "enum": ["Component"] },
+    "name": {
+      "description": "Value teams write as 'type' in a workload requirement; same pattern as the workload schema's type.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$"
+    },
+    "description": { "description": "What the component gives a team.", "type": "string", "minLength": 1 },
+    "exports": {
+      "description": "The contract: the only valid names in ${resource.<id>.<name>}. Every class of every implementation exports exactly these (checked by the resolver).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "implementations": {
+      "description": "Environment type (declared in the Catalog file) or 'default' -> implementation. An environment uses its type's implementation, else 'default'; every implementation declares the same classes (checked by the resolver).",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["classes"],
+        "properties": {
+          "classes": {
+            "description": "Class (what a workload may request with 'class') -> the nodes each requiring workload gets and its exports.",
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "$ref": "#/definitions/part" }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes"],
+      "properties": {
+        "nodes": {
+          "description": "Graph nodes by name; the name is how other expressions refer to the node.",
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/definitions/node" }
+        },
+        "exports": {
+          "description": "Export name -> expression producing it; exactly the component's exports.",
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template", "config"],
+      "properties": {
+        "template": { "description": "Template reference, relative to the catalog's templates directory.", "type": "string", "minLength": 1 },
+        "kind": { "description": "create (default) or grant. Grants are surfaced in the approval diff.", "enum": ["create", "grant"], "default": "create" },
+        "config": { "description": "Template configuration. Values are any YAML scalar or map, kept as written.", "type": "object" }
+      }
+    }
+  }
+}

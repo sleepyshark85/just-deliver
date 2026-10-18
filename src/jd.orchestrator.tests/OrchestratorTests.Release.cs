@@ -91,7 +91,7 @@ public partial class OrchestratorTests
     }
 
     [Fact]
-    public async Task The_probe_target_is_the_dark_deploys_fqdn_output_and_the_mappings_path_only()
+    public async Task The_probe_target_is_the_dark_deploys_fqdn_output_and_the_runtimes_path_only()
     {
         var backend = new FakeBackend { Fqdn = "rev-1.example.test" };
         var probe = new FakeProbe(backend.Log);
@@ -294,7 +294,7 @@ public partial class OrchestratorTests
         foreach (var value in new[] { "one", "two" })
         {
             var (graph, catalog) = await ResolveAsync(
-                DefaultRequires, ExportingMapping, runtimeMapping: RuntimeReadingMapping,
+                DefaultRequires, ExportingPart, runtime: RuntimeReadingNodes,
                 container: $"container:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n    A: {value}\n");
             Assert.True((await Create(backend, catalog).DeployAsync(graph, null, CancellationToken.None)).Succeeded);
         }
@@ -373,7 +373,7 @@ public partial class OrchestratorTests
     {
         var backend = new FakeBackend();
         var (graph, catalog) = await ResolveAsync(
-            DefaultRequires, ExportingMapping, runtimeMapping: RuntimeReadingMapping,
+            DefaultRequires, ExportingPart, runtime: RuntimeReadingNodes,
             container: $"container:\n  image: {image}\n  ports:\n    - port: 8080\n  variables:\n{variables}");
         await Create(backend, catalog).DeployAsync(graph, null, CancellationToken.None);
         return Parameter(RuntimeDeploys(backend)[0], "suffix");
@@ -399,7 +399,7 @@ public partial class OrchestratorTests
     private static async Task<RunReport> DeployVariantAsync(FakeBackend backend, string value)
     {
         var (graph, catalog) = await ResolveAsync(
-            DefaultRequires, ExportingMapping, runtimeMapping: RuntimeReadingMapping,
+            DefaultRequires, ExportingPart, runtime: RuntimeReadingNodes,
             container: $"container:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n    A: {value}\n");
         return await Create(backend, catalog).DeployAsync(graph, null, CancellationToken.None);
     }

@@ -1,0 +1,31 @@
+kind: Component
+name: database
+description: A database for the workload. The platform's implementation decides the engine (today a container in the environment's shared Cosmos DB, SQL API); the `engine` export tells the code which one it got.
+exports: [engine, endpoint, database, container]     # the contract: every class of every implementation exports exactly these
+implementations:
+  default:                                           # every environment type without its own key
+    classes:
+      standard:
+        # The account and the shared-throughput database are substrate (env.cosmos.*); a workload adds a container and a grant on it.
+        nodes:
+          container:
+            template: azure/cosmos-sql-container
+            config:
+              accountId: ${env.cosmos.accountId}
+              databaseName: ${env.cosmos.databaseName}
+              containerName: ${name('cosmos-container')}
+              partitionKeyPath: /id
+          access:
+            kind: grant                                   # surfaced in the approval diff
+            template: azure/cosmos-sql-role-assignment
+            config:
+              accountId: ${env.cosmos.accountId}
+              scope: ${container.scope}                   # this container only, not the account
+              principalId: ${runtime.principalId}         # this reference alone orders it after the revision step
+              roleGuid: ${role.cosmos-data-contributor}
+              roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
+        exports:
+          engine: cosmos-sql                              # a literal from data: what the code is talking to
+          endpoint: ${env.cosmos.endpoint}
+          database: ${env.cosmos.databaseName}
+          container: ${container.containerName}

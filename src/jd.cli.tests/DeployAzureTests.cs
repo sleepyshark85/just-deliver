@@ -18,27 +18,32 @@ public sealed class DeployAzureTests : ProbeAzureTest
     {
         var catalog = Path.Combine(Root, "catalog");
         Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n");
-        Write("catalog/types/probe.yaml", "kind: ResourceType\nname: probe\ndescription: Test-only type.\nclasses: [standard]\nexports: [workspace]\n");
         Write("catalog/naming.yaml", "kind: Naming\nrules:\n  law:\n    pattern: \"law-{env}-{hash}\"\n    maxLength: 63\n    allowed: \"[a-z0-9-]\"\n");
-        Write("catalog/mappings/probe.yaml", """
-            kind: Mapping
-            match: { type: probe, class: standard }
-            nodes:
-              group:
-                template: azure/resource-group
-                config:
-                  resourceGroupName: ${env.probeGroup}
-                  location: ${env.region}
-                  tags: { project: just-deliver-mvp }
-              workspace:
-                template: azure/log-analytics
-                config:
-                  resourceGroupName: ${group.resourceGroupName}
-                  location: ${group.location}
-                  workspaceName: ${name('law')}
-                  dailyQuotaGb: 0.15
-            exports:
-              workspace: ${workspace.workspaceName}
+        Write("catalog/components/probe.yaml", """
+            kind: Component
+            name: probe
+            description: Test-only component.
+            exports: [workspace]
+            implementations:
+              default:
+                classes:
+                  standard:
+                    nodes:
+                      group:
+                        template: azure/resource-group
+                        config:
+                          resourceGroupName: ${env.probeGroup}
+                          location: ${env.region}
+                          tags: { project: just-deliver-mvp }
+                      workspace:
+                        template: azure/log-analytics
+                        config:
+                          resourceGroupName: ${group.resourceGroupName}
+                          location: ${group.location}
+                          workspaceName: ${name('law')}
+                          dailyQuotaGb: 0.15
+                    exports:
+                      workspace: ${workspace.workspaceName}
             """);
         WriteRuntimeStandIn();
         CopyTemplates("resource-group", "log-analytics");

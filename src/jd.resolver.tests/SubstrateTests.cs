@@ -114,7 +114,7 @@ public class SubstrateTests
         Assert.Equal("rg-shared-1", descriptor.Values["shared.resourceGroup"]);
         Assert.Equal(["cosmos.accountId"], descriptor.Grantable);
 
-        // The layout serves the existing mappings and policies: the sample workload resolves on it without errors.
+        // The layout serves the existing components and policies: the sample workload resolves on it without errors.
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         Assert.Empty(Resolver.Resolve(workload, "workload.yaml", await CatalogAsync(), descriptor).Errors);
     }
@@ -212,9 +212,8 @@ public class SubstrateTests
         var files = new[]
         {
             "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
-            "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n",
             "kind: Naming\nrules:\n  rg:\n    pattern: \"rg-{env}-{hash}\"\n    maxLength: 90\n    allowed: \"[a-z0-9-]\"\n",
-            "kind: Mapping\nmatch: { type: thing }\nnodes:\n  group:\n    template: t/group\n    config:\n      groupName: ${name('rg')}\nexports:\n  out: ${group.groupName}\n",
+            TestCatalog.Component("thing", "[out]", "nodes:\n  group:\n    template: t/group\n    config:\n      groupName: ${name('rg')}\nexports:\n  out: ${group.groupName}\n"),
         }.Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var catalog = (await CatalogParser.ParseAsync(files)).Catalog!;
         var definition = new EnvironmentDefinition("dev", "dev", [new JObject { ["type"] = "thing", ["id"] = "substrate" }], [], [], null);

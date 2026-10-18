@@ -70,7 +70,7 @@ public sealed class Qualifier(Orchestrator orchestrator, IBackEndProvider provid
         try
         {
             var runtime = graph.Nodes.Single(n => n.Phase == Phase.Runtime);
-            var idOutput = (runtime.Release ?? throw new InvalidOperationException($"node '{runtime.Id}': the runtime mapping has no release block.")).ResourceIdOutput;
+            var idOutput = (runtime.Release ?? throw new InvalidOperationException($"node '{runtime.Id}': the runtime has no release block.")).ResourceIdOutput;
             var outputs = await provider.GetOutputsAsync(runtime.Stack, templates.GetContent(runtime.Template), cancellationToken);
             if (outputs?.GetValueOrDefault(idOutput)?.Value is not { Length: > 0 } id)
             {

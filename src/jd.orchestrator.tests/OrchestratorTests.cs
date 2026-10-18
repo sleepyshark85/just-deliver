@@ -18,9 +18,7 @@ public partial class OrchestratorTests
     private static readonly EnvironmentDescriptor Env = new("dev", "region-1", "dev", new Dictionary<string, string>(), [], null);
 
     // group -> app (references group outputs); rt waits on the runtime through app.
-    private const string Mapping = """
-        kind: Mapping
-        match: { type: thing }
+    private const string Part = """
         nodes:
           group:
             template: t/group
@@ -51,7 +49,7 @@ public partial class OrchestratorTests
         """;
 
     // The runtime is not deployed by the walk; it is reported, first, because its id sorts before any requirement's.
-    private const string RuntimeMapping = "kind: Mapping\nmatch: { kind: runtime }\n" + ProbeAndRelease + "nodes:\n  runtime:\n    template: t/runtime\n    config: { k: 1 }\n";
+    private const string RuntimeNodes = "nodes:\n  runtime:\n    template: t/runtime\n    config: { k: 1 }\n";
 
     private const string ProbeAndRelease =
         "probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
@@ -59,17 +57,20 @@ public partial class OrchestratorTests
 
     private const string DefaultRequires = "  - type: thing\n";
 
+    // The tests write the component's one class and the runtime's one implementation as top-level lines; ResolveAsync nests them in their files.
+    private static string Indent(string text, int spaces) =>
+        string.Join('\n', text.TrimEnd('\n').Split('\n').Select(line => line.Length == 0 ? line : new string(' ', spaces) + line)) + "\n";
+
     // The orchestrator gets the catalog the graph was resolved with.
     private static async Task<(ResolvedGraph Graph, Catalog Catalog)> ResolveAsync(
-        string requires = DefaultRequires, string mapping = Mapping, string workloadName = "shop", string runtimeMapping = RuntimeMapping, string policy = "", string container = "")
+        string requires = DefaultRequires, string part = Part, string workloadName = "shop", string runtime = RuntimeNodes, string policy = "", string container = "")
     {
         var files = new[]
             {
                 "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
-                "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out, key]\n",
                 "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
-                mapping,
-                runtimeMapping,
+                "kind: Component\nname: thing\ndescription: d\nexports: [out, key]\nimplementations:\n  default:\n    classes:\n      standard:\n" + Indent(part, 8),
+                "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n" + Indent(ProbeAndRelease + runtime, 4),
             }
             .Concat(policy.Length > 0 ? [policy] : [])
             .Select((content, i) => new CatalogSource($"f{i}.yaml", content));
@@ -81,9 +82,9 @@ public partial class OrchestratorTests
         return (graph, loaded.Catalog!);
     }
 
-    private static async Task<RunReport> DeployRawAsync(FakeBackend backend, string requires = DefaultRequires, Action<NodeReport>? progress = null, string mapping = Mapping)
+    private static async Task<RunReport> DeployRawAsync(FakeBackend backend, string requires = DefaultRequires, Action<NodeReport>? progress = null, string part = Part)
     {
-        var (graph, catalog) = await ResolveAsync(requires, mapping);
+        var (graph, catalog) = await ResolveAsync(requires, part);
         return await Create(backend, catalog).DeployAsync(graph, progress, CancellationToken.None);
     }
 
@@ -96,8 +97,8 @@ public partial class OrchestratorTests
     // Most tests are about the requirement's nodes; the runtime node, reported first, has its own test.
     private static RunReport WithoutRuntime(RunReport report) => new(report.Nodes.Where(n => !n.NodeId.EndsWith("/@workload/runtime", StringComparison.Ordinal)).ToList());
 
-    private static async Task<RunReport> DeployAsync(FakeBackend backend, string requires = DefaultRequires, Action<NodeReport>? progress = null, string mapping = Mapping) =>
-        WithoutRuntime(await DeployRawAsync(backend, requires, progress, mapping));
+    private static async Task<RunReport> DeployAsync(FakeBackend backend, string requires = DefaultRequires, Action<NodeReport>? progress = null, string part = Part) =>
+        WithoutRuntime(await DeployRawAsync(backend, requires, progress, part));
 
     private static async Task<RunReport> PreviewAsync(FakeBackend backend) => WithoutRuntime(await PreviewRawAsync(backend));
 
@@ -339,9 +340,9 @@ public partial class OrchestratorTests
     public async Task A_null_config_value_fails_naming_node_and_field_and_is_never_sent_as_text()
     {
         var backend = new FakeBackend();
-        var mapping = "kind: Mapping\nmatch: { type: thing }\nnodes:\n  n:\n    template: t/n\n    config: { a: { b: ~ } }\nexports:\n  out: x\n  key: y\n";
+        var part = "nodes:\n  n:\n    template: t/n\n    config: { a: { b: ~ } }\nexports:\n  out: x\n  key: y\n";
 
-        var report = await DeployAsync(backend, mapping: mapping);
+        var report = await DeployAsync(backend, part: part);
 
         var failed = Assert.Single(report.Nodes);
         Assert.Equal(NodeOutcome.Failed, failed.Outcome);
@@ -350,10 +351,8 @@ public partial class OrchestratorTests
     }
 
     // Only the runtime node reads the workload's variables and the requirements' exports; these tests check the second pass on it.
-    // 'group' is a node name in two scopes (the runtime mapping declares one too): the runtime reads its own scope's by name and the requirement's only through an export.
-    private const string ExportingMapping = """
-        kind: Mapping
-        match: { type: thing }
+    // 'group' is a node name in two scopes (the runtime declares one too): the runtime reads its own scope's by name and the requirement's only through an export.
+    private const string ExportingPart = """
         nodes:
           group:
             template: t/group
@@ -363,11 +362,7 @@ public partial class OrchestratorTests
           key: ${group.key}
         """;
 
-    private const string RuntimeReadingMapping = """
-        kind: Mapping
-        match: { kind: runtime }
-        probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
-        release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }
+    private const string RuntimeReadingNodes = """
         nodes:
           group:
             template: t/group
@@ -386,7 +381,7 @@ public partial class OrchestratorTests
     private static async Task<(RunReport Report, ResolvedGraph Graph)> DeployRuntimeAsync(FakeBackend backend, string variables)
     {
         var (graph, catalog) = await ResolveAsync(
-            DefaultRequires, ExportingMapping, runtimeMapping: RuntimeReadingMapping,
+            DefaultRequires, ExportingPart, runtime: RuntimeReadingNodes,
             container: $"container:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n{variables}");
         return (await Create(backend, catalog).DeployAsync(graph, null, CancellationToken.None), graph);
     }

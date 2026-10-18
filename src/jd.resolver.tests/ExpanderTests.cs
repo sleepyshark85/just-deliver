@@ -14,20 +14,27 @@ public class ExpanderTests
     private static readonly string[] BaseFiles =
     [
         "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
-        "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard, isolated]\nexports: [endpoint]\n",
         "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
         "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n",
     ];
 
-    private static string Mapping(string match, string nodes = "  n:\n    template: t/n\n    config: { a: 1 }\n", string exports = "  endpoint: ${n.out}\n") =>
-        $"kind: Mapping\nmatch: {match}\nnodes:\n{nodes}exports:\n{exports}";
+    private const string ComponentFile = "f3.yaml";
+
+    private static string Sqldb(string nodes = "  n:\n    template: t/n\n    config: { a: 1 }\n", string exports = "  endpoint: ${n.out}\n", string key = "default") =>
+        TestCatalog.Component("sqldb", "[endpoint]", $"nodes:\n{nodes}exports:\n{exports}", key);
+
+    // A default implementation and one for stage, told apart by their endpoint.
+    private const string SqldbForStage =
+        "kind: Component\nname: sqldb\ndescription: d\nexports: [endpoint]\nimplementations:\n"
+        + "  default:\n    classes:\n      standard: { nodes: { n: { template: t/n, config: {} } }, exports: { endpoint: plain } }\n"
+        + "  stage:\n    classes:\n      standard: { nodes: { n: { template: t/n, config: {} } }, exports: { endpoint: guarded } }\n";
 
     private static EnvironmentDescriptor Env(string type = "dev") =>
         new("dev", "region", type, new Dictionary<string, string> { ["host"] = "h1" }, [], null);
 
-    private static async Task<Catalog> LoadAsync(params string[] mappings)
+    private static async Task<Catalog> LoadAsync(params string[] components)
     {
-        var files = BaseFiles.Concat(mappings).Append(TestCatalog.RuntimeMapping).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
+        var files = BaseFiles.Concat(components).Append(TestCatalog.RuntimeFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var result = await CatalogParser.ParseAsync(files);
         Assert.Empty(result.Errors);
         return result.Catalog!;
@@ -40,10 +47,9 @@ public class ExpanderTests
         new Expander(catalog, Env(type)).Expand(Workload(requires), "workload.yaml");
 
     [Fact]
-    public async Task Single_match_expands_nodes_and_exports_with_the_requirement_id()
+    public async Task A_requirement_expands_its_component_class_with_the_requirement_id()
     {
-        var catalog = await LoadAsync(Mapping(
-            "{ type: sqldb, class: standard }",
+        var catalog = await LoadAsync(Sqldb(
             "  n:\n    template: t/n\n    kind: grant\n    config:\n      name: ${name('thing')}\n      host: ${env.host}\n",
             "  endpoint: ${env.host}\n"));
 
@@ -51,7 +57,7 @@ public class ExpanderTests
 
         Assert.Empty(result.Errors);
         var requirement = Assert.Single(result.Requirements);
-        Assert.Equal(("orders", "sqldb", "standard", "f4.yaml"), (requirement.Id, requirement.Type, requirement.Class, requirement.Mapping));
+        Assert.Equal(("orders", "sqldb", "standard", ComponentFile), (requirement.Id, requirement.Type, requirement.Class, requirement.Source));
         var node = Assert.Single(requirement.Nodes);
         Assert.Equal(("n", "t/n", NodeKind.Grant), (node.Name, node.Template, node.Kind));
         Assert.Equal("shop-orders", Text(node.Config["name"]));
@@ -59,157 +65,139 @@ public class ExpanderTests
         Assert.Equal("h1", Assert.IsType<Resolved>(requirement.Exports["endpoint"]).Value);
     }
 
-    [Fact]
-    public async Task The_most_specific_mapping_wins()
+    [Theory]
+    [InlineData("stage", "guarded")]
+    [InlineData("dev", "plain")]
+    public async Task The_environment_types_own_implementation_is_used_else_the_default(string type, string endpoint)
     {
-        var catalog = await LoadAsync(Mapping("{ type: sqldb }", exports: "  endpoint: general\n"), Mapping("{ type: sqldb, class: isolated }", exports: "  endpoint: specific\n"));
+        var catalog = await LoadAsync(SqldbForStage);
 
-        var isolated = Assert.Single(Expand(catalog, "  - type: sqldb\n    class: isolated\n").Requirements);
-        var standard = Assert.Single(Expand(catalog, "  - type: sqldb\n").Requirements);
+        var requirement = Assert.Single(Expand(catalog, "  - type: sqldb\n", type).Requirements);
 
-        Assert.Equal("specific", Assert.IsType<Resolved>(isolated.Exports["endpoint"]).Value);
-        Assert.Equal("general", Assert.IsType<Resolved>(standard.Exports["endpoint"]).Value);
+        Assert.Equal(endpoint, Assert.IsType<Resolved>(requirement.Exports["endpoint"]).Value);
     }
 
     [Fact]
-    public async Task A_tie_at_the_top_is_an_error_naming_both_files()
+    public async Task No_implementation_for_the_environment_type_and_no_default_is_an_error_naming_the_component_and_the_type()
     {
-        var catalog = await LoadAsync(Mapping("{ type: sqldb, class: standard }"), Mapping("{ type: sqldb, environmentType: dev }"));
+        var catalog = await LoadAsync(Sqldb(key: "stage"));
 
-        var result = Expand(catalog, "  - type: sqldb\n");
+        var result = Expand(catalog, "  - type: sqldb\n    id: orders\n");
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[0]"), (error.File, error.Location));
-        Assert.Contains("f4.yaml, f5.yaml", error.Message);
+        Assert.Equal("requirement 'orders': component 'sqldb' has no implementation for environment type 'dev' and no 'default' implementation.", error.Message);
         Assert.Empty(result.Requirements);
     }
 
     [Fact]
-    public async Task No_match_is_an_error_naming_the_requirement_type_class_and_environment_type()
+    public async Task A_class_the_component_lacks_is_an_error_naming_the_component_the_class_and_the_environment_type()
     {
-        var catalog = await LoadAsync(Mapping("{ type: sqldb, class: standard }"));
+        var catalog = await LoadAsync(Sqldb());
 
         var result = Expand(catalog, "  - type: sqldb\n    id: orders\n    class: isolated\n");
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal("requires[0]", error.Location);
-        Assert.Contains("'orders'", error.Message);
-        Assert.Contains("type 'sqldb', class 'isolated', environment type 'dev'", error.Message);
+        Assert.Equal(("workload.yaml", "requires[0]"), (error.File, error.Location));
+        Assert.Equal("requirement 'orders': component 'sqldb' has no class 'isolated' for environment type 'dev' (classes: standard).", error.Message);
+        Assert.Empty(result.Requirements);
     }
 
     [Fact]
-    public async Task The_environment_type_takes_part_in_matching()
+    public async Task A_type_that_names_no_component_is_an_error()
     {
-        var catalog = await LoadAsync(Mapping("{ type: sqldb }", exports: "  endpoint: plain\n"), Mapping("{ type: sqldb, environmentType: stage }", exports: "  endpoint: guarded\n"));
+        var catalog = await LoadAsync(Sqldb());
 
-        var team = Assert.Single(Expand(catalog, "  - type: sqldb\n", "dev").Requirements);
-        var guarded = Assert.Single(Expand(catalog, "  - type: sqldb\n", "stage").Requirements);
+        var error = Assert.Single(Expand(catalog, "  - type: cache\n").Errors);
 
-        Assert.Equal("plain", Assert.IsType<Resolved>(team.Exports["endpoint"]).Value);
-        Assert.Equal("guarded", Assert.IsType<Resolved>(guarded.Exports["endpoint"]).Value);
+        Assert.Equal(("requires[0]", "requirement 'cache': 'cache' is not a component in the catalog."), (error.Location, error.Message));
     }
 
-    [Theory]
-    [InlineData("{ type: sqldb, kind: other }")]
-    [InlineData("{ type: sqldb, runtime: container-app }")]
-    public async Task A_mapping_using_a_key_the_requirement_lacks_never_matches(string match)
-    {
-        var catalog = await LoadAsync(Mapping(match));
+    private const string RuntimeNodes = "nodes:\n  runtime:\n    template: t/rt\n    config: { image: '${workload.image}', port: '${workload.port}', name: \"${name('thing')}\" }\n";
 
-        var error = Assert.Single(Expand(catalog, "  - type: sqldb\n").Errors);
-
-        Assert.Contains("no mapping matches", error.Message);
-    }
-
-    private const string RuntimeNodeYaml = "  runtime:\n    template: t/rt\n    config: { image: '${workload.image}', port: '${workload.port}', name: \"${name('thing')}\" }\n";
-
-    private static string RuntimeMapping(string match = "{ kind: runtime }", string extra = "") =>
-        $"kind: Mapping\nmatch: {match}\n{TestCatalog.ProbeAndRelease}{extra}nodes:\n{RuntimeNodeYaml}";
+    private const string RuntimeFile = "f3.yaml";
 
     private static JObject WorkloadWith(string container) =>
         (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\ncontainer:\n{container}requires: []\n");
 
-    private static async Task<ExpansionResult> ExpandRuntimeAsync(string container, string type, params string[] mappings) =>
-        new Expander(await LoadWithoutRuntimeAsync(mappings), Env(type)).Expand(WorkloadWith(container), "workload.yaml");
+    private static async Task<ExpansionResult> ExpandRuntimeAsync(string container, string type, params string[] runtimes) =>
+        new Expander(await LoadWithoutRuntimeAsync(runtimes), Env(type)).Expand(WorkloadWith(container), "workload.yaml");
 
-    private static async Task<Catalog> LoadWithoutRuntimeAsync(string[] mappings)
+    private static async Task<Catalog> LoadWithoutRuntimeAsync(string[] files)
     {
-        var result = await CatalogParser.ParseAsync(BaseFiles.Concat(mappings).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
+        var result = await CatalogParser.ParseAsync(BaseFiles.Concat(files).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
         Assert.Empty(result.Errors);
         return result.Catalog!;
     }
 
     [Fact]
-    public async Task A_workload_gets_the_runtime_nodes_of_the_matching_runtime_mapping_with_image_port_and_probe()
+    public async Task A_workload_gets_the_runtime_nodes_with_image_port_and_probe()
     {
         var result = await ExpandRuntimeAsync("  image: reg.example/app:1\n  ports:\n    - port: 8080\n    - port: 9090\n", "dev",
-            RuntimeMapping());
+            TestCatalog.Runtime(RuntimeNodes));
 
         Assert.Empty(result.Errors);
         var runtime = Assert.IsType<ExpandedRuntime>(result.Runtime);
         var node = Assert.Single(runtime.Nodes);
-        Assert.Equal(("runtime", "t/rt", "f4.yaml"), (node.Name, node.Template, runtime.Mapping));
+        Assert.Equal(("runtime", "t/rt", RuntimeFile), (node.Name, node.Template, runtime.Source));
         Assert.Equal("reg.example/app:1", Text(node.Config["image"]));
         Assert.Equal("8080", Text(node.Config["port"]));
         Assert.StartsWith("shop-", Text(node.Config["name"]));
         Assert.Equal((TestCatalog.Probe, TestCatalog.Release), (runtime.Probe, runtime.Release));
     }
 
-    [Fact]
-    public async Task The_most_specific_runtime_mapping_wins_by_environment_type()
+    [Theory]
+    [InlineData("stage", "t/guarded")]
+    [InlineData("dev", "t/plain")]
+    public async Task The_runtime_uses_the_environment_types_own_implementation_else_the_default(string type, string template)
     {
-        var plain = RuntimeMapping().Replace("t/rt", "t/plain");
-        var guarded = RuntimeMapping("{ kind: runtime, environmentType: stage }").Replace("t/rt", "t/guarded");
-        const string container = "  image: i\n  ports:\n    - port: 80\n";
+        var runtime = TestCatalog.Runtime(RuntimeNodes.Replace("t/rt", "t/plain")) + TestCatalog.RuntimeImplementation(RuntimeNodes.Replace("t/rt", "t/guarded"), "stage");
 
-        Assert.Equal("t/plain", (await ExpandRuntimeAsync(container, "dev", plain, guarded)).Runtime!.Nodes[0].Template);
-        Assert.Equal("t/guarded", (await ExpandRuntimeAsync(container, "stage", plain, guarded)).Runtime!.Nodes[0].Template);
+        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", type, runtime);
+
+        Assert.Equal(template, Assert.Single(result.Runtime!.Nodes).Template);
     }
 
-    [Fact]
-    public async Task Two_runtime_mappings_that_tie_are_an_error_naming_both_files()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public async Task A_catalog_without_exactly_one_runtime_is_an_error_for_a_workload(int count)
     {
-        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "dev", RuntimeMapping(), RuntimeMapping("{ kind: runtime }", "# second\n"));
+        var runtimes = Enumerable.Range(0, count).Select(i => TestCatalog.Runtime(RuntimeNodes).Replace("name: container-app", $"name: runtime-{i}")).ToArray();
+
+        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "dev", runtimes);
 
         var error = Assert.Single(result.Errors);
         Assert.Null(result.Runtime);
-        Assert.Contains("matches 2 mappings equally well: f4.yaml, f5.yaml", error.Message);
+        Assert.Equal(("workload.yaml", $"the catalog must declare exactly one Runtime; it declares {count}."), (error.File, error.Message));
     }
 
     [Fact]
-    public async Task No_runtime_mapping_for_the_environment_type_is_an_error_naming_it()
+    public async Task No_runtime_implementation_for_the_environment_type_and_no_default_is_an_error_naming_the_runtime_and_the_type()
     {
-        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "dev", RuntimeMapping("{ kind: runtime, environmentType: stage }"));
+        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "dev", TestCatalog.Runtime(RuntimeNodes, "stage"));
 
         var error = Assert.Single(result.Errors);
         Assert.Null(result.Runtime);
-        Assert.Contains("no mapping matches the runtime of the workload (environment type 'dev')", error.Message);
-    }
-
-    [Fact]
-    public async Task A_runtime_mapping_naming_a_runtime_is_never_selected_until_workloads_can_name_one()
-    {
-        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "dev", RuntimeMapping("{ kind: runtime, runtime: container-app }"));
-
-        Assert.Contains("no mapping matches the runtime", Assert.Single(result.Errors).Message);
+        Assert.Equal("runtime 'container-app' has no implementation for environment type 'dev' and no 'default' implementation.", error.Message);
     }
 
     [Fact]
     public async Task Reading_the_port_of_a_workload_without_ports_is_an_error_naming_the_workload()
     {
-        var result = await ExpandRuntimeAsync("  image: i\n", "dev", RuntimeMapping());
+        var result = await ExpandRuntimeAsync("  image: i\n", "dev", TestCatalog.Runtime(RuntimeNodes));
 
         var error = Assert.Single(result.Errors);
         Assert.Null(result.Runtime);
-        Assert.Equal(("f4.yaml", "nodes.runtime.config.port"), (error.File, error.Location));
+        Assert.Equal((RuntimeFile, "implementations.default.nodes.runtime.config.port"), (error.File, error.Location));
         Assert.Contains("for the runtime: ", error.Message);
         Assert.Contains("workload 'shop' declares no port", error.Message);
     }
 
     [Fact]
-    public async Task An_environment_definition_has_no_runtime_and_does_not_need_a_runtime_mapping()
+    public async Task An_environment_definition_has_no_runtime_and_does_not_need_a_runtime()
     {
-        var catalog = await LoadWithoutRuntimeAsync(["kind: Mapping\nmatch: { type: sqldb }\nnodes:\n  n:\n    template: t/n\n    config: { a: 1 }\nexports:\n  endpoint: x\n"]);
+        var catalog = await LoadWithoutRuntimeAsync([Sqldb(exports: "  endpoint: x\n")]);
 
         var result = new Expander(catalog, Env()).ExpandEnvironment("dev", (JArray)YamlSchemaValidator.ParseYaml("- type: sqldb\n"), "definition.yaml");
 
@@ -221,9 +209,7 @@ public class ExpanderTests
     [Fact]
     public async Task Config_is_walked_through_objects_and_arrays_and_scalars_pass_through()
     {
-        var catalog = await LoadAsync(Mapping(
-            "{ type: sqldb }",
-            "  n:\n    template: t/n\n    config:\n      size: 400\n      on: true\n      none: null\n      tags: [x, '${env.host}', 7]\n      nested: { deep: { host: '${env.host}' }, count: 2 }\n"));
+        var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config:\n      size: 400\n      on: true\n      none: null\n      tags: [x, '${env.host}', 7]\n      nested: { deep: { host: '${env.host}' }, count: 2 }\n"));
 
         var node = Assert.Single(Assert.Single(Expand(catalog, "  - type: sqldb\n").Requirements).Nodes);
 
@@ -241,9 +227,7 @@ public class ExpanderTests
     [Fact]
     public async Task Pending_values_carry_their_references()
     {
-        var catalog = await LoadAsync(Mapping(
-            "{ type: sqldb }",
-            "  n:\n    template: t/n\n    config: { a: 1 }\n  m:\n    template: t/m\n    config:\n      db: ${n.databaseName}\n      who: [{ id: '${runtime.principalId}' }]\n",
+        var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config: { a: 1 }\n  m:\n    template: t/m\n    config:\n      db: ${n.databaseName}\n      who: [{ id: '${runtime.principalId}' }]\n",
             "  endpoint: ${n.endpoint}\n"));
 
         var requirement = Assert.Single(Expand(catalog, "  - type: sqldb\n").Requirements);
@@ -258,23 +242,21 @@ public class ExpanderTests
     [Fact]
     public async Task Expression_errors_are_collected_across_requirements_with_the_mapping_file_and_requirement()
     {
-        var catalog = await LoadAsync(Mapping(
-            "{ type: sqldb }",
-            "  n:\n    template: t/n\n    config: { a: '${env.nope}', b: '${role.nope}' }\n"));
+        var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config: { a: '${env.nope}', b: '${role.nope}' }\n"));
 
         var result = Expand(catalog, "  - type: sqldb\n    id: one\n  - type: sqldb\n    id: two\n");
 
         Assert.Equal(4, result.Errors.Count);
-        Assert.All(result.Errors, e => Assert.Equal("f4.yaml", e.File));
-        Assert.Contains(result.Errors, e => e.Location == "nodes.n.config.b" && e.Message.StartsWith("for requires[1] ('two')"));
+        Assert.All(result.Errors, e => Assert.Equal(ComponentFile, e.File));
+        Assert.Contains(result.Errors, e => e.Location == $"{TestCatalog.PartPath}.nodes.n.config.b" && e.Message.StartsWith("for requires[1] ('two')"));
         Assert.Empty(result.Requirements);
     }
 
     [Fact]
     public async Task The_loaded_catalog_is_not_changed_by_expansion()
     {
-        var catalog = await LoadAsync(Mapping("{ type: sqldb }", "  n:\n    template: t/n\n    config: { size: 400, tags: [1], nested: { k: v } }\n"));
-        string Snapshot() => JsonConvert.SerializeObject(catalog.Mappings);
+        var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config: { size: 400, tags: [1], nested: { k: v } }\n"));
+        string Snapshot() => JsonConvert.SerializeObject(catalog.Components);
         var before = Snapshot();
 
         var node = Assert.Single(Assert.Single(Expand(catalog, "  - type: sqldb\n").Requirements).Nodes);

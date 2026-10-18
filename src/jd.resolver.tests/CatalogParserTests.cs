@@ -7,10 +7,8 @@ public class CatalogParserTests
 {
     private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n";
 
-    private static string TypeFile(string name) => $"kind: ResourceType\nname: {name}\ndescription: test\nclasses: [standard]\nexports: [endpoint]\n";
-
-    private static string MappingFile(string type) =>
-        $"kind: Mapping\nmatch: {{ type: {type} }}\nnodes:\n  db:\n    template: t/db\n    config: {{ size: 1 }}\nexports:\n  endpoint: ${{db.endpoint}}\n";
+    private static string ComponentFile(string name, string exports = "  endpoint: ${db.endpoint}\n", string key = "default") =>
+        TestCatalog.Component(name, "[endpoint]", $"nodes:\n  db:\n    template: t/db\n    config: {{ size: 1 }}\nexports:\n{exports}", key);
 
     private static string PolicyFile(string name) =>
         $"kind: Policy\nname: {name}\nreason: because\nmatch: {{ kind: runtime }}\nset: {{ runtime.b: 1 }}\n";
@@ -39,8 +37,8 @@ public class CatalogParserTests
     {
         var result = await Parse(
             ("catalog.yaml", CatalogFile),
-            ("types/a.yaml", TypeFile("alpha-db")),
-            ("maps/a.yaml", MappingFile("alpha-db")),
+            ("components/a.yaml", ComponentFile("alpha-db")),
+            ("runtimes/r.yaml", TestCatalog.RuntimeFile),
             ("policies/p.yaml", PolicyFile("p-one") + "add:\n  extra:\n    kind: grant\n    template: t/x\n    config: { k: v }\n"),
             ("naming.yaml", "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{hash}\"\n    maxLength: 20\n    allowed: \"[a-z0-9]\"\n"),
             ("roles.yaml", "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n"));
@@ -49,13 +47,17 @@ public class CatalogParserTests
         var catalog = Assert.IsType<Catalog>(result.Catalog);
         Assert.Equal("1", catalog.Version);
         Assert.Equal([("dev", false), ("stage", true)], catalog.EnvironmentTypes.Select(t => (t.Key, t.Value.Approval)).OrderBy(t => t.Key, StringComparer.Ordinal));
-        Assert.Equal("alpha-db", Assert.Single(catalog.Types).Name);
-        var mapping = Assert.Single(catalog.Mappings);
-        Assert.Equal("maps/a.yaml", mapping.Source);
-        Assert.Equal("alpha-db", mapping.Match.Criteria["type"]);
-        Assert.Equal(NodeKind.Create, mapping.Nodes["db"].Kind);
-        Assert.Equal(1, (int)mapping.Nodes["db"].Config["size"]);
-        Assert.Equal("${db.endpoint}", mapping.Exports["endpoint"]);
+        var component = Assert.Single(catalog.Components).Value;
+        Assert.Equal(("alpha-db", "components/a.yaml"), (component.Name, component.Source));
+        Assert.Equal(["endpoint"], component.Exports);
+        var part = Assert.Single(Assert.Single(component.Implementations, i => i.Key == "default").Value.Classes, c => c.Key == "standard").Value;
+        Assert.Equal(NodeKind.Create, part.Nodes["db"].Kind);
+        Assert.Equal(1, (int)part.Nodes["db"].Config["size"]);
+        Assert.Equal("${db.endpoint}", part.Exports["endpoint"]);
+        var runtime = Assert.Single(catalog.Runtimes).Value;
+        var implementation = Assert.Single(runtime.Implementations, i => i.Key == "default").Value;
+        Assert.Equal(("container-app", "runtimes/r.yaml", TestCatalog.Probe, TestCatalog.Release), (runtime.Name, runtime.Source, implementation.Probe, implementation.Release));
+        Assert.Equal("t/runtime", implementation.Nodes["runtime"].Template);
         var policy = Assert.Single(catalog.Policies);
         Assert.Equal(NodeKind.Grant, policy.Add["extra"].Kind);
         Assert.True(policy.Set.ContainsKey("runtime.b"));
@@ -75,6 +77,19 @@ public class CatalogParserTests
         Assert.Null(result.Catalog);
     }
 
+    [Theory]
+    [InlineData("ResourceType", "a Component file holds the type's contract (exports) beside its implementations")]
+    [InlineData("Mapping", "a Component's implementations (per environment type, then class) replace a type's mappings, and a Runtime file the runtime mapping")]
+    public async Task An_old_kind_is_an_error_saying_what_replaced_it(string kind, string replacement)
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("old.yaml", $"kind: {kind}\nname: alpha-db\n"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("old.yaml", "kind"), (error.File, error.Location));
+        Assert.Equal($"kind '{kind}' is no longer supported: {replacement}.", error.Message);
+        Assert.Null(result.Catalog);
+    }
+
     [Fact]
     public async Task Missing_kind_is_an_error()
     {
@@ -88,7 +103,7 @@ public class CatalogParserTests
     [Fact]
     public async Task Missing_catalog_file_is_an_error()
     {
-        var result = await Parse(("types/a.yaml", TypeFile("alpha-db")));
+        var result = await Parse(("components/a.yaml", ComponentFile("alpha-db")));
 
         Assert.Contains(result.Errors, e => e.Message.Contains("exactly one is required"));
     }
@@ -103,14 +118,17 @@ public class CatalogParserTests
         Assert.Contains("a.yaml", error.Message);
     }
 
-    [Fact]
-    public async Task Duplicate_type_name_is_an_error()
+    [Theory]
+    [InlineData("components/b.yaml")]
+    [InlineData("runtimes/b.yaml")]
+    public async Task Components_and_runtimes_share_one_namespace(string second)
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("types/a.yaml", TypeFile("alpha-db")), ("types/b.yaml", TypeFile("alpha-db")));
+        var duplicate = second.StartsWith("runtimes/", StringComparison.Ordinal) ? TestCatalog.RuntimeFile.Replace("container-app", "alpha-db", StringComparison.Ordinal) : ComponentFile("alpha-db");
+        var result = await Parse(("catalog.yaml", CatalogFile), ("components/a.yaml", ComponentFile("alpha-db")), (second, duplicate));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal("types/b.yaml", error.File);
-        Assert.Contains("'alpha-db' is already declared in types/a.yaml", error.Message);
+        Assert.Equal((second, "name"), (error.File, error.Location));
+        Assert.Equal("'alpha-db' is already declared in components/a.yaml.", error.Message);
     }
 
     [Fact]
@@ -124,40 +142,43 @@ public class CatalogParserTests
     }
 
     [Theory]
-    [InlineData("  endpoint: ${db.endpoint}\n  extra: ${db.extra}\n", "not in the type: extra")]
-    [InlineData("  other: ${db.endpoint}\n", "missing endpoint")]
-    public async Task Mapping_exports_must_equal_the_type_exports(string exports, string expected)
+    [InlineData("default", "  endpoint: ${db.endpoint}\n  extra: ${db.extra}\n", "not in the contract: extra")]
+    [InlineData("stage", "  other: ${db.endpoint}\n", "missing endpoint; not in the contract: other")]
+    [InlineData("default", "  {}\n", "missing endpoint")]
+    public async Task Every_class_of_every_implementation_must_export_exactly_the_contract(string key, string exports, string problem)
     {
-        var mapping = "kind: Mapping\nmatch: { type: alpha-db }\nnodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n" + exports;
-        var result = await Parse(("catalog.yaml", CatalogFile), ("types/a.yaml", TypeFile("alpha-db")), ("maps/a.yaml", mapping));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("components/a.yaml", ComponentFile("alpha-db", exports, key)));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal("maps/a.yaml", error.File);
-        Assert.Equal("exports", error.Location);
-        Assert.Contains(expected, error.Message);
+        Assert.Equal(("components/a.yaml", $"implementations.{key}.classes.standard.exports"), (error.File, error.Location));
+        Assert.Equal($"must export exactly the contract of component 'alpha-db' (endpoint); {problem}.", error.Message);
+        Assert.Null(result.Catalog);
+    }
+
+    [Theory]
+    [InlineData("components/a.yaml")]
+    [InlineData("runtimes/r.yaml")]
+    public async Task An_implementation_keyed_by_an_undeclared_environment_type_is_an_error(string file)
+    {
+        var content = file.StartsWith("runtimes/", StringComparison.Ordinal) ? TestCatalog.Runtime("nodes:\n  runtime: { template: t/rt, config: {} }\n", "stagee") : ComponentFile("alpha-db", key: "stagee");
+        var result = await Parse(("catalog.yaml", CatalogFile), (file, content));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal((file, "implementations.stagee"), (error.File, error.Location));
+        Assert.Equal("'stagee' is not a declared environment type (declared: dev, stage).", error.Message);
     }
 
     [Fact]
-    public async Task Mapping_for_an_undeclared_type_is_an_error()
+    public async Task Implementations_with_different_classes_are_an_error()
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("types/a.yaml", TypeFile("alpha-db")), ("maps/b.yaml", MappingFile("beta-db")));
+        const string part = "{ nodes: { db: { template: t/db, config: {} } }, exports: { endpoint: x } }";
+        var component = "kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n"
+            + $"  default:\n    classes: {{ standard: {part} }}\n  stage:\n    classes: {{ standard: {part}, isolated: {part} }}\n";
+        var result = await Parse(("catalog.yaml", CatalogFile), ("components/a.yaml", component));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal("maps/b.yaml", error.File);
-        Assert.Equal("match.type", error.Location);
-        Assert.Contains("'beta-db'", error.Message);
-        Assert.Contains("alpha-db", error.Message);
-    }
-
-    [Fact]
-    public async Task Mapping_matching_an_undeclared_environment_type_is_an_error()
-    {
-        var mapping = "kind: Mapping\nmatch: { type: alpha-db, environmentType: stagee }\nnodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: ${db.endpoint}\n";
-        var result = await Parse(("catalog.yaml", CatalogFile), ("types/a.yaml", TypeFile("alpha-db")), ("maps/a.yaml", mapping));
-
-        var error = Assert.Single(result.Errors);
-        Assert.Equal(("maps/a.yaml", "match.environmentType"), (error.File, error.Location));
-        Assert.Contains("'stagee' is not a declared environment type (declared: dev, stage)", error.Message);
+        Assert.Equal(("components/a.yaml", "implementations.stage.classes"), (error.File, error.Location));
+        Assert.Equal("declares standard, isolated; every implementation must declare the classes of 'default' (standard).", error.Message);
     }
 
     [Fact]
@@ -173,13 +194,11 @@ public class CatalogParserTests
     [Fact]
     public async Task Schema_violation_is_reported_with_file_and_location()
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("maps/bad.yaml", "kind: Mapping\nmatch: { type: x }\nnodes:\n  db:\n    template: t\nexports: {}\n"));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("components/bad.yaml", TestCatalog.Component("alpha-db", "[]", "nodes:\n  db:\n    template: t\n")));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal("maps/bad.yaml", error.File);
-        Assert.Equal("nodes.db", error.Location);
-        Assert.Contains("PropertyRequired: #/nodes.db.config", error.Message);
-        Assert.Contains("maps/bad.yaml", error.ToString());
+        Assert.Equal(("components/bad.yaml", "implementations.default"), (error.File, error.Location));
+        Assert.Contains($"#/{TestCatalog.PartPath}.nodes.db.config", error.Message);
     }
 
     [Fact]
@@ -244,14 +263,17 @@ public class CatalogParserTests
     [InlineData("1a")]
     [InlineData("a.b")]
     [InlineData("a@b")]
-    public async Task Node_names_in_mappings_and_policy_adds_must_be_lowercase_kebab(string name)
+    public async Task Node_names_in_components_runtimes_and_policy_adds_must_be_lowercase_kebab(string name)
     {
-        var mapping = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ kind: runtime }}\n{TestCatalog.ProbeAndRelease}nodes:\n  runtime:\n    template: t/x\n    config: {{}}\n  \"{name}\":\n    template: t/x\n    config: {{}}\n"));
+        var component = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", TestCatalog.Component("alpha-db", "[]", $"nodes:\n  \"{name}\":\n    template: t/x\n    config: {{}}\n")));
+        var runtime = await Parse(("catalog.yaml", CatalogFile), ("r.yaml", TestCatalog.Runtime($"nodes:\n  runtime:\n    template: t/x\n    config: {{}}\n  \"{name}\":\n    template: t/x\n    config: {{}}\n")));
         var policy = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {{ kind: runtime }}\nadd:\n  \"{name}\":\n    template: t/x\n    config: {{}}\n"));
 
-        var mappingError = Assert.Single(mapping.Errors);
-        Assert.Equal(("m.yaml", $"nodes.{name}"), (mappingError.File, mappingError.Location));
-        Assert.Contains("not a valid node name", mappingError.Message);
+        var componentError = Assert.Single(component.Errors);
+        Assert.Equal(("c.yaml", $"{TestCatalog.PartPath}.nodes.{name}"), (componentError.File, componentError.Location));
+        Assert.Contains("not a valid node name", componentError.Message);
+        var runtimeError = Assert.Single(runtime.Errors);
+        Assert.Equal(("r.yaml", $"implementations.default.nodes.{name}"), (runtimeError.File, runtimeError.Location));
         var policyError = Assert.Single(policy.Errors);
         Assert.Equal(("p.yaml", $"add.{name}"), (policyError.File, policyError.Location));
     }
@@ -259,56 +281,45 @@ public class CatalogParserTests
     [Fact]
     public async Task Kebab_node_names_load()
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime }\n" + TestCatalog.ProbeAndRelease + "nodes:\n  runtime:\n    template: t/x\n    config: {}\n  app-insights-2:\n    template: t/x\n    config: {}\n"));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("r.yaml", TestCatalog.Runtime("nodes:\n  runtime:\n    template: t/x\n    config: {}\n  app-insights-2:\n    template: t/x\n    config: {}\n")));
 
         Assert.Empty(result.Errors);
     }
 
-    [Fact]
-    public async Task A_mapping_must_match_a_type_or_a_kind()
+    private const string RuntimeHead = "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n";
+    private const string RuntimeNode = "    nodes:\n      runtime:\n        template: t/rt\n        config: {}\n";
+    private const string Probe = "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n";
+    private const string Release = "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n";
+    private const string ComponentHead = "kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n  default:\n";
+    private const string ClassesWith = "    classes:\n      standard:\n        exports: { endpoint: x }\n        nodes:\n          ";
+
+    // The schema reports a violation inside an implementation at the implementation, naming the path inside it.
+    [Theory]
+    [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      other:\n        template: t/rt\n        config: {}\n", "implementations.default.nodes")]
+    [InlineData(RuntimeHead + Probe + Release + RuntimeNode + "    exports:\n      endpoint: x\n", "implementations.default.exports")]
+    [InlineData(ComponentHead + Probe + ClassesWith + "db: { template: t/db, config: {} }\n", "implementations.default.probe")]
+    [InlineData(RuntimeHead + Probe + RuntimeNode, "implementations.default.release")]
+    [InlineData(RuntimeHead + Release + RuntimeNode, "implementations.default.probe")]
+    public async Task The_schema_rules_of_runtimes_and_components_are_enforced(string file, string path)
     {
-        const string body = "nodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: x\n";
-        var neither = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", $"kind: Mapping\nmatch: {{ class: standard }}\n{body}"));
-        var runtime = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", "kind: Mapping\nmatch: { kind: runtime, runtime: container-app }\n" + TestCatalog.ProbeAndRelease + "nodes:\n  runtime:\n    template: t/db\n    config: {}\n"));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("f.yaml", file));
 
-        var error = Assert.Single(neither.Errors);
-        Assert.Equal(("m.yaml", "match"), (error.File, error.Location));
-        Assert.Empty(runtime.Errors);
-    }
-
-    private const string RuntimeHead = "kind: Mapping\nmatch: { kind: runtime }\n";
-    private const string RuntimeNode = "nodes:\n  runtime:\n    template: t/rt\n    config: {}\n";
-    private const string Probe = "probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n";
-    private const string Release = "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n";
-
-    [Fact]
-    public async Task A_runtime_mapping_loads_with_its_probe_and_release_and_no_exports()
-    {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + Probe + Release + RuntimeNode));
-
-        Assert.Empty(result.Errors);
-        var mapping = Assert.Single(result.Catalog!.Mappings);
-        Assert.True(mapping.IsRuntime);
-        Assert.Equal((TestCatalog.Probe, TestCatalog.Release), (mapping.Probe, mapping.Release));
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("f.yaml", "implementations.default"), (error.File, error.Location));
+        Assert.Contains($"#/{path}", error.Message);
     }
 
     [Theory]
-    [InlineData(RuntimeHead + Probe + Release + "nodes:\n  other:\n    template: t/rt\n    config: {}\n", "nodes", "must declare a node named 'runtime'")]
-    [InlineData(RuntimeHead + Probe + Release + RuntimeNode + "exports:\n  endpoint: x\n", "exports", "has no exports")]
-    [InlineData("kind: Mapping\nmatch: { type: alpha-db }\nnodes:\n  runtime:\n    template: t/rt\n    config: {}\nexports:\n  endpoint: x\n", "nodes.runtime", "declared only by a runtime mapping")]
-    [InlineData("kind: Mapping\nmatch: { type: alpha-db }\n" + Probe + "nodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: x\n", "probe", "only a runtime mapping has a probe")]
-    [InlineData("kind: Mapping\nmatch: { type: alpha-db }\n" + Release + "nodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: x\n", "release", "only a runtime mapping has a release block")]
-    [InlineData(RuntimeHead + Probe + RuntimeNode, "release", "must have a release block")]
-    [InlineData(RuntimeHead + Release + RuntimeNode, "probe", "must have a probe")]
-    [InlineData(RuntimeHead + "probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 6 }\n" + Release + RuntimeNode, "probe.intervalSeconds", "must not exceed timeoutSeconds")]
-    [InlineData(RuntimeHead + Probe + Release + "nodes:\n  runtime:\n    template: t/rt\n    config: { suffix: x }\n", "nodes.runtime.config.suffix", "the release flow sets this input")]
-    [InlineData(RuntimeHead + Probe + Release + "nodes:\n  runtime:\n    template: t/rt\n    config: { traffic: [] }\n", "nodes.runtime.config.traffic", "the release flow sets this input")]
-    public async Task The_runtime_mapping_rules_are_enforced(string mapping, string location, string message)
+    [InlineData(ComponentHead + ClassesWith + "runtime: { template: t/rt, config: {} }\n", TestCatalog.PartPath + ".nodes.runtime", "'runtime' is the runtime node, declared only by a Runtime.")]
+    [InlineData(RuntimeHead + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 6 }\n" + Release + RuntimeNode, "implementations.default.probe.intervalSeconds", "must not exceed timeoutSeconds.")]
+    [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      runtime:\n        template: t/rt\n        config: { suffix: x }\n", "implementations.default.nodes.runtime.config.suffix", "the release flow sets this input; the runtime node must not.")]
+    [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      runtime:\n        template: t/rt\n        config: { traffic: [] }\n", "implementations.default.nodes.runtime.config.traffic", "the release flow sets this input; the runtime node must not.")]
+    public async Task The_runtime_rules_are_enforced(string file, string location, string message)
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("types/a.yaml", TypeFile("alpha-db")), ("m.yaml", mapping));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("f.yaml", file));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("m.yaml", location), (error.File, error.Location));
+        Assert.Equal(("f.yaml", location), (error.File, error.Location));
         Assert.Contains(message, error.Message);
     }
 
@@ -326,10 +337,11 @@ public class CatalogParserTests
     [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, method: POST }", "probe.method")]
     public async Task A_bad_probe_is_an_error(string probe, string location)
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + $"probe: {probe}\n" + Release + RuntimeNode));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + $"    probe: {probe}\n" + Release + RuntimeNode));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("m.yaml", location), (error.File, error.Location));
+        Assert.Equal(("m.yaml", "implementations.default"), (error.File, error.Location));
+        Assert.Contains($"#/implementations.default.{location}", error.Message);
     }
 
     [Theory]
@@ -351,8 +363,8 @@ public class CatalogParserTests
         var missing = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + Probe + without + RuntimeNode));
         var blank = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + Probe + empty + RuntimeNode));
 
-        Assert.Contains(missing.Errors, e => e.Location == $"release.{name}");
-        Assert.Equal($"release.{name}", Assert.Single(blank.Errors).Location);
+        Assert.Contains(missing.Errors, e => e.Message.Contains($"#/implementations.default.release.{name}", StringComparison.Ordinal));
+        Assert.Contains($"#/implementations.default.release.{name}", Assert.Single(blank.Errors).Message);
     }
 
     [Fact]
@@ -446,24 +458,11 @@ public class CatalogParserTests
     [Fact]
     public async Task Schema_invalid_catalog_file_still_counts_as_the_catalog()
     {
-        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: 1\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n"), ("types/a.yaml", TypeFile("alpha-db")));
+        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: 1\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n"), ("components/a.yaml", ComponentFile("alpha-db")));
 
         var error = Assert.Single(result.Errors);
         Assert.Equal("catalog.yaml", error.File);
         Assert.Contains("schema violation", error.Message);
-    }
-
-    [Fact]
-    public async Task Schema_invalid_type_file_still_declares_its_name()
-    {
-        // The type fails its schema (no description) but its name is known, so the mapping is not blamed.
-        var result = await Parse(
-            ("catalog.yaml", CatalogFile),
-            ("types/a.yaml", "kind: ResourceType\nname: alpha-db\nclasses: [standard]\nexports: [endpoint]\n"),
-            ("maps/a.yaml", MappingFile("alpha-db")));
-
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("types/a.yaml", error.File);
     }
 
     [Fact]
@@ -481,15 +480,15 @@ public class CatalogParserTests
     public async Task All_errors_are_reported_together()
     {
         var result = await Parse(
-            ("types/a.yaml", TypeFile("alpha-db")),
-            ("types/b.yaml", TypeFile("alpha-db")),
-            ("maps/c.yaml", MappingFile("gamma-db")),
+            ("components/a.yaml", ComponentFile("alpha-db")),
+            ("components/b.yaml", ComponentFile("alpha-db")),
+            ("components/c.yaml", ComponentFile("gamma-db", "  other: x\n")),
             ("odd.yaml", "kind: Widget\n"),
             ("roles.yaml", "kind: Roles\nroles:\n  reader: not-a-guid\n"));
 
         var files = result.Errors.Select(e => e.File).ToHashSet();
-        Assert.Contains("types/b.yaml", files);
-        Assert.Contains("maps/c.yaml", files);
+        Assert.Contains("components/b.yaml", files);
+        Assert.Contains("components/c.yaml", files);
         Assert.Contains("odd.yaml", files);
         Assert.Contains("roles.yaml", files);
     }

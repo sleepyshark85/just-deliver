@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 
 namespace jd.resolver.expansion;
 
-/// <summary>A config value after evaluation. The tree mirrors the mapping's config: strings are evaluated, everything else is carried over.</summary>
+/// <summary>A config value after evaluation. The tree mirrors the catalog node's config: strings are evaluated, everything else is carried over.</summary>
 public abstract record ConfigValue;
 
 /// <summary>A non-string scalar, copied from the catalog.</summary>
@@ -23,17 +23,17 @@ public sealed record ConfigArray(IReadOnlyList<ConfigValue> Items) : ConfigValue
 
 public sealed record ExpandedNode(string Name, string Template, NodeKind Kind, IReadOnlyDictionary<string, ConfigValue> Config);
 
-/// <summary>One requirement expanded from the mapping in <see cref="Mapping"/> (catalog-relative path of the selected file).</summary>
+/// <summary>One requirement expanded from the component in <see cref="Source"/> (catalog-relative path of its file).</summary>
 public sealed record ExpandedRequirement(
     string Id,
     string Type,
     string Class,
-    string Mapping,
+    string Source,
     IReadOnlyList<ExpandedNode> Nodes,
     IReadOnlyDictionary<string, EvalResult> Exports);
 
-/// <summary>The workload's runtime nodes expanded from the runtime mapping in <see cref="Mapping"/>, with the mapping's probe and release block. <see cref="WorkloadFile"/> is where the workload's variables, which the runtime mapping puts in its config, were written.</summary>
-public sealed record ExpandedRuntime(string Mapping, IReadOnlyList<ExpandedNode> Nodes, Probe? Probe, RuntimeRelease? Release, string WorkloadFile);
+/// <summary>The workload's runtime nodes expanded from the runtime in <see cref="Source"/>, with its probe and release block. <see cref="WorkloadFile"/> is where the workload's variables, which the runtime puts in its config, were written.</summary>
+public sealed record ExpandedRuntime(string Source, IReadOnlyList<ExpandedNode> Nodes, Probe? Probe, RuntimeRelease? Release, string WorkloadFile);
 
 /// <summary>Who the requirements belong to: a workload (it has a runtime), or an environment definition (substrate, no runtime).</summary>
 public enum OwnerKind

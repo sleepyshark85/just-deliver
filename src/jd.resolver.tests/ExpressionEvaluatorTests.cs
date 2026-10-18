@@ -255,13 +255,13 @@ public class ExpressionEvaluatorTests
         Assert.NotNull(catalog);
         var workload = YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
-        var mapping = Assert.Single(catalog.Mappings, m => m.Match.Criteria.GetValueOrDefault("type") == "database");
-        var runtime = Assert.Single(catalog.Mappings, m => m.IsRuntime);
+        var part = catalog.Components["database"].Implementations["default"].Classes["standard"];
+        var runtime = Assert.Single(catalog.Runtimes).Value.Implementations["default"];
         var policy = Assert.Single(catalog.Policies);
-        var nodeNames = mapping.Nodes.Keys.Concat(policy.Add.Keys).ToHashSet();
-        var strings = mapping.Nodes.Values.Concat(policy.Add.Values).Concat(runtime.Nodes.Values).SelectMany(n => n.Config.Values)
+        var nodeNames = part.Nodes.Keys.Concat(policy.Add.Keys).ToHashSet();
+        var strings = part.Nodes.Values.Concat(policy.Add.Values).Concat(runtime.Nodes.Values).SelectMany(n => n.Config.Values)
             .Concat(policy.Set.Values).Select(t => t.ToString())
-            .Concat(mapping.Exports.Values)
+            .Concat(part.Exports.Values)
             .Append(sampleEndpoint)
             .ToList();
 

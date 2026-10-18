@@ -29,7 +29,6 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     private void WriteCatalog(string revisionSuffix, string traffic)
     {
         Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n");
-        Write("catalog/types/probe.yaml", "kind: ResourceType\nname: probe\ndescription: Test-only type.\nclasses: [standard]\nexports: [app]\n");
         Write("catalog/naming.yaml", """
             kind: Naming
             rules:
@@ -37,53 +36,59 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
               cae: { pattern: "cae-{env}-{hash}", maxLength: 32, allowed: "[a-z0-9-]" }
               ca: { pattern: "ca-{env}-{hash}", maxLength: 32, allowed: "[a-z0-9-]" }
             """);
-        Write("catalog/mappings/probe.yaml", $$"""
-            kind: Mapping
-            match: { type: probe, class: standard }
-            nodes:
-              group:
-                template: azure/resource-group
-                config:
-                  resourceGroupName: ${env.probeGroup}
-                  location: ${env.region}
-                  tags: { project: just-deliver-mvp }
-              workspace:
-                template: azure/log-analytics
-                config:
-                  resourceGroupName: ${group.resourceGroupName}
-                  location: ${group.location}
-                  workspaceName: ${name('law')}
-                  dailyQuotaGb: 0.15
-              apps:
-                template: azure/container-apps-environment
-                config:
-                  resourceGroupName: ${group.resourceGroupName}
-                  location: ${group.location}
-                  environmentName: ${name('cae')}
-                  workspaceResourceGroupName: ${group.resourceGroupName}
-                  workspaceName: ${workspace.workspaceName}
-                  workspaceCustomerId: ${workspace.workspaceCustomerId}
-              app:
-                template: azure/container-app
-                config:
-                  resourceGroupName: ${group.resourceGroupName}
-                  location: ${group.location}
-                  containerAppsEnvironmentId: ${apps.environmentId}
-                  containerAppName: ${name('ca')}
-                  image: {{Image}}
-                  targetPort: 8080
-                  externalIngress: true
-                  cpu: 0.25
-                  memory: 0.5Gi
-                  minReplicas: 0
-                  maxReplicas: 1
-                  maxInactiveRevisions: 5
-                  revisionSuffix: {{revisionSuffix}}
-                  traffic: {{traffic}}
-                  variables:
-                    - { name: GREETING, value: hello }
-            exports:
-              app: ${app.containerAppId}
+        Write("catalog/components/probe.yaml", $$"""
+            kind: Component
+            name: probe
+            description: Test-only component.
+            exports: [app]
+            implementations:
+              default:
+                classes:
+                  standard:
+                    nodes:
+                      group:
+                        template: azure/resource-group
+                        config:
+                          resourceGroupName: ${env.probeGroup}
+                          location: ${env.region}
+                          tags: { project: just-deliver-mvp }
+                      workspace:
+                        template: azure/log-analytics
+                        config:
+                          resourceGroupName: ${group.resourceGroupName}
+                          location: ${group.location}
+                          workspaceName: ${name('law')}
+                          dailyQuotaGb: 0.15
+                      apps:
+                        template: azure/container-apps-environment
+                        config:
+                          resourceGroupName: ${group.resourceGroupName}
+                          location: ${group.location}
+                          environmentName: ${name('cae')}
+                          workspaceResourceGroupName: ${group.resourceGroupName}
+                          workspaceName: ${workspace.workspaceName}
+                          workspaceCustomerId: ${workspace.workspaceCustomerId}
+                      app:
+                        template: azure/container-app
+                        config:
+                          resourceGroupName: ${group.resourceGroupName}
+                          location: ${group.location}
+                          containerAppsEnvironmentId: ${apps.environmentId}
+                          containerAppName: ${name('ca')}
+                          image: {{Image}}
+                          targetPort: 8080
+                          externalIngress: true
+                          cpu: 0.25
+                          memory: 0.5Gi
+                          minReplicas: 0
+                          maxReplicas: 1
+                          maxInactiveRevisions: 5
+                          revisionSuffix: {{revisionSuffix}}
+                          traffic: {{traffic}}
+                          variables:
+                            - { name: GREETING, value: hello }
+                    exports:
+                      app: ${app.containerAppId}
             """);
         WriteRuntimeStandIn();
         CopyTemplates("resource-group", "log-analytics", "container-apps-environment", "container-app");

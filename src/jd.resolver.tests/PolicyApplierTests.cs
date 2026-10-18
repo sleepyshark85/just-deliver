@@ -12,15 +12,14 @@ namespace jd.resolver.tests;
 
 public class PolicyApplierTests
 {
-    private const string MappingFile = "f4.yaml";
+    private const string ComponentFile = "f3.yaml";
 
     private static readonly string[] BaseFiles =
     [
         "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
-        "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard, isolated]\nexports: [endpoint]\n",
         "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
         "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n",
-        "kind: Mapping\nmatch: { type: sqldb }\nnodes:\n  n:\n    template: t/n\n    config: { size: 400, keep: x, nested: { a: 1, b: 2 } }\n  m:\n    template: t/m\n    config: { size: 1 }\nexports:\n  endpoint: ${n.out}\n",
+        "kind: Component\nname: sqldb\ndescription: d\nexports: [endpoint]\nimplementations:\n  default:\n    classes:\n      standard: &part\n        nodes:\n          n:\n            template: t/n\n            config: { size: 400, keep: x, nested: { a: 1, b: 2 } }\n          m:\n            template: t/m\n            config: { size: 1 }\n        exports:\n          endpoint: ${n.out}\n      isolated: *part\n",
     ];
 
     private static string Policy(string name, string match, string body) =>
@@ -31,7 +30,7 @@ public class PolicyApplierTests
 
     private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string type = "dev", bool expectExpansionErrors = false)
     {
-        var files = BaseFiles.Concat(policies).Append(TestCatalog.RuntimeMapping).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
+        var files = BaseFiles.Concat(policies).Append(TestCatalog.RuntimeFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
@@ -57,8 +56,8 @@ public class PolicyApplierTests
 
         var node = Node(result, "n");
         Assert.Equal(1000, Number(node.Config["size"]));
-        Assert.Equal(new Provenance("f5.yaml", "pol", Layer.PolicySet), node.Provenance["size"]);
-        Assert.Equal(new Provenance(MappingFile, MappingFile, Layer.Mapping), node.Provenance["keep"]);
+        Assert.Equal(new Provenance("f4.yaml", "pol", Layer.PolicySet), node.Provenance["size"]);
+        Assert.Equal(new Provenance(ComponentFile, ComponentFile, Layer.Implementation), node.Provenance["keep"]);
         Assert.Equal(1, Number(Node(result, "m").Config["size"]));
     }
 
@@ -73,9 +72,9 @@ public class PolicyApplierTests
 
         var node = Node(result, "n");
         Assert.Equal(400, Number(node.Config["size"]));
-        Assert.Equal(new Provenance(MappingFile, MappingFile, Layer.Mapping), node.Provenance["size"]);
+        Assert.Equal(new Provenance(ComponentFile, ComponentFile, Layer.Implementation), node.Provenance["size"]);
         Assert.Equal("h1", Text(node.Config["fresh"]));
-        Assert.Equal(new Provenance("f5.yaml", "a-default", Layer.PolicyDefault), node.Provenance["fresh"]);
+        Assert.Equal(new Provenance("f4.yaml", "a-default", Layer.PolicyDefault), node.Provenance["fresh"]);
         Assert.Equal("strict", Text(node.Config["won"]));
         Assert.Equal(Layer.PolicySet, node.Provenance["won"].Layer);
     }
@@ -91,7 +90,7 @@ public class PolicyApplierTests
         Assert.Equal(1, Number(At(node, "nested.a")));
         Assert.Equal(Layer.PolicySet, node.Provenance["deep.er.level"].Layer);
         Assert.Equal(Layer.PolicySet, node.Provenance["nested.b"].Layer);
-        Assert.Equal(Layer.Mapping, node.Provenance["nested.a"].Layer);
+        Assert.Equal(Layer.Implementation, node.Provenance["nested.a"].Layer);
     }
 
     [Fact]
@@ -100,7 +99,7 @@ public class PolicyApplierTests
         var result = await ApplyAsync([Policy("pol", "{ template: t/n }", "set: { 'keep.inner': 1 }\n")]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f5.yaml", "set.keep.inner"), (error.File, error.Location));
+        Assert.Equal(("f4.yaml", "set.keep.inner"), (error.File, error.Location));
         Assert.Contains("not an object", error.Message);
     }
 
@@ -114,10 +113,10 @@ public class PolicyApplierTests
         ]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Contains("'alpha' (f6.yaml)", error.Message);
-        Assert.Contains("'zeta' (f5.yaml)", error.Message);
+        Assert.Contains("'alpha' (f5.yaml)", error.Message);
+        Assert.Contains("'zeta' (f4.yaml)", error.Message);
         Assert.Contains("'size'", error.Message);
-        Assert.Equal("f6.yaml", error.File);
+        Assert.Equal("f5.yaml", error.File);
     }
 
     [Fact]
@@ -193,23 +192,23 @@ public class PolicyApplierTests
         var runtime = Assert.Single(result.RuntimeNodes);
         Assert.Equal(("runtime", TestCatalog.Probe, TestCatalog.Release), (runtime.Name, runtime.Probe, runtime.Release));
         Assert.Equal(2, Number(runtime.Config["k"]));
-        Assert.Equal(new Provenance("f5.yaml", "size", Layer.PolicySet), runtime.Provenance["k"]);
+        Assert.Equal(new Provenance("f4.yaml", "size", Layer.PolicySet), runtime.Provenance["k"]);
         Assert.Empty(result.WorkloadNodes);
     }
 
     [Fact]
-    public async Task A_policy_cannot_add_a_node_the_runtime_mapping_already_declares()
+    public async Task A_policy_cannot_add_a_node_the_runtime_already_declares()
     {
-        var runtimeMapping = "kind: Mapping\nmatch: { kind: runtime }\n" + TestCatalog.ProbeAndRelease + "nodes:\n  runtime:\n    template: t/rt\n    config: {}\n  sidecar:\n    template: t/s\n    config: {}\n";
+        var runtimeFile = TestCatalog.Runtime("nodes:\n  runtime:\n    template: t/rt\n    config: {}\n  sidecar:\n    template: t/s\n    config: {}\n");
         var policy = Policy("pol", "{ kind: runtime }", "add:\n  sidecar:\n    template: t/x\n    config: {}\n");
-        var loaded = await CatalogParser.ParseAsync(BaseFiles.Append(runtimeMapping).Append(policy).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
+        var loaded = await CatalogParser.ParseAsync(BaseFiles.Append(runtimeFile).Append(policy).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\ncontainer: { image: i }\nrequires:\n  - type: sqldb\n");
 
         var result = new PolicyApplier(loaded.Catalog!, Env()).Apply(new Expander(loaded.Catalog!, Env()).Expand(workload, "workload.yaml"));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f6.yaml", "add.sidecar"), (error.File, error.Location));
+        Assert.Equal(("f5.yaml", "add.sidecar"), (error.File, error.Location));
         Assert.Contains("already declares", error.Message);
         Assert.Empty(result.WorkloadNodes);
     }
@@ -229,8 +228,8 @@ public class PolicyApplierTests
         var appi = result.WorkloadNodes[0];
         Assert.Equal("shop-appi", Text(appi.Config["name"]));
         Assert.Equal(30, Number(appi.Config["retention"]));
-        Assert.Equal(new Provenance("f5.yaml", "monitoring", Layer.PolicyAdd), appi.Provenance["name"]);
-        Assert.Equal(new Provenance("f6.yaml", "hardening", Layer.PolicySet), appi.Provenance["retention"]);
+        Assert.Equal(new Provenance("f4.yaml", "monitoring", Layer.PolicyAdd), appi.Provenance["name"]);
+        Assert.Equal(new Provenance("f5.yaml", "hardening", Layer.PolicySet), appi.Provenance["retention"]);
         var access = result.WorkloadNodes[1];
         Assert.Equal(NodeKind.Grant, access.Kind);
         Assert.Equal(Layer.PolicyAdd, access.Provenance["scope"].Layer);
@@ -283,8 +282,8 @@ public class PolicyApplierTests
         var result = await ApplyAsync([Policy("first", "{ kind: runtime }", add), Policy("second", "{ kind: runtime }", add)]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Contains("'first' (f5.yaml)", error.Message);
-        Assert.Contains("'second' (f6.yaml)", error.Message);
+        Assert.Contains("'first' (f4.yaml)", error.Message);
+        Assert.Contains("'second' (f5.yaml)", error.Message);
         Assert.Contains("'extra'", error.Message);
         Assert.Single(result.WorkloadNodes);
     }
@@ -301,8 +300,8 @@ public class PolicyApplierTests
         ]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Contains("'inner' (f6.yaml)", error.Message);
-        Assert.Contains("'outer' (f5.yaml)", error.Message);
+        Assert.Contains("'inner' (f5.yaml)", error.Message);
+        Assert.Contains("'outer' (f4.yaml)", error.Message);
         Assert.Contains("'fresh' and 'fresh.b'", error.Message);
         Assert.False(Node(result, "n").Config.ContainsKey("fresh"));
     }
@@ -323,7 +322,7 @@ public class PolicyApplierTests
         var result = await ApplyAsync([Policy("pol", "{ template: t/n }", "set: { a: '${env.nope}' }\n")]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f5.yaml", "set.a"), (error.File, error.Location));
+        Assert.Equal(("f4.yaml", "set.a"), (error.File, error.Location));
     }
 
     [Fact]
@@ -363,7 +362,7 @@ public class PolicyApplierTests
             Leaves(string.Empty, new ConfigObject(n.Config)).Order(StringComparer.Ordinal),
             n.Provenance.Keys.Order(StringComparer.Ordinal)));
         Assert.Equal(
-            [Layer.Mapping, Layer.PolicySet, Layer.PolicyDefault, Layer.PolicyAdd],
+            [Layer.Implementation, Layer.PolicySet, Layer.PolicyDefault, Layer.PolicyAdd],
             nodes.SelectMany(n => n.Provenance.Values).Select(v => v.Layer).Distinct().Order());
     }
 

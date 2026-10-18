@@ -14,19 +14,17 @@ namespace jd.resolver.tests;
 
 public class GraphBuilderTests
 {
-    private const string MappingFile = "f3.yaml";
+    private const string ComponentFile = "f1.yaml";
 
     private static readonly string[] BaseFiles =
     [
         "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
-        "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard]\nexports: [endpoint]\n",
-        "kind: ResourceType\nname: other\ndescription: d\nclasses: [standard]\nexports: [endpoint]\n",
     ];
 
     private static readonly EnvironmentDescriptor Env =
         new("dev", "region", "dev", new Dictionary<string, string> { ["host"] = "h1", ["grant.ok"] = "g1" }, ["grant.ok"], null);
 
-    // One mapping node as YAML; config is a flow mapping body, written as it would be in the catalog.
+    // One component node as YAML; config is a flow mapping body, written as it would be in the catalog.
     private static string N(string name, string config, string kind = "create", string template = "")
     {
         var templateName = template.Length > 0 ? template : $"t/{name}";
@@ -37,8 +35,8 @@ public class GraphBuilderTests
 
     private static async Task<ResolvedGraph> BuildAsync(string nodes, string requires = "  - type: sqldb\n", params string[] policies)
     {
-        var mapping = $"kind: Mapping\nmatch: {{ type: sqldb }}\nnodes:\n{nodes}exports:\n  endpoint: x\n";
-        var files = BaseFiles.Append(mapping).Concat(policies).Append(TestCatalog.RuntimeMapping).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
+        var mapping = TestCatalog.Component("sqldb", "[endpoint]", $"nodes:\n{nodes}exports:\n  endpoint: x\n");
+        var files = BaseFiles.Append(mapping).Concat(policies).Append(TestCatalog.RuntimeFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
@@ -124,7 +122,7 @@ public class GraphBuilderTests
     [Fact]
     public async Task A_runtime_reference_in_an_environment_definition_is_an_error_because_it_has_no_runtime()
     {
-        var mapping = $"kind: Mapping\nmatch: {{ type: sqldb }}\nnodes:\n{N("a", "who: '${runtime.principalId}'")}exports:\n  endpoint: x\n";
+        var mapping = TestCatalog.Component("sqldb", "[endpoint]", $"nodes:\n{N("a", "who: '${runtime.principalId}'")}exports:\n  endpoint: x\n");
         var loaded = await CatalogParser.ParseAsync(BaseFiles.Append(mapping).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
         Assert.Empty(loaded.Errors);
         var expansion = new Expander(loaded.Catalog!, Env).ExpandEnvironment("dev", (JArray)YamlSchemaValidator.ParseYaml("- type: sqldb\n"), "definition.yaml");
@@ -132,7 +130,7 @@ public class GraphBuilderTests
         var graph = new GraphBuilder(Env).Build(new PolicyApplier(loaded.Catalog!, Env).Apply(expansion));
 
         var error = Assert.Single(graph.Errors);
-        Assert.Equal((MappingFile, "who"), (error.File, error.Location));
+        Assert.Equal((ComponentFile, "who"), (error.File, error.Location));
         Assert.Contains("references runtime.principalId, but there is no runtime", error.Message);
     }
 
@@ -208,7 +206,7 @@ public class GraphBuilderTests
         var graph = await BuildAsync(N("g", config, kind: "grant"));
 
         var error = Assert.Single(graph.Errors);
-        Assert.Equal((MappingFile, field), (error.File, error.Location));
+        Assert.Equal((ComponentFile, field), (error.File, error.Location));
         Assert.Contains($"node '{Id("sqldb", "g")}'", error.Message);
         Assert.Contains("env.host", error.Message);
         Assert.Contains("grantable", error.Message);
@@ -233,7 +231,7 @@ public class GraphBuilderTests
             "kind: Policy\nname: pol\nreason: r\nmatch: { template: t/g }\nset: { extra: '${env.host}' }\n");
 
         var error = Assert.Single(graph.Errors);
-        Assert.Equal(("f4.yaml", "extra"), (error.File, error.Location));
+        Assert.Equal(("f2.yaml", "extra"), (error.File, error.Location));
     }
 
     [Fact]
@@ -242,7 +240,7 @@ public class GraphBuilderTests
         var graph = await BuildAsync(N("a", "v: '${resource.other.endpoint}'"));
 
         var error = Assert.Single(graph.Errors);
-        Assert.Equal((MappingFile, "v"), (error.File, error.Location));
+        Assert.Equal((ComponentFile, "v"), (error.File, error.Location));
         Assert.Contains("resource.other.endpoint", error.Message);
         Assert.Contains(Id("sqldb", "a"), error.Message);
     }

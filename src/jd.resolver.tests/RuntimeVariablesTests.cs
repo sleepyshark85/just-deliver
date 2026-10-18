@@ -10,30 +10,31 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-// The workload's variables: fn::entries in the runtime mapping, ${resource.*} in a variable, and workload-scope policies on runtime.*.
+// The workload's variables: fn::entries in the runtime, ${resource.*} in a variable, and workload-scope policies on runtime.*.
 public class RuntimeVariablesTests
 {
     private static readonly EnvironmentDescriptor Env =
         new("dev", "region", "dev", new Dictionary<string, string> { ["host"] = "h1" }, [], null);
 
-    private const string RuntimeMapping = """
-        kind: Mapping
-        match: { kind: runtime }
-        probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
-        release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }
-        nodes:
-          runtime:
-            template: t/runtime
-            config:
-              image: ${workload.image}
-              variables:
-                fn::entries: workload.variables
+    private const string RuntimeFile = """
+        kind: Runtime
+        name: container-app
+        description: d
+        implementations:
+          default:
+            probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
+            release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }
+            nodes:
+              runtime:
+                template: t/runtime
+                config:
+                  image: ${workload.image}
+                  variables:
+                    fn::entries: workload.variables
         """;
 
     // A static export (endpoint), one waiting on a node (dyn), and a node that reads another requirement's export (the D19 case).
-    private static string Mapping(string extraConfig = "") => $$"""
-        kind: Mapping
-        match: { type: sqldb }
+    private static string Component(string extraConfig = "") => TestCatalog.Component("sqldb", "[endpoint, dyn, rt]", $$"""
         nodes:
           n:
             template: t/n
@@ -42,17 +43,16 @@ public class RuntimeVariablesTests
           endpoint: ${env.host}
           dyn: ${n.out}
           rt: ${runtime.principalId}
-        """;
+        """);
 
-    private static async Task<ResolvedGraph> ResolveAsync(string variables, string[]? policies = null, string runtimeMapping = RuntimeMapping, string mapping = "")
+    private static async Task<ResolvedGraph> ResolveAsync(string variables, string[]? policies = null, string runtimeFile = RuntimeFile, string component = "")
     {
         var files = new[]
             {
                 "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
-                "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard]\nexports: [endpoint, dyn, rt]\n",
                 "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
-                mapping.Length > 0 ? mapping : Mapping(),
-                runtimeMapping,
+                component.Length > 0 ? component : Component(),
+                runtimeFile,
             }
             .Concat(policies ?? [])
             .Select((content, i) => new CatalogSource($"f{i}.yaml", content));
@@ -144,16 +144,16 @@ public class RuntimeVariablesTests
 
     // A runtime mapping with a second node, 'granter' or 'sidecar', whose config is the given body.
     private static string RuntimeWith(string node, string kind, string body) =>
-        $"kind: Mapping\nmatch: {{ kind: runtime }}\n{TestCatalog.ProbeAndRelease}nodes:\n  runtime:\n    template: t/runtime\n    config: {{ k: 1 }}\n  {node}:\n    kind: {kind}\n    template: t/x\n    config: {{ {body} }}\n";
+        TestCatalog.Runtime($"nodes:\n  runtime:\n    template: t/runtime\n    config: {{ k: 1 }}\n  {node}:\n    kind: {kind}\n    template: t/x\n    config: {{ {body} }}\n");
 
     private static string RuntimeConfig(string body) =>
-        $"kind: Mapping\nmatch: {{ kind: runtime }}\n{TestCatalog.ProbeAndRelease}nodes:\n  runtime:\n    template: t/runtime\n    config: {{ {body} }}\n";
+        TestCatalog.Runtime($"nodes:\n  runtime:\n    template: t/runtime\n    config: {{ {body} }}\n");
 
     [Theory]
     [InlineData("a requirement node")]
     [InlineData("a policy-added node")]
     [InlineData("a policy-added grant")]
-    [InlineData("a runtime-mapping node not named runtime")]
+    [InlineData("a runtime node not named runtime")]
     [InlineData("a grant in the runtime mapping")]
     public async Task Only_the_runtime_node_may_read_a_requirements_export_whether_it_is_static_or_pending(string reader)
     {
@@ -163,10 +163,10 @@ public class RuntimeVariablesTests
             var add = $"add:\n  extra:\n    kind: {(reader.Contains("grant", StringComparison.Ordinal) ? "grant" : "create")}\n    template: t/x\n    config: {{ {read} }}\n";
             var graph = reader switch
             {
-                "a requirement node" => await ResolveAsync(string.Empty, mapping: Mapping($", {read}")),
+                "a requirement node" => await ResolveAsync(string.Empty, component: Component($", {read}")),
                 "a policy-added node" or "a policy-added grant" => await ResolveAsync(string.Empty, [WorkloadPolicy("readers", add)]),
-                "a runtime-mapping node not named runtime" => await ResolveAsync(string.Empty, runtimeMapping: RuntimeWith("sidecar", "create", read)),
-                _ => await ResolveAsync(string.Empty, runtimeMapping: RuntimeWith("granter", "grant", read)),
+                "a runtime node not named runtime" => await ResolveAsync(string.Empty, runtimeFile: RuntimeWith("sidecar", "create", read)),
+                _ => await ResolveAsync(string.Empty, runtimeFile: RuntimeWith("granter", "grant", read)),
             };
 
             var error = Assert.Single(graph.Errors);
@@ -178,26 +178,25 @@ public class RuntimeVariablesTests
     [Fact]
     public async Task A_grant_cannot_receive_the_workload_variables()
     {
-        var graph = await ResolveAsync("    A: a\n", runtimeMapping: RuntimeWith("granter", "grant", "vars: { fn::entries: workload.variables }"));
+        var graph = await ResolveAsync("    A: a\n", runtimeFile: RuntimeWith("granter", "grant", "vars: { fn::entries: workload.variables }"));
 
         Assert.Contains("fn::entries is not valid here", Assert.Single(graph.Errors).Message);
     }
 
     [Fact]
-    public async Task A_mapping_export_cannot_reference_a_resource()
+    public async Task A_component_export_cannot_reference_a_resource()
     {
         var files = new[]
         {
             "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
-            "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard]\nexports: [endpoint, dyn, lit, quoted, apostrophes, fine]\n",
-            "kind: Mapping\nmatch: { type: sqldb }\nnodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.host, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n"
-                + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.host} isn't\"\n",
+            TestCatalog.Component("sqldb", "[endpoint, dyn, lit, quoted, apostrophes, fine]", "nodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.host, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n"
+                + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.host} isn't\"\n"),
         };
 
         var loaded = await CatalogParser.ParseAsync(files.Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
 
         Assert.Equal(
-            [("f2.yaml", "exports.apostrophes"), ("f2.yaml", "exports.dyn"), ("f2.yaml", "exports.endpoint"), ("f2.yaml", "exports.quoted")],
+            new[] { "apostrophes", "dyn", "endpoint", "quoted" }.Select(e => ("f1.yaml", $"{TestCatalog.PartPath}.exports.{e}")),
             loaded.Errors.Select(e => (e.File, e.Location)).Order());
         Assert.All(loaded.Errors, e => Assert.Contains("an export cannot reference ${resource.<id>.<export>}", e.Message));
     }
@@ -242,9 +241,9 @@ public class RuntimeVariablesTests
         var variables = Variables(runtime);
         Assert.True(variables.AsEntries);
         Assert.Equal(["from-policy", "from-workload", "policy-default"], [Value(variables.Properties["SET_ME"]), Value(variables.Properties["KEEP"]), Value(variables.Properties["FRESH"])]);
-        Assert.Equal(new Provenance("f5.yaml", "vars", Layer.PolicySet), runtime.Provenance["variables.SET_ME"]);
+        Assert.Equal(new Provenance("f4.yaml", "vars", Layer.PolicySet), runtime.Provenance["variables.SET_ME"]);
         Assert.Equal(Layer.Workload, runtime.Provenance["variables.KEEP"].Layer);
-        Assert.Equal(new Provenance("f5.yaml", "vars", Layer.PolicyDefault), runtime.Provenance["variables.FRESH"]);
+        Assert.Equal(new Provenance("f4.yaml", "vars", Layer.PolicyDefault), runtime.Provenance["variables.FRESH"]);
     }
 
     [Fact]
@@ -300,7 +299,7 @@ public class RuntimeVariablesTests
     }
 
     [Theory]
-    [InlineData("a requirement mapping")]
+    [InlineData("a requirement component")]
     [InlineData("a literal map source")]
     [InlineData("nested in an object")]
     [InlineData("in an array item")]
@@ -312,11 +311,11 @@ public class RuntimeVariablesTests
         const string form = "{ fn::entries: workload.variables }";
         var graph = where switch
         {
-            "a requirement mapping" => await ResolveAsync(string.Empty, mapping: Mapping($", vars: {form}")),
-            "a literal map source" => await ResolveAsync(string.Empty, runtimeMapping: RuntimeMapping.Replace("fn::entries: workload.variables", "fn::entries: { A: x }", StringComparison.Ordinal)),
-            "nested in an object" => await ResolveAsync(string.Empty, runtimeMapping: RuntimeConfig($"outer: {{ inner: {form} }}")),
-            "in an array item" => await ResolveAsync(string.Empty, runtimeMapping: RuntimeConfig($"items: [{form}]")),
-            "on a node that is not the runtime" => await ResolveAsync(string.Empty, runtimeMapping: RuntimeWith("sidecar", "create", $"vars: {form}")),
+            "a requirement component" => await ResolveAsync(string.Empty, component: Component($", vars: {form}")),
+            "a literal map source" => await ResolveAsync(string.Empty, runtimeFile: RuntimeFile.Replace("fn::entries: workload.variables", "fn::entries: { A: x }", StringComparison.Ordinal)),
+            "nested in an object" => await ResolveAsync(string.Empty, runtimeFile: RuntimeConfig($"outer: {{ inner: {form} }}")),
+            "in an array item" => await ResolveAsync(string.Empty, runtimeFile: RuntimeConfig($"items: [{form}]")),
+            "on a node that is not the runtime" => await ResolveAsync(string.Empty, runtimeFile: RuntimeWith("sidecar", "create", $"vars: {form}")),
             "a policy add" => await ResolveAsync(string.Empty, [WorkloadPolicy("pol", $"add:\n  extra:\n    template: t/x\n    config: {{ vars: {form} }}\n")]),
             _ => await ResolveAsync(string.Empty, [WorkloadPolicy("pol", $"set: {{ runtime.label: {form} }}\n")]),
         };
@@ -362,11 +361,11 @@ public class RuntimeVariablesTests
     [Fact]
     public async Task The_form_is_part_of_the_node_hash()
     {
-        var plain = RuntimeMapping.Replace("variables:\n        fn::entries: workload.variables", "variables: { A: x }", StringComparison.Ordinal);
-        Assert.NotEqual(RuntimeMapping, plain);
+        var plain = RuntimeFile.Replace("variables:\n            fn::entries: workload.variables", "variables: { A: x }", StringComparison.Ordinal);
+        Assert.NotEqual(RuntimeFile, plain);
 
         var entries = await ResolveAsync("    A: x\n");
-        var map = await ResolveAsync("    A: x\n", runtimeMapping: plain);
+        var map = await ResolveAsync("    A: x\n", runtimeFile: plain);
 
         // The same name and value, but one is deployed as a list of items and the other as an object: the hash must tell them apart.
         Assert.Empty(entries.Errors);
@@ -377,11 +376,7 @@ public class RuntimeVariablesTests
     [Fact]
     public async Task Every_runtime_node_is_evaluated_with_its_own_name_as_the_current_id()
     {
-        const string mapping = """
-            kind: Mapping
-            match: { kind: runtime }
-            probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
-            release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }
+        var runtime = TestCatalog.Runtime("""
             nodes:
               runtime:
                 template: t/runtime
@@ -389,10 +384,10 @@ public class RuntimeVariablesTests
               sidecar:
                 template: t/sidecar
                 config: { label: "${name('thing')}" }
-            """;
+            """);
         var policy = WorkloadPolicy("named", "set: { runtime.label: \"${name('thing')}\" }\n");
 
-        var graph = await ResolveAsync(string.Empty, [policy], mapping);
+        var graph = await ResolveAsync(string.Empty, [policy], runtime);
 
         Assert.Empty(graph.Errors);
         var sidecar = graph.Nodes.Single(n => n.Name == "sidecar");
