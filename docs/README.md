@@ -22,6 +22,7 @@ provisions and deploys it, IT Ops moves from executor to gatekeeper.
    - [workload-definition.md](architecture/workload-definition.md) — what teams declare
    - [provisioning.md](architecture/provisioning.md) — mappings, policies, Pulumi operation
    - [resolver.md](architecture/resolver.md) — proposed resolver design (C52)
+   - [components.md](architecture/components.md) — design note: the catalog by component, shared resources, environments from offers (S21, phase 1)
    - [release.md](architecture/release.md) — the release manifest and release set: pinned workloads in deploy order (C53)
    - [release-record.md](architecture/release-record.md) — design note: the release record and IQ/OQ qualification (S17)
    - [approvals.md](architecture/approvals.md) — design note: the `stage` substrate, the protected tier, approval policy and records (S18)

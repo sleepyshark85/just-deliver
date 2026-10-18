@@ -141,6 +141,8 @@ Agreed direction:
 
 Related, not decided: `kind` stays on every file; `types` merge into the component (one contract per component, many classes).
 
+Design: [architecture/components.md](architecture/components.md) (S21).
+
 ## Related
 
 - Decisions: [0001 custom build](decisions/0001-custom-build-api-and-clients.md), [0002 Pulumi Automation API](decisions/0002-pulumi-automation-api.md), [0004 two-layer definitions](decisions/0004-two-layer-definition-model.md), [0005 B/C first](decisions/0005-build-bc-first-design-for-d.md)
