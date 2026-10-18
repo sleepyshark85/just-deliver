@@ -52,6 +52,8 @@ Opus. Keep recording each slice's review rounds in status.md.
 ## Non-negotiables
 
 - Nothing hard-coded in code; the catalog, environment descriptor and configuration carry the knowledge.
+- Explicit over implicit: a workload gets only what it declares; guardrails require, never silently add
+  ([conventions](docs/engineering/conventions.md#design-rules-that-code-must-keep)).
 - Simplest approach; no unnecessary code; clean architecture and separation of concerns.
 - Every Azure resource inside the free tier; test resources torn down after use.
 - Small slices, one PR each; `tools/verify.sh` green on every commit.
