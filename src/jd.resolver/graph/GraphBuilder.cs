@@ -38,7 +38,8 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
             }
         }
 
-        var exports = policy.Requirements.OrderBy(r => r.Id, StringComparer.Ordinal).ToDictionary(r => r.Id, r => r.Exports);
+        // An environment run's parts have no type and no contract; what they export is the graph's Parts.
+        var exports = policy.Requirements.Where(r => r.Type is not null).OrderBy(r => r.Id, StringComparer.Ordinal).ToDictionary(r => r.Id, r => r.Exports);
         var entries = policy.Requirements.SelectMany(r => r.Nodes.Select(n => (Scope: r.Id, Node: n)))
             .Concat(policy.RuntimeNodes.Select(n => (Scope: WorkloadScope, Node: n)))
             .Select(e => (e.Scope, e.Node, Id: $"{policy.WorkloadName}/{environment.Name}/{e.Scope}/{e.Node.Name}"))
@@ -59,7 +60,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
                 draft.Node.Config, draft.Node.Provenance, Hash(draft.Node), draft.DependsOn, draft.Node.Probe, draft.Node.Release));
         }
 
-        return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, policy.WorkloadImage, policy.WorkloadPort, nodes, exports, errors);
+        return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, policy.WorkloadImage, policy.WorkloadPort, nodes, exports, errors, policy.Parts);
     }
 
     // Pulumi stack names allow [A-Za-z0-9_.-]. Ids contain no '.' or '_' (names are kebab; the owner and the scope may start

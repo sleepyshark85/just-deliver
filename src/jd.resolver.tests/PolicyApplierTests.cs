@@ -16,7 +16,7 @@ public class PolicyApplierTests
 
     private static readonly string[] BaseFiles =
     [
-        "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
+        "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
         "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
         "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n",
         "kind: Component\nname: sqldb\ndescription: d\nexports: [endpoint]\nimplementations:\n  default:\n    classes:\n      standard: &part\n        nodes:\n          n:\n            template: t/n\n            config: { size: 400, keep: x, nested: { a: 1, b: 2 } }\n          m:\n            template: t/m\n            config: { size: 1 }\n        exports:\n          endpoint: ${n.out}\n      isolated: *part\n",
@@ -363,13 +363,13 @@ public class PolicyApplierTests
             "dev",
             new Dictionary<string, string>
             {
-                ["resourceGroup"] = "rg",
-                ["containerAppsEnvironment.id"] = "/cae",
-                ["cosmos.accountName"] = "acct",
-                ["cosmos.databaseName"] = "db",
-                ["cosmos.accountId"] = "/acct",
-                ["cosmos.endpoint"] = "https://acct",
-                ["logAnalytics.id"] = "/law",
+                ["env-group.name"] = "rg",
+                ["apps-env.id"] = "/cae",
+                ["cosmos-account.name"] = "acct",
+                ["database.databaseName"] = "db",
+                ["cosmos-account.id"] = "/acct",
+                ["cosmos-account.endpoint"] = "https://acct",
+                ["log-analytics.id"] = "/law",
             },
             [],
             null);

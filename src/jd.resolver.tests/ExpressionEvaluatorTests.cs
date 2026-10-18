@@ -30,6 +30,14 @@ public class ExpressionEvaluatorTests
             ["cosmos.accountId"] = "/acct/id",
             ["cosmos.endpoint"] = "https://acct.example",
             ["logAnalytics.id"] = "/law/id",
+
+            // The seed catalog's workload parts read the descriptor by part name (docs/architecture/components.md section 3).
+            ["env-group.name"] = "rg-test",
+            ["apps-env.id"] = "/cae",
+            ["cosmos-account.id"] = "/acct/id",
+            ["cosmos-account.endpoint"] = "https://acct.example",
+            ["database.databaseName"] = "db",
+            ["log-analytics.id"] = "/law/id",
         },
         [],
         null);
@@ -41,8 +49,56 @@ public class ExpressionEvaluatorTests
         IReadOnlyDictionary<string, NamingRule>? naming = null,
         IReadOnlyDictionary<string, string>? roles = null,
         string? image = null,
-        int? port = null) =>
-        new(roles ?? Roles, naming ?? Naming, Env, workload, "team-a", id, new HashSet<string> { "database", "container" }, known ?? [], image, port);
+        int? port = null,
+        Dictionary<string, IReadOnlyDictionary<string, string>>? parts = null) =>
+        new(roles ?? Roles, naming ?? Naming, Env, workload, "team-a", id, new HashSet<string> { "database", "container" }, known ?? [], image, port, parts ?? []);
+
+    // An environment run's parts (docs/architecture/components.md section 2): 'account' reads 'group' in place, 'database' (also a node) reads its node.
+    private static readonly Dictionary<string, IReadOnlyDictionary<string, string>> RunParts = new()
+    {
+        ["group"] = new Dictionary<string, string> { ["name"] = "${container.resourceGroupName}" },
+        ["account"] = new Dictionary<string, string> { ["resourceGroup"] = "${group.name}", ["label"] = "acct in ${group.name}" },
+        ["database"] = new Dictionary<string, string> { ["databaseName"] = "${database.databaseName}" },
+    };
+
+    [Fact]
+    public void A_read_of_a_part_of_the_run_is_its_export_evaluated_in_place_also_when_chained()
+    {
+        var reference = new Reference(ReferenceKind.Node, "container", "resourceGroupName");
+
+        var (pending, _) = Run("${account.resourceGroup}", Context(parts: RunParts));
+        var (resolved, _) = Run("x-${account.label}", Context(parts: RunParts, known: new() { [reference] = "rg-1" }));
+        var (own, _) = Run("${database.databaseName}", Context(parts: RunParts));
+
+        Assert.Equal(new HashSet<Reference> { reference }, Assert.IsType<Pending>(pending).References);
+        Assert.Equal("${account.resourceGroup}", ((Pending)pending!).Original);
+        Assert.Equal(new Resolved("x-acct in rg-1"), resolved);
+        Assert.Equal(new HashSet<Reference> { new(ReferenceKind.Node, "database", "databaseName") }, Assert.IsType<Pending>(own).References);
+    }
+
+    [Fact]
+    public void A_read_of_an_export_a_part_of_the_run_does_not_declare_is_an_error()
+    {
+        var (result, errors) = Run("${account.nope}", Context(parts: RunParts));
+
+        Assert.Null(result);
+        Assert.Equal("'account.nope' is not an export of part 'account'; it exports resourceGroup, label.", Assert.Single(errors).Message);
+    }
+
+    [Fact]
+    public void A_read_of_a_part_deployed_before_is_the_descriptor_value_and_is_recorded_like_an_env_read()
+    {
+        var errors = new List<LoadError>();
+        var envPaths = new HashSet<string>();
+
+        var result = new ExpressionEvaluator(Context()).Evaluate("${cosmos-account.id}", "file.yaml", "x", errors, envPaths);
+        var (missing, missingErrors) = Run("${cosmos-account.nope}");
+
+        Assert.Equal(new Resolved("/acct/id"), result);
+        Assert.Equal(["cosmos-account.id"], envPaths);
+        Assert.Null(missing);
+        Assert.Contains("environment 'dev' has no value 'cosmos-account.nope'", Assert.Single(missingErrors).Message);
+    }
 
     private static (EvalResult? Result, List<LoadError> Errors) Run(string text, ExpressionContext? context = null)
     {
@@ -265,7 +321,7 @@ public class ExpressionEvaluatorTests
             .Append(sampleEndpoint)
             .ToList();
 
-        var evaluator = new ExpressionEvaluator(new ExpressionContext(catalog.Roles, catalog.Naming, Env, "shop", "team-a", "db", nodeNames, new Dictionary<Reference, string>(), "registry.example/app:1", 8080));
+        var evaluator = new ExpressionEvaluator(new ExpressionContext(catalog.Roles, catalog.Naming, Env, "shop", "team-a", "db", nodeNames, new Dictionary<Reference, string>(), "registry.example/app:1", 8080, new Dictionary<string, IReadOnlyDictionary<string, string>>()));
         var errors = new List<LoadError>();
         var results = strings.Select(s => evaluator.Evaluate(s, "seed", "", errors)).ToList();
 

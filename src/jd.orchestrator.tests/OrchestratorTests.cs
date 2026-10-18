@@ -67,7 +67,7 @@ public partial class OrchestratorTests
     {
         var files = new[]
             {
-                "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
+                "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
                 "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
                 "kind: Component\nname: thing\ndescription: d\nexports: [out, key]\nimplementations:\n  default:\n    classes:\n      standard:\n" + Indent(part, 8),
                 "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n" + Indent(ProbeAndRelease + runtime, 4),

@@ -37,14 +37,15 @@ public sealed record ResolvedNode(
 // The expanded requirement without its pre-policy nodes: Nodes are the ones to use.
 public sealed record ResolvedRequirement(
     string Id,
-    string Type,
-    string Class,
+    string? Type,
+    string? Class,
     string Source,
     IReadOnlyDictionary<string, EvalResult> Exports,
     IReadOnlyList<ResolvedNode> Nodes);
 
 /// <summary>
-/// RuntimeNodes are the nodes of the workload's runtime (none for an environment definition). The result is usable only when
+/// RuntimeNodes are the nodes of the workload's runtime (none for an environment definition); Parts are an environment run's parts'
+/// exports, as expanded. The result is usable only when
 /// Errors is empty.
 /// </summary>
 public sealed record PolicyResult(
@@ -55,4 +56,5 @@ public sealed record PolicyResult(
     int? WorkloadPort,
     IReadOnlyList<ResolvedRequirement> Requirements,
     IReadOnlyList<ResolvedNode> RuntimeNodes,
-    IReadOnlyList<LoadError> Errors);
+    IReadOnlyList<LoadError> Errors,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts);

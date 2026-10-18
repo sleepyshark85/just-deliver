@@ -5,7 +5,7 @@ namespace jd.resolver.tests;
 
 public class CatalogParserTests
 {
-    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n";
+    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
 
     private static string ComponentFile(string name, string exports = "  endpoint: ${db.endpoint}\n", string key = "default") =>
         TestCatalog.Component(name, "[endpoint]", $"nodes:\n  db:\n    template: t/db\n    config: {{ size: 1 }}\nexports:\n{exports}", key);
@@ -166,6 +166,19 @@ public class CatalogParserTests
         var error = Assert.Single(result.Errors);
         Assert.Equal((file, "implementations.stagee"), (error.File, error.Location));
         Assert.Equal("'stagee' is not a declared environment type (declared: dev, stage).", error.Message);
+    }
+
+    [Theory]
+    [InlineData("components/a.yaml")]
+    [InlineData("runtimes/r.yaml")]
+    public async Task An_implementation_keyed_by_a_shared_layer_type_is_an_error(string file)
+    {
+        var content = file.StartsWith("runtimes/", StringComparison.Ordinal) ? TestCatalog.Runtime("nodes:\n  runtime: { template: t/rt, config: {} }\n", "shared") : ComponentFile("alpha-db", key: "shared");
+        var result = await Parse(("catalog.yaml", CatalogFile.Replace("environmentTypes: {", "environmentTypes: { shared: { layer: shared },", StringComparison.Ordinal)), (file, content));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal((file, "implementations.shared"), (error.File, error.Location));
+        Assert.Equal("'shared' is a shared-layer environment type; implementations are keyed by environment-layer types or 'default'.", error.Message);
     }
 
     [Fact]
@@ -504,7 +517,7 @@ public class CatalogParserTests
     [Fact]
     public async Task Schema_invalid_catalog_file_still_counts_as_the_catalog()
     {
-        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: 1\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n"), ("components/a.yaml", ComponentFile("alpha-db")));
+        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: 1\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n"), ("components/a.yaml", ComponentFile("alpha-db")));
 
         var error = Assert.Single(result.Errors);
         Assert.Equal("catalog.yaml", error.File);

@@ -101,7 +101,7 @@ public static class CatalogParser
         CheckUnique(policyDocuments, errors);
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
         var environmentTypes = catalogs.FirstOrDefault() is { Valid: true } first
-            ? Map(first.Body["environmentTypes"]).ToDictionary(e => e.Key, e => new EnvironmentType((bool?)e.Value["approval"] ?? false))
+            ? Map(first.Body["environmentTypes"]).ToDictionary(e => e.Key, e => new EnvironmentType((bool?)e.Value["approval"] ?? false, Enum.Parse<SharedScope>(Text(e.Value["layer"]), ignoreCase: true)))
             : null;
         CheckEnvironmentTypes(components, runtimes, policies, environmentTypes, errors);
         CheckPolicyScopes(policies, errors);
@@ -452,6 +452,12 @@ public static class CatalogParser
         foreach (var (source, location, type) in keyed.Concat(matched).Where(e => !environmentTypes.ContainsKey(e.Type)))
         {
             errors.Add(new LoadError(source, location, $"'{type}' is not a declared environment type (declared: {string.Join(", ", environmentTypes.Keys.Order())})."));
+        }
+
+        // A shared-layer environment deploys no component part, so an implementation for its type would never be used.
+        foreach (var (source, location, type) in keyed.Where(e => environmentTypes.GetValueOrDefault(e.Type)?.Layer == SharedScope.Shared))
+        {
+            errors.Add(new LoadError(source, location, $"'{type}' is a shared-layer environment type; implementations are keyed by environment-layer types or '{ImplementationKey.Default}'."));
         }
     }
 

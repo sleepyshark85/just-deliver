@@ -2,7 +2,7 @@
 # Deletes what the walkthrough created, in the order the Azure test uses: the environment groups in parallel (their Container Apps
 # environments log to the shared workspace), then the shared group; then lists what is left (nothing, when all is gone).
 #   samples/walkthrough/teardown.sh <dev.env.yaml> <stage.env.yaml>
-# The groups are read from the descriptors: values.resourceGroup of each, and values.shared.resourceGroup (the shared layer's).
+# The groups are read from the descriptors: values.env-group.name of each, and values.shared-group.name (the shared layer's).
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
@@ -10,15 +10,15 @@ if [[ $# -lt 1 ]]; then
   exit 2
 fi
 
-shared=$(sed -n 's/^    resourceGroup: *//p' "$1")
+shared=$(sed -n '/^  shared-group:$/,/^  [^ ]/s/^    name: *//p' "$1")
 groups=()
 for descriptor in "$@"; do
-  groups+=("$(sed -n 's/^  resourceGroup: *//p' "$descriptor")")
+  groups+=("$(sed -n '/^  env-group:$/,/^  [^ ]/s/^    name: *//p' "$descriptor")")
 done
 
 for group in "$shared" "${groups[@]}"; do
   if [[ -z $group ]]; then
-    echo "a descriptor has no resourceGroup; nothing deleted" >&2
+    echo "a descriptor has no env-group or shared-group name; nothing deleted" >&2
     exit 1
   fi
 done

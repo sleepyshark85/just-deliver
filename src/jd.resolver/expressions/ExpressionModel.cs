@@ -34,6 +34,8 @@ public sealed record Pending(string Original, IReadOnlySet<Reference> References
 /// <param name="CurrentId">The requirement's effective id, or the node name for nodes not tied to a requirement.</param>
 /// <param name="NodeNames">Nodes in scope for <c>${node.output}</c>.</param>
 /// <param name="KnownOutputs">Outputs already known; a reference found here resolves instead of staying pending.</param>
+/// <param name="Parts">The exports (name to expression) of the parts deployed in this run, by part name: <c>${&lt;name&gt;.&lt;export&gt;}</c> of one of
+/// them is evaluated in place. Empty in a workload run.</param>
 public sealed record ExpressionContext(
     IReadOnlyDictionary<string, string> Roles,
     IReadOnlyDictionary<string, NamingRule> Naming,
@@ -44,4 +46,5 @@ public sealed record ExpressionContext(
     IReadOnlySet<string> NodeNames,
     IReadOnlyDictionary<Reference, string> KnownOutputs,
     string? WorkloadImage,
-    int? WorkloadPort);
+    int? WorkloadPort,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts);

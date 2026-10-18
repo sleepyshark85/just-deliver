@@ -16,8 +16,11 @@ public sealed record Catalog(
     IReadOnlyDictionary<string, NamingRule> Naming,
     IReadOnlyDictionary<string, string> Roles);
 
-/// <summary>A declared environment type; <see cref="Approval"/>: an environment of this type must carry an approval block.</summary>
-public sealed record EnvironmentType(bool Approval);
+/// <summary>
+/// A declared environment type; <see cref="Approval"/>: an environment of this type must carry an approval block. <see cref="Layer"/>: which
+/// scope a <c>jd env up</c> of this type deploys.
+/// </summary>
+public sealed record EnvironmentType(bool Approval, SharedScope Layer);
 
 /// <summary>
 /// What a workload requires by name: one contract (<see cref="Exports"/>) and an implementation per environment type, keyed by the type or
@@ -36,7 +39,7 @@ public sealed record Implementation(Part? Environment, IReadOnlyDictionary<strin
 /// <summary>A platform-owned part deployed once per <see cref="Scope"/>, read by the parts that name it in their <c>uses</c>.</summary>
 public sealed record SharedResource(string Source, string Name, SharedScope Scope, IReadOnlyList<string> Uses, Part Part);
 
-/// <summary>Where a shared resource is deployed: once for the shared layer, or once per environment.</summary>
+/// <summary>Where a shared resource is deployed, and so the layer an environment type is: once for the shared layer, or once per environment.</summary>
 public enum SharedScope
 {
     Shared,

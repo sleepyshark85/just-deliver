@@ -49,7 +49,7 @@ public class RuntimeVariablesTests
     {
         var files = new[]
             {
-                "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
+                "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
                 "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
                 component.Length > 0 ? component : Component(),
                 runtimeFile,
@@ -184,7 +184,7 @@ public class RuntimeVariablesTests
     {
         var files = new[]
         {
-            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
+            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
             TestCatalog.Component("sqldb", "[endpoint, dyn, lit, quoted, apostrophes, fine]", "nodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.host, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n"
                 + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.host} isn't\"\n"),
         };
@@ -207,7 +207,7 @@ public class RuntimeVariablesTests
         var policy = new PolicyResult(
             "1", "shop", "crew", null, null,
             [new ResolvedRequirement("db", "sqldb", "standard", "m.yaml", new Dictionary<string, EvalResult> { ["endpoint"] = export }, [])],
-            [runtime], []);
+            [runtime], [], new Dictionary<string, IReadOnlyDictionary<string, string>>());
 
         var graph = new GraphBuilder(Env).Build(policy);
 

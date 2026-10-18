@@ -5,7 +5,7 @@
   "description": "What an environment (its substrate) publishes so the resolver can resolve ${env.<path>} references. name, region and type are addressable as env.name, env.region and env.type; every other env.<dot.path> resolves inside values. grantable lists the values paths workloads may grant on (security boundary). Checked against the catalog, not here: the type is declared, and a type with `approval: true` carries the `approval` block.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "name", "region", "type", "values"],
+  "required": ["kind", "name", "region", "type", "offers", "values"],
   "properties": {
     "kind": { "enum": ["Environment"] },
     "name": {
@@ -15,6 +15,12 @@
     },
     "region": { "type": "string", "minLength": 1 },
     "type": { "description": "An environment type the catalog declares.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
+    "offers": {
+      "description": "The components and runtime the environment offers, as its definition names them; a shared layer's descriptor offers nothing, so no workload can deploy on it.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" }
+    },
     "values": { "$ref": "#/definitions/values" },
     "approval": {
       "description": "The gate: an environment with this block accepts deploys only through `jd promote`. A set is promoted when it is qualified on `qualifiedOn` and `required` distinct listed approvers approved it. Literals, not expressions. Rules the schema cannot express: `qualifiedOn` is not this environment and `required` is at most the number of approvers.",
@@ -43,7 +49,7 @@
   },
   "definitions": {
     "values": {
-      "description": "Substrate outputs: nested mappings of strings. Keys must not contain dots, so a dot path is unambiguous (enforced by the loader; the schema validator ignores propertyNames).",
+      "description": "The exports of the parts `jd env up` deployed, keyed by part name (values.<part>.<export>), the base descriptor's included: nested mappings of strings. Keys must not contain dots, so a dot path is unambiguous (enforced by the loader; the schema validator ignores propertyNames).",
       "type": "object",
       "additionalProperties": {
         "anyOf": [

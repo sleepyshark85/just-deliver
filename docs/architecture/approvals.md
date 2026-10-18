@@ -13,8 +13,8 @@ protects against mistakes and against edits of what was approved, not against so
 ## 1. The `stage` substrate on the free tier
 
 `stage` is one more environment on top of the shared substrate, brought up like `dev` (`jd env up samples/environments/stage.yaml --catalog catalog
---base shared.env.yaml --out stage.env.yaml`). **No catalog change is needed:** the mapping `env-substrate/standard` has no environment type in its
-`match`, so `stage` (type `stage`, S21a; tier `protected` before) resolves to the same mapping as `dev`. The A4 candidate (identical policy set across
+--base shared.env.yaml --out stage.env.yaml`). **No catalog change is needed:** `stage` (type `stage`, layer `environment`, S21a/S21e; tier `protected` before) offers what `dev`
+offers, and the components' `default` implementations serve both types, so it deploys the same parts as `dev`. The A4 candidate (identical policy set across
 types; scale may differ) holds trivially; per-type SKUs are out of the MVP.
 
 | Part | `stage` | Shared with `dev`? |
@@ -78,8 +78,7 @@ carries it and no command needs another input. It is not an expression: the leav
 kind: EnvironmentDefinition
 name: stage
 type: stage                             # tier: protected before S21a
-requires: [{ type: env-substrate, id: substrate }]
-values: { ... as dev ... }
+offers: [container-app, database, monitoring]   # as dev (S21e; requires and values before)
 approval:
   qualifiedOn: dev                      # the environment whose records must show the set qualified
   required: 1                           # distinct approvers needed

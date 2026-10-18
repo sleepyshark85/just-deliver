@@ -20,10 +20,10 @@
         "throughput": 400
       },
       "provenance": {
-        "accountName": "Implementation: components/env-substrate.yaml",
-        "databaseName": "Implementation: components/env-substrate.yaml",
-        "resourceGroupName": "Implementation: components/env-substrate.yaml",
-        "throughput": "Implementation: components/env-substrate.yaml"
+        "accountName": "Implementation: components/database.yaml",
+        "databaseName": "Implementation: components/database.yaml",
+        "resourceGroupName": "Implementation: components/database.yaml",
+        "throughput": "Implementation: components/database.yaml"
       }
     },
     {
@@ -45,10 +45,10 @@
         }
       },
       "provenance": {
-        "location": "Implementation: components/env-substrate.yaml",
-        "resourceGroupName": "Implementation: components/env-substrate.yaml",
-        "tags.project": "Implementation: components/env-substrate.yaml",
-        "tags.tier": "Implementation: components/env-substrate.yaml"
+        "location": "Implementation: shared/env-group.yaml",
+        "resourceGroupName": "Implementation: shared/env-group.yaml",
+        "tags.project": "Implementation: shared/env-group.yaml",
+        "tags.tier": "Implementation: shared/env-group.yaml"
       }
     },
     {
@@ -59,35 +59,27 @@
       "kind": "Create",
       "stack": "_stage.stage.substrate.apps",
       "phase": "Infrastructure",
-      "hash": "a65536b8a6fd5d1d88c1cc52d0505a5b802ad103afc3923466aaae28e82d0e61",
+      "hash": "e675d54121e23ebf516fe538dea0374f1bb30660be37df4175ed1ef0c7a80280",
       "dependsOn": [
         "@stage/stage/substrate/group"
       ],
       "config": {
         "environmentName": "cae-stage-32fe4c",
-        "location": "${group.location}",
-        "resourceGroupName": "${group.resourceGroupName}",
+        "location": "${env-group.location}",
+        "resourceGroupName": "${env-group.name}",
         "workspaceCustomerId": "00000000-0000-0000-0000-000000000001",
         "workspaceName": "law-shared",
         "workspaceResourceGroupName": "rg-shared"
       },
       "provenance": {
-        "environmentName": "Implementation: components/env-substrate.yaml",
-        "location": "Implementation: components/env-substrate.yaml",
-        "resourceGroupName": "Implementation: components/env-substrate.yaml",
-        "workspaceCustomerId": "Implementation: components/env-substrate.yaml",
-        "workspaceName": "Implementation: components/env-substrate.yaml",
-        "workspaceResourceGroupName": "Implementation: components/env-substrate.yaml"
+        "environmentName": "Implementation: shared/apps-env.yaml",
+        "location": "Implementation: shared/apps-env.yaml",
+        "resourceGroupName": "Implementation: shared/apps-env.yaml",
+        "workspaceCustomerId": "Implementation: shared/apps-env.yaml",
+        "workspaceName": "Implementation: shared/apps-env.yaml",
+        "workspaceResourceGroupName": "Implementation: shared/apps-env.yaml"
       }
     }
   ],
-  "exports": {
-    "substrate": {
-      "containerAppsEnvironmentId": "${apps.environmentId}",
-      "databaseId": "${database.databaseId}",
-      "databaseName": "${database.databaseName}",
-      "defaultDomain": "${apps.defaultDomain}",
-      "resourceGroupName": "${group.resourceGroupName}"
-    }
-  }
+  "exports": {}
 }

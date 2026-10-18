@@ -28,12 +28,13 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         var errors = new List<LoadError>(expansion.Errors);
         ExpressionEvaluator EvaluatorFor(string currentId, IEnumerable<string> nodeNames) => new(new ExpressionContext(
             catalog.Roles, catalog.Naming, environment, expansion.WorkloadName, expansion.WorkloadTeam, currentId, nodeNames.ToHashSet(), new Dictionary<Reference, string>(),
-            expansion.WorkloadImage, expansion.WorkloadPort));
+            expansion.WorkloadImage, expansion.WorkloadPort, expansion.Parts));
 
         var requirements = new List<ResolvedRequirement>();
         foreach (var requirement in expansion.Requirements)
         {
-            var evaluator = EvaluatorFor(requirement.Id, requirement.Nodes.Select(n => n.Name));
+            // An environment run's parts share one scope, so a policy value may read any node of it.
+            var evaluator = EvaluatorFor(requirement.Id, expansion.Requirements.Where(r => r.Id == requirement.Id).SelectMany(r => r.Nodes).Select(n => n.Name));
             var nodes = requirement.Nodes
                 .Select(n => ApplyNodePolicies(
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(requirement.Source, requirement.Source, Layer.Implementation),
@@ -66,7 +67,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             }
         }
 
-        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, expansion.WorkloadImage, expansion.WorkloadPort, requirements, runtimeNodes, errors);
+        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, expansion.WorkloadImage, expansion.WorkloadPort, requirements, runtimeNodes, errors, expansion.Parts);
     }
 
     // Workload scope is kind: runtime, optionally narrowed by environmentType. The 'runtime' key is accepted but not matched yet:

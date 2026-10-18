@@ -78,10 +78,21 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     /// </summary>
     public EvalResult? Evaluate(string text, string file, string location, ICollection<LoadError> errors, ISet<string>? envPaths = null)
     {
-        void Fail(string message) => errors.Add(new LoadError(file, location, message));
+        if (EvaluateText(text, message => errors.Add(new LoadError(file, location, message))) is not { } value)
+        {
+            return null;
+        }
 
+        envPaths?.UnionWith(value.EnvPaths);
+        return value.References.Count == 0 ? new Resolved(value.Text ?? string.Empty) : new Pending(text, value.References);
+    }
+
+    // Every expression in text, joined with the text around them; null when any is invalid.
+    private Value? EvaluateText(string text, Action<string> fail)
+    {
         var output = new StringBuilder();
         var references = new HashSet<Reference>();
+        var envPaths = new HashSet<string>();
         var valid = true;
         var pos = 0;
         while (pos < text.Length)
@@ -97,11 +108,11 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
             var end = FindClosingBrace(text, start + 2);
             if (end < 0)
             {
-                Fail($"unterminated expression '{text[start..]}'; expected a closing '}}'.");
+                fail($"unterminated expression '{text[start..]}'; expected a closing '}}'.");
                 return null;
             }
 
-            var value = EvaluateExpression(text[(start + 2)..end].Trim(), Fail);
+            var value = EvaluateExpression(text[(start + 2)..end].Trim(), fail);
             if (value is null)
             {
                 valid = false;
@@ -109,19 +120,14 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
             else
             {
                 references.UnionWith(value.References);
-                envPaths?.UnionWith(value.EnvPaths);
+                envPaths.UnionWith(value.EnvPaths);
                 output.Append(value.Text);
             }
 
             pos = end + 1;
         }
 
-        if (!valid)
-        {
-            return null;
-        }
-
-        return references.Count == 0 ? new Resolved(output.ToString()) : new Pending(text, references);
+        return valid ? new Value(references.Count == 0 ? output.ToString() : null, references, envPaths) : null;
     }
 
     // The first '}' outside a single-quoted literal.
@@ -296,11 +302,11 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
                 return null;
 
             default:
-                // 'runtime' is a node like any other; it is in scope without being listed.
+                // 'runtime' is a node like any other; it is in scope without being listed. A node is read before a part of the same name:
+                // a part's exports read its own nodes (the database part's node is 'database').
                 if (segments[0] != RuntimeNode && !context.NodeNames.Contains(segments[0]))
                 {
-                    fail($"'{path}' refers to unknown node '{segments[0]}'; nodes in scope: {string.Join(", ", context.NodeNames.Append(RuntimeNode).Order())}.");
-                    return null;
+                    return ResolvePart(segments, path, fail);
                 }
 
                 if (segments.Length != 2)
@@ -311,6 +317,31 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
 
                 return Await(new Reference(ReferenceKind.Node, segments[0], segments[1]));
         }
+    }
+
+    // A part of this run is read by evaluating its export in place, so the read becomes the node references it is made of
+    // (docs/architecture/components.md section 2); the catalog loader keeps uses acyclic, so this ends. Any other part was deployed
+    // before: its exports are the descriptor's values, recorded like an env.* read so the grantable check sees them.
+    private Value? ResolvePart(string[] segments, string path, Action<string> fail)
+    {
+        if (context.Parts.TryGetValue(segments[0], out var exports))
+        {
+            if (segments.Length == 2 && exports.TryGetValue(segments[1], out var export))
+            {
+                return EvaluateText(export, fail);
+            }
+
+            fail($"'{path}' is not an export of part '{segments[0]}'; it exports {string.Join(", ", exports.Keys)}.");
+            return null;
+        }
+
+        if (segments.Length == 2 && context.Environment.Values.TryGetValue(path, out var deployed))
+        {
+            return new Value(deployed, NoReferences, new HashSet<string> { path });
+        }
+
+        fail($"'{path}' refers to unknown node '{segments[0]}', and environment '{context.Environment.Name}' has no value '{path}'; nodes in scope: {string.Join(", ", context.NodeNames.Append(RuntimeNode).Order())}.");
+        return null;
     }
 
     // A deploy-time value: resolved if the caller already knows it, otherwise pending on it.

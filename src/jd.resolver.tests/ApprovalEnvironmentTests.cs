@@ -13,10 +13,10 @@ public class ApprovalEnvironmentTests
     private const string Block = $"approval:\n  qualifiedOn: dev\n  required: 1\n  approvers: [\"{Approver}\"]\n  separateFromDeployer: true\n";
 
     private static string Descriptor(string type = "stage", string? approval = Block, string name = "stage") =>
-        $"kind: Environment\nname: {name}\nregion: r1\ntype: {type}\nvalues: {{ a: b }}\n{approval}";
+        $"kind: Environment\nname: {name}\nregion: r1\ntype: {type}\noffers: []\nvalues: {{ a: b }}\n{approval}";
 
     private static string Definition(string type = "stage", string? approval = Block) =>
-        $"kind: EnvironmentDefinition\nname: stage\ntype: {type}\nrequires: [{{ type: env-substrate }}]\nvalues: {{ a: b }}\n{approval}";
+        $"kind: EnvironmentDefinition\nname: stage\ntype: {type}\noffers: [database]\n{approval}";
 
     private static async Task<EnvironmentDefinitionLoadResult> LoadDefinitionAsync(string text)
     {

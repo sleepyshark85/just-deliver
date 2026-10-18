@@ -2,9 +2,11 @@ kind: Environment
 name: dev
 region: southeastasia
 type: dev
+offers: [container-app, database, monitoring]
 values:
-  resourceGroup: rg-dev
-  containerAppsEnvironment: { id: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.App/managedEnvironments/cae-dev }
-  cosmos: { accountName: cosmos-dev, databaseName: db-dev, databaseId: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev/sqlDatabases/db-dev, accountId: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev, endpoint: "https://cosmos-dev.documents.azure.com:443/" }
-  logAnalytics: { id: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev }
-grantable: [cosmos.accountId]
+  env-group: { name: rg-dev, location: southeastasia }
+  apps-env: { id: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.App/managedEnvironments/cae-dev }
+  cosmos-account: { name: cosmos-dev, id: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev, endpoint: "https://cosmos-dev.documents.azure.com:443/" }
+  database: { databaseName: db-dev, databaseId: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev/sqlDatabases/db-dev }
+  log-analytics: { id: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev }
+grantable: [cosmos-account.id]

@@ -10,6 +10,7 @@ public class EnvironmentParserTests
         name: test-env
         region: testregion
         type: dev
+        offers: [container-app]
         values:
           resourceGroup: rg-test
           cosmos: { accountName: acct, accountId: /acct/id, endpoint: "https://acct.example" }

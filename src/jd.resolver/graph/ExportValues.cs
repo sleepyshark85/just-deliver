@@ -44,7 +44,7 @@ public sealed record ExportValues(IReadOnlyDictionary<Reference, string> Values,
 
             var evaluator = new ExpressionEvaluator(new ExpressionContext(
                 catalog.Roles, catalog.Naming, environment, graph.Workload, graph.WorkloadTeam, scope, nodes.Select(n => n.Name).ToHashSet(), known,
-                graph.WorkloadImage, graph.WorkloadPort));
+                graph.WorkloadImage, graph.WorkloadPort, graph.Parts));
             foreach (var (export, result) in exports)
             {
                 var resolved = result is Pending pending ? evaluator.Evaluate(pending.Original, file, $"exports.{export}", errors) : result;

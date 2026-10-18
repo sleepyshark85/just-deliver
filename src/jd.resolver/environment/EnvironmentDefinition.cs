@@ -4,10 +4,10 @@ using Newtonsoft.Json.Linq;
 namespace jd.resolver.environment;
 
 /// <summary>
-/// What <c>jd env up</c> provisions: substrate requirements (like a workload's) and the layout of the descriptor written from
-/// their outputs. Format: schemas/environment-definition.schema.json. <see cref="Values"/> leaves are expressions.
+/// What <c>jd env up</c> provisions: what the <see cref="Offers"/> (component and runtime names) reach in its type's layer. Format:
+/// schemas/environment-definition.schema.json.
 /// </summary>
-public sealed record EnvironmentDefinition(string Name, string Type, JArray Requires, JObject Values, IReadOnlyList<string> Grantable, ApprovalPolicy? Approval)
+public sealed record EnvironmentDefinition(string Name, string Type, IReadOnlyList<string> Offers, IReadOnlyList<string> Grantable, ApprovalPolicy? Approval)
 {
     /// <summary>The environment the definition is resolved in: its own name, type and approval policy, the given region, and the base descriptor's values.</summary>
     public EnvironmentDescriptor Over(string region, EnvironmentDescriptor? baseDescriptor) =>
@@ -17,7 +17,7 @@ public sealed record EnvironmentDefinition(string Name, string Type, JArray Requ
 /// <summary><see cref="Definition"/> is set exactly when <see cref="Errors"/> is empty.</summary>
 public sealed record EnvironmentDefinitionLoadResult(EnvironmentDefinition? Definition, IReadOnlyList<LoadError> Errors);
 
-/// <summary>Reads an environment definition and validates it against its schema and the rule the schema cannot express (unique requirement ids).</summary>
+/// <summary>Reads an environment definition and validates it against its schema; the catalog's rules are checked when it is resolved.</summary>
 public static class EnvironmentDefinitionFile
 {
     private const string SchemaName = "schemas/environment-definition.schema.json";
@@ -49,16 +49,12 @@ public static class EnvironmentDefinitionFile
         }
 
         // The schema guarantees these exist and have these shapes.
-        var requires = (JArray)body["requires"]!;
-        var errors = requires.Select((r, i) => (Id: (string?)r["id"] ?? (string)r["type"]!, Index: i)).GroupBy(r => r.Id).SelectMany(g => g.Skip(1))
-            .Select(r => new LoadError(path, $"requires[{r.Index}]", $"requirement id '{r.Id}' is used twice; give one an 'id'."))
-            .ToList();
-        return errors.Count > 0
-            ? new EnvironmentDefinitionLoadResult(null, errors)
-            : new EnvironmentDefinitionLoadResult(
-                new EnvironmentDefinition(
-                    (string)body["name"]!, (string)body["type"]!, requires, (JObject)body["values"]!, body["grantable"] is JArray g ? g.Select(t => (string)t!).ToList() : [],
-                    body["approval"] is { } approval ? ApprovalPolicy.FromJson(approval) : null),
-                errors);
+        return new EnvironmentDefinitionLoadResult(
+            new EnvironmentDefinition(
+                (string)body["name"]!, (string)body["type"]!, Strings(body["offers"]), Strings(body["grantable"]),
+                body["approval"] is { } approval ? ApprovalPolicy.FromJson(approval) : null),
+            []);
     }
+
+    private static List<string> Strings(JToken? token) => token is JArray array ? array.Select(t => (string)t!).ToList() : [];
 }

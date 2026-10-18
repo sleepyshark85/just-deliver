@@ -7,7 +7,7 @@ namespace jd.resolver.tests;
 // error at the file and location, and the catalog does not load.
 public class CatalogUsesTests
 {
-    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n";
+    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
 
     // A shared resource with one node (default: the resource's name, prefixed `n-`, so nodes of one scope do not collide), configured
     // `config`, exporting `exports` (default: the node's id).

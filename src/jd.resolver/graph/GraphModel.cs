@@ -41,7 +41,8 @@ public sealed record GraphNode(
 
 /// <summary>
 /// The resolver's output. <see cref="Nodes"/> are in topological order (dependencies first, ties broken by id);
-/// <see cref="Exports"/> are each requirement's exports by requirement id. Usable only when <see cref="Errors"/> is empty.
+/// <see cref="Exports"/> are each requirement's exports by requirement id; <see cref="Parts"/> an environment run's parts' exports (name to
+/// expression) by part name, which its pending config reads in place (empty for a workload). Usable only when <see cref="Errors"/> is empty.
 /// </summary>
 public sealed record ResolvedGraph(
     string CatalogVersion,
@@ -52,4 +53,5 @@ public sealed record ResolvedGraph(
     int? WorkloadPort,
     IReadOnlyList<GraphNode> Nodes,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, EvalResult>> Exports,
-    IReadOnlyList<LoadError> Errors);
+    IReadOnlyList<LoadError> Errors,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts);

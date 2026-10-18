@@ -1,8 +1,9 @@
 kind: Catalog
 version: "0.1.0"
 # Declared once; an environment definition or descriptor of any other type is an error (docs/architecture/components.md section 2).
+# layer: which `jd env up` layer an environment of the type is (section 3): `shared` deploys the shared resources, `environment` the rest.
 environmentTypes:
-  shared: {}                       # the shared layer's own type
-  dev:    {}
-  stage:  { approval: true }  # a definition or descriptor of this type must carry an `approval` block
-  prod:   { approval: true }
+  shared: { layer: shared }                         # the shared layer's own type
+  dev:    { layer: environment }
+  stage:  { layer: environment, approval: true }    # a definition or descriptor of this type must carry an `approval` block
+  prod:   { layer: environment, approval: true }

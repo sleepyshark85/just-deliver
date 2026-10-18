@@ -263,18 +263,21 @@ running it again resumes. The workloads' containers share the environment databa
 ### Substrate (`jd env up`)
 
 An environment's substrate is provisioned by the same path as a workload's infrastructure: `Resolver.ResolveSubstrate` resolves an
-**environment definition** (substrate requirements, looked up in the catalog's components like workload requirements; the owner is
+**environment definition** (its `type` and `offers`: the parts are what the offered components and runtime reach through `uses`, per the
+type's layer, collected into one scope `substrate` ([resolver.md](resolver.md#environment-definition)); the owner is
 named `@<name>`, so its ids and stacks (`_dev.dev.substrate.group`) can never collide with a workload's, and it has no runtime, so
 workload-scope policies add nothing) and the orchestrator deploys the graph.
 There is no second resolution or deploy path. Because Azure allows one free-tier Cosmos account per subscription there are two
-layers: `shared` (once per subscription: resource group, Log Analytics workspace with a daily cap, the Cosmos account with free
-tier, `totalThroughputLimit: 1000` and key (local) authentication disabled) and one definition per environment on top of the shared descriptor (`--base`): resource
+layers: `shared` (layer `shared`, once per subscription, deploying the shared resources: resource group, Log Analytics workspace with a daily cap, the Cosmos account with free
+tier, `totalThroughputLimit: 1000` and key (local) authentication disabled) and one definition per environment on top of the shared descriptor (`--base`),
+which never deploys a shared resource (one it reaches must be in the base, else an error before anything is created): resource
 group, Container Apps environment (Consumption) on the shared workspace, and a Cosmos SQL database with 400 RU/s shared throughput
 in the shared account. Two environments use 800 of the 1,000 free RU/s. These values live in the catalog components, not in code.
 
-After the deploy, `DescriptorComposer` evaluates the definition's `values` (each an expression over `${resource.<id>.<export>}`):
-an export is evaluated with its requirement's node outputs (`NodeReport.Outputs` holds only non-secret outputs; null and secret ones are dropped by `ExportValues`, which the orchestrator's second pass shares), which makes
-`${resource.…}` resolve. The values are merged into the base descriptor's (new keys only), and the result is validated with the
+After the deploy, `DescriptorComposer` writes `values.<part>.<export>`: each part's export evaluated with the node outputs
+(`NodeReport.Outputs` holds only non-secret outputs; null and secret ones are dropped, as `ExportValues` does for the orchestrator's
+second pass), so an export reading a secret, directly or through another part's export, fails and nothing is written. The values are
+merged into the base descriptor's (new keys only), and the result is validated with the
 descriptor loader before it is written. The same composition runs once **before** the deploy with the values still pending, so
 every error that does not need an output is found while nothing exists yet.
 

@@ -3,8 +3,9 @@ kind: Environment
 name: shared
 region: region-1
 type: shared
+offers: []
 values:
-  shared: { resourceGroup: rg-shared }
-  logAnalytics: { id: /subscriptions/s/resourceGroups/rg-shared/providers/Microsoft.OperationalInsights/workspaces/law-shared, name: law-shared, customerId: 00000000-0000-0000-0000-000000000001 }
-  cosmos: { accountId: /subscriptions/s/resourceGroups/rg-shared/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-shared, accountName: cosmos-shared, endpoint: "https://cosmos-shared.documents.azure.com:443/" }
+  cosmos-account: { id: /subscriptions/s/resourceGroups/rg-shared/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-shared, name: cosmos-shared, endpoint: "https://cosmos-shared.documents.azure.com:443/", resourceGroup: rg-shared }
+  log-analytics: { id: /subscriptions/s/resourceGroups/rg-shared/providers/Microsoft.OperationalInsights/workspaces/law-shared, name: law-shared, customerId: 00000000-0000-0000-0000-000000000001, resourceGroup: rg-shared }
+  shared-group: { name: rg-shared, location: region-1 }
 grantable: []

@@ -322,20 +322,20 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.True(sharedCode == 0, sharedOutput);
         var loadedShared = (await EnvironmentFile.LoadAsync(sharedDescriptor)).Descriptor;
         Assert.NotNull(loadedShared);
-        var account = loadedShared.Values["cosmos.accountName"];
-        var sharedGroup = loadedShared.Values["shared.resourceGroup"];
+        var account = loadedShared.Values["cosmos-account.name"];
+        var sharedGroup = loadedShared.Values["shared-group.name"];
         Assert.Equal("true", Az("cosmosdb", "show", "--name", account, "--resource-group", sharedGroup, "--query", "enableFreeTier"), ignoreCase: true);
         Assert.Equal("1000", Az("cosmosdb", "show", "--name", account, "--resource-group", sharedGroup, "--query", "capacity.totalThroughputLimit"));
-        var cap = Az("monitor", "log-analytics", "workspace", "show", "--workspace-name", loadedShared.Values["logAnalytics.name"], "--resource-group", sharedGroup, "--query", "workspaceCapping.dailyQuotaGb");
+        var cap = Az("monitor", "log-analytics", "workspace", "show", "--workspace-name", loadedShared.Values["log-analytics.name"], "--resource-group", sharedGroup, "--query", "workspaceCapping.dailyQuotaGb");
         Assert.Equal(0.15, double.Parse(cap, System.Globalization.CultureInfo.InvariantCulture));
 
         var (devCode, devOutput) = await UpAsync(backend, region, dev, "--base", sharedDescriptor, "--out", devDescriptor);
         Assert.True(devCode == 0, devOutput);
         var loadedDev = (await EnvironmentFile.LoadAsync(devDescriptor)).Descriptor;
         Assert.NotNull(loadedDev);
-        Assert.Equal(account, loadedDev.Values["cosmos.accountName"]);
-        Assert.Equal(["cosmos.accountId"], loadedDev.Grantable);
-        var database = loadedDev.Values["cosmos.databaseName"];
+        Assert.Equal(account, loadedDev.Values["cosmos-account.name"]);
+        Assert.Equal(["cosmos-account.id"], loadedDev.Grantable);
+        var database = loadedDev.Values["database.databaseName"];
         Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", database, "--query", "resource.throughput"));
 
         var (againSharedCode, againShared) = await UpAsync(backend, region, shared, "--out", sharedDescriptor);
@@ -355,8 +355,8 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.NotNull(loadedStage);
         Assert.Equal(("stage", "dev", 1, true), (loadedStage.Type, loadedStage.Approval?.QualifiedOn, loadedStage.Approval?.Required, loadedStage.Approval?.SeparateFromDeployer));
         Assert.Equal(["00000000-0000-0000-0000-000000000000"], loadedStage.Approval!.Approvers);
-        Assert.Equal(account, loadedStage.Values["cosmos.accountName"]);
-        var stageDatabase = loadedStage.Values["cosmos.databaseName"];
+        Assert.Equal(account, loadedStage.Values["cosmos-account.name"]);
+        var stageDatabase = loadedStage.Values["database.databaseName"];
         Assert.NotEqual(database, stageDatabase);
         Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", stageDatabase, "--query", "resource.throughput"));
         Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", database, "--query", "resource.throughput"));
@@ -432,7 +432,7 @@ public sealed class EnvUpAzureTests : IDisposable
         AssertNothingChanged(againRelease, 10); // five nodes per workload: the runtime and four others
 
         // The second pass on the deployed runtime: the pending variables hold real values; the secret one reaches the app and never the output.
-        var devGroup = loadedDev.Values["resourceGroup"];
+        var devGroup = loadedDev.Values["env-group.name"];
         var workerApp = AppId(devGroup, "just-deliver-sample-worker-");
         var sampleApp = AppId(devGroup, "just-deliver-sample-app-");
         Assert.StartsWith("https://", AppEnv(sampleApp, "COSMOS_ENDPOINT"), StringComparison.Ordinal);
@@ -444,7 +444,7 @@ public sealed class EnvUpAzureTests : IDisposable
         // one; its variables are the workload's addresses and the App Insights connection string. Free tier: the environment has no profile other
         // than Consumption, and each app scales to zero at 0.25 vCPU and 0.5Gi.
         Assert.Equal("true", Az("cosmosdb", "show", "--name", account, "--resource-group", sharedGroup, "--query", "disableLocalAuth"), ignoreCase: true);
-        Assert.Equal("0", Show(loadedDev.Values["containerAppsEnvironment.id"], "length(properties.workloadProfiles[?workloadProfileType!='Consumption'] || `[]`)"));
+        Assert.Equal("0", Show(loadedDev.Values["apps-env.id"], "length(properties.workloadProfiles[?workloadProfileType!='Consumption'] || `[]`)"));
         foreach (var app in new[] { workerApp, sampleApp })
         {
             Assert.Equal("0", Show(app, "length(properties.configuration.secrets || `[]`)"));
