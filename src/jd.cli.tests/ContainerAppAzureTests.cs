@@ -32,7 +32,6 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
         Write("catalog/naming.yaml", """
             kind: Naming
             rules:
-              law: { pattern: "law-{env}-{hash}", maxLength: 63, allowed: "[a-z0-9-]" }
               cae: { pattern: "cae-{env}-{hash}", maxLength: 32, allowed: "[a-z0-9-]" }
               ca: { pattern: "ca-{env}-{hash}", maxLength: 32, allowed: "[a-z0-9-]" }
             """);

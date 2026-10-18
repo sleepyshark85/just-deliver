@@ -16,7 +16,7 @@ nodes:
       resourceId: ${apps.environmentId}
       workspaceResourceId: ${log-analytics.id}         # the workspace's resource id: Azure RBAC, no workspace key
       settingName: to-shared-workspace                 # unique per environment, the setting's parent
-      categoryGroup: allLogs                           # every log category of the environment: console and system logs
+      categoryGroup: allLogs                           # sends every log category of the managed environment
 exports:
   id: ${apps.environmentId}
   defaultDomain: ${apps.defaultDomain}
