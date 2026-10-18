@@ -420,6 +420,7 @@ public static class CatalogParser
 
     private static RuntimeImplementation ToRuntimeImplementation(JToken implementation)
     {
+        // Safe: only schema-valid documents reach here, and runtime.schema.json requires `probe`, `release` and all four probe fields.
         var probe = implementation["probe"]!;
         var release = implementation["release"]!;
         return new RuntimeImplementation(
