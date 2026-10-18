@@ -178,7 +178,8 @@ A workload asks for it (`requires: [{ type: monitoring }]`) and maps the export 
 
 E.g. `catalog/shared/cosmos-account.yaml`: `kind: SharedResource`, `scope: shared`, `uses: [shared-group]`, today's `cosmos` node with
 `${shared-group.name}`/`.location` for the group, and `exports: { id: ${cosmos.accountId}, name: …, endpoint: …, resourceGroup:
-${shared-group.name} }`. A shared resource has no implementations: the shared layer has one type.
+${shared-group.name} }`. A shared resource has no implementations: the shared layer has one type. Environment-scope resources (`env-group`, `apps-env`) likewise
+cannot vary by environment type yet; that is deferred and additive later (principle 10).
 
 ### The platform-owned implicit resources
 
@@ -291,7 +292,8 @@ A grant's **target** may only be a node created by the workload's own requiremen
 
 `enforce-monitoring` becomes `match: { kind: runtime }`, `require: monitoring` (its `reason` unchanged). The narrowest form: `require` names **one** declared component, only on a workload-scope policy (`kind: runtime`, optionally
 `environmentType`). A workload with no requirement of that type (any id, any class) is an error at its `requires`, naming the policy and its
-reason. A policy cannot add nodes (`add` is gone), require a class or a count. Node-scope `set`/`default` and workload-scope
+reason. `require` guarantees only that the monitoring resource exists in the workload; it does not guarantee that the workload maps
+`APPLICATIONINSIGHTS_CONNECTION_STRING` to it. Whether the policy also requires that variable is decided in the S21c brief (lead). A policy cannot add nodes (`add` is gone), require a class or a count. Node-scope `set`/`default` and workload-scope
 `set`/`default` on `runtime.*` are unchanged.
 
 ### Security boundaries (D19) that move
@@ -392,8 +394,10 @@ runtime's `APPLICATIONINSIGHTS_CONNECTION_STRING`, now the workload's variable, 
   runtime updated (new revision, probe and shift run); every other node and every `env up` node `unchanged`; the old stacks untouched.
 - **(b) Keep the old ids.** Needs a component flag that puts a requirement's nodes into the workload scope `@workload` and hashes names by
   node name: a permanent special case in the expander and the graph builder (~30 lines), and a second scope rule for everything that reads
-  ids, serving only this migration. Pulumi state surgery (`pulumi stack rename`) does not avoid it, because the hash still changes the
-  resource name. Not recommended.
+  ids, serving only this migration. Not recommended: a permanent special case (or a per-workload migration step) for a one-off, against
+  principle 7. (A workload could instead require `{ type: monitoring, id: appinsights }`, which keeps the hash and so the resource name, and
+  `pulumi stack rename` could then move the state. Each workload would still need that manual migration step, and the stack ids and node
+  names still change.)
 
 Old records carry the old `graph.sha256`; nothing compares graph hashes across that line. S21c's sample workloads make new sets.
 
