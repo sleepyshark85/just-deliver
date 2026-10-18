@@ -44,7 +44,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
 
         var workloadPolicies = _policies.Where(p => expansion.Owner == OwnerKind.Workload && IsWorkloadScope(p)).ToList();
 
-        // A declared requirement that failed to expand still counts: its own error says why, this one only what the policy needs.
+        // A declared requirement that failed to expand still counts; its own error says why.
         foreach (var policy in workloadPolicies.Where(p => p.Require is { } type && !expansion.DeclaredTypes.Contains(type)))
         {
             errors.Add(new LoadError(expansion.OwnerFile, "requires",
