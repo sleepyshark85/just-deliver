@@ -40,7 +40,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     private static partial Regex FunctionNamePattern();
 
     /// <summary>The first segments of a path that are not node names: the namespaces and the runtime node, always in scope.</summary>
-    public static readonly IReadOnlySet<string> ReservedRoots = new HashSet<string> { EnvNamespace, RoleNamespace, WorkloadNamespace, ResourceNamespace, RuntimeNode };
+    internal static readonly IReadOnlySet<string> ReservedRoots = new HashSet<string> { EnvNamespace, RoleNamespace, WorkloadNamespace, ResourceNamespace, RuntimeNode };
 
     /// <summary>Whether an expression in <paramref name="text"/> reads a <c>resource.</c> path, as a bare path or a function argument.</summary>
     public static bool ReadsResource(string text) => Paths(text).Any(p => p.StartsWith(ResourceNamespace + ".", StringComparison.Ordinal));
@@ -50,7 +50,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     /// own rules (where an expression ends, how arguments split, what a path is), so the two cannot disagree; text the evaluator rejects
     /// is left to it.
     /// </summary>
-    public static IEnumerable<string> Paths(string text)
+    internal static IEnumerable<string> Paths(string text)
     {
         var pos = 0;
         while (text.IndexOf("${", pos, StringComparison.Ordinal) is var start and >= 0 && FindClosingBrace(text, start + 2) is var end and >= 0)

@@ -87,13 +87,29 @@ public class CatalogUsesTests
         Assert.Equal(("c.yaml", "name"), (component.File, component.Location));
     }
 
-    [Fact]
-    public async Task Uses_must_name_a_declared_shared_resource()
+    [Theory]
+    [InlineData("c.yaml")]
+    [InlineData("r.yaml")]
+    [InlineData("e.yaml")]
+    public async Task Uses_must_name_a_declared_shared_resource(string file)
     {
-        var error = SingleError(await Parse(("s.yaml", Shared("shared-group")), ("c.yaml", Component(uses: "[cosmos-acount]"))));
+        string Uses(string f) => f == file ? "[cosmos-acount]" : "[]";
+        var error = SingleError(await Parse(
+            ("s.yaml", Shared("shared-group")), ("e.yaml", Shared("env-group", scope: "environment", uses: Uses("e.yaml"))), ("c.yaml", Component(uses: Uses("c.yaml"))),
+            ("r.yaml", Runtime(Uses("r.yaml"), "{}"))));
 
-        Assert.Equal(("c.yaml", "uses"), (error.File, error.Location));
-        Assert.Equal("'cosmos-acount' is not a shared resource in the catalog (shared resources: shared-group).", error.Message);
+        Assert.Equal((file, "uses"), (error.File, error.Location));
+        Assert.Equal("'cosmos-acount' is not a shared resource in the catalog (shared resources: env-group, shared-group).", error.Message);
+    }
+
+    // The second declaration is the one error: the checks that read shared resources by name use the first.
+    [Fact]
+    public async Task A_shared_resource_declared_twice_is_only_the_duplicate_name_error()
+    {
+        var error = SingleError(await Parse(
+            ("a.yaml", Shared("shared-group")), ("b.yaml", Shared("shared-group")), ("c.yaml", Component(uses: "[shared-group]", config: "{ group: '${shared-group.id}' }"))));
+
+        Assert.Equal(("b.yaml", "name", "'shared-group' is already declared in a.yaml."), (error.File, error.Location, error.Message));
     }
 
     [Theory]
@@ -130,23 +146,19 @@ public class CatalogUsesTests
         Assert.Empty(result.Errors);
     }
 
+    // One error per cycle, at its first member; res-0 only leads into the cycle, so it is not in it.
     [Fact]
-    public async Task A_uses_cycle_is_an_error_on_each_resource_in_it()
+    public async Task A_uses_cycle_is_one_error_naming_the_cycle()
     {
-        var two = await Parse(("a.yaml", Shared("res-a", uses: "[res-b]")), ("b.yaml", Shared("res-b", uses: "[res-a]", node: "other")));
-        var three = await Parse(
+        var two = SingleError(await Parse(("a.yaml", Shared("res-a", uses: "[res-b]")), ("b.yaml", Shared("res-b", uses: "[res-a]", node: "other"))));
+        var three = SingleError(await Parse(
             ("a.yaml", Shared("res-a", uses: "[res-b]")), ("b.yaml", Shared("res-b", uses: "[res-c]", node: "nb")), ("c.yaml", Shared("res-c", uses: "[res-a]", node: "nc")),
-            ("d.yaml", Shared("res-d", uses: "[res-a]", node: "nd")));
+            ("d.yaml", Shared("res-0", uses: "[res-a]", node: "nd"))));
         var self = SingleError(await Parse(("a.yaml", Shared("res-a", uses: "[res-a]"))));
 
-        Assert.Null(two.Catalog);
-        Assert.Equal(
-            [("a.yaml", "uses", "'res-a' reaches itself through uses: res-a -> res-b -> res-a."), ("b.yaml", "uses", "'res-b' reaches itself through uses: res-b -> res-a -> res-b.")],
-            two.Errors.Select(e => (e.File, e.Location, e.Message)));
-        // res-d only leads into the cycle, so it is not reported.
-        Assert.Equal(["a.yaml", "b.yaml", "c.yaml"], three.Errors.Select(e => e.File));
-        Assert.Equal("'res-a' reaches itself through uses: res-a -> res-b -> res-c -> res-a.", three.Errors[0].Message);
-        Assert.Equal(("a.yaml", "uses", "'res-a' reaches itself through uses: res-a -> res-a."), (self.File, self.Location, self.Message));
+        Assert.Equal(("a.yaml", "uses", "uses cycle: res-a -> res-b -> res-a."), (two.File, two.Location, two.Message));
+        Assert.Equal(("a.yaml", "uses", "uses cycle: res-a -> res-b -> res-c -> res-a."), (three.File, three.Location, three.Message));
+        Assert.Equal(("a.yaml", "uses", "uses cycle: res-a -> res-a."), (self.File, self.Location, self.Message));
     }
 
     [Fact]
@@ -194,7 +206,7 @@ public class CatalogUsesTests
         var error = SingleError(await Parse(("c.yaml", Component(environment: environment))));
 
         Assert.Equal(("c.yaml", "implementations.default.environment.nodes.db.config.a"), (error.File, error.Location));
-        Assert.Contains("reads another component or runtime", error.Message);
+        Assert.Equal("'alpha-db.databaseName': an environment part cannot read its own component.", error.Message);
     }
 
     [Theory]
@@ -240,6 +252,18 @@ public class CatalogUsesTests
 
         Assert.Equal(("s.yaml", "nodes.shared-group"), (used.File, used.Location));
         Assert.Equal(("s.yaml", "nodes.runtime", "'runtime' is the runtime node, declared only by a Runtime."), (runtime.File, runtime.Location, runtime.Message));
+    }
+
+    // The kebab rule covers every part kind; class parts and runtimes are covered in CatalogParserTests.
+    [Fact]
+    public async Task Shared_resource_and_environment_part_node_names_must_be_lowercase_kebab()
+    {
+        var shared = SingleError(await Parse(("s.yaml", Shared("shared-group", node: "Bad_Name", exports: "{}"))));
+        var environment = SingleError(await Parse(("c.yaml", Component(environment: "{ nodes: { Bad_Name: { template: t/db, config: {} } }, exports: {} }"))));
+
+        Assert.Equal(("s.yaml", "nodes.Bad_Name"), (shared.File, shared.Location));
+        Assert.StartsWith("'Bad_Name' is not a valid node name;", shared.Message);
+        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.Bad_Name"), (environment.File, environment.Location));
     }
 
     [Theory]
