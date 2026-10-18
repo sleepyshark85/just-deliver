@@ -132,13 +132,13 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     [Fact]
     public async Task A_template_misfit_in_the_second_workload_stops_the_whole_set_before_anything_is_created()
     {
-        // The app asks for a type whose mapping names a template the library does not have; the worker is fine.
+        // The app asks for a component whose class names a template the library does not have; the worker is fine.
         var catalog = Path.Combine(_temp, "catalog");
         CliTests.CopyDirectory(Catalog, catalog);
-        await File.WriteAllTextAsync(Path.Combine(catalog, "types", "cache.yaml"), "kind: ResourceType\nname: cache\ndescription: d\nclasses: [standard]\nexports: [engine, endpoint, database, container]\n");
         await File.WriteAllTextAsync(
-            Path.Combine(catalog, "mappings", "cache.yaml"),
-            "kind: Mapping\nmatch: { type: cache, class: standard }\nnodes:\n  n:\n    template: azure/no-such-template\n    config: {}\nexports:\n  engine: e\n  endpoint: e\n  database: e\n  container: e\n");
+            Path.Combine(catalog, "components", "cache.yaml"),
+            "kind: Component\nname: cache\ndescription: d\nexports: [engine, endpoint, database, container]\nimplementations:\n  default:\n    classes:\n      standard:\n"
+            + "        nodes:\n          n:\n            template: azure/no-such-template\n            config: {}\n        exports: { engine: e, endpoint: e, database: e, container: e }\n");
         var set = await CreateSetAsync(app => app.Replace("- type: database", "- type: cache\n    id: database"));
         var backend = new RecordingBackend();
 

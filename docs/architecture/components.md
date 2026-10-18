@@ -1,6 +1,6 @@
 # Catalog by component
 
-> Status: design note for S21, **phase 1: components, base** ([roadmap](../plans/roadmap.md); serves N1, N3, N5). S21a built (environment types); S21b–f not built. Direction:
+> Status: design note for S21, **phase 1: components, base** ([roadmap](../plans/roadmap.md); serves N1, N3, N5). S21a built (environment types); S21b built (components and runtimes); S21c–f not built. Direction:
 > [context.md](../context.md) § "Catalog by component". Refines [resolver.md](resolver.md), [provisioning.md](provisioning.md) (Substrate) and
 > [approvals.md](approvals.md) §1–2. The user's choices: [section 8](#8-choices-taken-by-the-user-2026-10-18).
 

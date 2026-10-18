@@ -11,7 +11,7 @@ namespace jd.resolver.expressions;
 /// </summary>
 public sealed partial class ExpressionEvaluator(ExpressionContext context)
 {
-    /// <summary>The reserved node name of the runtime: always in scope, never declared by a mapping.</summary>
+    /// <summary>The reserved node name of the runtime: always in scope, declared only by a Runtime.</summary>
     public const string RuntimeNode = "runtime";
 
     // Namespaces (first path segment) and the node they reference; part of the expression format.

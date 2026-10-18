@@ -7,7 +7,7 @@ public sealed record ProbeResult(bool Passed, string Detail);
 
 /// <summary>
 /// Asks a deployed revision once whether it is healthy. The orchestrator owns the retries; the adapter owns the transport. The target
-/// is only the revision's <c>fqdn</c> and the mapping's <see cref="Probe.Path"/>.
+/// is only the revision's <c>fqdn</c> and the runtime's <see cref="Probe.Path"/>.
 /// </summary>
 public interface IRevisionProbe
 {

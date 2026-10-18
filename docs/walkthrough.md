@@ -10,7 +10,7 @@ where a step is not covered by a test, it says so.
 | Part | What it is | Depth |
 |---|---|---|
 | Workload definition | What a team declares: image (pinned by digest), variables, ports, `requires` by type (`database`). No Azure detail. | [workload-definition.md](architecture/workload-definition.md) |
-| Catalog (`catalog/`) | The platform's knowledge as data: **types** (the contract), **mappings** (requirement → graph nodes), **templates** (Pulumi YAML), **policies** (IT Ops rules: add, set, forbid), **naming**, **roles**. | [resolver.md](architecture/resolver.md), [provisioning.md](architecture/provisioning.md) |
+| Catalog (`catalog/`) | The platform's knowledge as data: **components** (the contract and its implementations per environment type: requirement → graph nodes), **runtimes** (the workload's runtime), **templates** (Pulumi YAML), **policies** (IT Ops rules: add, set, forbid), **naming**, **roles**. | [resolver.md](architecture/resolver.md), [provisioning.md](architecture/provisioning.md) |
 | Environment definition → descriptor | `jd env up` provisions an environment's substrate (`shared` once, then `dev`, `stage`) and writes its **descriptor**: the real ids workloads resolve against, and for `stage` the **approval policy**. | [resolver.md](architecture/resolver.md#environment-descriptor), [approvals.md](architecture/approvals.md) |
 | Resolver → graph | Workload + catalog + descriptor → a graph of nodes (template, config with provenance, dependencies, phase). Pure, offline: `jd preview` prints it. | [resolver.md](architecture/resolver.md) |
 | Orchestrator + Pulumi Automation | Deploys the graph node by node, one Pulumi stack each, in order; the runtime node last as a release: dark revision, grants, probe, traffic shift. | [provisioning.md](architecture/provisioning.md#orchestrator) |
@@ -23,7 +23,7 @@ where a step is not covered by a test, it says so.
 flowchart LR
   W[workload definitions] --> M[release manifest] -->|release create| S[release set<br/>pinned, immutable]
   ED[environment definitions] -->|env up| D[descriptors<br/>shared, dev, stage + policy]
-  C[catalog<br/>types, mappings, templates,<br/>policies, naming, roles] --> R
+  C[catalog<br/>components, runtimes, templates,<br/>policies, naming, roles] --> R
   S --> R[resolver] 
   D --> R
   R -->|graph per workload| O[orchestrator] -->|Pulumi Automation| AZ[(Azure)]
@@ -226,7 +226,7 @@ exist, so `/health` answers 503.
 jd release deploy "$JD_WALK/bad.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog catalog; echo "exit $?"
 ```
 
-Expected after about five minutes (the probe retries for the mapping's `timeoutSeconds: 300`): exit 1; under `workload just-deliver-sample-app` the runtime
+Expected after about five minutes (the probe retries for the runtime's `timeoutSeconds: 300`): exit 1; under `workload just-deliver-sample-app` the runtime
 shows `dark: done (<bad revision>)`, `grants: done`, `probe: failed …` and **no** `shift:` line; no `workload just-deliver-sample-worker` line;
 `release 1.3.0-bad on dev: 0 deployed, 0 unchanged, 1 failed, 1 not started (just-deliver-sample-worker).`; on stderr
 `jd: stopped at just-deliver-sample-app, node just-deliver-sample-app/dev/@workload/runtime: …`; `record: …` (no IQ line: a failed deploy runs no IQ).
@@ -265,7 +265,7 @@ jd preview samples/walkthrough/workloads/app.yaml --env "$JD_WALK/dev.env.yaml" 
 jd preview samples/walkthrough/workloads/app.yaml --env "$JD_WALK/dev.env.yaml" --catalog "$JD_WALK/catalog" | grep maxInactiveRevisions
 ```
 
-Expected: `maxInactiveRevisions = 5   [Mapping: mappings/runtime/container-app.yaml]`, then
+Expected: `maxInactiveRevisions = 5   [Implementation: runtimes/container-app.yaml]`, then
 `maxInactiveRevisions = 2   [PolicySet: limit-revisions (policies/limit-revisions.yaml)]`. Without Azure at all, use
 `--env src/jd.resolver.tests/golden/seed-environment.yaml` (a test descriptor). Proven offline by
 `CliTests.The_walkthrough_kit_passes_the_offline_checks_and_its_policy_shows_in_the_preview`. Reset: `rm -rf "$JD_WALK/catalog"`.

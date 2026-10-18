@@ -80,21 +80,24 @@ public abstract class ProbeAzureTest : IDisposable
     }
 
     /// <summary>
-    /// Every workload needs a runtime mapping. This test-only one points at a template with no resources, so the release flow
+    /// Every workload needs a runtime. This test-only one points at a template with no resources, so the release flow
     /// deploys it without reaching Azure (<see cref="DeployAsync"/> gives the flow a probe that passes: there is no app behind the
     /// stand-in's fqdn); it declares the inputs and outputs the release block names.
     /// </summary>
     protected void WriteRuntimeStandIn()
     {
-        Write("catalog/mappings/runtime.yaml", """
-            kind: Mapping
-            match: { kind: runtime }
-            probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
-            release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }
-            nodes:
-              runtime:
-                template: test/runtime-stand-in
-                config: {}
+        Write("catalog/runtimes/test-runtime.yaml", """
+            kind: Runtime
+            name: test-runtime
+            description: Test-only runtime stand-in.
+            implementations:
+              default:
+                probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }
+                release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }
+                nodes:
+                  runtime:
+                    template: test/runtime-stand-in
+                    config: {}
             """);
         Write("catalog/templates/test/runtime-stand-in/Pulumi.yaml", """
             name: runtime-stand-in

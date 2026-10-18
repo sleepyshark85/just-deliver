@@ -20,7 +20,7 @@
       "minLength": 1
     },
     "match": {
-      "description": "Criteria the policy applies to: the mapping criteria plus 'template' (the template of a node).",
+      "description": "Criteria the policy applies to: the requirement's type and class, the environment type, the kind (requirement or runtime), the runtime, and the template of a node.",
       "type": "object",
       "minProperties": 1,
       "additionalProperties": false,

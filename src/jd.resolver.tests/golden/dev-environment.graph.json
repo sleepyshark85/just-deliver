@@ -20,10 +20,10 @@
         "throughput": 400
       },
       "provenance": {
-        "accountName": "Mapping: mappings/env-substrate/standard.yaml",
-        "databaseName": "Mapping: mappings/env-substrate/standard.yaml",
-        "resourceGroupName": "Mapping: mappings/env-substrate/standard.yaml",
-        "throughput": "Mapping: mappings/env-substrate/standard.yaml"
+        "accountName": "Implementation: components/env-substrate.yaml",
+        "databaseName": "Implementation: components/env-substrate.yaml",
+        "resourceGroupName": "Implementation: components/env-substrate.yaml",
+        "throughput": "Implementation: components/env-substrate.yaml"
       }
     },
     {
@@ -45,10 +45,10 @@
         }
       },
       "provenance": {
-        "location": "Mapping: mappings/env-substrate/standard.yaml",
-        "resourceGroupName": "Mapping: mappings/env-substrate/standard.yaml",
-        "tags.project": "Mapping: mappings/env-substrate/standard.yaml",
-        "tags.tier": "Mapping: mappings/env-substrate/standard.yaml"
+        "location": "Implementation: components/env-substrate.yaml",
+        "resourceGroupName": "Implementation: components/env-substrate.yaml",
+        "tags.project": "Implementation: components/env-substrate.yaml",
+        "tags.tier": "Implementation: components/env-substrate.yaml"
       }
     },
     {
@@ -72,12 +72,12 @@
         "workspaceResourceGroupName": "rg-shared"
       },
       "provenance": {
-        "environmentName": "Mapping: mappings/env-substrate/standard.yaml",
-        "location": "Mapping: mappings/env-substrate/standard.yaml",
-        "resourceGroupName": "Mapping: mappings/env-substrate/standard.yaml",
-        "workspaceCustomerId": "Mapping: mappings/env-substrate/standard.yaml",
-        "workspaceName": "Mapping: mappings/env-substrate/standard.yaml",
-        "workspaceResourceGroupName": "Mapping: mappings/env-substrate/standard.yaml"
+        "environmentName": "Implementation: components/env-substrate.yaml",
+        "location": "Implementation: components/env-substrate.yaml",
+        "resourceGroupName": "Implementation: components/env-substrate.yaml",
+        "workspaceCustomerId": "Implementation: components/env-substrate.yaml",
+        "workspaceName": "Implementation: components/env-substrate.yaml",
+        "workspaceResourceGroupName": "Implementation: components/env-substrate.yaml"
       }
     }
   ],

@@ -115,13 +115,13 @@ public sealed class CliTests : IDisposable
         // A policy-added field: the value, where it came from in the environment, and the policy that added it.
         Assert.Contains("  workspaceResourceId = /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev (from env.logAnalytics.id)   [PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)]", stdout);
         // A mapping field: its provenance names the file once.
-        Assert.Contains("  partitionKeyPath = /id   [Mapping: mappings/database/standard.yaml]", stdout);
+        Assert.Contains("  partitionKeyPath = /id   [Implementation: components/database.yaml]", stdout);
         Assert.Contains("= pending: ", stdout);
         Assert.Contains("depends on: ", stdout);
         // The runtime node: its own phase, the probe as data, its fields from the runtime mapping.
         Assert.Contains("template: azure/container-app  kind: Create  phase: Runtime", stdout);
         Assert.Contains("  probe: GET /health expects 200", stdout);
-        Assert.Contains("  targetPort = 8080   [Mapping: mappings/runtime/container-app.yaml]", stdout);
+        Assert.Contains("  targetPort = 8080   [Implementation: runtimes/container-app.yaml]", stdout);
         // The env wiring: each variable with its source, and whether it still waits for a deployed output.
         Assert.Contains("  variables.LOG_LEVEL = info   [Workload: container.variables]", stdout);
         Assert.Contains("  variables.COSMOS_ENDPOINT = https://cosmos-dev.documents.azure.com:443/   [Workload: container.variables]", stdout);
@@ -141,7 +141,7 @@ public sealed class CliTests : IDisposable
 
         Assert.True(code == 0, stderr);
         Assert.Contains("  maxInactiveRevisions = 2   [PolicySet: limit-revisions (policies/limit-revisions.yaml)]", stdout);
-        Assert.DoesNotContain("  maxInactiveRevisions = 5   [Mapping: mappings/runtime/container-app.yaml]", stdout);
+        Assert.DoesNotContain("  maxInactiveRevisions = 5   [Implementation: runtimes/container-app.yaml]", stdout);
     }
 
     // The manual-test kit (samples/walkthrough, docs/walkthrough.md) cannot rot unseen: every workload previews, every manifest makes a set whose
@@ -209,19 +209,18 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
-    public async Task Preview_reports_a_mapping_export_that_references_a_resource_instead_of_failing()
+    public async Task Preview_reports_a_component_export_that_references_a_resource_instead_of_failing()
     {
         var catalog = Path.Combine(_temp, "catalog");
         WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n");
-        WriteTemp("catalog/types/database.yaml", "kind: ResourceType\nname: database\ndescription: d\nclasses: [standard]\nexports: [endpoint]\n");
-        WriteTemp("catalog/mappings/database.yaml", "kind: Mapping\nmatch: { type: database }\nnodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.endpoint}\n");
+        WriteTemp("catalog/components/database.yaml", "kind: Component\nname: database\ndescription: d\nexports: [endpoint]\nimplementations:\n  default:\n    classes:\n      standard:\n        nodes:\n          n: { template: t/n, config: {} }\n        exports:\n          endpoint: ${resource.other.endpoint}\n");
 
         var (code, stdout, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", catalog);
 
         Assert.Equal(1, code);
         Assert.Empty(stdout);
-        Assert.Contains(Path.Combine(catalog, "mappings/database.yaml"), stderr);
-        Assert.Contains("exports.endpoint", stderr);
+        Assert.Contains(Path.Combine(catalog, "components/database.yaml"), stderr);
+        Assert.Contains("implementations.default.classes.standard.exports.endpoint", stderr);
         Assert.Contains("an export cannot reference", stderr);
     }
 
@@ -230,13 +229,13 @@ public sealed class CliTests : IDisposable
     {
         var catalog = Path.Combine(_temp, "catalog");
         WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n");
-        WriteTemp("catalog/mappings/oops.yaml", "kind: Mapping\nmatch: {}\n");
+        WriteTemp("catalog/components/oops.yaml", "kind: Component\nname: oops\n");
 
         var (code, stdout, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", catalog);
 
         Assert.Equal(1, code);
         Assert.Empty(stdout);
-        Assert.Contains(Path.Combine(catalog, "mappings/oops.yaml"), stderr);
+        Assert.Contains(Path.Combine(catalog, "components/oops.yaml"), stderr);
     }
 
     [Fact]
@@ -303,11 +302,11 @@ public sealed class CliTests : IDisposable
     [Fact]
     public async Task A_revision_that_fails_its_probe_exits_1_naming_the_probe_step_and_is_never_shifted()
     {
-        // One second of retrying instead of the mapping's five minutes.
+        // One second of retrying instead of the runtime's five minutes.
         var catalog = Path.Combine(_temp, "catalog");
         CopyDirectory(Catalog, catalog);
-        var mapping = Path.Combine(catalog, "mappings", "runtime", "container-app.yaml");
-        File.WriteAllText(mapping, File.ReadAllText(mapping).Replace("timeoutSeconds: 300, intervalSeconds: 5", "timeoutSeconds: 1, intervalSeconds: 1", StringComparison.Ordinal));
+        var runtime = Path.Combine(catalog, "runtimes", "container-app.yaml");
+        File.WriteAllText(runtime, File.ReadAllText(runtime).Replace("timeoutSeconds: 300, intervalSeconds: 5", "timeoutSeconds: 1, intervalSeconds: 1", StringComparison.Ordinal));
         var backend = new RecordingBackend { ProbePasses = false };
 
         var (code, stdout, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", catalog);

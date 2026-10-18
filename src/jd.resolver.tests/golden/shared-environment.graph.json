@@ -22,10 +22,10 @@
         }
       },
       "provenance": {
-        "location": "Mapping: mappings/shared-substrate/standard.yaml",
-        "resourceGroupName": "Mapping: mappings/shared-substrate/standard.yaml",
-        "tags.project": "Mapping: mappings/shared-substrate/standard.yaml",
-        "tags.tier": "Mapping: mappings/shared-substrate/standard.yaml"
+        "location": "Implementation: components/shared-substrate.yaml",
+        "resourceGroupName": "Implementation: components/shared-substrate.yaml",
+        "tags.project": "Implementation: components/shared-substrate.yaml",
+        "tags.tier": "Implementation: components/shared-substrate.yaml"
       }
     },
     {
@@ -49,12 +49,12 @@
         "totalThroughputLimit": 1000
       },
       "provenance": {
-        "accountName": "Mapping: mappings/shared-substrate/standard.yaml",
-        "disableLocalAuth": "Mapping: mappings/shared-substrate/standard.yaml",
-        "enableFreeTier": "Mapping: mappings/shared-substrate/standard.yaml",
-        "location": "Mapping: mappings/shared-substrate/standard.yaml",
-        "resourceGroupName": "Mapping: mappings/shared-substrate/standard.yaml",
-        "totalThroughputLimit": "Mapping: mappings/shared-substrate/standard.yaml"
+        "accountName": "Implementation: components/shared-substrate.yaml",
+        "disableLocalAuth": "Implementation: components/shared-substrate.yaml",
+        "enableFreeTier": "Implementation: components/shared-substrate.yaml",
+        "location": "Implementation: components/shared-substrate.yaml",
+        "resourceGroupName": "Implementation: components/shared-substrate.yaml",
+        "totalThroughputLimit": "Implementation: components/shared-substrate.yaml"
       }
     },
     {
@@ -76,10 +76,10 @@
         "workspaceName": "law-shared-546c92"
       },
       "provenance": {
-        "dailyQuotaGb": "Mapping: mappings/shared-substrate/standard.yaml",
-        "location": "Mapping: mappings/shared-substrate/standard.yaml",
-        "resourceGroupName": "Mapping: mappings/shared-substrate/standard.yaml",
-        "workspaceName": "Mapping: mappings/shared-substrate/standard.yaml"
+        "dailyQuotaGb": "Implementation: components/shared-substrate.yaml",
+        "location": "Implementation: components/shared-substrate.yaml",
+        "resourceGroupName": "Implementation: components/shared-substrate.yaml",
+        "workspaceName": "Implementation: components/shared-substrate.yaml"
       }
     }
   ],

@@ -15,7 +15,7 @@ internal sealed record Prepared(DeploymentPackage? Package, NodeOutcome Outcome 
 
 /// <summary>
 /// Deploys the runtime node in the steps of the release flow: a dark revision (the live revision keeps all traffic), the grants, a probe
-/// of the new revision, and the traffic shift. A revision that fails its probe never gets traffic while a live one exists. The mapping's
+/// of the new revision, and the traffic shift. A revision that fails its probe never gets traffic while a live one exists. The runtime's
 /// release block names the template's inputs and outputs and the shape of a traffic item, so none is in code. <c>prepare</c> fills the
 /// node's config as for any node; <c>deployDependants</c> deploys the nodes that depend on the runtime, given the dark deploy's outputs, and
 /// returns the failure reason or null. Rules: docs/architecture/provisioning.md.
@@ -33,8 +33,8 @@ internal sealed class ReleaseFlow(
 
     public async Task<NodeReport> RunAsync(GraphNode node, CancellationToken cancellationToken)
     {
-        var release = node.Release ?? throw new InvalidOperationException($"node '{node.Id}': the runtime mapping has no release block.");
-        var spec = node.Probe ?? throw new InvalidOperationException($"node '{node.Id}': the runtime mapping has no probe.");
+        var release = node.Release ?? throw new InvalidOperationException($"node '{node.Id}': the runtime has no release block.");
+        var spec = node.Probe ?? throw new InvalidOperationException($"node '{node.Id}': the runtime has no probe.");
         var steps = new List<StepReport>();
         var step = Step.Dark;
         DeploymentResult? dark = null;

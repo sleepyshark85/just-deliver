@@ -247,8 +247,8 @@ public partial class TemplateLibraryTests
         Assert.Equal(("w/dev/@workload/runtime", output), (error.File, error.Location));
     }
 
-    // The catalog loader refuses a runtime mapping that sets the engine's inputs, but a workload-scope policy sets runtime.* after the
-    // mapping loaded: the resolved runtime node is checked here.
+    // The catalog loader refuses a runtime that sets the engine's inputs, but a workload-scope policy sets runtime.* after the
+    // catalog loaded: the resolved runtime node is checked here.
     [Theory]
     [InlineData("set", "suffix")]
     [InlineData("set", "traffic")]
@@ -259,9 +259,10 @@ public partial class TemplateLibraryTests
         var sources = new[]
         {
             "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
-            "kind: Mapping\nmatch: { kind: runtime }\nprobe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
-                + "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffixOut, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n"
-                + "nodes:\n  runtime:\n    template: t/rt\n    config: { image: i }\n",
+            "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n"
+                + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
+                + "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffixOut, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n"
+                + "    nodes:\n      runtime:\n        template: t/rt\n        config: { image: i }\n",
             $"kind: Policy\nname: pol\nreason: r\nmatch: {{ kind: runtime }}\n{layer}: {{ runtime.{input}: from-policy }}\n",
         }.Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(sources);

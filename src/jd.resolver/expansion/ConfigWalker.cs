@@ -6,7 +6,7 @@ namespace jd.resolver.expansion;
 /// <summary>The workload's <c>container.variables</c> and the file they were written in: what <c>fn::entries</c> stands for in the runtime node.</summary>
 internal sealed record WorkloadVariables(JObject Map, string File);
 
-/// <summary>Evaluates catalog config (mapping nodes, policy values and added nodes) into <see cref="ConfigValue"/>s; shared by expansion and policies.</summary>
+/// <summary>Evaluates catalog config (component and runtime nodes, policy values and added nodes) into <see cref="ConfigValue"/>s; shared by expansion and policies.</summary>
 internal static class ConfigWalker
 {
     /// <summary>The one config-level form: <c>{ fn::entries: workload.variables }</c> is the workload's variables, deployed as a sorted list of <c>{name, value}</c>.</summary>

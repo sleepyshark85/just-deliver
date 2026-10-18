@@ -17,9 +17,8 @@ public sealed class ReleaseResolverTests
         var files = new[]
         {
             "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
-            "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n",
-            "kind: Mapping\nmatch: { type: thing }\nnodes:\n  n:\n    template: t/n\n    config: { k: 1 }\nexports:\n  out: x\n",
-            TestCatalog.RuntimeMapping,
+            TestCatalog.Component("thing", "[out]", "nodes:\n  n:\n    template: t/n\n    config: { k: 1 }\nexports:\n  out: x\n"),
+            TestCatalog.RuntimeFile,
         };
         var loaded = await CatalogParser.ParseAsync(files.Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
         Assert.Empty(loaded.Errors);
