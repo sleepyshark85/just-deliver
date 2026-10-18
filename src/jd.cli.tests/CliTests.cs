@@ -113,7 +113,7 @@ public sealed class CliTests : IDisposable
         }
 
         // A component field read from the environment: the value, where it came from, and the component file.
-        Assert.Contains("  workspaceResourceId = /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev (from env.logAnalytics.id)   [Implementation: components/monitoring.yaml]", stdout);
+        Assert.Contains("  workspaceResourceId = /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev (from env.log-analytics.id)   [Implementation: components/monitoring.yaml]", stdout);
         // A mapping field: its provenance names the file once.
         Assert.Contains("  partitionKeyPath = /id   [Implementation: components/database.yaml]", stdout);
         Assert.Contains("= pending: ", stdout);
@@ -213,7 +213,7 @@ public sealed class CliTests : IDisposable
     public async Task Preview_reports_a_component_export_that_references_a_resource_instead_of_failing()
     {
         var catalog = Path.Combine(_temp, "catalog");
-        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n");
+        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
         WriteTemp("catalog/components/database.yaml", "kind: Component\nname: database\ndescription: d\nexports: [endpoint]\nimplementations:\n  default:\n    classes:\n      standard:\n        nodes:\n          n: { template: t/n, config: {} }\n        exports:\n          endpoint: ${resource.other.endpoint}\n");
 
         var (code, stdout, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", catalog);
@@ -229,7 +229,7 @@ public sealed class CliTests : IDisposable
     public async Task Preview_prints_resolver_errors_with_file_and_location()
     {
         var catalog = Path.Combine(_temp, "catalog");
-        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n");
+        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
         WriteTemp("catalog/components/oops.yaml", "kind: Component\nname: oops\n");
 
         var (code, stdout, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", catalog);

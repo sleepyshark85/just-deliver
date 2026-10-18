@@ -2,8 +2,7 @@ kind: SharedResource
 name: shared-group
 description: The shared layer's resource group, holding every shared-scope resource.
 scope: shared
-# Loaded and checked; deployed from S21e, when `env up` collects parts from the offers (docs/architecture/components.md section 7). Until
-# then the transitional shared-substrate component deploys these nodes.
+# Deployed by the shared layer's `jd env up` when what it offers reaches it through uses (docs/architecture/components.md section 3).
 nodes:
   group:
     template: azure/resource-group

@@ -23,11 +23,14 @@ public sealed record ConfigArray(IReadOnlyList<ConfigValue> Items) : ConfigValue
 
 public sealed record ExpandedNode(string Name, string Template, NodeKind Kind, IReadOnlyDictionary<string, ConfigValue> Config);
 
-/// <summary>One requirement expanded from the component in <see cref="Source"/> (catalog-relative path of its file).</summary>
+/// <summary>
+/// One requirement expanded from the component in <see cref="Source"/> (catalog-relative path of its file), or one part of an environment
+/// run (id the substrate scope, no type or class, so no policy matching them applies).
+/// </summary>
 public sealed record ExpandedRequirement(
     string Id,
-    string Type,
-    string Class,
+    string? Type,
+    string? Class,
     string Source,
     IReadOnlyList<ExpandedNode> Nodes,
     IReadOnlyDictionary<string, EvalResult> Exports);
@@ -52,6 +55,7 @@ public enum OwnerKind
 /// <param name="DeclaredTypes">The <c>type</c> of every entry in the owner's <c>requires</c>, including those that failed to expand.</param>
 /// <param name="Runtime">The runtime nodes of a workload; null for an environment definition, and when the runtime failed to expand.</param>
 /// <param name="Errors">Everything that kept a requirement from expanding.</param>
+/// <param name="Parts">An environment run's parts: their exports (name to expression) by part name; empty for a workload.</param>
 public sealed record ExpansionResult(
     OwnerKind Owner,
     string OwnerFile,
@@ -62,4 +66,5 @@ public sealed record ExpansionResult(
     IReadOnlyList<ExpandedRequirement> Requirements,
     IReadOnlySet<string> DeclaredTypes,
     ExpandedRuntime? Runtime,
-    IReadOnlyList<LoadError> Errors);
+    IReadOnlyList<LoadError> Errors,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts);

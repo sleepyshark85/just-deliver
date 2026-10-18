@@ -18,7 +18,7 @@ public class GraphBuilderTests
 
     private static readonly string[] BaseFiles =
     [
-        "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
+        "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
     ];
 
     private static readonly EnvironmentDescriptor Env =
@@ -115,21 +115,6 @@ public class GraphBuilderTests
 
         Assert.Equal((TestCatalog.Probe, TestCatalog.Release), (Node(graph, "@workload", "runtime").Probe, Node(graph, "@workload", "runtime").Release));
         Assert.All(graph.Nodes.Where(n => n.Name != "runtime"), n => Assert.Equal((null, null), (n.Probe, n.Release)));
-    }
-
-    [Fact]
-    public async Task A_runtime_reference_in_an_environment_definition_is_an_error_because_it_has_no_runtime()
-    {
-        var component = TestCatalog.Component("sqldb", "[endpoint]", $"nodes:\n{N("a", "who: '${runtime.principalId}'")}exports:\n  endpoint: x\n");
-        var loaded = await CatalogParser.ParseAsync(BaseFiles.Append(component).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
-        Assert.Empty(loaded.Errors);
-        var expansion = new Expander(loaded.Catalog!, Env).ExpandEnvironment("dev", (JArray)YamlSchemaValidator.ParseYaml("- type: sqldb\n"), "definition.yaml");
-
-        var graph = new GraphBuilder(Env).Build(new PolicyApplier(loaded.Catalog!, Env).Apply(expansion));
-
-        var error = Assert.Single(graph.Errors);
-        Assert.Equal((ComponentFile, "who"), (error.File, error.Location));
-        Assert.Contains("references runtime.principalId, but there is no runtime", error.Message);
     }
 
     [Fact]

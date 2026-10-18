@@ -12,9 +12,9 @@ implementations:
           appinsights:
             template: azure/application-insights
             config:
-              resourceGroupName: ${env.resourceGroup}
+              resourceGroupName: ${env.env-group.name}
               location: ${env.region}
-              workspaceResourceId: ${env.logAnalytics.id}
+              workspaceResourceId: ${env.log-analytics.id}
               appInsightsName: ${name('appi')}
           access:
             kind: grant                                   # surfaced in the approval diff

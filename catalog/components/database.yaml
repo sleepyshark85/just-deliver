@@ -5,8 +5,8 @@ exports: [engine, endpoint, database, container]     # the contract: every class
 uses: [cosmos-account]
 implementations:
   default:                                           # every environment type without its own key
-    # Once per environment that offers database. Loaded and checked; deployed from S21e, and read by the class below (as
-    # ${database.databaseName}) from S21f (docs/architecture/components.md section 7). Until then env-substrate deploys this node.
+    # Once per environment that offers database, deployed by its `jd env up`; the class below reads it from the descriptor as
+    # env.database.* until S21f reads it as ${database.databaseName} (docs/architecture/components.md section 7).
     environment:
       nodes:
         database:
@@ -21,26 +21,27 @@ implementations:
         databaseId: ${database.databaseId}
     classes:
       standard:
-        # The account and the shared-throughput database are substrate (env.cosmos.*); a workload adds a container and a grant on it.
+        # The account and the shared-throughput database are the environment's (env.cosmos-account.*, env.database.*); a workload adds a
+        # container and a grant on it.
         nodes:
           container:
             template: azure/cosmos-sql-container
             config:
-              accountId: ${env.cosmos.accountId}
-              databaseName: ${env.cosmos.databaseName}
+              accountId: ${env.cosmos-account.id}
+              databaseName: ${env.database.databaseName}
               containerName: ${name('cosmos-container')}
               partitionKeyPath: /id
           access:
             kind: grant                                   # surfaced in the approval diff
             template: azure/cosmos-sql-role-assignment
             config:
-              accountId: ${env.cosmos.accountId}
+              accountId: ${env.cosmos-account.id}
               scope: ${container.scope}                   # this container only, not the account
               principalId: ${runtime.principalId}         # this reference alone orders it after the revision step
               roleGuid: ${role.cosmos-data-contributor}
               roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
         exports:
           engine: cosmos-sql                              # a literal from data: what the code is talking to
-          endpoint: ${env.cosmos.endpoint}
-          database: ${env.cosmos.databaseName}
+          endpoint: ${env.cosmos-account.endpoint}
+          database: ${env.database.databaseName}
           container: ${container.containerName}

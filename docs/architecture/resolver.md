@@ -108,29 +108,29 @@ implementations:
           container:
             template: azure/cosmos-sql-container
             config:
-              accountId: ${env.cosmos.accountId}
-              databaseName: ${env.cosmos.databaseName}
+              accountId: ${env.cosmos-account.id}
+              databaseName: ${env.database.databaseName}
               containerName: ${name('cosmos-container')}
               partitionKeyPath: /id
           access:
             kind: grant                                   # surfaced in the approval diff
             template: azure/cosmos-sql-role-assignment
             config:
-              accountId: ${env.cosmos.accountId}
+              accountId: ${env.cosmos-account.id}
               scope: ${container.scope}                   # this container only, not the account
               principalId: ${runtime.principalId}         # this reference alone orders it after the revision step
               roleGuid: ${role.cosmos-data-contributor}
               roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
         exports:
           engine: cosmos-sql                              # a literal from data: what the code is talking to
-          endpoint: ${env.cosmos.endpoint}
-          database: ${env.cosmos.databaseName}
+          endpoint: ${env.cosmos-account.endpoint}
+          database: ${env.database.databaseName}
           container: ${container.containerName}
 ```
 
 Team overrides are out of the MVP, so the format has no `overridable` block yet.
 
-The Cosmos account and one shared-throughput database (400 RU/s) per environment are substrate resources, so the implementation reads them from `${env.cosmos.…}` and creates only the workload's container (it has no throughput of its own) plus a grant scoped to that container. A grant node reads only grantable environment values, so the grant template derives everything else from `accountId`.
+The Cosmos account and one shared-throughput database (400 RU/s) per environment are substrate resources (the shared resource `cosmos-account` and the component's `environment` part, deployed by `jd env up`), so the implementation reads them from `${env.cosmos-account.…}` and `${env.database.…}` and creates only the workload's container (it has no throughput of its own) plus a grant scoped to that container. A grant node reads only grantable environment values, so the grant template derives everything else from `accountId`.
 
 ### Policy — IT Ops layer
 
@@ -228,9 +228,9 @@ implementations:
       runtime:
         template: azure/container-app
         config:
-          resourceGroupName: ${env.resourceGroup}
+          resourceGroupName: ${env.env-group.name}
           location: ${env.region}
-          containerAppsEnvironmentId: ${env.containerAppsEnvironment.id}
+          containerAppsEnvironmentId: ${env.apps-env.id}
           containerAppName: ${name('ca')}
           image: ${workload.image}
           targetPort: ${workload.port}
@@ -264,7 +264,7 @@ properties, so a variable may itself be named `fn::entries`. A policy gives indi
 - A variable's value is text that may contain only `${resource.<id>.<output>}` references; the workload validator
   (`WorkloadRules`) rejects any other `${…}` (`env`, `name()`, `workload`, `runtime`, `role`, a node), naming the variable, because a
   variable is workload input crossing into the platform ([D19](../open-questions.md)). `${resource.<id>.<export>}` takes the value of that requirement's export. An export
-  that is already a value (`${env.cosmos.endpoint}`) is resolved at expansion, so preview shows it; one that reads a node output
+  that is already a value (`${env.cosmos-account.endpoint}`) is resolved at expansion, so preview shows it; one that reads a node output
   (`${container.containerName}`) stays pending and adds an edge from the runtime node to that node (see Security and the depends-on
   field). An unknown id or export is an error naming the variable, reported against the workload file at `container.variables.<NAME>`, as is any
   other problem in a variable's value.
@@ -279,27 +279,32 @@ is not deployed by the infrastructure walk ([provisioning.md](provisioning.md)).
 
 An environment publishes what the resolver needs as one YAML document, validated by
 [`schemas/environment.schema.json`](../../schemas/environment.schema.json) (embedded in `jd.resolver`).
-It is written by `jd env up` from substrate deployment outputs ([provisioning.md](provisioning.md#substrate-jd-env-up)); the resolver only reads it.
+It is written by `jd env up` from the exports of the parts it deployed ([provisioning.md](provisioning.md#substrate-jd-env-up)); the resolver only reads it.
 
 ```yaml
 kind: Environment
 name: dev                 # same pattern as workload ids
 region: southeastasia
 type: dev                 # an environment type catalog.yaml declares
-values:                   # substrate outputs, addressable as ${env.<path>}
-  resourceGroup: rg-…
-  cosmos: { accountName: …, accountId: …, databaseName: …, databaseId: …, endpoint: … }
-  logAnalytics: { id: … }
-grantable:                # paths under values that workloads may grant on
-  - cosmos.accountId
+offers: [container-app, database, monitoring]   # the definition's offers; a shared layer's descriptor offers nothing
+values:                   # keyed by part: each deployed part's exports, read as ${env.<part>.<export>} (in a later env up as ${<part>.<export>})
+  shared-group: { name: rg-…, location: … }       # from the base (the shared layer)
+  cosmos-account: { id: …, name: …, endpoint: …, resourceGroup: … }
+  log-analytics: { id: …, name: …, customerId: …, resourceGroup: … }
+  env-group: { name: rg-…, location: … }          # this layer's own parts
+  apps-env: { id: …, defaultDomain: … }
+  database: { databaseName: …, databaseId: … }
+grantable:                # paths under values that workloads may grant on (transitional until S21f)
+  - cosmos-account.id
 ```
 
-- **Type:** `catalog.yaml` declares the environment types (`environmentTypes`: type → optional `approval: true`). A descriptor or
+- **Type:** `catalog.yaml` declares the environment types (`environmentTypes`: type → `layer: shared | environment`, optional
+  `approval: true`; implementations are keyed by environment-layer types or `default`). A descriptor or
   definition of an undeclared type is an error naming the declared ones, and one of a type with `approval: true` must carry `approval`
   (`EnvironmentTypeCheck`, called by the CLI with the catalog before anything resolves or deploys).
 - **Lookup:** `env.name`, `env.region` and `env.type` are reserved and come from the top-level
   fields; any other `env.<dot.path>` resolves to a string inside `values`. A path to a group (for
-  example `env.cosmos`) or to nothing is not found.
+  example `env.cosmos-account`) or to nothing is not found.
 - **Rules beyond the schema:** `values` must not define `name`, `region` or `type`; no key in `values`
   may contain `.` (a dot path must be unambiguous); every `grantable` path must be a value in `values`. The loader reports all errors with their location.
 - **Security:** `grantable` is the boundary the engine enforces for `grant` nodes
@@ -309,27 +314,39 @@ grantable:                # paths under values that workloads may grant on
 
 The descriptor is produced from an **environment definition**
 ([`schemas/environment-definition.schema.json`](../../schemas/environment-definition.schema.json), `jd.resolver`):
-`kind: EnvironmentDefinition`, `name`, `type`, `requires` (substrate types, with `id` and `class` as in a workload; effective ids
-unique), `values` (the descriptor's layout; each leaf an expression, normally `${resource.<id>.<export>}`) and `grantable`.
-`Resolver.ResolveSubstrate(definition, file, catalog, environment)` is the one entry point. The owner is the definition, with
+`kind: EnvironmentDefinition`, `name`, `type`, `offers` (names of catalog components and runtimes, at most one runtime) and the transitional
+`grantable` (until S21f). What the environment deploys follows from the offers and the type's layer ([components.md](components.md) §2–3),
+collected by `Expander.ExpandEnvironment` into one scope `substrate` (`Expander.SubstrateScope`):
+
+- **shared layer:** the `scope: shared` resources the offered components and runtime reach through `uses`;
+- **environment layer:** each offered component's `environment` part (its implementation for the type) plus the `scope: environment`
+  resources reached through `uses`. Every reached `scope: shared` resource must already be in the base descriptor's values, else an
+  error naming the resource and the base before anything is created: an environment never deploys a shared resource. A part whose name
+  is already in the base's values is an error too.
+
+`Resolver.ResolveSubstrate(definition, file, catalog, environment, base)` is the one entry point. The owner is the definition, with
 the name `@<name>` (a workload name cannot start with `@`) in node ids, stacks and `name()` hashes: ids `@dev/dev/substrate/group`,
 stacks `_dev.dev.substrate.group`, so a workload named like the environment, with a requirement `substrate`, shares nothing with the
 substrate and a workload deploy never touches it ([ADR 0006](../decisions/0006-infra-deployed-with-app.md)). `ExpansionResult.Owner` records the owner kind
 (`Workload` or `Environment`); an environment owner has no runtime, so workload-scope policies do not apply. In a substrate
-component `${workload.name}` therefore evaluates to `@<name>`; the `{workload}` naming placeholder drops the `@` through `allowed`. Its team is empty
+part `${workload.name}` therefore evaluates to `@<name>`; the `{workload}` naming placeholder drops the `@` through `allowed`. Its team is empty
 (`${workload.team}` is empty). The `environment` is `definition.Over(region, base)`: the definition's name and type, the region given on the
-command line, and the **base descriptor's values and `grantable`**, so implementations read `${env.…}` of the layer below.
+command line, and the **base descriptor's values and `grantable`**.
 
-`DescriptorComposer` turns the resolved graph and the node outputs into the descriptor text: each export is evaluated with its
-requirement's node outputs; each `values` leaf is evaluated with those as the known `resource.*` references (a leaf that stays
-pending, or names a node or an unknown export, is an error); the result is merged into the base's values (a key the base has is a
-collision error), `grantable` is the union, and the composed text must pass `EnvironmentParser`, so every rule above holds.
+A part reads another as `${<part>.<export>}`: a part of the same run is evaluated in place (the export's text, so the read becomes the
+node references it is made of, chained through further parts); otherwise it is the base descriptor's `values.<part>.<export>`. The
+graph's `Parts` (part name → export → expression) carry the exports to the policy applier, the orchestrator's context and the composer.
+
+`DescriptorComposer` turns the resolved graph and the node outputs into the descriptor text: `values.<part>.<export>` is each part's
+export evaluated with the deployed node outputs; secret and null outputs are dropped, so an export reading one, directly or through a
+chain, stays pending and is an error, and nothing is written. The result is merged with the base's values (new keys only),
+`grantable` is the union, and the composed text must pass `EnvironmentParser`, so every rule above holds.
 `region` is the caller's; the descriptor's `name` and `type` are the definition's.
 
 ## Expressions
 
 Config values, exports and workload variables are strings that may mix text and `${…}` expressions
-(`${env.cosmos.accountId}/dbs/${env.cosmos.databaseName}`). Non-string values are never
+(`${env.cosmos-account.id}/dbs/${env.database.databaseName}`). Non-string values are never
 touched. There is no escaping and no operators. Evaluation is pure (`jd.resolver.expressions`): the caller supplies a
 context (catalog roles and naming, environment descriptor, workload name and team, the current id, the node names in
 scope, the outputs already known) and a file/location for error reports.
@@ -349,7 +366,8 @@ path       := segment { '.' segment }          # segment: letters, digits, '_' a
 | `workload.image`, `workload.port` | `container.image`, and the first of `container.ports`; a workload with no ports makes `workload.port` an error naming the workload. Like every expression result it is text (`"8080"`): Pulumi config values are strings, and the template's `Integer` input parses it. Meant for runtimes; the graph carries both (`WorkloadImage`, `WorkloadPort`), so the orchestrator's second pass evaluates them like the first |
 | `resource.<id>.<export>` | reference to a requirement's export: **pending** unless the caller knows its value. Read only by the `runtime` node (its workload variables); an error in any other node |
 | `runtime.<output>` | **pending** reference to the runtime node (an edge to it); an environment definition has no runtime, so there it is an error |
-| `<node>.<output>` | **pending** reference to an output of a node in scope; unknown node is an error |
+| `<node>.<output>` | **pending** reference to an output of a node in scope |
+| `<part>.<export>` | not a node in scope: an export of a part of this environment run, evaluated in place; else the base descriptor's `values.<part>.<export>`, reported like an `env.*` read; a path found in neither is an error |
 
 **Two phases.** An expression evaluates to `Resolved(value)`, or to `Pending(original, references)` when it needs
 values that exist only at deploy time. `references` is the set of `(node, output)` or `(resource id, export)` pairs

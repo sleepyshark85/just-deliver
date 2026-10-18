@@ -23,13 +23,13 @@ public class ExpressionEvaluatorTests
         "dev",
         new Dictionary<string, string>
         {
-            ["resourceGroup"] = "rg-test",
-            ["containerAppsEnvironment.id"] = "/cae",
-            ["cosmos.accountName"] = "acct",
-            ["cosmos.databaseName"] = "db",
-            ["cosmos.accountId"] = "/acct/id",
-            ["cosmos.endpoint"] = "https://acct.example",
-            ["logAnalytics.id"] = "/law/id",
+            // The seed catalog's workload parts read the descriptor by part name (docs/architecture/components.md section 3).
+            ["env-group.name"] = "rg-test",
+            ["apps-env.id"] = "/cae",
+            ["cosmos-account.id"] = "/acct/id",
+            ["cosmos-account.endpoint"] = "https://acct.example",
+            ["database.databaseName"] = "db",
+            ["log-analytics.id"] = "/law/id",
         },
         [],
         null);
@@ -41,8 +41,56 @@ public class ExpressionEvaluatorTests
         IReadOnlyDictionary<string, NamingRule>? naming = null,
         IReadOnlyDictionary<string, string>? roles = null,
         string? image = null,
-        int? port = null) =>
-        new(roles ?? Roles, naming ?? Naming, Env, workload, "team-a", id, new HashSet<string> { "database", "container" }, known ?? [], image, port);
+        int? port = null,
+        Dictionary<string, IReadOnlyDictionary<string, string>>? parts = null) =>
+        new(roles ?? Roles, naming ?? Naming, Env, workload, "team-a", id, new HashSet<string> { "database", "container" }, known ?? [], image, port, parts ?? []);
+
+    // An environment run's parts (docs/architecture/components.md section 2): 'account' reads 'group' in place, 'database' (also a node) reads its node.
+    private static readonly Dictionary<string, IReadOnlyDictionary<string, string>> RunParts = new()
+    {
+        ["group"] = new Dictionary<string, string> { ["name"] = "${container.resourceGroupName}" },
+        ["account"] = new Dictionary<string, string> { ["resourceGroup"] = "${group.name}", ["label"] = "acct in ${group.name}" },
+        ["database"] = new Dictionary<string, string> { ["databaseName"] = "${database.databaseName}" },
+    };
+
+    [Fact]
+    public void A_read_of_a_part_of_the_run_is_its_export_evaluated_in_place_also_when_chained()
+    {
+        var reference = new Reference(ReferenceKind.Node, "container", "resourceGroupName");
+
+        var (pending, _) = Run("${account.resourceGroup}", Context(parts: RunParts));
+        var (resolved, _) = Run("x-${account.label}", Context(parts: RunParts, known: new() { [reference] = "rg-1" }));
+        var (own, _) = Run("${database.databaseName}", Context(parts: RunParts));
+
+        Assert.Equal(new HashSet<Reference> { reference }, Assert.IsType<Pending>(pending).References);
+        Assert.Equal("${account.resourceGroup}", ((Pending)pending!).Original);
+        Assert.Equal(new Resolved("x-acct in rg-1"), resolved);
+        Assert.Equal(new HashSet<Reference> { new(ReferenceKind.Node, "database", "databaseName") }, Assert.IsType<Pending>(own).References);
+    }
+
+    [Fact]
+    public void A_read_of_an_export_a_part_of_the_run_does_not_declare_is_an_error()
+    {
+        var (result, errors) = Run("${account.nope}", Context(parts: RunParts));
+
+        Assert.Null(result);
+        Assert.Equal("'account.nope' is not an export of part 'account'; it exports resourceGroup, label.", Assert.Single(errors).Message);
+    }
+
+    [Fact]
+    public void A_read_of_a_part_deployed_before_is_the_descriptor_value_and_is_recorded_like_an_env_read()
+    {
+        var errors = new List<LoadError>();
+        var envPaths = new HashSet<string>();
+
+        var result = new ExpressionEvaluator(Context()).Evaluate("${cosmos-account.id}", "file.yaml", "x", errors, envPaths);
+        var (missing, missingErrors) = Run("${cosmos-account.nope}");
+
+        Assert.Equal(new Resolved("/acct/id"), result);
+        Assert.Equal(["cosmos-account.id"], envPaths);
+        Assert.Null(missing);
+        Assert.Contains("environment 'dev' has no value 'cosmos-account.nope'", Assert.Single(missingErrors).Message);
+    }
 
     private static (EvalResult? Result, List<LoadError> Errors) Run(string text, ExpressionContext? context = null)
     {
@@ -85,14 +133,14 @@ public class ExpressionEvaluatorTests
     [Fact]
     public void Text_and_several_expressions_are_joined()
     {
-        Assert.Equal("/acct/id/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001", Resolve("${env.cosmos.accountId}/sqlRoleDefinitions/${role.reader}"));
+        Assert.Equal("/acct/id/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001", Resolve("${env.cosmos-account.id}/sqlRoleDefinitions/${role.reader}"));
         Assert.Equal("shop by team-a in dev", Resolve("${workload.name} by ${workload.team} in ${env.name}"));
     }
 
     [Fact]
     public void Env_workload_and_role_namespaces_resolve()
     {
-        Assert.Equal("rg-test", Resolve("${env.resourceGroup}"));
+        Assert.Equal("rg-test", Resolve("${env.env-group.name}"));
         Assert.Equal("testregion", Resolve("${env.region}"));
         Assert.Equal("shop", Resolve("${workload.name}"));
         Assert.Equal("00000000-0000-0000-0000-000000000001", Resolve("${role.reader}"));
@@ -230,18 +278,18 @@ public class ExpressionEvaluatorTests
     [Fact]
     public void Guid_is_deterministic_and_depends_on_every_argument()
     {
-        var a = Resolve("${guid(env.cosmos.accountId, 'x')}");
+        var a = Resolve("${guid(env.cosmos-account.id, 'x')}");
 
-        Assert.Equal(a, Resolve("${guid(env.cosmos.accountId, 'x')}"));
+        Assert.Equal(a, Resolve("${guid(env.cosmos-account.id, 'x')}"));
         // Pinned: UUIDv5 of "/acct/id|x" in the documented namespace, computed independently of the C# code.
         Assert.Equal("a81fb372-e883-5703-9b28-092d973ce2a0", a);
-        Assert.NotEqual(a, Resolve("${guid(env.cosmos.accountId, 'y')}"));
+        Assert.NotEqual(a, Resolve("${guid(env.cosmos-account.id, 'y')}"));
     }
 
     [Fact]
     public void Guid_with_a_pending_argument_is_pending_and_resolves_once_known()
     {
-        var text = "${guid(env.cosmos.accountId, runtime.principalId, 'x')}";
+        var text = "${guid(env.cosmos-account.id, runtime.principalId, 'x')}";
         Assert.Equal([new Reference(ReferenceKind.Node, "runtime", "principalId")], Await(text).References);
 
         var known = new Dictionary<Reference, string> { [new(ReferenceKind.Node, "runtime", "principalId")] = "p1" };
@@ -265,7 +313,7 @@ public class ExpressionEvaluatorTests
             .Append(sampleEndpoint)
             .ToList();
 
-        var evaluator = new ExpressionEvaluator(new ExpressionContext(catalog.Roles, catalog.Naming, Env, "shop", "team-a", "db", nodeNames, new Dictionary<Reference, string>(), "registry.example/app:1", 8080));
+        var evaluator = new ExpressionEvaluator(new ExpressionContext(catalog.Roles, catalog.Naming, Env, "shop", "team-a", "db", nodeNames, new Dictionary<Reference, string>(), "registry.example/app:1", 8080, new Dictionary<string, IReadOnlyDictionary<string, string>>()));
         var errors = new List<LoadError>();
         var results = strings.Select(s => evaluator.Evaluate(s, "seed", "", errors)).ToList();
 

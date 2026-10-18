@@ -10,7 +10,7 @@ where a step is not covered by a test, it says so.
 | Part | What it is | Depth |
 |---|---|---|
 | Workload definition | What a team declares: image (pinned by digest), variables, ports, `requires` by type (`database`). No Azure detail. | [workload-definition.md](architecture/workload-definition.md) |
-| Catalog (`catalog/`) | The platform's knowledge as data: **components** (the contract and its implementations per environment type: requirement → graph nodes), **runtimes** (the workload's runtime), **templates** (Pulumi YAML), **policies** (IT Ops rules: set, default, require a component), **naming**, **roles**. | [resolver.md](architecture/resolver.md), [provisioning.md](architecture/provisioning.md) |
+| Catalog (`catalog/`) | The platform's knowledge as data: **components** (the contract and its implementations per environment type: requirement → graph nodes), **runtimes** (the workload's runtime), **templates** (Pulumi YAML), **shared resources** (what an environment offers: shared or per environment), **policies** (IT Ops rules: set, default, require a component), **naming**, **roles**. | [resolver.md](architecture/resolver.md), [provisioning.md](architecture/provisioning.md) |
 | Environment definition → descriptor | `jd env up` provisions an environment's substrate (`shared` once, then `dev`, `stage`) and writes its **descriptor**: the real ids workloads resolve against, and for `stage` the **approval policy**. | [resolver.md](architecture/resolver.md#environment-descriptor), [approvals.md](architecture/approvals.md) |
 | Resolver → graph | Workload + catalog + descriptor → a graph of nodes (template, config with provenance, dependencies, phase). Pure, offline: `jd preview` prints it. | [resolver.md](architecture/resolver.md) |
 | Orchestrator + Pulumi Automation | Deploys the graph node by node, one Pulumi stack each, in order; the runtime node last as a release: dark revision, grants, probe, traffic shift. | [provisioning.md](architecture/provisioning.md#orchestrator) |
@@ -107,9 +107,13 @@ Environments (exit 0 each; one node line per substrate node, then the descriptor
 jd env up samples/environments/shared.yaml --catalog catalog --out "$JD_WALK/shared.env.yaml"
 jd env up samples/environments/dev.yaml    --catalog catalog --base "$JD_WALK/shared.env.yaml" --out "$JD_WALK/dev.env.yaml"
 jd env up samples/environments/stage.yaml  --catalog catalog --base "$JD_WALK/shared.env.yaml" --out "$JD_WALK/stage.env.yaml"
-DEV_RG=$(sed -n 's/^  resourceGroup: *//p' "$JD_WALK/dev.env.yaml")
-STAGE_RG=$(sed -n 's/^  resourceGroup: *//p' "$JD_WALK/stage.env.yaml")
+DEV_RG=$(sed -n '/^  env-group:$/,/^  [^ ]/s/^    name: *//p' "$JD_WALK/dev.env.yaml")
+STAGE_RG=$(sed -n '/^  env-group:$/,/^  [^ ]/s/^    name: *//p' "$JD_WALK/stage.env.yaml")
 ```
+
+Each run deploys what the definition's `offers` reach: the shared layer the shared resources, dev and stage their own parts on the shared
+descriptor; the descriptor's `values` are keyed by part (`env-group.name`, `cosmos-account.id`, …). A descriptor written before S21e is
+refused (its layout changed): re-run the three `jd env up` with `--force`; every node is `unchanged`.
 
 Look at: the Cosmos account is free tier, capped at 1,000 RU/s, refuses keys; `db-dev` and `db-stage` hold 400 RU/s each.
 

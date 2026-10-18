@@ -25,7 +25,7 @@ public class GoldenSubstrateTests
         var definition = (await EnvironmentDefinitionFile.LoadAsync(Path.Combine(AppContext.BaseDirectory, "samples", "environments", sample + ".yaml"))).Definition!;
         var baseEnvironment = baseDescriptor is null ? null : (await EnvironmentFile.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", baseDescriptor))).Descriptor;
 
-        var graph = Resolver.ResolveSubstrate(definition, sample + ".yaml", catalog, definition.Over("region-1", baseEnvironment));
+        var graph = Resolver.ResolveSubstrate(definition, sample + ".yaml", catalog, definition.Over("region-1", baseEnvironment), baseEnvironment);
 
         Assert.Empty(graph.Errors);
         var actual = GraphJson.Serialize(graph);

@@ -158,7 +158,7 @@ public sealed class Orchestrator(
             var errors = new List<LoadError>();
             // Only a node that reads an export (the runtime node) needs them, so an unrelated node never fails on another scope's export.
             var exported = node.Config.Values.Any(ReadsExport)
-                ? ExportValues.Evaluate(graph, catalog, environment, _outputs.ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, ConfigEntry>)o.Value), includeSecrets: true, node.Id, errors)
+                ? ExportValues.Evaluate(graph, catalog, environment, _outputs.ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, ConfigEntry>)o.Value), node.Id, errors)
                 : ExportValues.None;
             var filler = new ConfigFiller(new ExpressionEvaluator(ContextFor(node, exported)), node.Id, SecretOutputs(node, exported));
             var parameters = filler.Fill(node.Config);
@@ -180,7 +180,8 @@ public sealed class Orchestrator(
         // The current id is the node's requirement (the node itself at workload scope), as in the first pass. Node names in scope
         // are all nodes of the node's scope; the first pass allowed only the adding policy's nodes at workload scope, but it already
         // rejected any other name, so the wider set cannot change a result here. Only the known outputs differ: node outputs are read by
-        // name, so they come from the node's own scope and from the runtime; what another scope exports arrives through its exports.
+        // name, so they come from the node's own scope and from the runtime; what another scope exports arrives through its exports. An
+        // environment run's parts read each other in place, as in the first pass (the graph's Parts).
         private ExpressionContext ContextFor(GraphNode node, ExportValues exported)
         {
             // What a requirement's exports are worth by now is what ${resource.<id>.<export>} reads.
@@ -207,7 +208,8 @@ public sealed class Orchestrator(
                 graph.Nodes.Where(n => n.Scope == node.Scope).Select(n => n.Name).ToHashSet(),
                 known,
                 graph.WorkloadImage,
-                graph.WorkloadPort);
+                graph.WorkloadPort,
+                graph.Parts);
         }
 
         private static bool ReadsExport(ConfigValue value) => value switch

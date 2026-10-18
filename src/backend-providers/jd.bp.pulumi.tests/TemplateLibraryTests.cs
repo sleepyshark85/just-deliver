@@ -32,7 +32,7 @@ public partial class TemplateLibraryTests
             config, new Dictionary<string, Provenance>(), "hash", []);
 
     private static ResolvedGraph Graph(IEnumerable<GraphNode> nodes, IReadOnlyDictionary<string, IReadOnlyDictionary<string, EvalResult>>? exports = null) =>
-        new("1", "dev", "w", "crew", null, null, nodes.ToList(), exports ?? new Dictionary<string, IReadOnlyDictionary<string, EvalResult>>(), []);
+        new("1", "dev", "w", "crew", null, null, nodes.ToList(), exports ?? new Dictionary<string, IReadOnlyDictionary<string, EvalResult>>(), [], new Dictionary<string, IReadOnlyDictionary<string, string>>());
 
     [Fact]
     public async Task The_seed_catalog_and_sample_workload_fit_the_template_library()
@@ -258,7 +258,7 @@ public partial class TemplateLibraryTests
     {
         var sources = new[]
         {
-            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
+            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
             "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n"
                 + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
                 + "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffixOut, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n"

@@ -97,11 +97,11 @@ public static class CatalogParser
         var readers = Readers(shared, components, runtimes);
         CheckNodeNames(readers, errors);
         CheckReads(readers, sharedByName, kinds, errors);
-        CheckScopeNodeNames(readers, errors);
+        CheckScopeNodeNames(readers, sharedByName.Keys, errors);
         CheckUnique(policyDocuments, errors);
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
         var environmentTypes = catalogs.FirstOrDefault() is { Valid: true } first
-            ? Map(first.Body["environmentTypes"]).ToDictionary(e => e.Key, e => new EnvironmentType((bool?)e.Value["approval"] ?? false))
+            ? Map(first.Body["environmentTypes"]).ToDictionary(e => e.Key, e => new EnvironmentType((bool?)e.Value["approval"] ?? false, Enum.Parse<SharedScope>(Text(e.Value["layer"]), ignoreCase: true)))
             : null;
         CheckEnvironmentTypes(components, runtimes, policies, environmentTypes, errors);
         CheckPolicyScopes(policies, errors);
@@ -365,9 +365,17 @@ public static class CatalogParser
 
     // The parts of one shared or environment run expand into one scope (docs/architecture/components.md section 3), so their node
     // names are unique across the parts that can share it; a component's implementations may reuse a name, since one is selected.
-    private static void CheckScopeNodeNames(List<Reader> readers, List<LoadError> errors)
+    // A node may not take a shared resource's name either: a run looks up nodes before parts, so it would silently replace what
+    // ${<resource>.<export>} reads (components.md section 2); a name the part itself uses is refused by CheckNodeNames.
+    private static void CheckScopeNodeNames(List<Reader> readers, IEnumerable<string> sharedNames, List<LoadError> errors)
     {
-        var nodes = readers.Where(r => r.Scope is not null).SelectMany(r => r.Part.Nodes.Keys.Select(n => (Reader: r, Node: n)));
+        var nodes = readers.Where(r => r.Scope is not null).SelectMany(r => r.Part.Nodes.Keys.Select(n => (Reader: r, Node: n))).ToList();
+        var resources = sharedNames.ToHashSet();
+        foreach (var (reader, node) in nodes.Where(n => resources.Contains(n.Node) && !n.Reader.Uses.Contains(n.Node)))
+        {
+            errors.Add(new LoadError(reader.Source, $"{reader.Prefix}nodes.{node}", $"node '{node}' takes the name of shared resource '{node}', which a part of the same run reads as ${{{node}.<export>}}."));
+        }
+
         foreach (var group in nodes.GroupBy(n => (n.Reader.Scope, n.Node)))
         {
             var first = group.First().Reader;
@@ -452,6 +460,12 @@ public static class CatalogParser
         foreach (var (source, location, type) in keyed.Concat(matched).Where(e => !environmentTypes.ContainsKey(e.Type)))
         {
             errors.Add(new LoadError(source, location, $"'{type}' is not a declared environment type (declared: {string.Join(", ", environmentTypes.Keys.Order())})."));
+        }
+
+        // A shared-layer environment deploys no component part, so an implementation for its type would never be used.
+        foreach (var (source, location, type) in keyed.Where(e => environmentTypes.GetValueOrDefault(e.Type)?.Layer == SharedScope.Shared))
+        {
+            errors.Add(new LoadError(source, location, $"'{type}' is a shared-layer environment type; implementations are keyed by environment-layer types or '{ImplementationKey.Default}'."));
         }
     }
 

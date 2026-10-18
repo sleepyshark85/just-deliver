@@ -3,7 +3,6 @@ name: log-analytics
 description: The shared Log Analytics workspace every environment's Container Apps environment and Application Insights report to.
 scope: shared
 uses: [shared-group]
-# Loaded and checked; deployed from S21e (see shared-group.yaml).
 nodes:
   workspace:
     template: azure/log-analytics

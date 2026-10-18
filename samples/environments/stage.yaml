@@ -1,22 +1,12 @@
-# The stage environment on top of the shared substrate: dev's layout plus an approval policy, which gates it (a set reaches stage only through `jd promote`).
+# The stage environment on top of the shared layer: what dev offers, plus an approval policy, which gates it (a set reaches stage only through `jd promote`).
 #   jd env up samples/environments/stage.yaml --catalog catalog --base shared.env.yaml --out stage.env.yaml
 # Strict as shipped: the approver below is the all-zero id, which matches no principal, so nobody can approve until you list the object ids of the
 # service principals that may; and a principal that deployed a label on dev may not approve it.
 kind: EnvironmentDefinition
 name: stage
 type: stage
-requires:
-  - type: env-substrate
-    id: substrate
-values:
-  resourceGroup: ${resource.substrate.resourceGroupName}
-  containerAppsEnvironment:
-    id: ${resource.substrate.containerAppsEnvironmentId}
-    defaultDomain: ${resource.substrate.defaultDomain}
-  cosmos:
-    databaseName: ${resource.substrate.databaseName}
-    databaseId: ${resource.substrate.databaseId}
-grantable: [cosmos.accountId]
+offers: [container-app, database, monitoring]
+grantable: [cosmos-account.id]    # transitional until grant targets replace it (docs/architecture/components.md section 7, S21f)
 approval:
   qualifiedOn: dev                # the environment whose records must show the set qualified
   required: 1                     # distinct approvers needed

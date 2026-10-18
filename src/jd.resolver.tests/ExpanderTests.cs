@@ -13,7 +13,7 @@ public class ExpanderTests
 {
     private static readonly string[] BaseFiles =
     [
-        "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
+        "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
         "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
         "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n",
     ];
@@ -195,18 +195,6 @@ public class ExpanderTests
     }
 
     [Fact]
-    public async Task An_environment_definition_has_no_runtime_and_does_not_need_a_runtime()
-    {
-        var catalog = await LoadWithoutRuntimeAsync([Sqldb(exports: "  endpoint: x\n")]);
-
-        var result = new Expander(catalog, Env()).ExpandEnvironment("dev", (JArray)YamlSchemaValidator.ParseYaml("- type: sqldb\n"), "definition.yaml");
-
-        Assert.Empty(result.Errors);
-        Assert.Null(result.Runtime);
-        Assert.Single(result.Requirements);
-    }
-
-    [Fact]
     public async Task Config_is_walked_through_objects_and_arrays_and_scalars_pass_through()
     {
         var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config:\n      size: 400\n      on: true\n      none: null\n      tags: [x, '${env.host}', 7]\n      nested: { deep: { host: '${env.host}' }, count: 2 }\n"));
@@ -277,13 +265,13 @@ public class ExpanderTests
             "dev",
             new Dictionary<string, string>
             {
-                ["resourceGroup"] = "rg",
-                ["containerAppsEnvironment.id"] = "/cae",
-                ["cosmos.accountName"] = "acct",
-                ["cosmos.databaseName"] = "db",
-                ["cosmos.accountId"] = "/acct",
-                ["cosmos.endpoint"] = "https://acct",
-                ["logAnalytics.id"] = "/law",
+                ["env-group.name"] = "rg",
+                ["apps-env.id"] = "/cae",
+                ["cosmos-account.name"] = "acct",
+                ["database.databaseName"] = "db",
+                ["cosmos-account.id"] = "/acct",
+                ["cosmos-account.endpoint"] = "https://acct",
+                ["log-analytics.id"] = "/law",
             },
             [],
             null);

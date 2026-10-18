@@ -1,19 +1,7 @@
-# Once per subscription: resource group, Log Analytics workspace (capped) and the one free-tier Cosmos DB account.
+# Once per subscription: the shared resources what it offers reaches through `uses` - the resource group, the Log Analytics workspace
+# (capped) and the one free-tier Cosmos DB account. Its descriptor offers nothing; it is the --base of every environment.
 #   jd env up samples/environments/shared.yaml --catalog catalog --out shared.env.yaml
 kind: EnvironmentDefinition
 name: shared
 type: shared
-requires:
-  - type: shared-substrate
-    id: substrate
-values:
-  shared:
-    resourceGroup: ${resource.substrate.resourceGroupName}
-  logAnalytics:
-    id: ${resource.substrate.workspaceId}
-    name: ${resource.substrate.workspaceName}
-    customerId: ${resource.substrate.workspaceCustomerId}
-  cosmos:
-    accountId: ${resource.substrate.cosmosAccountId}
-    accountName: ${resource.substrate.cosmosAccountName}
-    endpoint: ${resource.substrate.cosmosEndpoint}
+offers: [container-app, database, monitoring]

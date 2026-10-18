@@ -3,7 +3,6 @@ name: apps-env
 description: The environment's Container Apps environment, which the runtime deploys every workload into; it logs to the shared workspace.
 scope: environment
 uses: [env-group, log-analytics]
-# Loaded and checked; deployed from S21e (see env-group.yaml).
 nodes:
   apps:
     template: azure/container-apps-environment

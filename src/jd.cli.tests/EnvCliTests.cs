@@ -69,8 +69,8 @@ public sealed class EnvCliTests : IDisposable
         Assert.Equal(["_dev.dev.substrate.apps", "_dev.dev.substrate.database", "_dev.dev.substrate.group", "_shared.shared.substrate.cosmos", "_shared.shared.substrate.group", "_shared.shared.substrate.workspace"], backend.Calls.Order().ToList());
         var descriptor = (await jd.resolver.environment.EnvironmentFile.LoadAsync(dev)).Descriptor!;
         Assert.Equal(("dev", "region-1"), (descriptor.Name, descriptor.Region));
-        Assert.Equal("cosmos-1", descriptor.Values["cosmos.accountName"]);
-        Assert.Equal("db-dev", descriptor.Values["cosmos.databaseName"]);
+        Assert.Equal("cosmos-1", descriptor.Values["cosmos-account.name"]);
+        Assert.Equal("db-dev", descriptor.Values["database.databaseName"]);
         Assert.Contains($"{dev}: environment dev (region-1, dev) written.", second.Out);
     }
 
@@ -160,21 +160,21 @@ public sealed class EnvCliTests : IDisposable
     {
         var backend = new OutputBackend();
         var shared = Path.Combine(_temp, "shared.env.yaml");
+        var dev = Path.Combine(_temp, "dev.env.yaml");
         await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", shared);
+        await RunAsync(backend, Region, "up", Dev, "--catalog", Catalog, "--base", shared, "--out", dev);
         backend.Calls.Clear();
-        var clash = Path.Combine(_temp, "clash.yaml");
-        await File.WriteAllTextAsync(clash, (await File.ReadAllTextAsync(Dev)).Replace("databaseName:", "accountName:"));
         var broken = Path.Combine(_temp, "broken.yaml");
-        await File.WriteAllTextAsync(broken, (await File.ReadAllTextAsync(Dev)).Replace("resource.substrate.databaseId", "resource.substrate.nope"));
+        await File.WriteAllTextAsync(broken, (await File.ReadAllTextAsync(Dev)).Replace("offers: [container-app, database", "offers: [container-app, nosql"));
 
-        var collision = await RunAsync(backend, Region, "up", clash, "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "a.yaml"));
+        var collision = await RunAsync(backend, Region, "up", Dev, "--catalog", Catalog, "--base", dev, "--out", Path.Combine(_temp, "a.yaml"));
         var unknown = await RunAsync(backend, Region, "up", broken, "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "b.yaml"));
         var noBase = await RunAsync(backend, Region, "up", Dev, "--catalog", Catalog, "--out", Path.Combine(_temp, "c.yaml"));
 
         Assert.Equal((1, 1, 1), (collision.Code, unknown.Code, noBase.Code));
-        Assert.Contains("values.cosmos.accountName: 'cosmos.accountName' is already a value of the base descriptor", collision.Err);
-        Assert.Contains("values.cosmos.databaseId", unknown.Err);
-        Assert.Contains("'env.shared.resourceGroup' is not a value of environment 'dev'", noBase.Err);
+        Assert.Contains("offers: part 'apps-env' is already in the base descriptor's values", collision.Err);
+        Assert.Contains("offers[1]: 'nosql' is not a component or runtime in the catalog.", unknown.Err);
+        Assert.Contains("the offers reach shared resource 'cosmos-account', but there is no base descriptor", noBase.Err);
         Assert.Empty(backend.Calls);
     }
 
@@ -187,7 +187,7 @@ public sealed class EnvCliTests : IDisposable
         var (code, stdout, stderr) = await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", path);
 
         Assert.Equal(1, code);
-        Assert.Contains("values.cosmos.endpoint", stderr);
+        Assert.Contains("values.cosmos-account.endpoint", stderr);
         Assert.Contains("missing, null or secret", stderr);
         Assert.False(File.Exists(path));
         Assert.DoesNotContain("https://cosmos-1/", stdout + stderr);

@@ -76,7 +76,7 @@ internal static class EnvCli
             return Invalid;
         }
 
-        var graph = Resolver.ResolveSubstrate(definition, options.Definition, catalog, environment);
+        var graph = Resolver.ResolveSubstrate(definition, options.Definition, catalog, environment, baseResult?.Descriptor);
         var composer = new DescriptorComposer(definition, options.Definition, catalog, environment, graph);
 
         // Everything that can be known before anything is created is checked first: the graph, and the descriptor with its values still pending.

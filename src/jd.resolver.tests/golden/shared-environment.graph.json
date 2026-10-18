@@ -22,10 +22,10 @@
         }
       },
       "provenance": {
-        "location": "Implementation: components/shared-substrate.yaml",
-        "resourceGroupName": "Implementation: components/shared-substrate.yaml",
-        "tags.project": "Implementation: components/shared-substrate.yaml",
-        "tags.tier": "Implementation: components/shared-substrate.yaml"
+        "location": "Implementation: shared/shared-group.yaml",
+        "resourceGroupName": "Implementation: shared/shared-group.yaml",
+        "tags.project": "Implementation: shared/shared-group.yaml",
+        "tags.tier": "Implementation: shared/shared-group.yaml"
       }
     },
     {
@@ -36,7 +36,7 @@
       "kind": "Create",
       "stack": "_shared.shared.substrate.cosmos",
       "phase": "Infrastructure",
-      "hash": "98a5bfc294af050d94922663753a819d841ba257b9bea27d70fc35fb23f90ffd",
+      "hash": "938292950470e73207bdc947a0c3d5870c22ab3b5dbcddffdb3db05f8e399f03",
       "dependsOn": [
         "@shared/shared/substrate/group"
       ],
@@ -44,17 +44,17 @@
         "accountName": "cosmos-shared-39d0b1",
         "disableLocalAuth": true,
         "enableFreeTier": true,
-        "location": "${group.location}",
-        "resourceGroupName": "${group.resourceGroupName}",
+        "location": "${shared-group.location}",
+        "resourceGroupName": "${shared-group.name}",
         "totalThroughputLimit": 1000
       },
       "provenance": {
-        "accountName": "Implementation: components/shared-substrate.yaml",
-        "disableLocalAuth": "Implementation: components/shared-substrate.yaml",
-        "enableFreeTier": "Implementation: components/shared-substrate.yaml",
-        "location": "Implementation: components/shared-substrate.yaml",
-        "resourceGroupName": "Implementation: components/shared-substrate.yaml",
-        "totalThroughputLimit": "Implementation: components/shared-substrate.yaml"
+        "accountName": "Implementation: shared/cosmos-account.yaml",
+        "disableLocalAuth": "Implementation: shared/cosmos-account.yaml",
+        "enableFreeTier": "Implementation: shared/cosmos-account.yaml",
+        "location": "Implementation: shared/cosmos-account.yaml",
+        "resourceGroupName": "Implementation: shared/cosmos-account.yaml",
+        "totalThroughputLimit": "Implementation: shared/cosmos-account.yaml"
       }
     },
     {
@@ -65,33 +65,23 @@
       "kind": "Create",
       "stack": "_shared.shared.substrate.workspace",
       "phase": "Infrastructure",
-      "hash": "5b72ad0880763ded2c1d782081d2e026733f6136073bb875c792de7f687e8243",
+      "hash": "0466657765643c8de2c81dd685e87252bac13e477069a042498be74eb96f53b9",
       "dependsOn": [
         "@shared/shared/substrate/group"
       ],
       "config": {
         "dailyQuotaGb": 0.15,
-        "location": "${group.location}",
-        "resourceGroupName": "${group.resourceGroupName}",
+        "location": "${shared-group.location}",
+        "resourceGroupName": "${shared-group.name}",
         "workspaceName": "law-shared-546c92"
       },
       "provenance": {
-        "dailyQuotaGb": "Implementation: components/shared-substrate.yaml",
-        "location": "Implementation: components/shared-substrate.yaml",
-        "resourceGroupName": "Implementation: components/shared-substrate.yaml",
-        "workspaceName": "Implementation: components/shared-substrate.yaml"
+        "dailyQuotaGb": "Implementation: shared/log-analytics.yaml",
+        "location": "Implementation: shared/log-analytics.yaml",
+        "resourceGroupName": "Implementation: shared/log-analytics.yaml",
+        "workspaceName": "Implementation: shared/log-analytics.yaml"
       }
     }
   ],
-  "exports": {
-    "substrate": {
-      "cosmosAccountId": "${cosmos.accountId}",
-      "cosmosAccountName": "${cosmos.accountName}",
-      "cosmosEndpoint": "${cosmos.documentEndpoint}",
-      "resourceGroupName": "${group.resourceGroupName}",
-      "workspaceCustomerId": "${workspace.workspaceCustomerId}",
-      "workspaceId": "${workspace.workspaceId}",
-      "workspaceName": "${workspace.workspaceName}"
-    }
-  }
+  "exports": {}
 }

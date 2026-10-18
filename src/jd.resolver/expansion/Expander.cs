@@ -11,6 +11,9 @@ namespace jd.resolver.expansion;
 /// </summary>
 public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 {
+    /// <summary>The one scope an environment run's parts expand into, and so the current id of their <c>name()</c> hashes. An engine constant.</summary>
+    public const string SubstrateScope = "substrate";
+
     /// <summary>Owner-name prefix of environment definitions. A workload name cannot start with it, so substrate and workload ids, stacks and <c>name()</c> hashes never collide.</summary>
     public const string EnvironmentOwnerPrefix = "@";
 
@@ -37,9 +40,107 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         return Expand(owner, workload["requires"] as JArray ?? [], workloadFile);
     }
 
-    /// <summary>Expands the substrate <paramref name="requires"/> (entries with <c>type</c>, optional <c>id</c> and <c>class</c>) of the environment definition <paramref name="name"/>; it has no team and no runtime.</summary>
-    public ExpansionResult ExpandEnvironment(string name, JArray requires, string ownerFile) =>
-        Expand(new Owner(OwnerKind.Environment, EnvironmentOwnerPrefix + name, string.Empty, null, null, new JObject()), requires, ownerFile);
+    /// <summary>
+    /// Collects what an environment definition's offers reach in its type's layer into the one scope <see cref="SubstrateScope"/>
+    /// (docs/architecture/components.md section 3): the layer's shared resources reached through <c>uses</c> and, in an environment layer,
+    /// the offered components' environment parts. Every shared-scope resource an environment layer reaches must be in
+    /// <paramref name="baseDescriptor"/>, which it reads but never deploys. The definition has no team and no runtime.
+    /// </summary>
+    public ExpansionResult ExpandEnvironment(EnvironmentDefinition definition, string definitionFile, EnvironmentDescriptor? baseDescriptor)
+    {
+        var owner = new Owner(OwnerKind.Environment, EnvironmentOwnerPrefix + definition.Name, string.Empty, null, null, new JObject());
+        var errors = new List<LoadError>();
+        void Fail(string location, string message) => errors.Add(new LoadError(definitionFile, location, message));
+
+        // The type is checked against the catalog before an environment is resolved (EnvironmentTypeCheck).
+        var layer = catalog.EnvironmentTypes[environment.Type].Layer;
+        var parts = new List<(string Name, string Source, string Path, Part Part)>();
+        var uses = new List<string>();
+        var runtimes = new List<string>();
+        foreach (var (offer, index) in definition.Offers.Select((o, i) => (o, i)))
+        {
+            if (catalog.Components.TryGetValue(offer, out var component))
+            {
+                uses.AddRange(component.Uses);
+                if (layer == SharedScope.Shared)
+                {
+                    continue;
+                }
+
+                if (ImplementationKey.For(component.Implementations, environment.Type) is not { } key)
+                {
+                    Fail($"offers[{index}]", NoImplementation($"component '{offer}'"));
+                }
+                else if (component.Implementations[key].Environment is { } part)
+                {
+                    parts.Add((offer, component.Source, $"implementations.{key}.environment.", part));
+                }
+            }
+            else if (catalog.Runtimes.TryGetValue(offer, out var runtime))
+            {
+                uses.AddRange(runtime.Uses);
+                runtimes.Add(offer);
+            }
+            else
+            {
+                Fail($"offers[{index}]", $"'{offer}' is not a component or runtime in the catalog.");
+            }
+        }
+
+        if (runtimes.Count > 1)
+        {
+            Fail("offers", $"an environment offers at most one runtime; it offers {string.Join(", ", runtimes)}.");
+        }
+
+        // One owner per shared stack (security boundary 8): an environment layer reads the shared resources from its base, never deploys them.
+        var baseValues = baseDescriptor?.Values ?? new Dictionary<string, string>();
+        var missingInBase = baseDescriptor is null ? "there is no base descriptor" : $"base descriptor '{baseDescriptor.Name}' has no values for it";
+        bool InBase(string part) => baseValues.Keys.Any(k => k.StartsWith(part + ".", StringComparison.Ordinal));
+        foreach (var resource in Reached(uses).Select(r => catalog.SharedResources[r]))
+        {
+            if (resource.Scope == layer)
+            {
+                parts.Add((resource.Name, resource.Source, string.Empty, resource.Part));
+            }
+            else if (layer == SharedScope.Environment && !InBase(resource.Name))
+            {
+                Fail("offers", $"the offers reach shared resource '{resource.Name}', but {missingInBase}; an environment never deploys a shared resource, so pass as the base the descriptor of a shared layer that offers it.");
+            }
+        }
+
+        // The descriptor adds new keys only, so a part of this run cannot be one the base already has.
+        foreach (var part in parts.Where(p => InBase(p.Name)))
+        {
+            Fail("offers", $"part '{part.Name}' is already in the base descriptor's values; an environment adds new parts only.");
+        }
+
+        var exports = parts.ToDictionary(p => p.Name, p => p.Part.Exports);
+        var requirements = new List<ExpandedRequirement>();
+        if (errors.Count == 0)
+        {
+            var evaluator = EvaluatorFor(owner, SubstrateScope, parts.SelectMany(p => p.Part.Nodes.Keys), parts: exports);
+            requirements.AddRange(parts.Select(p => new ExpandedRequirement(
+                SubstrateScope, null, null, p.Source, EvaluateNodes(p.Source, p.Path, p.Part.Nodes, errors, (_, _) => (evaluator, null)), new Dictionary<string, EvalResult>())));
+        }
+
+        return new ExpansionResult(owner.Kind, definitionFile, owner.Name, owner.Team, null, null, requirements, new HashSet<string>(), null, errors, exports);
+    }
+
+    // Everything reached through uses; the catalog loader keeps uses acyclic and naming shared resources only.
+    private SortedSet<string> Reached(IEnumerable<string> uses)
+    {
+        var reached = new SortedSet<string>(StringComparer.Ordinal);
+        var pending = new Queue<string>(uses);
+        while (pending.TryDequeue(out var name))
+        {
+            if (reached.Add(name))
+            {
+                catalog.SharedResources[name].Uses.ToList().ForEach(pending.Enqueue);
+            }
+        }
+
+        return reached;
+    }
 
     private ExpansionResult Expand(Owner owner, JArray requires, string ownerFile)
     {
@@ -62,12 +163,15 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             }
         }
 
-        var runtime = owner.Kind == OwnerKind.Workload ? ExpandRuntime(owner, requirements, ownerFile, errors) : null;
-        return new ExpansionResult(owner.Kind, ownerFile, owner.Name, owner.Team, owner.Image, owner.Port, requirements, declaredTypes, runtime, errors);
+        var runtime = ExpandRuntime(owner, requirements, ownerFile, errors);
+        return new ExpansionResult(owner.Kind, ownerFile, owner.Name, owner.Team, owner.Image, owner.Port, requirements, declaredTypes, runtime, errors, new Dictionary<string, IReadOnlyDictionary<string, string>>());
     }
 
-    private ExpressionEvaluator EvaluatorFor(Owner owner, string currentId, IEnumerable<string> nodeNames, IReadOnlyDictionary<Reference, string>? known = null) => new(new ExpressionContext(
-        catalog.Roles, catalog.Naming, environment, owner.Name, owner.Team, currentId, nodeNames.ToHashSet(), known ?? new Dictionary<Reference, string>(), owner.Image, owner.Port));
+    private ExpressionEvaluator EvaluatorFor(
+        Owner owner, string currentId, IEnumerable<string> nodeNames, IReadOnlyDictionary<Reference, string>? known = null, IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? parts = null) =>
+        new(new ExpressionContext(
+            catalog.Roles, catalog.Naming, environment, owner.Name, owner.Team, currentId, nodeNames.ToHashSet(), known ?? new Dictionary<Reference, string>(), owner.Image, owner.Port,
+            parts ?? new Dictionary<string, IReadOnlyDictionary<string, string>>()));
 
     // Exact lookup, no matching: the component named by the type, its implementation for the environment's type (else the default), the class.
     private ExpandedRequirement? ExpandOne(Requirement requirement, Owner owner, string ownerFile, string location, List<LoadError> errors)
@@ -96,7 +200,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         var found = new List<LoadError>();
         var path = $"implementations.{key}.classes.{requirement.Class}";
         var evaluator = EvaluatorFor(owner, requirement.Id, part.Nodes.Keys);
-        var nodes = EvaluateNodes(component.Source, path, part.Nodes, found, (_, _) => (evaluator, null));
+        var nodes = EvaluateNodes(component.Source, $"{path}.", part.Nodes, found, (_, _) => (evaluator, null));
         var exports = EvaluateExports(component.Source, path, part.Exports, evaluator, found);
         if (found.Count > 0)
         {
@@ -140,7 +244,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 
         var found = new List<LoadError>();
         var variables = new WorkloadVariables(owner.Variables, ownerFile);
-        var nodes = EvaluateNodes(runtime.Source, $"implementations.{key}", implementation.Nodes, found, (name, kind) => IsRuntimeNode(name, kind)
+        var nodes = EvaluateNodes(runtime.Source, $"implementations.{key}.", implementation.Nodes, found, (name, kind) => IsRuntimeNode(name, kind)
             ? (EvaluatorFor(owner, name, implementation.Nodes.Keys, known), variables)
             : (EvaluatorFor(owner, name, implementation.Nodes.Keys), null));
         if (found.Count > 0)
@@ -156,9 +260,9 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
     // an error, reported where it is found.
     private static bool IsRuntimeNode(string name, NodeKind kind) => name == ExpressionEvaluator.RuntimeNode && kind != NodeKind.Grant;
 
-    // Source and path say where the nodes are written, for errors: the catalog file and the part's location in it.
+    // Source and prefix say where the nodes are written, for errors: the catalog file and the part's location in it.
     private static List<ExpandedNode> EvaluateNodes(
-        string source, string path, IReadOnlyDictionary<string, Node> partNodes, List<LoadError> found,
+        string source, string prefix, IReadOnlyDictionary<string, Node> partNodes, List<LoadError> found,
         Func<string, NodeKind, (ExpressionEvaluator Evaluator, WorkloadVariables? Variables)> contextFor)
     {
         var nodes = new List<ExpandedNode>();
@@ -166,7 +270,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         {
             var (evaluator, variables) = contextFor(nodeName, node.Kind);
             nodes.Add(new ExpandedNode(nodeName, node.Template, node.Kind,
-                ConfigWalker.WalkConfig(node.Config, evaluator, source, $"{path}.nodes.{nodeName}.config", found, variables).Properties));
+                ConfigWalker.WalkConfig(node.Config, evaluator, source, $"{prefix}nodes.{nodeName}.config", found, variables).Properties));
         }
 
         return nodes;

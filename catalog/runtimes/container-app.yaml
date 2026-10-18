@@ -23,9 +23,9 @@ implementations:
       runtime:
         template: azure/container-app
         config:
-          resourceGroupName: ${env.resourceGroup}
+          resourceGroupName: ${env.env-group.name}
           location: ${env.region}
-          containerAppsEnvironmentId: ${env.containerAppsEnvironment.id}
+          containerAppsEnvironmentId: ${env.apps-env.id}
           containerAppName: ${name('ca')}
           image: ${workload.image}
           targetPort: ${workload.port}

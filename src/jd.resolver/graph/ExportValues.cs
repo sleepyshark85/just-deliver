@@ -8,18 +8,17 @@ namespace jd.resolver.graph;
 /// <summary>
 /// The value of each requirement export that the deployed outputs now settle: the exports are evaluated with the outputs of their
 /// requirement's nodes and keyed as the references <c>${resource.&lt;id&gt;.&lt;export&gt;}</c> that read them. <see cref="Secrets"/> are the
-/// references whose export read a secret output. Shared by the substrate descriptor and the orchestrator's second pass.
+/// references whose export read a secret output. Used by the orchestrator's second pass.
 /// </summary>
 public sealed record ExportValues(IReadOnlyDictionary<Reference, string> Values, IReadOnlySet<Reference> Secrets)
 {
     /// <summary>No export is known.</summary>
     public static ExportValues None { get; } = new(new Dictionary<Reference, string>(), new HashSet<Reference>());
 
-    // outputs: by node id. includeSecrets: whether a secret output counts as known (the descriptor drops them: a secret must never reach it).
-    // file: reported in errors about an export.
+    // outputs: by node id; a secret output counts as known and is tracked in Secrets. file: reported in errors about an export.
     public static ExportValues Evaluate(
         ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment,
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>> outputs, bool includeSecrets, string file, ICollection<LoadError> errors)
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>> outputs, string file, ICollection<LoadError> errors)
     {
         var values = new Dictionary<Reference, string>();
         var secrets = new HashSet<Reference>();
@@ -31,7 +30,7 @@ public sealed record ExportValues(IReadOnlyDictionary<Reference, string> Values,
             foreach (var node in nodes.Where(n => outputs.ContainsKey(n.Id)))
             {
                 // An output the stack exported as null is not a value: the reference stays unresolved.
-                foreach (var (output, entry) in outputs[node.Id].Where(o => o.Value.Value is not null && (includeSecrets || !o.Value.IsSecret)))
+                foreach (var (output, entry) in outputs[node.Id].Where(o => o.Value.Value is not null))
                 {
                     var reference = new Reference(ReferenceKind.Node, node.Name, output);
                     known[reference] = entry.Value!;
@@ -44,7 +43,7 @@ public sealed record ExportValues(IReadOnlyDictionary<Reference, string> Values,
 
             var evaluator = new ExpressionEvaluator(new ExpressionContext(
                 catalog.Roles, catalog.Naming, environment, graph.Workload, graph.WorkloadTeam, scope, nodes.Select(n => n.Name).ToHashSet(), known,
-                graph.WorkloadImage, graph.WorkloadPort));
+                graph.WorkloadImage, graph.WorkloadPort, graph.Parts));
             foreach (var (export, result) in exports)
             {
                 var resolved = result is Pending pending ? evaluator.Evaluate(pending.Original, file, $"exports.{export}", errors) : result;
