@@ -38,6 +38,13 @@ Any blocking finding means CHANGES REQUIRED. Findings cite a file and line and t
 - New dependency or project without a stated reason?
 - Does the slice stay inside the phase goal its brief names ([roadmap](../plans/roadmap.md))? Work outside it, or a
   design choice that makes a later phase's idea harder (roadmap rule 4), is a finding.
+- **Explicit over implicit:** does the change add a resource, grant, default, match rule or policy *addition* the
+  workload did not declare ([conventions](conventions.md#design-rules-that-code-must-keep))? Blocking unless the brief says
+  the user approved it.
+- **Simplification over complication:** does the change add a concept, rule or mechanism where removing or reusing one
+  would do? Name the simpler design. Does it break cohesion (one component's knowledge spread out), bind a consumer to an
+  implementation instead of a contract, make a workload definition vary by environment, or give a resource two owners
+  ([context.md](../context.md#design-principles) 7–11)?
 
 ## 4. Architecture and separation of concerns — blocking
 - Dependency direction per standards §3; inner layers free of Pulumi/Azure/CLI.

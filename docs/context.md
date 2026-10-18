@@ -100,6 +100,27 @@ D          -> Full automation, Ops handles approvals and exceptions only
 3. **Secrets in a vault from day one.** Secret values go in a secrets backend (Azure Key Vault for this platform; Vault and AWS Secrets Manager were listed as generic examples), never in the platform DB. In D, apps read them directly from the vault.
 4. **Pluggable deployment actions.** A deployment record has a `trigger` field: `manual_instruction` in B/C, `api_call` in D. Same record, different executor.
 5. **Never let work happen outside the platform.** Shadow processes break the audit trail and block future automation.
+6. **Explicit over implicit.** A workload gets only what it declares; guardrails require rather than silently add; implicit platform-owned resources are few and named. See [conventions](engineering/conventions.md#design-rules-that-code-must-keep).
+7. **Simplification over complication.** Fewer mechanisms beat clever ones: remove a concept before adding one (types merged into
+   components, `grantable` removed, tier matching replaced by an exact lookup). When two designs meet the goal, take the one with fewer
+   concepts, rules and files, and say what was left out.
+8. **Cohesion by component.** Everything about one component lives in one place: its contract, its implementation per environment type,
+   and the shared resources it uses. Organise by what a thing *is*, not by the kind of file it is.
+9. **Contract over implementation.** Consumers bind to a component's contract (its exports), never to how it is built. Implementations
+   may differ per environment type; every implementation exports the same contract.
+10. **One workload definition everywhere.** A workload's definition is identical in dev, stage and prod. Environment differences
+    (resource tiers, SKUs, redundancy) live in the platform's per-environment-type definitions.
+11. **One owner per resource.** Every resource and stack has exactly one owner that deploys and removes it (a separate shared layer;
+    never co-owned by environments). Ownership decides who may change it and when it may go.
+12. **Least privilege by construction.** A grant targets only what the workload's own requirements created; shared and platform
+    resources are never grant targets. Boundaries are enforced by the resolver and tested, not left to review.
+13. **Prove, then extend; refactor without changing behaviour.** Verify what exists before building on it (the MVP before the next phase).
+    A refactor's proof is the same resources for the same inputs.
+14. **Every piece of work serves the north star.** Each slice names its phase goal ([roadmap](plans/roadmap.md)); work that serves none
+    needs the user's go-ahead.
+
+Principles 6–14 come from design discussions with the user (2026-10-18). They bind the code through the
+[conventions](engineering/conventions.md#design-rules-that-code-must-keep) and the [review checklist](engineering/review-checklist.md).
 
 ### North star: workloads as components (the user's vision, not designed yet)
 
