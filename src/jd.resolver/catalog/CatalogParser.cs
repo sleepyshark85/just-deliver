@@ -420,13 +420,13 @@ public static class CatalogParser
 
     private static RuntimeImplementation ToRuntimeImplementation(JToken implementation)
     {
-        var probe = implementation["probe"];
-        var release = implementation["release"];
+        var probe = implementation["probe"]!;
+        var release = implementation["release"]!;
         return new RuntimeImplementation(
-            new Probe(Text(probe?["path"]), (int?)probe?["expectedStatus"] ?? 0, (int?)probe?["timeoutSeconds"] ?? 0, (int?)probe?["intervalSeconds"] ?? 0),
+            new Probe(Text(probe["path"]), (int)probe["expectedStatus"]!, (int)probe["timeoutSeconds"]!, (int)probe["intervalSeconds"]!),
             new RuntimeRelease(
-                Text(release?["suffixInput"]), Text(release?["trafficInput"]), Text(release?["trafficOutput"]), Text(release?["suffixOutput"]), Text(release?["revisionOutput"]),
-                Text(release?["fqdnOutput"]), Text(release?["revisionKey"]), Text(release?["latestKey"]), Text(release?["weightKey"]), Text(release?["resourceIdOutput"])),
+                Text(release["suffixInput"]), Text(release["trafficInput"]), Text(release["trafficOutput"]), Text(release["suffixOutput"]), Text(release["revisionOutput"]),
+                Text(release["fqdnOutput"]), Text(release["revisionKey"]), Text(release["latestKey"]), Text(release["weightKey"]), Text(release["resourceIdOutput"])),
             ToNodes(implementation["nodes"]));
     }
 

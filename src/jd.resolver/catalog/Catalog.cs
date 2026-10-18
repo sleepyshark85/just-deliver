@@ -37,7 +37,7 @@ public sealed record Runtime(string Source, string Name, IReadOnlyDictionary<str
 public sealed record RuntimeImplementation(Probe Probe, RuntimeRelease Release, IReadOnlyDictionary<string, Node> Nodes);
 
 /// <summary>Selects the implementation a component or runtime has for an environment type: by exact key, else <see cref="Default"/>.</summary>
-public static class ImplementationKey
+internal static class ImplementationKey
 {
     /// <summary>The key of the implementation every environment type without its own key uses. Part of the catalog format; not a type.</summary>
     public const string Default = "default";

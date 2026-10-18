@@ -199,7 +199,7 @@ revision and shift traffic to it; [provisioning.md](provisioning.md)).
 
 A `Runtime` produces the workload's runtime: a node named `runtime` ([ADR 0013](../decisions/0013-container-apps-runtime.md)). Its
 implementation is looked up like a component's (the environment's type, else `default`), and the engine expands it like any other
-implementation, once per workload, so the app is not special-cased. Until workloads choose a runtime (S21e), the catalog declares
+implementation, once per workload, so the app is not special-cased. Until workloads choose a runtime (S21f), the catalog declares
 exactly one `Runtime`; none or several is an error for every workload.
 
 ```yaml

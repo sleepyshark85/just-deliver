@@ -142,7 +142,7 @@ public class RuntimeVariablesTests
         Assert.Contains("env.nope", error.Message);
     }
 
-    // A runtime mapping with a second node, 'granter' or 'sidecar', whose config is the given body.
+    // A runtime with a second node, 'granter' or 'sidecar', whose config is the given body.
     private static string RuntimeWith(string node, string kind, string body) =>
         TestCatalog.Runtime($"nodes:\n  runtime:\n    template: t/runtime\n    config: {{ k: 1 }}\n  {node}:\n    kind: {kind}\n    template: t/x\n    config: {{ {body} }}\n");
 
@@ -154,7 +154,7 @@ public class RuntimeVariablesTests
     [InlineData("a policy-added node")]
     [InlineData("a policy-added grant")]
     [InlineData("a runtime node not named runtime")]
-    [InlineData("a grant in the runtime mapping")]
+    [InlineData("a grant in the runtime")]
     public async Task Only_the_runtime_node_may_read_a_requirements_export_whether_it_is_static_or_pending(string reader)
     {
         foreach (var export in new[] { "endpoint", "dyn" })

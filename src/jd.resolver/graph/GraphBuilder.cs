@@ -28,7 +28,8 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
         var errors = new List<LoadError>(policy.Errors);
 
         // An export is evaluated in its requirement's scope, where another requirement's exports are out of reach. The catalog loader
-        // rejects it; a graph built from anything else is still refused here, at the component's export.
+        // rejects it, at implementations.<key>.classes.<class>.exports.<name>; a graph built from anything else is still refused here. The
+        // ExpandedRequirement does not carry the implementation key, so the error names the export only.
         foreach (var requirement in policy.Requirements)
         {
             foreach (var (name, result) in requirement.Exports.Where(e => e.Value is Pending { References: var refs } && refs.Any(r => r.Kind == ReferenceKind.Resource)))

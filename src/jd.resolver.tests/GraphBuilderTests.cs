@@ -35,8 +35,8 @@ public class GraphBuilderTests
 
     private static async Task<ResolvedGraph> BuildAsync(string nodes, string requires = "  - type: sqldb\n", params string[] policies)
     {
-        var mapping = TestCatalog.Component("sqldb", "[endpoint]", $"nodes:\n{nodes}exports:\n  endpoint: x\n");
-        var files = BaseFiles.Append(mapping).Concat(policies).Append(TestCatalog.RuntimeFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
+        var component = TestCatalog.Component("sqldb", "[endpoint]", $"nodes:\n{nodes}exports:\n  endpoint: x\n");
+        var files = BaseFiles.Append(component).Concat(policies).Append(TestCatalog.RuntimeFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
@@ -122,8 +122,8 @@ public class GraphBuilderTests
     [Fact]
     public async Task A_runtime_reference_in_an_environment_definition_is_an_error_because_it_has_no_runtime()
     {
-        var mapping = TestCatalog.Component("sqldb", "[endpoint]", $"nodes:\n{N("a", "who: '${runtime.principalId}'")}exports:\n  endpoint: x\n");
-        var loaded = await CatalogParser.ParseAsync(BaseFiles.Append(mapping).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
+        var component = TestCatalog.Component("sqldb", "[endpoint]", $"nodes:\n{N("a", "who: '${runtime.principalId}'")}exports:\n  endpoint: x\n");
+        var loaded = await CatalogParser.ParseAsync(BaseFiles.Append(component).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
         Assert.Empty(loaded.Errors);
         var expansion = new Expander(loaded.Catalog!, Env).ExpandEnvironment("dev", (JArray)YamlSchemaValidator.ParseYaml("- type: sqldb\n"), "definition.yaml");
 

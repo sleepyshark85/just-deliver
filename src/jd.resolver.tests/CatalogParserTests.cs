@@ -182,6 +182,19 @@ public class CatalogParserTests
     }
 
     [Fact]
+    public async Task A_later_implementation_missing_a_class_of_the_first_is_an_error()
+    {
+        const string part = "{ nodes: { db: { template: t/db, config: {} } }, exports: { endpoint: x } }";
+        var component = "kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n"
+            + $"  default:\n    classes: {{ standard: {part}, isolated: {part} }}\n  stage:\n    classes: {{ standard: {part} }}\n";
+        var result = await Parse(("catalog.yaml", CatalogFile), ("components/a.yaml", component));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("components/a.yaml", "implementations.stage.classes"), (error.File, error.Location));
+        Assert.Equal("declares standard; every implementation must declare the classes of 'default' (standard, isolated).", error.Message);
+    }
+
+    [Fact]
     public async Task Policy_matching_an_undeclared_environment_type_is_an_error()
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { template: t/x, environmentType: stagee }\nset: { a.b: 1 }\n"));
