@@ -283,6 +283,7 @@ public class ExpanderTests
                 ["cosmos.databaseName"] = "db",
                 ["cosmos.accountId"] = "/acct",
                 ["cosmos.endpoint"] = "https://acct",
+                ["logAnalytics.id"] = "/law",
             },
             [],
             null);
@@ -290,7 +291,8 @@ public class ExpanderTests
         var result = new Expander(catalog, environment).Expand(workload, "workload.yaml");
 
         Assert.Empty(result.Errors);
-        var requirement = Assert.Single(result.Requirements);
+        Assert.Equal(["database", "monitoring"], result.Requirements.Select(r => r.Type));
+        var requirement = result.Requirements[0];
         Assert.Equal(["access", "container"], requirement.Nodes.Select(n => n.Name).Order(StringComparer.Ordinal));
         var runtime = Assert.IsType<ExpandedRuntime>(result.Runtime);
         Assert.Equal(("runtime", "azure/container-app"), (Assert.Single(runtime.Nodes).Name, runtime.Nodes[0].Template));

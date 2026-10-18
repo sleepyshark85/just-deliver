@@ -2,14 +2,14 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/catalog/policy.schema.json",
   "title": "just-deliver catalog policy",
-  "description": "IT Ops layer. 'set' overrides any other layer, 'default' only fills gaps, 'add' adds nodes. At least one of the three is required. Unique by name across the catalog.",
+  "description": "IT Ops layer. 'set' overrides any other layer, 'default' only fills gaps, 'require' makes a workload declare a component. At least one of the three is required. Unique by name across the catalog.",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "name", "reason", "match"],
   "anyOf": [
     { "required": ["set"] },
     { "required": ["default"] },
-    { "required": ["add"] }
+    { "required": ["require"] }
   ],
   "properties": {
     "kind": { "enum": ["Policy"] },
@@ -43,23 +43,10 @@
       "type": "object",
       "minProperties": 1
     },
-    "add": {
-      "description": "Nodes added to the graph, by name.",
-      "type": "object",
-      "minProperties": 1,
-      "additionalProperties": { "$ref": "#/definitions/node" }
-    }
-  },
-  "definitions": {
-    "node": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["template", "config"],
-      "properties": {
-        "template": { "description": "Template reference, relative to the catalog's templates directory.", "type": "string", "minLength": 1 },
-        "kind": { "description": "create (default) or grant. Grants are surfaced in the approval diff.", "enum": ["create", "grant"], "default": "create" },
-        "config": { "description": "Template configuration. Values are any YAML scalar or map, kept as written.", "type": "object" }
-      }
+    "require": {
+      "description": "A component every workload this policy matches must require (any id, any class); only with 'kind: runtime'. A policy never adds nodes.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$"
     }
   }
 }

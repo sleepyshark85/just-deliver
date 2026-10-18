@@ -256,12 +256,12 @@ public class ExpressionEvaluatorTests
         var workload = YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
         var part = catalog.Components["database"].Implementations["default"].Classes["standard"];
+        var monitoring = catalog.Components["monitoring"].Implementations["default"].Classes["standard"];
         var runtime = Assert.Single(catalog.Runtimes).Value.Implementations["default"];
-        var policy = Assert.Single(catalog.Policies);
-        var nodeNames = part.Nodes.Keys.Concat(policy.Add.Keys).ToHashSet();
-        var strings = part.Nodes.Values.Concat(policy.Add.Values).Concat(runtime.Nodes.Values).SelectMany(n => n.Config.Values)
-            .Concat(policy.Set.Values).Select(t => t.ToString())
-            .Concat(part.Exports.Values)
+        var nodeNames = part.Nodes.Keys.Concat(monitoring.Nodes.Keys).ToHashSet();
+        var strings = part.Nodes.Values.Concat(monitoring.Nodes.Values).Concat(runtime.Nodes.Values).SelectMany(n => n.Config.Values)
+            .Select(t => t.ToString())
+            .Concat(part.Exports.Values).Concat(monitoring.Exports.Values)
             .Append(sampleEndpoint)
             .ToList();
 

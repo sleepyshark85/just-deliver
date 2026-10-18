@@ -96,6 +96,7 @@ public sealed record RuntimeRelease(
     string WeightKey,
     string ResourceIdOutput);
 
+/// <summary>An IT Ops rule: <see cref="Set"/> and <see cref="Default"/> config fields of the nodes it matches; <see cref="Require"/>: a component every workload it matches must require (null when none).</summary>
 public sealed record Policy(
     string Source,
     string Name,
@@ -103,6 +104,6 @@ public sealed record Policy(
     MatchCriteria Match,
     IReadOnlyDictionary<string, JToken> Set,
     IReadOnlyDictionary<string, JToken> Default,
-    IReadOnlyDictionary<string, Node> Add);
+    string? Require);
 
 public sealed record NamingRule(string Pattern, int MaxLength, string Allowed);

@@ -8,7 +8,8 @@ namespace jd.resolver.policies;
 
 /// <summary>
 /// Applies the catalog's policies to expanded requirements and records where every config field came from. Pure; the
-/// catalog is never modified. An environment definition has no runtime, so workload-scope policies add nothing for it. One pass: nodes added by policies receive node-scope policies but never trigger more adds.
+/// catalog is never modified. Workload-scope policies apply to a workload only (an environment definition has no runtime): they set and
+/// default fields of the runtime node and require components, never add nodes.
 /// Rules: docs/architecture/resolver.md (Engine rules, Policies).
 /// </summary>
 public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environment)
@@ -41,50 +42,31 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             requirements.Add(new ResolvedRequirement(requirement.Id, requirement.Type, requirement.Class, requirement.Source, requirement.Exports, nodes));
         }
 
-        // The runtime's nodes get node-scope policies like any component node; the runtime node also gets the workload-scope
-        // policies' set and default (their paths start with 'runtime.', which the catalog loader enforces). A node added by a
-        // workload-scope policy may be read by those values.
         var workloadPolicies = _policies.Where(p => expansion.Owner == OwnerKind.Workload && IsWorkloadScope(p)).ToList();
+
+        // A requirement that failed to expand is missing here too; its own error says why, this one what the policy needs.
+        foreach (var policy in workloadPolicies.Where(p => p.Require is { } type && expansion.Requirements.All(r => r.Type != type)))
+        {
+            errors.Add(new LoadError(expansion.OwnerFile, "requires",
+                $"policy '{policy.Name}' ({policy.Source}) requires a '{policy.Require}' requirement ({policy.Reason}); add '- type: {policy.Require}'."));
+        }
+
+        // The runtime's nodes get node-scope policies like any component node; the runtime node also gets the workload-scope
+        // policies' set and default (their paths start with 'runtime.', which the catalog loader enforces).
         var runtimeNodes = new List<ResolvedNode>();
-        var runtimeNames = expansion.Runtime?.Nodes.Select(n => n.Name).ToHashSet() ?? [];
         if (expansion.Runtime is { } runtime)
         {
-            var inScope = runtimeNames.Concat(workloadPolicies.SelectMany(p => p.Add.Keys)).ToList();
+            var runtimeNames = runtime.Nodes.Select(n => n.Name).ToList();
             foreach (var n in runtime.Nodes)
             {
                 var node = ApplyNodePolicies(
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(runtime.Source, runtime.Source, Layer.Implementation),
-                    null, null, EvaluatorFor(n.Name, inScope), n.Name, n.Name == ExpressionEvaluator.RuntimeNode ? workloadPolicies : [], runtime.WorkloadFile, errors);
+                    null, null, EvaluatorFor(n.Name, runtimeNames), n.Name, n.Name == ExpressionEvaluator.RuntimeNode ? workloadPolicies : [], expansion.OwnerFile, errors);
                 runtimeNodes.Add(n.Name == ExpressionEvaluator.RuntimeNode ? node with { Probe = runtime.Probe, Release = runtime.Release } : node);
             }
         }
 
-        var workloadNodes = new List<ResolvedNode>();
-        var addedBy = new Dictionary<string, Policy>();
-        foreach (var policy in workloadPolicies)
-        {
-            foreach (var (name, node) in policy.Add)
-            {
-                if (runtimeNames.Contains(name))
-                {
-                    errors.Add(new LoadError(policy.Source, $"add.{name}", $"policy '{policy.Name}' adds a node named '{name}', which the runtime already declares."));
-                    continue;
-                }
-
-                if (!addedBy.TryAdd(name, policy))
-                {
-                    errors.Add(new LoadError(policy.Source, $"add.{name}", $"policies '{addedBy[name].Name}' ({addedBy[name].Source}) and '{policy.Name}' ({policy.Source}) both add a node named '{name}'."));
-                    continue;
-                }
-
-                var evaluator = EvaluatorFor(name, policy.Add.Keys);
-                var config = ConfigWalker.WalkConfig(node.Config, evaluator, policy.Source, $"add.{name}.config", errors);
-                workloadNodes.Add(ApplyNodePolicies(
-                    name, node.Template, node.Kind, config, new Provenance(policy.Source, policy.Name, Layer.PolicyAdd), null, null, evaluator, name, [], string.Empty, errors));
-            }
-        }
-
-        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, expansion.WorkloadImage, expansion.WorkloadPort, requirements, runtimeNodes, workloadNodes, errors);
+        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, expansion.WorkloadImage, expansion.WorkloadPort, requirements, runtimeNodes, errors);
     }
 
     // Workload scope is kind: runtime, optionally narrowed by environmentType. The 'runtime' key is accepted but not matched yet:

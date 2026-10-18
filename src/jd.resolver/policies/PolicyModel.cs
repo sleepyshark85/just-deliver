@@ -14,7 +14,6 @@ public enum Layer
     Workload,
     PolicySet,
     PolicyDefault,
-    PolicyAdd,
 }
 
 /// <summary>Where a config field's value came from: the file and its rule (the component or runtime file, or the policy name and its file; for the workload's variables, the workload file and `container.variables`).</summary>
@@ -45,8 +44,8 @@ public sealed record ResolvedRequirement(
     IReadOnlyList<ResolvedNode> Nodes);
 
 /// <summary>
-/// RuntimeNodes are the nodes of the workload's runtime (none for an environment definition); WorkloadNodes are
-/// the nodes added once per workload by workload-scope policies. The result is usable only when Errors is empty.
+/// RuntimeNodes are the nodes of the workload's runtime (none for an environment definition). The result is usable only when
+/// Errors is empty.
 /// </summary>
 public sealed record PolicyResult(
     string CatalogVersion,
@@ -56,5 +55,4 @@ public sealed record PolicyResult(
     int? WorkloadPort,
     IReadOnlyList<ResolvedRequirement> Requirements,
     IReadOnlyList<ResolvedNode> RuntimeNodes,
-    IReadOnlyList<ResolvedNode> WorkloadNodes,
     IReadOnlyList<LoadError> Errors);

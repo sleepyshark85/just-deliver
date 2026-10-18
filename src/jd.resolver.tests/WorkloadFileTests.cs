@@ -61,7 +61,7 @@ public sealed class WorkloadFileTests : IDisposable
 
         Assert.Null(result.Workload);
         var error = Assert.Single(result.Errors);
-        Assert.Equal("requires[0], requires[1]", error.Location);
+        Assert.Equal("requires[0], requires[2]", error.Location);
         Assert.StartsWith("the id 'database' is used more than once", error.Message);
     }
 }

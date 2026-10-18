@@ -51,17 +51,16 @@ public class GraphBuilderTests
     {
         var graph = await BuildAsync(
             N("n", "k: 1"),
-            "  - type: sqldb\n    id: users\n  - type: sqldb\n    id: orders\n",
-            "kind: Policy\nname: pol\nreason: r\nmatch: { kind: runtime }\nadd:\n  extra:\n    template: t/extra\n    config: {}\n");
+            "  - type: sqldb\n    id: users\n  - type: sqldb\n    id: orders\n");
 
         Assert.Empty(graph.Errors);
         Assert.Equal(["7", "dev", "shop"], [graph.CatalogVersion, graph.Environment, graph.Workload]);
         var orders = Node(graph, "orders", "n");
         Assert.Equal(("orders", "n", "shop.dev.orders.n"), (orders.Scope, orders.Name, orders.Stack));
         Assert.Equal("shop.dev.users.n", Node(graph, "users", "n").Stack);
-        var extra = Node(graph, "@workload", "extra");
-        Assert.Equal(("@workload", "shop.dev._workload.extra"), (extra.Scope, extra.Stack));
-        Assert.Equal(4, graph.Nodes.Select(n => n.Stack).Distinct().Count());
+        var runtime = Node(graph, "@workload", "runtime");
+        Assert.Equal(("@workload", "shop.dev._workload.runtime"), (runtime.Scope, runtime.Stack));
+        Assert.Equal(3, graph.Nodes.Select(n => n.Stack).Distinct().Count());
         Assert.Equal(["orders", "users"], graph.Exports.Keys);
         Assert.Equal("x", Assert.IsType<Resolved>(graph.Exports["orders"]["endpoint"]).Value);
     }
@@ -71,12 +70,11 @@ public class GraphBuilderTests
     {
         var graph = await BuildAsync(
             N("c", "k: 1") + N("b-c", "k: 1"),
-            "  - type: sqldb\n    id: a-b\n  - type: sqldb\n    id: a\n",
-            "kind: Policy\nname: pol\nreason: r\nmatch: { kind: runtime }\nadd:\n  extra:\n    template: t/extra\n    config: {}\n");
+            "  - type: sqldb\n    id: a-b\n  - type: sqldb\n    id: a\n");
 
         Assert.Empty(graph.Errors);
         Assert.All(graph.Nodes, n => Assert.Matches("^[a-z0-9._-]+$", n.Stack));
-        Assert.Equal(6, graph.Nodes.Select(n => n.Stack).Distinct().Count());
+        Assert.Equal(5, graph.Nodes.Select(n => n.Stack).Distinct().Count());
     }
 
     [Fact]

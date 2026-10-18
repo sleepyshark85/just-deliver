@@ -376,7 +376,7 @@ public sealed class EnvUpAzureTests : IDisposable
         // metrics-publisher assignment) are deployed in its Grants step, the real HTTP probe finds the new revision healthy, and the shift
         // names it (also on a first deploy), so the next run finds it live.
         var releaseLines = releaseOutput.Split('\n');
-        foreach (var grant in new[] { "/database/access", "/@workload/appinsights-access" })
+        foreach (var grant in new[] { "/database/access", "/monitoring/access" })
         {
             Assert.Equal(2, releaseLines.Count(line => line.Contains($"{grant}: deployed", StringComparison.Ordinal)));
         }

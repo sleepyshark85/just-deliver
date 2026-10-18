@@ -70,7 +70,7 @@ public sealed class CliTests : IDisposable
         var (code, _, stderr) = await RunAsync("validate", path);
 
         Assert.Equal(1, code);
-        Assert.Contains($"{path}: requires[0], requires[1]: ", stderr);
+        Assert.Contains($"{path}: requires[0], requires[2]: ", stderr);
         Assert.Contains("used more than once", stderr);
     }
 
@@ -112,8 +112,8 @@ public sealed class CliTests : IDisposable
             Assert.Contains(((string)node["hash"]!)[..8], stdout);
         }
 
-        // A policy-added field: the value, where it came from in the environment, and the policy that added it.
-        Assert.Contains("  workspaceResourceId = /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev (from env.logAnalytics.id)   [PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)]", stdout);
+        // A component field read from the environment: the value, where it came from, and the component file.
+        Assert.Contains("  workspaceResourceId = /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev (from env.logAnalytics.id)   [Implementation: components/monitoring.yaml]", stdout);
         // A mapping field: its provenance names the file once.
         Assert.Contains("  partitionKeyPath = /id   [Implementation: components/database.yaml]", stdout);
         Assert.Contains("= pending: ", stdout);
@@ -126,7 +126,8 @@ public sealed class CliTests : IDisposable
         Assert.Contains("  variables.LOG_LEVEL = info   [Workload: container.variables]", stdout);
         Assert.Contains("  variables.COSMOS_ENDPOINT = https://cosmos-dev.documents.azure.com:443/   [Workload: container.variables]", stdout);
         Assert.Contains("  variables.COSMOS_CONTAINER = pending: ${resource.database.container}   [Workload: container.variables]", stdout);
-        Assert.Contains("  variables.APPLICATIONINSIGHTS_CONNECTION_STRING = pending: ${appinsights.connectionString}   [PolicySet: enforce-monitoring (policies/enforce-monitoring.yaml)]", stdout);
+        // The connection string is the workload's own variable, read from its monitoring requirement; no policy sets it.
+        Assert.Contains("  variables.APPLICATIONINSIGHTS_CONNECTION_STRING = pending: ${resource.monitoring.connectionString}   [Workload: container.variables]", stdout);
     }
 
     // Success criterion 5: a policy that exists only as a catalog file changes what preview shows, with the policy named as the provenance.
@@ -271,8 +272,8 @@ public sealed class CliTests : IDisposable
         Assert.Equal(0, code);
         Assert.Empty(stderr);
         var app = "just-deliver-sample-app";
-        Assert.Equal([$"deploy {app}.dev._workload.appinsights", $"deploy {app}.dev.database.container", $"deploy {app}.dev._workload.runtime"], backend.Calls.Take(3));
-        Assert.Equal([$"deploy {app}.dev._workload.appinsights-access", $"deploy {app}.dev.database.access"], backend.Calls.Skip(3).Take(2).Order(StringComparer.Ordinal));
+        Assert.Equal([$"deploy {app}.dev.database.container", $"deploy {app}.dev.monitoring.appinsights", $"deploy {app}.dev._workload.runtime"], backend.Calls.Take(3));
+        Assert.Equal([$"deploy {app}.dev.database.access", $"deploy {app}.dev.monitoring.access"], backend.Calls.Skip(3).Take(2).Order(StringComparer.Ordinal));
         Assert.Equal("probe out-latestRevisionFqdn/health", backend.Calls[5]);
         Assert.Equal($"deploy {app}.dev._workload.runtime", backend.Calls[6]); // the shift, also on a first deploy
         Assert.Equal(7, backend.Calls.Count);
@@ -284,6 +285,51 @@ public sealed class CliTests : IDisposable
         Assert.Equal(
             ["  create azure-native:t:T", "  dark: done (out-latestRevisionName)", "  grants: done", "  probe: done (HTTP 200)", "  shift: done (out-latestRevisionName)"],
             lines[(runtime + 1)..].ToList());
+    }
+
+    // The policy only requires monitoring (docs/architecture/components.md section 3): the runtime gets the connection string through the
+    // workload's own mapping, and a secret output stays secret through the export into the variables entry.
+    [Fact]
+    public async Task The_connection_string_reaches_the_runtime_through_the_workloads_variable_and_stays_secret()
+    {
+        var backend = new RecordingBackend { SecretOutputs = { "connectionString" } };
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", Catalog);
+
+        Assert.True(code == 0, stderr);
+        var variables = backend.Packages.Last(p => p.StackName == "just-deliver-sample-app.dev._workload.runtime").DeploymentParameters["variables"];
+        Assert.True(variables.IsSecret);
+        Assert.Contains("""{"name":"APPLICATIONINSIGHTS_CONNECTION_STRING","value":"out-connectionString"}""", variables.Value, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_workload_that_requires_monitoring_but_does_not_map_it_gets_no_connection_string()
+    {
+        var path = WriteTemp("unmapped.yaml", File.ReadAllText(Workload).Replace("    APPLICATIONINSIGHTS_CONNECTION_STRING: ${resource.monitoring.connectionString}\n", string.Empty, StringComparison.Ordinal));
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", path, "--env", Environment, "--catalog", Catalog);
+
+        Assert.True(code == 0, stderr);
+        Assert.Contains("deploy just-deliver-sample-app.dev.monitoring.appinsights", backend.Calls);
+        var variables = backend.Packages.Last(p => p.StackName == "just-deliver-sample-app.dev._workload.runtime").DeploymentParameters["variables"];
+        Assert.DoesNotContain("APPLICATIONINSIGHTS_CONNECTION_STRING", variables.Value, StringComparison.Ordinal);
+        Assert.False(variables.IsSecret);
+    }
+
+    [Fact]
+    public async Task A_workload_without_monitoring_is_refused_naming_the_policy_and_its_file()
+    {
+        var path = WriteTemp("unmonitored.yaml", File.ReadAllText(Workload)
+            .Replace("    APPLICATIONINSIGHTS_CONNECTION_STRING: ${resource.monitoring.connectionString}\n", string.Empty, StringComparison.Ordinal)
+            .Replace("  - type: monitoring\n", string.Empty, StringComparison.Ordinal));
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", path, "--env", Environment, "--catalog", Catalog);
+
+        Assert.Equal(1, code);
+        Assert.Contains($"{path}: requires: policy 'enforce-monitoring' (policies/enforce-monitoring.yaml) requires a 'monitoring' requirement (Every workload reports to the environment workspace); add '- type: monitoring'.", stderr);
+        Assert.Empty(backend.Calls);
     }
 
     [Fact]
@@ -322,13 +368,13 @@ public sealed class CliTests : IDisposable
     [Fact]
     public async Task A_failed_deploy_exits_1_naming_the_node()
     {
-        var backend = new RecordingBackend { FailOn = "just-deliver-sample-app.dev._workload.appinsights" };
+        var backend = new RecordingBackend { FailOn = "just-deliver-sample-app.dev.database.container" };
 
         var (code, stdout, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", Catalog);
 
         Assert.Equal(1, code);
-        Assert.Contains("appinsights: failed", stdout);
-        Assert.Contains("jd: stopped at just-deliver-sample-app/dev/@workload/appinsights: provider exploded", stderr);
+        Assert.Contains("database/container: failed", stdout);
+        Assert.Contains("jd: stopped at just-deliver-sample-app/dev/database/container: provider exploded", stderr);
         Assert.Single(backend.Calls);
     }
 

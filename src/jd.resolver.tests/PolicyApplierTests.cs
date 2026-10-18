@@ -180,9 +180,7 @@ public class PolicyApplierTests
         Assert.False(Node(team, "n").Config.ContainsKey("failover"));
     }
 
-    private const string Monitoring =
-        "add:\n  appi:\n    template: t/appi\n    config: { name: \"${name('thing')}\", host: '${env.host}' }\n  appi-access:\n    kind: grant\n    template: t/role\n    config: { scope: '${appi.id}', who: '${runtime.principalId}' }\n"
-        + "set: { runtime.connection: '${appi.cs}' }\ndefault: { runtime.other: x }\n";
+    private const string RuntimeFields = "set: { runtime.connection: '${env.host}' }\ndefault: { runtime.other: x }\n";
 
     [Fact]
     public async Task The_runtime_nodes_come_from_the_runtime_mapping_with_its_probe_and_get_node_scope_policies()
@@ -193,57 +191,50 @@ public class PolicyApplierTests
         Assert.Equal(("runtime", TestCatalog.Probe, TestCatalog.Release), (runtime.Name, runtime.Probe, runtime.Release));
         Assert.Equal(2, Number(runtime.Config["k"]));
         Assert.Equal(new Provenance("f4.yaml", "size", Layer.PolicySet), runtime.Provenance["k"]);
-        Assert.Empty(result.WorkloadNodes);
     }
 
+    // A policy requires, it never adds (docs/architecture/components.md section 3): a workload the policy matches must declare the component.
     [Fact]
-    public async Task A_policy_cannot_add_a_node_the_runtime_already_declares()
+    public async Task A_workload_without_a_required_component_is_an_error_naming_the_policy_and_its_file()
     {
-        var runtimeFile = TestCatalog.Runtime("nodes:\n  runtime:\n    template: t/rt\n    config: {}\n  sidecar:\n    template: t/s\n    config: {}\n");
-        var policy = Policy("pol", "{ kind: runtime }", "add:\n  sidecar:\n    template: t/x\n    config: {}\n");
-        var loaded = await CatalogParser.ParseAsync(BaseFiles.Append(runtimeFile).Append(policy).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
-        Assert.Empty(loaded.Errors);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\ncontainer: { image: i }\nrequires:\n  - type: sqldb\n");
-
-        var result = new PolicyApplier(loaded.Catalog!, Env()).Apply(new Expander(loaded.Catalog!, Env()).Expand(workload, "workload.yaml"));
+        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], "  []\n");
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f5.yaml", "add.sidecar"), (error.File, error.Location));
-        Assert.Contains("already declares", error.Message);
-        Assert.Empty(result.WorkloadNodes);
+        Assert.Equal(("workload.yaml", "requires"), (error.File, error.Location));
+        Assert.Equal("policy 'needs-sqldb' (f4.yaml) requires a 'sqldb' requirement (because); add '- type: sqldb'.", error.Message);
+        Assert.Single(result.RuntimeNodes);
+    }
+
+    [Theory]
+    [InlineData("  - type: sqldb\n")]
+    [InlineData("  - type: sqldb\n    id: other\n    class: isolated\n")]
+    public async Task A_requirement_of_the_required_type_with_any_id_and_class_satisfies_the_policy(string requires)
+    {
+        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], requires);
+
+        Assert.Empty(result.Errors);
     }
 
     [Fact]
-    public async Task A_runtime_policy_adds_nodes_once_per_workload_and_they_get_node_scope_policies()
+    public async Task A_require_narrowed_by_environment_type_applies_only_there()
     {
-        var result = await ApplyAsync(
-        [
-            Policy("monitoring", "{ kind: runtime }", Monitoring),
-            Policy("hardening", "{ template: t/appi }", "set: { retention: 30 }\n"),
-        ], "  - type: sqldb\n    id: one\n  - type: sqldb\n    id: two\n");
+        var policy = Policy("needs-sqldb", "{ kind: runtime, environmentType: stage }", "require: sqldb\n");
 
-        Assert.Empty(result.Errors);
-        Assert.Equal(["appi", "appi-access"], result.WorkloadNodes.Select(n => n.Name));
-        Assert.All(result.Requirements, r => Assert.DoesNotContain(r.Nodes, n => n.Name.StartsWith("appi", StringComparison.Ordinal)));
-        var appi = result.WorkloadNodes[0];
-        Assert.Equal("shop-appi", Text(appi.Config["name"]));
-        Assert.Equal(30, Number(appi.Config["retention"]));
-        Assert.Equal(new Provenance("f4.yaml", "monitoring", Layer.PolicyAdd), appi.Provenance["name"]);
-        Assert.Equal(new Provenance("f5.yaml", "hardening", Layer.PolicySet), appi.Provenance["retention"]);
-        var access = result.WorkloadNodes[1];
-        Assert.Equal(NodeKind.Grant, access.Kind);
-        Assert.Equal(Layer.PolicyAdd, access.Provenance["scope"].Layer);
-        Assert.IsType<Pending>(Assert.IsType<ConfigText>(access.Config["who"]).Result);
+        var team = await ApplyAsync([policy], "  []\n");
+        var gated = await ApplyAsync([policy], "  []\n", type: "stage");
+
+        Assert.Empty(team.Errors);
+        Assert.Equal("requires", Assert.Single(gated.Errors).Location);
     }
 
     [Fact]
     public async Task Runtime_targeted_set_and_default_entries_are_not_applied_or_stored()
     {
-        var result = await ApplyAsync([Policy("monitoring", "{ kind: runtime }", Monitoring)]);
+        var result = await ApplyAsync([Policy("runtime-fields", "{ kind: runtime }", RuntimeFields)]);
 
         Assert.Empty(result.Errors);
-        Assert.DoesNotContain(result.Requirements.SelectMany(r => r.Nodes).Concat(result.WorkloadNodes), n => n.Config.ContainsKey("runtime"));
-        Assert.DoesNotContain(result.WorkloadNodes.Concat(result.Requirements.SelectMany(r => r.Nodes)), n => n.Provenance.Keys.Any(k => k.StartsWith("runtime", StringComparison.Ordinal)));
+        Assert.DoesNotContain(result.Requirements.SelectMany(r => r.Nodes).Concat(result.RuntimeNodes), n => n.Config.ContainsKey("runtime"));
+        Assert.DoesNotContain(result.Requirements.SelectMany(r => r.Nodes).Concat(result.RuntimeNodes), n => n.Provenance.Keys.Any(k => k.StartsWith("runtime", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -252,7 +243,7 @@ public class PolicyApplierTests
         var policies = new[]
         {
             Policy("runtime-set", "{ kind: runtime }", "set: { runtime.size: 1 }\n"),
-            Policy("guarded-add", "{ kind: runtime, environmentType: stage }", "add:\n  extra:\n    template: t/x\n    config: {}\n"),
+            Policy("guarded-set", "{ kind: runtime, environmentType: stage }", "set: { runtime.guarded: 1 }\n"),
         };
 
         var team = await ApplyAsync(policies);
@@ -260,8 +251,8 @@ public class PolicyApplierTests
 
         Assert.Equal(400, Number(Node(team, "n").Config["size"]));
         Assert.All(team.Requirements.SelectMany(r => r.Nodes), n => Assert.False(n.Config.ContainsKey("runtime")));
-        Assert.Empty(team.WorkloadNodes);
-        Assert.Equal("extra", Assert.Single(guarded.WorkloadNodes).Name);
+        Assert.False(Assert.Single(team.RuntimeNodes).Config.ContainsKey("guarded"));
+        Assert.Equal(1, Number(Assert.Single(guarded.RuntimeNodes).Config["guarded"]));
     }
 
     [Fact]
@@ -272,20 +263,6 @@ public class PolicyApplierTests
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[1]"), (error.File, error.Location));
         Assert.Single(result.Requirements);
-    }
-
-    [Fact]
-    public async Task Two_policies_adding_a_node_with_the_same_name_is_an_error_naming_both_files()
-    {
-        var add = "add:\n  extra:\n    template: t/x\n    config: {}\n";
-
-        var result = await ApplyAsync([Policy("first", "{ kind: runtime }", add), Policy("second", "{ kind: runtime }", add)]);
-
-        var error = Assert.Single(result.Errors);
-        Assert.Contains("'first' (f4.yaml)", error.Message);
-        Assert.Contains("'second' (f5.yaml)", error.Message);
-        Assert.Contains("'extra'", error.Message);
-        Assert.Single(result.WorkloadNodes);
     }
 
     [Theory]
@@ -348,7 +325,6 @@ public class PolicyApplierTests
     {
         var result = await ApplyAsync(
         [
-            Policy("monitoring", "{ kind: runtime }", Monitoring),
             Policy("pol", "{ template: t/n }", "set: { size: 1, 'x.y': 2 }\ndefault: { fresh: 1 }\n"),
         ]);
 
@@ -356,18 +332,18 @@ public class PolicyApplierTests
             ? o.Properties.SelectMany(p => Leaves(prefix.Length == 0 ? p.Key : $"{prefix}.{p.Key}", p.Value))
             : [prefix];
 
-        var nodes = result.Requirements.SelectMany(r => r.Nodes).Concat(result.WorkloadNodes).ToList();
+        var nodes = result.Requirements.SelectMany(r => r.Nodes).ToList();
         Assert.NotEmpty(nodes);
         Assert.All(nodes, n => Assert.Equal(
             Leaves(string.Empty, new ConfigObject(n.Config)).Order(StringComparer.Ordinal),
             n.Provenance.Keys.Order(StringComparer.Ordinal)));
         Assert.Equal(
-            [Layer.Implementation, Layer.PolicySet, Layer.PolicyDefault, Layer.PolicyAdd],
+            [Layer.Implementation, Layer.PolicySet, Layer.PolicyDefault],
             nodes.SelectMany(n => n.Provenance.Values).Select(v => v.Layer).Distinct().Order());
     }
 
     [Fact]
-    public async Task Seed_catalog_and_sample_workload_gain_the_monitoring_nodes_without_errors()
+    public async Task Seed_catalog_and_sample_workload_resolve_with_monitoring_as_a_requirement()
     {
         var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
@@ -393,8 +369,9 @@ public class PolicyApplierTests
         var result = new PolicyApplier(catalog, environment).Apply(expansion);
 
         Assert.Empty(result.Errors);
-        Assert.Equal(["appinsights", "appinsights-access"], result.WorkloadNodes.Select(n => n.Name));
+        var monitoring = Assert.Single(result.Requirements, r => r.Type == "monitoring");
+        Assert.Equal(["appinsights", "access"], monitoring.Nodes.Select(n => n.Name));
         Assert.Equal(catalog.Version, result.CatalogVersion);
-        Assert.Equal(new Provenance("policies/enforce-monitoring.yaml", "enforce-monitoring", Layer.PolicyAdd), result.WorkloadNodes[0].Provenance["workspaceResourceId"]);
+        Assert.Equal(new Provenance("components/monitoring.yaml", "components/monitoring.yaml", Layer.Implementation), monitoring.Nodes[0].Provenance["workspaceResourceId"]);
     }
 }

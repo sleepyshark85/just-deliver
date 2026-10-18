@@ -61,7 +61,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         }
 
         var runtime = owner.Kind == OwnerKind.Workload ? ExpandRuntime(owner, requirements, ownerFile, errors) : null;
-        return new ExpansionResult(owner.Kind, owner.Name, owner.Team, owner.Image, owner.Port, requirements, runtime, errors);
+        return new ExpansionResult(owner.Kind, ownerFile, owner.Name, owner.Team, owner.Image, owner.Port, requirements, runtime, errors);
     }
 
     private ExpressionEvaluator EvaluatorFor(Owner owner, string currentId, IEnumerable<string> nodeNames, IReadOnlyDictionary<Reference, string>? known = null) => new(new ExpressionContext(
@@ -147,7 +147,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             return null;
         }
 
-        return new ExpandedRuntime(runtime.Source, nodes, implementation.Probe, implementation.Release, ownerFile);
+        return new ExpandedRuntime(runtime.Source, nodes, implementation.Probe, implementation.Release);
     }
 
     // Only the runtime node (never a grant) reads the workload's variables and the requirements' exports; any other node that tries is

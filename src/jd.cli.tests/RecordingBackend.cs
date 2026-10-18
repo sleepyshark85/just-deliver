@@ -11,7 +11,7 @@ namespace jd.cli.tests;
 // The probe passes unless ProbePasses is false. With Deployed, every stack looks deployed and clean; so does a stack this backend deployed,
 // as after a deploy: a preview finds no change and the state has the outputs the templates declare (what a qualification reads); the traffic is valid JSON
 // naming a revision, as the release flow reads it. With a Clock, each deploy moves it by DeployTime and each preview by PreviewTime;
-// the previews of the stacks in PreviewDrift find a change.
+// the previews of the stacks in PreviewDrift find a change. The outputs named in SecretOutputs are secret; Packages holds every package deployed.
 internal sealed class RecordingBackend : IBackEndProvider, IRevisionProbe
 {
     public List<string> Calls { get; } = [];
@@ -22,11 +22,14 @@ internal sealed class RecordingBackend : IBackEndProvider, IRevisionProbe
     public TimeSpan DeployTime { get; set; }
     public TimeSpan PreviewTime { get; set; }
     public HashSet<string> PreviewDrift { get; } = [];
+    public HashSet<string> SecretOutputs { get; } = [];
+    public List<DeploymentPackage> Packages { get; } = [];
     private readonly HashSet<string> _deployedStacks = [];
 
     public Task<DeploymentResult> DeployAsync(DeploymentPackage package, CancellationToken cancellationToken)
     {
         Calls.Add("deploy " + package.StackName);
+        Packages.Add(package);
         Clock?.Advance(DeployTime);
         var outputs = OutputsOf(package.DeploymentContent);
         if (package.StackName == FailOn)
@@ -51,9 +54,9 @@ internal sealed class RecordingBackend : IBackEndProvider, IRevisionProbe
 
     private bool IsDeployed(string stack) => Deployed || _deployedStacks.Contains(stack);
 
-    private static Dictionary<string, ConfigEntry> OutputsOf(string deploymentContent) =>
+    private Dictionary<string, ConfigEntry> OutputsOf(string deploymentContent) =>
         ((YamlSchemaValidator.ParseYaml(deploymentContent) as JObject)?["outputs"] as JObject)?.Properties()
-            .ToDictionary(p => p.Name, p => new ConfigEntry(p.Name == "traffic" ? """[{"revisionName":"app--r1","weight":100}]""" : "out-" + p.Name)) ?? [];
+            .ToDictionary(p => p.Name, p => new ConfigEntry(p.Name == "traffic" ? """[{"revisionName":"app--r1","weight":100}]""" : "out-" + p.Name, SecretOutputs.Contains(p.Name))) ?? [];
 
     public Task<ProbeResult> ProbeAsync(string fqdn, Probe probe, CancellationToken cancellationToken)
     {

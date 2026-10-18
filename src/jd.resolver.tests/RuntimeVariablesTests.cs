@@ -151,8 +151,6 @@ public class RuntimeVariablesTests
 
     [Theory]
     [InlineData("a requirement node")]
-    [InlineData("a policy-added node")]
-    [InlineData("a policy-added grant")]
     [InlineData("a runtime node not named runtime")]
     [InlineData("a grant in the runtime")]
     public async Task Only_the_runtime_node_may_read_a_requirements_export_whether_it_is_static_or_pending(string reader)
@@ -160,11 +158,9 @@ public class RuntimeVariablesTests
         foreach (var export in new[] { "endpoint", "dyn" })
         {
             var read = $"v: '${{resource.sqldb.{export}}}'";
-            var add = $"add:\n  extra:\n    kind: {(reader.Contains("grant", StringComparison.Ordinal) ? "grant" : "create")}\n    template: t/x\n    config: {{ {read} }}\n";
             var graph = reader switch
             {
                 "a requirement node" => await ResolveAsync(string.Empty, component: Component($", {read}")),
-                "a policy-added node" or "a policy-added grant" => await ResolveAsync(string.Empty, [WorkloadPolicy("readers", add)]),
                 "a runtime node not named runtime" => await ResolveAsync(string.Empty, runtimeFile: RuntimeWith("sidecar", "create", read)),
                 _ => await ResolveAsync(string.Empty, runtimeFile: RuntimeWith("granter", "grant", read)),
             };
@@ -211,7 +207,7 @@ public class RuntimeVariablesTests
         var policy = new PolicyResult(
             "1", "shop", "crew", null, null,
             [new ResolvedRequirement("db", "sqldb", "standard", "m.yaml", new Dictionary<string, EvalResult> { ["endpoint"] = export }, [])],
-            [runtime], [], []);
+            [runtime], []);
 
         var graph = new GraphBuilder(Env).Build(policy);
 
@@ -244,22 +240,6 @@ public class RuntimeVariablesTests
         Assert.Equal(new Provenance("f4.yaml", "vars", Layer.PolicySet), runtime.Provenance["variables.SET_ME"]);
         Assert.Equal(Layer.Workload, runtime.Provenance["variables.KEEP"].Layer);
         Assert.Equal(new Provenance("f4.yaml", "vars", Layer.PolicyDefault), runtime.Provenance["variables.FRESH"]);
-    }
-
-    [Fact]
-    public async Task A_variable_set_by_a_policy_can_read_a_node_the_policies_add_and_waits_for_it()
-    {
-        var policy = WorkloadPolicy(
-            "monitoring",
-            "add:\n  appinsights:\n    template: t/appi\n    config: { k: 1 }\nset: { runtime.variables.CONNECTION: '${appinsights.connectionString}' }\n");
-
-        var graph = await ResolveAsync(string.Empty, [policy]);
-
-        Assert.Empty(graph.Errors);
-        var runtime = Runtime(graph);
-        Assert.IsType<Pending>(Assert.IsType<ConfigText>(Variables(runtime).Properties["CONNECTION"]).Result);
-        Assert.Equal(["shop/dev/@workload/appinsights"], runtime.DependsOn);
-        Assert.Equal(Phase.Infrastructure, graph.Nodes.Single(n => n.Name == "appinsights").Phase);
     }
 
     [Fact]
@@ -304,7 +284,6 @@ public class RuntimeVariablesTests
     [InlineData("nested in an object")]
     [InlineData("in an array item")]
     [InlineData("on a node that is not the runtime")]
-    [InlineData("a policy add")]
     [InlineData("a policy set value")]
     public async Task Entries_are_an_error_anywhere_but_a_top_level_field_of_the_runtime_node(string where)
     {
@@ -316,7 +295,6 @@ public class RuntimeVariablesTests
             "nested in an object" => await ResolveAsync(string.Empty, runtimeFile: RuntimeConfig($"outer: {{ inner: {form} }}")),
             "in an array item" => await ResolveAsync(string.Empty, runtimeFile: RuntimeConfig($"items: [{form}]")),
             "on a node that is not the runtime" => await ResolveAsync(string.Empty, runtimeFile: RuntimeWith("sidecar", "create", $"vars: {form}")),
-            "a policy add" => await ResolveAsync(string.Empty, [WorkloadPolicy("pol", $"add:\n  extra:\n    template: t/x\n    config: {{ vars: {form} }}\n")]),
             _ => await ResolveAsync(string.Empty, [WorkloadPolicy("pol", $"set: {{ runtime.label: {form} }}\n")]),
         };
 

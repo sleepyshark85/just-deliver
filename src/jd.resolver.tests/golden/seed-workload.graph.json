@@ -4,29 +4,6 @@
   "workload": "just-deliver-sample-app",
   "nodes": [
     {
-      "id": "just-deliver-sample-app/dev/@workload/appinsights",
-      "scope": "@workload",
-      "name": "appinsights",
-      "template": "azure/application-insights",
-      "kind": "Create",
-      "stack": "just-deliver-sample-app.dev._workload.appinsights",
-      "phase": "Infrastructure",
-      "hash": "91b949bc7db071da87b6911110c9f8506280e8e8d615d50d07becf8e48b1960d",
-      "dependsOn": [],
-      "config": {
-        "appInsightsName": "appi-just-deliver-sample-app-dev-1c8d23",
-        "location": "southeastasia",
-        "resourceGroupName": "rg-dev",
-        "workspaceResourceId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev"
-      },
-      "provenance": {
-        "appInsightsName": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
-        "location": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
-        "resourceGroupName": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
-        "workspaceResourceId": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)"
-      }
-    },
-    {
       "id": "just-deliver-sample-app/dev/database/container",
       "scope": "database",
       "name": "container",
@@ -50,6 +27,29 @@
       }
     },
     {
+      "id": "just-deliver-sample-app/dev/monitoring/appinsights",
+      "scope": "monitoring",
+      "name": "appinsights",
+      "template": "azure/application-insights",
+      "kind": "Create",
+      "stack": "just-deliver-sample-app.dev.monitoring.appinsights",
+      "phase": "Infrastructure",
+      "hash": "91a43ef37453e91e571b7096a0d8ef65c1b23d9875a66ec215c5707adc5b3174",
+      "dependsOn": [],
+      "config": {
+        "appInsightsName": "appi-just-deliver-sample-app-dev-ae5faa",
+        "location": "southeastasia",
+        "resourceGroupName": "rg-dev",
+        "workspaceResourceId": "/subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev"
+      },
+      "provenance": {
+        "appInsightsName": "Implementation: components/monitoring.yaml",
+        "location": "Implementation: components/monitoring.yaml",
+        "resourceGroupName": "Implementation: components/monitoring.yaml",
+        "workspaceResourceId": "Implementation: components/monitoring.yaml"
+      }
+    },
+    {
       "id": "just-deliver-sample-app/dev/@workload/runtime",
       "scope": "@workload",
       "name": "runtime",
@@ -57,10 +57,10 @@
       "kind": "Create",
       "stack": "just-deliver-sample-app.dev._workload.runtime",
       "phase": "Runtime",
-      "hash": "71e8954d482d7a100466578c36aba177b7533c6e3e7738ec4d37f0925ad0ab8f",
+      "hash": "37f561154fd5d1e7c71c72b93d19afe75158a22c1a400473bca001872351d4f4",
       "dependsOn": [
-        "just-deliver-sample-app/dev/@workload/appinsights",
-        "just-deliver-sample-app/dev/database/container"
+        "just-deliver-sample-app/dev/database/container",
+        "just-deliver-sample-app/dev/monitoring/appinsights"
       ],
       "config": {
         "containerAppName": "ca-just-deliver-sample-appc15e1b",
@@ -78,7 +78,7 @@
         "variables": [
           {
             "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-            "value": "${appinsights.connectionString}"
+            "value": "${resource.monitoring.connectionString}"
           },
           {
             "name": "COSMOS_CONTAINER",
@@ -111,7 +111,7 @@
         "minReplicas": "Implementation: runtimes/container-app.yaml",
         "resourceGroupName": "Implementation: runtimes/container-app.yaml",
         "targetPort": "Implementation: runtimes/container-app.yaml",
-        "variables.APPLICATIONINSIGHTS_CONNECTION_STRING": "PolicySet: enforce-monitoring (policies/enforce-monitoring.yaml)",
+        "variables.APPLICATIONINSIGHTS_CONNECTION_STRING": "Workload: container.variables",
         "variables.COSMOS_CONTAINER": "Workload: container.variables",
         "variables.COSMOS_DATABASE": "Workload: container.variables",
         "variables.COSMOS_ENDPOINT": "Workload: container.variables",
@@ -134,32 +134,6 @@
         "latestKey": "latestRevision",
         "weightKey": "weight",
         "resourceIdOutput": "containerAppId"
-      }
-    },
-    {
-      "id": "just-deliver-sample-app/dev/@workload/appinsights-access",
-      "scope": "@workload",
-      "name": "appinsights-access",
-      "template": "azure/role-assignment",
-      "kind": "Grant",
-      "stack": "just-deliver-sample-app.dev._workload.appinsights-access",
-      "phase": "AfterRuntime",
-      "hash": "e1c8d629f9a7c7ebfea72317026a9975c9ccab5d46afdee03963dbb200637570",
-      "dependsOn": [
-        "just-deliver-sample-app/dev/@workload/appinsights",
-        "just-deliver-sample-app/dev/@workload/runtime"
-      ],
-      "config": {
-        "principalId": "${runtime.principalId}",
-        "roleAssignmentId": "${guid(appinsights.appInsightsId, runtime.principalId, 'metrics-publisher')}",
-        "roleGuid": "3913510d-42f4-4e42-8a64-420c390055eb",
-        "scope": "${appinsights.appInsightsId}"
-      },
-      "provenance": {
-        "principalId": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
-        "roleAssignmentId": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
-        "roleGuid": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)",
-        "scope": "PolicyAdd: enforce-monitoring (policies/enforce-monitoring.yaml)"
       }
     },
     {
@@ -189,6 +163,32 @@
         "roleGuid": "Implementation: components/database.yaml",
         "scope": "Implementation: components/database.yaml"
       }
+    },
+    {
+      "id": "just-deliver-sample-app/dev/monitoring/access",
+      "scope": "monitoring",
+      "name": "access",
+      "template": "azure/role-assignment",
+      "kind": "Grant",
+      "stack": "just-deliver-sample-app.dev.monitoring.access",
+      "phase": "AfterRuntime",
+      "hash": "e1c8d629f9a7c7ebfea72317026a9975c9ccab5d46afdee03963dbb200637570",
+      "dependsOn": [
+        "just-deliver-sample-app/dev/@workload/runtime",
+        "just-deliver-sample-app/dev/monitoring/appinsights"
+      ],
+      "config": {
+        "principalId": "${runtime.principalId}",
+        "roleAssignmentId": "${guid(appinsights.appInsightsId, runtime.principalId, 'metrics-publisher')}",
+        "roleGuid": "3913510d-42f4-4e42-8a64-420c390055eb",
+        "scope": "${appinsights.appInsightsId}"
+      },
+      "provenance": {
+        "principalId": "Implementation: components/monitoring.yaml",
+        "roleAssignmentId": "Implementation: components/monitoring.yaml",
+        "roleGuid": "Implementation: components/monitoring.yaml",
+        "scope": "Implementation: components/monitoring.yaml"
+      }
     }
   ],
   "exports": {
@@ -197,6 +197,9 @@
       "database": "db-dev",
       "endpoint": "https://cosmos-dev.documents.azure.com:443/",
       "engine": "cosmos-sql"
+    },
+    "monitoring": {
+      "connectionString": "${appinsights.connectionString}"
     }
   }
 }
