@@ -67,7 +67,15 @@ internal static class EnvCli
             return Invalid;
         }
 
+        // The definition's type, and the base's, must be the catalog's; a gated type's environment cannot be written without its block.
         var environment = definition.Over(region, baseResult?.Descriptor);
+        var definitionRefused = Cli.RefuseType(catalog, environment, options.Definition, stderr);
+        var baseRefused = options.Base is { } basePath && baseResult?.Descriptor is { } baseDescriptor && Cli.RefuseType(catalog, baseDescriptor, basePath, stderr);
+        if (definitionRefused || baseRefused)
+        {
+            return Invalid;
+        }
+
         var graph = Resolver.ResolveSubstrate(definition, options.Definition, catalog, environment);
         var composer = new DescriptorComposer(definition, options.Definition, catalog, environment, graph);
 
@@ -98,7 +106,7 @@ internal static class EnvCli
             await writer.WriteAsync(yaml.AsMemory(), cancellationToken);
         }
 
-        stdout.WriteLine($"{options.Out}: environment {environment.Name} ({environment.Region}, {environment.Tier}) written.");
+        stdout.WriteLine($"{options.Out}: environment {environment.Name} ({environment.Region}, {environment.Type}) written.");
         return Success;
     }
 

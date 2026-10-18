@@ -41,15 +41,22 @@ rule says and this page for how it is applied; raise the conflict so one of them
   The lead never reads whole diffs or logs: `grep`, `head`, or an agent's short report.
 - **Azure is the lead's.** Only the lead runs `tools/verify.sh --azure`, one run at a time; agents never run Azure
   tests or create resources. A gate failure goes back through the developer like a review finding. The suite is one
-  end-to-end scenario (~2 h since S18a), so it runs **once per slice, and only for an Azure-facing slice** (user's
-  choice, 2026-10-17):
-  - **Azure-facing** means the slice changes an Azure test (`*AzureTests.cs`, `DeployerIdentityTests.cs`),
-    `src/jd.azure`, `src/backend-providers`, `catalog/`, `samples/environments`, `samples/sample-app`, or what
-    `env up`, `deploy` or `release deploy` sends to Azure. Any other slice merges on the offline `verify.sh` (CI runs it
-    on every PR). The lead decides and records "Azure gate: run" or "none, not Azure-facing" in status.md.
+  end-to-end scenario (~1.5 h), so it runs only when **what reaches Azure changes** (user's choice, 2026-10-18; replaces the
+  2026-10-17 "Azure-facing" rule):
+  - **What reaches Azure** is (1) the deployment artifact: every Pulumi package jd hands the backend for `env up`, `deploy`
+    and `release deploy` — stack, config entries and secret flags, and the program's SHA-256 — snapshotted by
+    `DeployedConfigSnapshotTests` in `src/jd.cli.tests/golden/deployed-config.json`; and (2) the code that calls Azure
+    directly, whose effect no snapshot shows: `src/jd.azure`, `src/backend-providers`, `src/jd.orchestrator/ReleaseFlow.cs`,
+    `Qualifier.cs`, `src/jd.cli/HttpRevisionProbe.cs`. An edit to the Azure tests alone (`*AzureTests.cs`,
+    `DeployerIdentityTests.cs`) does not trigger a gate: the next gate runs them, at the latest the phase's exit gate.
+  - **No gate** when `git diff origin/main -- src/jd.cli.tests/golden/deployed-config.json` is empty and none of the
+    code in (2) changed. A slice that regenerates the snapshot must say why in its brief; the lead checks the diff is
+    exactly the intended change. A refactor's proof is the unchanged snapshot.
+  - **Gate** when the snapshot or the code in (2) changes, and **once at the end of each phase** as its exit evidence.
+    The lead records "Azure gate: run (reason)" or "none, artifact unchanged" in status.md.
   - **When it runs:** after the developer's hand-back, before review round 1, so a failure only Azure can show costs a
-    developer round, not a blocked slice. Later rounds re-run it only if they touch Azure-facing code; otherwise the
-    first run stands for the approved head.
+    developer round, not a blocked slice. Later rounds re-run it only if they change the snapshot or the code in (2);
+    otherwise the first run stands for the approved head.
   - **It does not block the next slice:** while a gate runs, the next slice may be developed on a branch from the
     gated one (rebased onto `main` after the merge). Merges stay in order, and only one slice is in review at a time.
 - **Claims are reproduced, not trusted.** A constraint an agent reports ("the SDK cannot", "this mutant is equivalent",

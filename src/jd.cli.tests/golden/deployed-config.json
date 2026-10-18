@@ -1,0 +1,1332 @@
+[
+  {
+    "stack": "_shared.shared.substrate.group",
+    "contentSha256": "ccfbb22e2fcd25aa7055e3f69b3bbc3e66fbf4c803157353d793b83853fa72a6",
+    "config": {
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "rg-shared-5d9b60",
+        "secret": false
+      },
+      "tags": {
+        "value": "{\"project\":\"just-deliver-mvp\",\"tier\":\"substrate\"}",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "_shared.shared.substrate.cosmos",
+    "contentSha256": "ec8f173432fd2c207234f90ec009f742cbdf705f935e5d85309d13b2c0e5eb96",
+    "config": {
+      "accountName": {
+        "value": "cosmos-shared-39d0b1",
+        "secret": false
+      },
+      "disableLocalAuth": {
+        "value": "true",
+        "secret": false
+      },
+      "enableFreeTier": {
+        "value": "true",
+        "secret": false
+      },
+      "location": {
+        "value": "_shared.shared.substrate.group/location",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_shared.shared.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "totalThroughputLimit": {
+        "value": "1000",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "_shared.shared.substrate.workspace",
+    "contentSha256": "6d01dcb1b01cebbdd3489ed3f4efae5ee67568c5d489bf7771a9354a2b980b13",
+    "config": {
+      "dailyQuotaGb": {
+        "value": "0.15",
+        "secret": false
+      },
+      "location": {
+        "value": "_shared.shared.substrate.group/location",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_shared.shared.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "workspaceName": {
+        "value": "law-shared-546c92",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "_dev.dev.substrate.database",
+    "contentSha256": "02117824d25e127f8097fc814474ae44d0226f64508a9c5d66cdda66dafb4f4b",
+    "config": {
+      "accountName": {
+        "value": "_shared.shared.substrate.cosmos/accountName",
+        "secret": false
+      },
+      "databaseName": {
+        "value": "db-dev",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_shared.shared.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "throughput": {
+        "value": "400",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "_dev.dev.substrate.group",
+    "contentSha256": "ccfbb22e2fcd25aa7055e3f69b3bbc3e66fbf4c803157353d793b83853fa72a6",
+    "config": {
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "rg-dev-ef5892",
+        "secret": false
+      },
+      "tags": {
+        "value": "{\"project\":\"just-deliver-mvp\",\"tier\":\"substrate\"}",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "_dev.dev.substrate.apps",
+    "contentSha256": "69acd461b24f55a767a4e67db16a4b7ac11d6cf1d1d7abfb0649607608b715bd",
+    "config": {
+      "environmentName": {
+        "value": "cae-dev-7dae27",
+        "secret": false
+      },
+      "location": {
+        "value": "_dev.dev.substrate.group/location",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_dev.dev.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "workspaceCustomerId": {
+        "value": "_shared.shared.substrate.workspace/workspaceCustomerId",
+        "secret": false
+      },
+      "workspaceName": {
+        "value": "_shared.shared.substrate.workspace/workspaceName",
+        "secret": false
+      },
+      "workspaceResourceGroupName": {
+        "value": "_shared.shared.substrate.group/resourceGroupName",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "_stage.stage.substrate.database",
+    "contentSha256": "02117824d25e127f8097fc814474ae44d0226f64508a9c5d66cdda66dafb4f4b",
+    "config": {
+      "accountName": {
+        "value": "_shared.shared.substrate.cosmos/accountName",
+        "secret": false
+      },
+      "databaseName": {
+        "value": "db-stage",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_shared.shared.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "throughput": {
+        "value": "400",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "_stage.stage.substrate.group",
+    "contentSha256": "ccfbb22e2fcd25aa7055e3f69b3bbc3e66fbf4c803157353d793b83853fa72a6",
+    "config": {
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "rg-stage-868fe9",
+        "secret": false
+      },
+      "tags": {
+        "value": "{\"project\":\"just-deliver-mvp\",\"tier\":\"substrate\"}",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "_stage.stage.substrate.apps",
+    "contentSha256": "69acd461b24f55a767a4e67db16a4b7ac11d6cf1d1d7abfb0649607608b715bd",
+    "config": {
+      "environmentName": {
+        "value": "cae-stage-32fe4c",
+        "secret": false
+      },
+      "location": {
+        "value": "_stage.stage.substrate.group/location",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_stage.stage.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "workspaceCustomerId": {
+        "value": "_shared.shared.substrate.workspace/workspaceCustomerId",
+        "secret": false
+      },
+      "workspaceName": {
+        "value": "_shared.shared.substrate.workspace/workspaceName",
+        "secret": false
+      },
+      "workspaceResourceGroupName": {
+        "value": "_shared.shared.substrate.group/resourceGroupName",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev._workload.appinsights",
+    "contentSha256": "88a50af66d84a9faf2a3c21ff98ae2d6f4e3dce20a7cc6da47937bd4f8d0a276",
+    "config": {
+      "appInsightsName": {
+        "value": "appi-just-deliver-sample-app-dev-1c8d23",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_dev.dev.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "workspaceResourceId": {
+        "value": "_shared.shared.substrate.workspace/workspaceId",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev.database.container",
+    "contentSha256": "c4756f15ca33ae87a2304e4bfe6edc68453f0d6dd61b7348b73be8ddc00cc094",
+    "config": {
+      "accountId": {
+        "value": "_shared.shared.substrate.cosmos/accountId",
+        "secret": false
+      },
+      "containerName": {
+        "value": "just-deliver-sample-app-database-623014",
+        "secret": false
+      },
+      "databaseName": {
+        "value": "_dev.dev.substrate.database/databaseName",
+        "secret": false
+      },
+      "partitionKeyPath": {
+        "value": "/id",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev._workload.runtime",
+    "contentSha256": "cb3fc0838e8bcdefb2cba4a93cc487f901f7f95a297b0c2a469b720e74cd847e",
+    "config": {
+      "containerAppName": {
+        "value": "ca-just-deliver-sample-appc15e1b",
+        "secret": false
+      },
+      "containerAppsEnvironmentId": {
+        "value": "_dev.dev.substrate.apps/environmentId",
+        "secret": false
+      },
+      "cpu": {
+        "value": "0.25",
+        "secret": false
+      },
+      "externalIngress": {
+        "value": "true",
+        "secret": false
+      },
+      "image": {
+        "value": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "maxInactiveRevisions": {
+        "value": "5",
+        "secret": false
+      },
+      "maxReplicas": {
+        "value": "1",
+        "secret": false
+      },
+      "memory": {
+        "value": "0.5Gi",
+        "secret": false
+      },
+      "minReplicas": {
+        "value": "0",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_dev.dev.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "revisionSuffix": {
+        "value": "r229c6f0de3b0c4",
+        "secret": false
+      },
+      "targetPort": {
+        "value": "8080",
+        "secret": false
+      },
+      "traffic": {
+        "value": "[{\"latestRevision\":true,\"weight\":100}]",
+        "secret": false
+      },
+      "variables": {
+        "value": "[{\"name\":\"APPLICATIONINSIGHTS_CONNECTION_STRING\",\"value\":\"just-deliver-sample-app.dev._workload.appinsights/connectionString\"},{\"name\":\"COSMOS_CONTAINER\",\"value\":\"just-deliver-sample-app.dev.database.container/containerName\"},{\"name\":\"COSMOS_DATABASE\",\"value\":\"_dev.dev.substrate.database/databaseName\"},{\"name\":\"COSMOS_ENDPOINT\",\"value\":\"_shared.shared.substrate.cosmos/documentEndpoint\"},{\"name\":\"LOG_LEVEL\",\"value\":\"info\"}]",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev._workload.appinsights-access",
+    "contentSha256": "fa0e9a1cca77f4e438749b8e635186d2c8b81c89f3c606ca4446f30759078ce8",
+    "config": {
+      "principalId": {
+        "value": "just-deliver-sample-app.dev._workload.runtime/principalId",
+        "secret": false
+      },
+      "roleAssignmentId": {
+        "value": "1efbd873-6da5-5c2a-9985-2d65bb25ed10",
+        "secret": false
+      },
+      "roleGuid": {
+        "value": "3913510d-42f4-4e42-8a64-420c390055eb",
+        "secret": false
+      },
+      "scope": {
+        "value": "just-deliver-sample-app.dev._workload.appinsights/appInsightsId",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev.database.access",
+    "contentSha256": "ebc931aa30b45540d927c1e8908864b70eec45bcdb1da4d7cae842301620a09f",
+    "config": {
+      "accountId": {
+        "value": "_shared.shared.substrate.cosmos/accountId",
+        "secret": false
+      },
+      "principalId": {
+        "value": "just-deliver-sample-app.dev._workload.runtime/principalId",
+        "secret": false
+      },
+      "roleAssignmentId": {
+        "value": "fe6e5df2-c333-5c1c-8a50-f9bdce4dfc83",
+        "secret": false
+      },
+      "roleGuid": {
+        "value": "00000000-0000-0000-0000-000000000002",
+        "secret": false
+      },
+      "scope": {
+        "value": "just-deliver-sample-app.dev.database.container/scope",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev._workload.runtime",
+    "contentSha256": "cb3fc0838e8bcdefb2cba4a93cc487f901f7f95a297b0c2a469b720e74cd847e",
+    "config": {
+      "containerAppName": {
+        "value": "ca-just-deliver-sample-appc15e1b",
+        "secret": false
+      },
+      "containerAppsEnvironmentId": {
+        "value": "_dev.dev.substrate.apps/environmentId",
+        "secret": false
+      },
+      "cpu": {
+        "value": "0.25",
+        "secret": false
+      },
+      "externalIngress": {
+        "value": "true",
+        "secret": false
+      },
+      "image": {
+        "value": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "maxInactiveRevisions": {
+        "value": "5",
+        "secret": false
+      },
+      "maxReplicas": {
+        "value": "1",
+        "secret": false
+      },
+      "memory": {
+        "value": "0.5Gi",
+        "secret": false
+      },
+      "minReplicas": {
+        "value": "0",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_dev.dev.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "revisionSuffix": {
+        "value": "r229c6f0de3b0c4",
+        "secret": false
+      },
+      "targetPort": {
+        "value": "8080",
+        "secret": false
+      },
+      "traffic": {
+        "value": "[{\"revisionName\":\"just-deliver-sample-app.dev._workload.runtime/latestRevisionName\",\"weight\":100}]",
+        "secret": false
+      },
+      "variables": {
+        "value": "[{\"name\":\"APPLICATIONINSIGHTS_CONNECTION_STRING\",\"value\":\"just-deliver-sample-app.dev._workload.appinsights/connectionString\"},{\"name\":\"COSMOS_CONTAINER\",\"value\":\"just-deliver-sample-app.dev.database.container/containerName\"},{\"name\":\"COSMOS_DATABASE\",\"value\":\"_dev.dev.substrate.database/databaseName\"},{\"name\":\"COSMOS_ENDPOINT\",\"value\":\"_shared.shared.substrate.cosmos/documentEndpoint\"},{\"name\":\"LOG_LEVEL\",\"value\":\"info\"}]",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev._workload.appinsights",
+    "contentSha256": "88a50af66d84a9faf2a3c21ff98ae2d6f4e3dce20a7cc6da47937bd4f8d0a276",
+    "config": {
+      "appInsightsName": {
+        "value": "appi-just-deliver-sample-app-dev-1c8d23",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_dev.dev.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "workspaceResourceId": {
+        "value": "_shared.shared.substrate.workspace/workspaceId",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev.database.container",
+    "contentSha256": "c4756f15ca33ae87a2304e4bfe6edc68453f0d6dd61b7348b73be8ddc00cc094",
+    "config": {
+      "accountId": {
+        "value": "_shared.shared.substrate.cosmos/accountId",
+        "secret": false
+      },
+      "containerName": {
+        "value": "just-deliver-sample-app-database-623014",
+        "secret": false
+      },
+      "databaseName": {
+        "value": "_dev.dev.substrate.database/databaseName",
+        "secret": false
+      },
+      "partitionKeyPath": {
+        "value": "/id",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev._workload.runtime",
+    "contentSha256": "cb3fc0838e8bcdefb2cba4a93cc487f901f7f95a297b0c2a469b720e74cd847e",
+    "config": {
+      "containerAppName": {
+        "value": "ca-just-deliver-sample-appc15e1b",
+        "secret": false
+      },
+      "containerAppsEnvironmentId": {
+        "value": "_dev.dev.substrate.apps/environmentId",
+        "secret": false
+      },
+      "cpu": {
+        "value": "0.25",
+        "secret": false
+      },
+      "externalIngress": {
+        "value": "true",
+        "secret": false
+      },
+      "image": {
+        "value": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "maxInactiveRevisions": {
+        "value": "5",
+        "secret": false
+      },
+      "maxReplicas": {
+        "value": "1",
+        "secret": false
+      },
+      "memory": {
+        "value": "0.5Gi",
+        "secret": false
+      },
+      "minReplicas": {
+        "value": "0",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_dev.dev.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "revisionSuffix": {
+        "value": "rc8a4385a3426f8",
+        "secret": false
+      },
+      "targetPort": {
+        "value": "8080",
+        "secret": false
+      },
+      "traffic": {
+        "value": "[{\"revisionName\":\"app--r1\",\"weight\":100}]",
+        "secret": false
+      },
+      "variables": {
+        "value": "[{\"name\":\"APPLICATIONINSIGHTS_CONNECTION_STRING\",\"value\":\"just-deliver-sample-app.dev._workload.appinsights/connectionString\"},{\"name\":\"APP_VERSION\",\"value\":\"1\"},{\"name\":\"COSMOS_CONTAINER\",\"value\":\"just-deliver-sample-app.dev.database.container/containerName\"},{\"name\":\"COSMOS_DATABASE\",\"value\":\"_dev.dev.substrate.database/databaseName\"},{\"name\":\"COSMOS_ENDPOINT\",\"value\":\"_shared.shared.substrate.cosmos/documentEndpoint\"},{\"name\":\"LOG_LEVEL\",\"value\":\"info\"}]",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev._workload.appinsights-access",
+    "contentSha256": "fa0e9a1cca77f4e438749b8e635186d2c8b81c89f3c606ca4446f30759078ce8",
+    "config": {
+      "principalId": {
+        "value": "just-deliver-sample-app.dev._workload.runtime/principalId",
+        "secret": false
+      },
+      "roleAssignmentId": {
+        "value": "1efbd873-6da5-5c2a-9985-2d65bb25ed10",
+        "secret": false
+      },
+      "roleGuid": {
+        "value": "3913510d-42f4-4e42-8a64-420c390055eb",
+        "secret": false
+      },
+      "scope": {
+        "value": "just-deliver-sample-app.dev._workload.appinsights/appInsightsId",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev.database.access",
+    "contentSha256": "ebc931aa30b45540d927c1e8908864b70eec45bcdb1da4d7cae842301620a09f",
+    "config": {
+      "accountId": {
+        "value": "_shared.shared.substrate.cosmos/accountId",
+        "secret": false
+      },
+      "principalId": {
+        "value": "just-deliver-sample-app.dev._workload.runtime/principalId",
+        "secret": false
+      },
+      "roleAssignmentId": {
+        "value": "fe6e5df2-c333-5c1c-8a50-f9bdce4dfc83",
+        "secret": false
+      },
+      "roleGuid": {
+        "value": "00000000-0000-0000-0000-000000000002",
+        "secret": false
+      },
+      "scope": {
+        "value": "just-deliver-sample-app.dev.database.container/scope",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.dev._workload.runtime",
+    "contentSha256": "cb3fc0838e8bcdefb2cba4a93cc487f901f7f95a297b0c2a469b720e74cd847e",
+    "config": {
+      "containerAppName": {
+        "value": "ca-just-deliver-sample-appc15e1b",
+        "secret": false
+      },
+      "containerAppsEnvironmentId": {
+        "value": "_dev.dev.substrate.apps/environmentId",
+        "secret": false
+      },
+      "cpu": {
+        "value": "0.25",
+        "secret": false
+      },
+      "externalIngress": {
+        "value": "true",
+        "secret": false
+      },
+      "image": {
+        "value": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "maxInactiveRevisions": {
+        "value": "5",
+        "secret": false
+      },
+      "maxReplicas": {
+        "value": "1",
+        "secret": false
+      },
+      "memory": {
+        "value": "0.5Gi",
+        "secret": false
+      },
+      "minReplicas": {
+        "value": "0",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_dev.dev.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "revisionSuffix": {
+        "value": "rc8a4385a3426f8",
+        "secret": false
+      },
+      "targetPort": {
+        "value": "8080",
+        "secret": false
+      },
+      "traffic": {
+        "value": "[{\"revisionName\":\"just-deliver-sample-app.dev._workload.runtime/latestRevisionName\",\"weight\":100}]",
+        "secret": false
+      },
+      "variables": {
+        "value": "[{\"name\":\"APPLICATIONINSIGHTS_CONNECTION_STRING\",\"value\":\"just-deliver-sample-app.dev._workload.appinsights/connectionString\"},{\"name\":\"APP_VERSION\",\"value\":\"1\"},{\"name\":\"COSMOS_CONTAINER\",\"value\":\"just-deliver-sample-app.dev.database.container/containerName\"},{\"name\":\"COSMOS_DATABASE\",\"value\":\"_dev.dev.substrate.database/databaseName\"},{\"name\":\"COSMOS_ENDPOINT\",\"value\":\"_shared.shared.substrate.cosmos/documentEndpoint\"},{\"name\":\"LOG_LEVEL\",\"value\":\"info\"}]",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.dev._workload.appinsights",
+    "contentSha256": "88a50af66d84a9faf2a3c21ff98ae2d6f4e3dce20a7cc6da47937bd4f8d0a276",
+    "config": {
+      "appInsightsName": {
+        "value": "appi-just-deliver-sample-worker-dev-b661c9",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_dev.dev.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "workspaceResourceId": {
+        "value": "_shared.shared.substrate.workspace/workspaceId",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.dev.database.container",
+    "contentSha256": "c4756f15ca33ae87a2304e4bfe6edc68453f0d6dd61b7348b73be8ddc00cc094",
+    "config": {
+      "accountId": {
+        "value": "_shared.shared.substrate.cosmos/accountId",
+        "secret": false
+      },
+      "containerName": {
+        "value": "just-deliver-sample-worker-database-922e18",
+        "secret": false
+      },
+      "databaseName": {
+        "value": "_dev.dev.substrate.database/databaseName",
+        "secret": false
+      },
+      "partitionKeyPath": {
+        "value": "/id",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.dev._workload.runtime",
+    "contentSha256": "cb3fc0838e8bcdefb2cba4a93cc487f901f7f95a297b0c2a469b720e74cd847e",
+    "config": {
+      "containerAppName": {
+        "value": "ca-just-deliver-sample-wor53a9d9",
+        "secret": false
+      },
+      "containerAppsEnvironmentId": {
+        "value": "_dev.dev.substrate.apps/environmentId",
+        "secret": false
+      },
+      "cpu": {
+        "value": "0.25",
+        "secret": false
+      },
+      "externalIngress": {
+        "value": "true",
+        "secret": false
+      },
+      "image": {
+        "value": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "maxInactiveRevisions": {
+        "value": "5",
+        "secret": false
+      },
+      "maxReplicas": {
+        "value": "1",
+        "secret": false
+      },
+      "memory": {
+        "value": "0.5Gi",
+        "secret": false
+      },
+      "minReplicas": {
+        "value": "0",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_dev.dev.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "revisionSuffix": {
+        "value": "r2dd4605de3b0c4",
+        "secret": false
+      },
+      "targetPort": {
+        "value": "8080",
+        "secret": false
+      },
+      "traffic": {
+        "value": "[{\"latestRevision\":true,\"weight\":100}]",
+        "secret": false
+      },
+      "variables": {
+        "value": "[{\"name\":\"APPLICATIONINSIGHTS_CONNECTION_STRING\",\"value\":\"just-deliver-sample-worker.dev._workload.appinsights/connectionString\"},{\"name\":\"APP_VERSION\",\"value\":\"1\"},{\"name\":\"COSMOS_CONTAINER\",\"value\":\"just-deliver-sample-worker.dev.database.container/containerName\"},{\"name\":\"COSMOS_DATABASE\",\"value\":\"_dev.dev.substrate.database/databaseName\"},{\"name\":\"COSMOS_ENDPOINT\",\"value\":\"_shared.shared.substrate.cosmos/documentEndpoint\"},{\"name\":\"LOG_LEVEL\",\"value\":\"info\"}]",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.dev._workload.appinsights-access",
+    "contentSha256": "fa0e9a1cca77f4e438749b8e635186d2c8b81c89f3c606ca4446f30759078ce8",
+    "config": {
+      "principalId": {
+        "value": "just-deliver-sample-worker.dev._workload.runtime/principalId",
+        "secret": false
+      },
+      "roleAssignmentId": {
+        "value": "e1131c9e-8bf3-5513-a560-ab16867a40b7",
+        "secret": false
+      },
+      "roleGuid": {
+        "value": "3913510d-42f4-4e42-8a64-420c390055eb",
+        "secret": false
+      },
+      "scope": {
+        "value": "just-deliver-sample-worker.dev._workload.appinsights/appInsightsId",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.dev.database.access",
+    "contentSha256": "ebc931aa30b45540d927c1e8908864b70eec45bcdb1da4d7cae842301620a09f",
+    "config": {
+      "accountId": {
+        "value": "_shared.shared.substrate.cosmos/accountId",
+        "secret": false
+      },
+      "principalId": {
+        "value": "just-deliver-sample-worker.dev._workload.runtime/principalId",
+        "secret": false
+      },
+      "roleAssignmentId": {
+        "value": "a7b7ab5d-0773-59d4-9ad0-4cdd8aa2deb2",
+        "secret": false
+      },
+      "roleGuid": {
+        "value": "00000000-0000-0000-0000-000000000002",
+        "secret": false
+      },
+      "scope": {
+        "value": "just-deliver-sample-worker.dev.database.container/scope",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.dev._workload.runtime",
+    "contentSha256": "cb3fc0838e8bcdefb2cba4a93cc487f901f7f95a297b0c2a469b720e74cd847e",
+    "config": {
+      "containerAppName": {
+        "value": "ca-just-deliver-sample-wor53a9d9",
+        "secret": false
+      },
+      "containerAppsEnvironmentId": {
+        "value": "_dev.dev.substrate.apps/environmentId",
+        "secret": false
+      },
+      "cpu": {
+        "value": "0.25",
+        "secret": false
+      },
+      "externalIngress": {
+        "value": "true",
+        "secret": false
+      },
+      "image": {
+        "value": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "maxInactiveRevisions": {
+        "value": "5",
+        "secret": false
+      },
+      "maxReplicas": {
+        "value": "1",
+        "secret": false
+      },
+      "memory": {
+        "value": "0.5Gi",
+        "secret": false
+      },
+      "minReplicas": {
+        "value": "0",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_dev.dev.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "revisionSuffix": {
+        "value": "r2dd4605de3b0c4",
+        "secret": false
+      },
+      "targetPort": {
+        "value": "8080",
+        "secret": false
+      },
+      "traffic": {
+        "value": "[{\"revisionName\":\"just-deliver-sample-worker.dev._workload.runtime/latestRevisionName\",\"weight\":100}]",
+        "secret": false
+      },
+      "variables": {
+        "value": "[{\"name\":\"APPLICATIONINSIGHTS_CONNECTION_STRING\",\"value\":\"just-deliver-sample-worker.dev._workload.appinsights/connectionString\"},{\"name\":\"APP_VERSION\",\"value\":\"1\"},{\"name\":\"COSMOS_CONTAINER\",\"value\":\"just-deliver-sample-worker.dev.database.container/containerName\"},{\"name\":\"COSMOS_DATABASE\",\"value\":\"_dev.dev.substrate.database/databaseName\"},{\"name\":\"COSMOS_ENDPOINT\",\"value\":\"_shared.shared.substrate.cosmos/documentEndpoint\"},{\"name\":\"LOG_LEVEL\",\"value\":\"info\"}]",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.stage._workload.appinsights",
+    "contentSha256": "88a50af66d84a9faf2a3c21ff98ae2d6f4e3dce20a7cc6da47937bd4f8d0a276",
+    "config": {
+      "appInsightsName": {
+        "value": "appi-just-deliver-sample-app-stage-e385be",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_stage.stage.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "workspaceResourceId": {
+        "value": "_shared.shared.substrate.workspace/workspaceId",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.stage.database.container",
+    "contentSha256": "c4756f15ca33ae87a2304e4bfe6edc68453f0d6dd61b7348b73be8ddc00cc094",
+    "config": {
+      "accountId": {
+        "value": "_shared.shared.substrate.cosmos/accountId",
+        "secret": false
+      },
+      "containerName": {
+        "value": "just-deliver-sample-app-database-9771e8",
+        "secret": false
+      },
+      "databaseName": {
+        "value": "_stage.stage.substrate.database/databaseName",
+        "secret": false
+      },
+      "partitionKeyPath": {
+        "value": "/id",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.stage._workload.runtime",
+    "contentSha256": "cb3fc0838e8bcdefb2cba4a93cc487f901f7f95a297b0c2a469b720e74cd847e",
+    "config": {
+      "containerAppName": {
+        "value": "ca-just-deliver-sample-appb9332a",
+        "secret": false
+      },
+      "containerAppsEnvironmentId": {
+        "value": "_stage.stage.substrate.apps/environmentId",
+        "secret": false
+      },
+      "cpu": {
+        "value": "0.25",
+        "secret": false
+      },
+      "externalIngress": {
+        "value": "true",
+        "secret": false
+      },
+      "image": {
+        "value": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "maxInactiveRevisions": {
+        "value": "5",
+        "secret": false
+      },
+      "maxReplicas": {
+        "value": "1",
+        "secret": false
+      },
+      "memory": {
+        "value": "0.5Gi",
+        "secret": false
+      },
+      "minReplicas": {
+        "value": "0",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_stage.stage.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "revisionSuffix": {
+        "value": "rada87e07e3b0c4",
+        "secret": false
+      },
+      "targetPort": {
+        "value": "8080",
+        "secret": false
+      },
+      "traffic": {
+        "value": "[{\"latestRevision\":true,\"weight\":100}]",
+        "secret": false
+      },
+      "variables": {
+        "value": "[{\"name\":\"APPLICATIONINSIGHTS_CONNECTION_STRING\",\"value\":\"just-deliver-sample-app.stage._workload.appinsights/connectionString\"},{\"name\":\"APP_VERSION\",\"value\":\"1\"},{\"name\":\"COSMOS_CONTAINER\",\"value\":\"just-deliver-sample-app.stage.database.container/containerName\"},{\"name\":\"COSMOS_DATABASE\",\"value\":\"_stage.stage.substrate.database/databaseName\"},{\"name\":\"COSMOS_ENDPOINT\",\"value\":\"_shared.shared.substrate.cosmos/documentEndpoint\"},{\"name\":\"LOG_LEVEL\",\"value\":\"info\"}]",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.stage._workload.appinsights-access",
+    "contentSha256": "fa0e9a1cca77f4e438749b8e635186d2c8b81c89f3c606ca4446f30759078ce8",
+    "config": {
+      "principalId": {
+        "value": "just-deliver-sample-app.stage._workload.runtime/principalId",
+        "secret": false
+      },
+      "roleAssignmentId": {
+        "value": "b9b76343-eb45-5359-b4cc-5e3560b66e6b",
+        "secret": false
+      },
+      "roleGuid": {
+        "value": "3913510d-42f4-4e42-8a64-420c390055eb",
+        "secret": false
+      },
+      "scope": {
+        "value": "just-deliver-sample-app.stage._workload.appinsights/appInsightsId",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.stage.database.access",
+    "contentSha256": "ebc931aa30b45540d927c1e8908864b70eec45bcdb1da4d7cae842301620a09f",
+    "config": {
+      "accountId": {
+        "value": "_shared.shared.substrate.cosmos/accountId",
+        "secret": false
+      },
+      "principalId": {
+        "value": "just-deliver-sample-app.stage._workload.runtime/principalId",
+        "secret": false
+      },
+      "roleAssignmentId": {
+        "value": "b0c2cfb3-99bc-58ab-a83e-bf3d8e6541fa",
+        "secret": false
+      },
+      "roleGuid": {
+        "value": "00000000-0000-0000-0000-000000000002",
+        "secret": false
+      },
+      "scope": {
+        "value": "just-deliver-sample-app.stage.database.container/scope",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-app.stage._workload.runtime",
+    "contentSha256": "cb3fc0838e8bcdefb2cba4a93cc487f901f7f95a297b0c2a469b720e74cd847e",
+    "config": {
+      "containerAppName": {
+        "value": "ca-just-deliver-sample-appb9332a",
+        "secret": false
+      },
+      "containerAppsEnvironmentId": {
+        "value": "_stage.stage.substrate.apps/environmentId",
+        "secret": false
+      },
+      "cpu": {
+        "value": "0.25",
+        "secret": false
+      },
+      "externalIngress": {
+        "value": "true",
+        "secret": false
+      },
+      "image": {
+        "value": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "maxInactiveRevisions": {
+        "value": "5",
+        "secret": false
+      },
+      "maxReplicas": {
+        "value": "1",
+        "secret": false
+      },
+      "memory": {
+        "value": "0.5Gi",
+        "secret": false
+      },
+      "minReplicas": {
+        "value": "0",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_stage.stage.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "revisionSuffix": {
+        "value": "rada87e07e3b0c4",
+        "secret": false
+      },
+      "targetPort": {
+        "value": "8080",
+        "secret": false
+      },
+      "traffic": {
+        "value": "[{\"revisionName\":\"just-deliver-sample-app.stage._workload.runtime/latestRevisionName\",\"weight\":100}]",
+        "secret": false
+      },
+      "variables": {
+        "value": "[{\"name\":\"APPLICATIONINSIGHTS_CONNECTION_STRING\",\"value\":\"just-deliver-sample-app.stage._workload.appinsights/connectionString\"},{\"name\":\"APP_VERSION\",\"value\":\"1\"},{\"name\":\"COSMOS_CONTAINER\",\"value\":\"just-deliver-sample-app.stage.database.container/containerName\"},{\"name\":\"COSMOS_DATABASE\",\"value\":\"_stage.stage.substrate.database/databaseName\"},{\"name\":\"COSMOS_ENDPOINT\",\"value\":\"_shared.shared.substrate.cosmos/documentEndpoint\"},{\"name\":\"LOG_LEVEL\",\"value\":\"info\"}]",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.stage._workload.appinsights",
+    "contentSha256": "88a50af66d84a9faf2a3c21ff98ae2d6f4e3dce20a7cc6da47937bd4f8d0a276",
+    "config": {
+      "appInsightsName": {
+        "value": "appi-just-deliver-sample-worker-stage-4c92e0",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_stage.stage.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "workspaceResourceId": {
+        "value": "_shared.shared.substrate.workspace/workspaceId",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.stage.database.container",
+    "contentSha256": "c4756f15ca33ae87a2304e4bfe6edc68453f0d6dd61b7348b73be8ddc00cc094",
+    "config": {
+      "accountId": {
+        "value": "_shared.shared.substrate.cosmos/accountId",
+        "secret": false
+      },
+      "containerName": {
+        "value": "just-deliver-sample-worker-database-30afa4",
+        "secret": false
+      },
+      "databaseName": {
+        "value": "_stage.stage.substrate.database/databaseName",
+        "secret": false
+      },
+      "partitionKeyPath": {
+        "value": "/id",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.stage._workload.runtime",
+    "contentSha256": "cb3fc0838e8bcdefb2cba4a93cc487f901f7f95a297b0c2a469b720e74cd847e",
+    "config": {
+      "containerAppName": {
+        "value": "ca-just-deliver-sample-wor95ff2a",
+        "secret": false
+      },
+      "containerAppsEnvironmentId": {
+        "value": "_stage.stage.substrate.apps/environmentId",
+        "secret": false
+      },
+      "cpu": {
+        "value": "0.25",
+        "secret": false
+      },
+      "externalIngress": {
+        "value": "true",
+        "secret": false
+      },
+      "image": {
+        "value": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "maxInactiveRevisions": {
+        "value": "5",
+        "secret": false
+      },
+      "maxReplicas": {
+        "value": "1",
+        "secret": false
+      },
+      "memory": {
+        "value": "0.5Gi",
+        "secret": false
+      },
+      "minReplicas": {
+        "value": "0",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_stage.stage.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "revisionSuffix": {
+        "value": "r01c18226e3b0c4",
+        "secret": false
+      },
+      "targetPort": {
+        "value": "8080",
+        "secret": false
+      },
+      "traffic": {
+        "value": "[{\"latestRevision\":true,\"weight\":100}]",
+        "secret": false
+      },
+      "variables": {
+        "value": "[{\"name\":\"APPLICATIONINSIGHTS_CONNECTION_STRING\",\"value\":\"just-deliver-sample-worker.stage._workload.appinsights/connectionString\"},{\"name\":\"APP_VERSION\",\"value\":\"1\"},{\"name\":\"COSMOS_CONTAINER\",\"value\":\"just-deliver-sample-worker.stage.database.container/containerName\"},{\"name\":\"COSMOS_DATABASE\",\"value\":\"_stage.stage.substrate.database/databaseName\"},{\"name\":\"COSMOS_ENDPOINT\",\"value\":\"_shared.shared.substrate.cosmos/documentEndpoint\"},{\"name\":\"LOG_LEVEL\",\"value\":\"info\"}]",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.stage._workload.appinsights-access",
+    "contentSha256": "fa0e9a1cca77f4e438749b8e635186d2c8b81c89f3c606ca4446f30759078ce8",
+    "config": {
+      "principalId": {
+        "value": "just-deliver-sample-worker.stage._workload.runtime/principalId",
+        "secret": false
+      },
+      "roleAssignmentId": {
+        "value": "eed7abfb-e849-5876-bf2e-df110070da8b",
+        "secret": false
+      },
+      "roleGuid": {
+        "value": "3913510d-42f4-4e42-8a64-420c390055eb",
+        "secret": false
+      },
+      "scope": {
+        "value": "just-deliver-sample-worker.stage._workload.appinsights/appInsightsId",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.stage.database.access",
+    "contentSha256": "ebc931aa30b45540d927c1e8908864b70eec45bcdb1da4d7cae842301620a09f",
+    "config": {
+      "accountId": {
+        "value": "_shared.shared.substrate.cosmos/accountId",
+        "secret": false
+      },
+      "principalId": {
+        "value": "just-deliver-sample-worker.stage._workload.runtime/principalId",
+        "secret": false
+      },
+      "roleAssignmentId": {
+        "value": "9224f723-0576-557b-bcd1-50f9a0372a86",
+        "secret": false
+      },
+      "roleGuid": {
+        "value": "00000000-0000-0000-0000-000000000002",
+        "secret": false
+      },
+      "scope": {
+        "value": "just-deliver-sample-worker.stage.database.container/scope",
+        "secret": false
+      }
+    }
+  },
+  {
+    "stack": "just-deliver-sample-worker.stage._workload.runtime",
+    "contentSha256": "cb3fc0838e8bcdefb2cba4a93cc487f901f7f95a297b0c2a469b720e74cd847e",
+    "config": {
+      "containerAppName": {
+        "value": "ca-just-deliver-sample-wor95ff2a",
+        "secret": false
+      },
+      "containerAppsEnvironmentId": {
+        "value": "_stage.stage.substrate.apps/environmentId",
+        "secret": false
+      },
+      "cpu": {
+        "value": "0.25",
+        "secret": false
+      },
+      "externalIngress": {
+        "value": "true",
+        "secret": false
+      },
+      "image": {
+        "value": "ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9",
+        "secret": false
+      },
+      "location": {
+        "value": "region-1",
+        "secret": false
+      },
+      "maxInactiveRevisions": {
+        "value": "5",
+        "secret": false
+      },
+      "maxReplicas": {
+        "value": "1",
+        "secret": false
+      },
+      "memory": {
+        "value": "0.5Gi",
+        "secret": false
+      },
+      "minReplicas": {
+        "value": "0",
+        "secret": false
+      },
+      "resourceGroupName": {
+        "value": "_stage.stage.substrate.group/resourceGroupName",
+        "secret": false
+      },
+      "revisionSuffix": {
+        "value": "r01c18226e3b0c4",
+        "secret": false
+      },
+      "targetPort": {
+        "value": "8080",
+        "secret": false
+      },
+      "traffic": {
+        "value": "[{\"revisionName\":\"just-deliver-sample-worker.stage._workload.runtime/latestRevisionName\",\"weight\":100}]",
+        "secret": false
+      },
+      "variables": {
+        "value": "[{\"name\":\"APPLICATIONINSIGHTS_CONNECTION_STRING\",\"value\":\"just-deliver-sample-worker.stage._workload.appinsights/connectionString\"},{\"name\":\"APP_VERSION\",\"value\":\"1\"},{\"name\":\"COSMOS_CONTAINER\",\"value\":\"just-deliver-sample-worker.stage.database.container/containerName\"},{\"name\":\"COSMOS_DATABASE\",\"value\":\"_stage.stage.substrate.database/databaseName\"},{\"name\":\"COSMOS_ENDPOINT\",\"value\":\"_shared.shared.substrate.cosmos/documentEndpoint\"},{\"name\":\"LOG_LEVEL\",\"value\":\"info\"}]",
+        "secret": false
+      }
+    }
+  }
+]

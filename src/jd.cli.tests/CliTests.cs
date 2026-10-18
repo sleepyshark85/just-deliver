@@ -212,7 +212,7 @@ public sealed class CliTests : IDisposable
     public async Task Preview_reports_a_mapping_export_that_references_a_resource_instead_of_failing()
     {
         var catalog = Path.Combine(_temp, "catalog");
-        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\n");
+        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n");
         WriteTemp("catalog/types/database.yaml", "kind: ResourceType\nname: database\ndescription: d\nclasses: [standard]\nexports: [endpoint]\n");
         WriteTemp("catalog/mappings/database.yaml", "kind: Mapping\nmatch: { type: database }\nnodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.endpoint}\n");
 
@@ -229,7 +229,7 @@ public sealed class CliTests : IDisposable
     public async Task Preview_prints_resolver_errors_with_file_and_location()
     {
         var catalog = Path.Combine(_temp, "catalog");
-        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\n");
+        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n");
         WriteTemp("catalog/mappings/oops.yaml", "kind: Mapping\nmatch: {}\n");
 
         var (code, stdout, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", catalog);

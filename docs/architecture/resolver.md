@@ -75,7 +75,7 @@ loader; the expression evaluator interprets them later.
 | `Roles` | `roles` (name → role-definition GUID) | files merge; a role is defined once |
 
 A node is `{ template, kind?: create | grant, config }`; `kind` defaults to `create`. Mapping `match`
-keys are `type`, `class`, `tier`, `kind`, `runtime`; a policy may also match on `template`.
+keys are `type`, `class`, `environmentType`, `kind`, `runtime`; a policy may also match on `template`.
 Naming `pattern` placeholders are `{workload}`, `{id}`, `{env}` and `{hash}`. The loader collects
 every error (file and location inside it) in one pass.
 
@@ -150,11 +150,11 @@ set:
 ```
 
 ```yaml
-# policies/protected-cosmos-failover.yaml
+# policies/prod-cosmos-failover.yaml
 kind: Policy
-name: protected-cosmos-failover
-reason: Protected tiers need automatic failover
-match: { template: azure/cosmos-account, tier: protected }
+name: prod-cosmos-failover
+reason: Production needs automatic failover
+match: { template: azure/cosmos-account, environmentType: prod }
 set: { enableAutomaticFailover: true }
 ```
 
@@ -199,7 +199,7 @@ revision and shift traffic to it; [provisioning.md](provisioning.md)).
 
 ### Runtime is a mapping too
 
-A runtime mapping, `match: { kind: runtime }` (optionally `tier`), produces the workload's runtime: a node named `runtime`
+A runtime mapping, `match: { kind: runtime }` (optionally `environmentType`), produces the workload's runtime: a node named `runtime`
 ([ADR 0013](../decisions/0013-container-apps-runtime.md)). The engine expands it like any other mapping, once per workload, and
 the app is not special-cased:
 
@@ -280,7 +280,7 @@ It is written by `jd env up` from substrate deployment outputs ([provisioning.md
 kind: Environment
 name: dev                 # same pattern as workload ids
 region: southeastasia
-tier: team                # team | protected
+type: dev                 # an environment type catalog.yaml declares
 values:                   # substrate outputs, addressable as ${env.<path>}
   resourceGroup: rg-…
   cosmos: { accountName: …, accountId: …, databaseName: …, databaseId: …, endpoint: … }
@@ -289,10 +289,13 @@ grantable:                # paths under values that workloads may grant on
   - cosmos.accountId
 ```
 
-- **Lookup:** `env.name`, `env.region` and `env.tier` are reserved and come from the top-level
+- **Type:** `catalog.yaml` declares the environment types (`environmentTypes`: type → optional `approval: true`). A descriptor or
+  definition of an undeclared type is an error naming the declared ones, and one of a type with `approval: true` must carry `approval`
+  (`EnvironmentTypeCheck`, called by the CLI with the catalog before anything resolves or deploys).
+- **Lookup:** `env.name`, `env.region` and `env.type` are reserved and come from the top-level
   fields; any other `env.<dot.path>` resolves to a string inside `values`. A path to a group (for
   example `env.cosmos`) or to nothing is not found.
-- **Rules beyond the schema:** `values` must not define `name`, `region` or `tier`; no key in `values`
+- **Rules beyond the schema:** `values` must not define `name`, `region` or `type`; no key in `values`
   may contain `.` (a dot path must be unambiguous); every `grantable` path must be a value in `values`. The loader reports all errors with their location.
 - **Security:** `grantable` is the boundary the engine enforces for `grant` nodes
   ([D19](../open-questions.md)): a workload can only grant on the listed `env.*` resources.
@@ -301,7 +304,7 @@ grantable:                # paths under values that workloads may grant on
 
 The descriptor is produced from an **environment definition**
 ([`schemas/environment-definition.schema.json`](../../schemas/environment-definition.schema.json), `jd.resolver`):
-`kind: EnvironmentDefinition`, `name`, `tier`, `requires` (substrate types, with `id` and `class` as in a workload; effective ids
+`kind: EnvironmentDefinition`, `name`, `type`, `requires` (substrate types, with `id` and `class` as in a workload; effective ids
 unique), `values` (the descriptor's layout; each leaf an expression, normally `${resource.<id>.<export>}`) and `grantable`.
 `Resolver.ResolveSubstrate(definition, file, catalog, environment)` is the one entry point. The owner is the definition, with
 the name `@<name>` (a workload name cannot start with `@`) in node ids, stacks and `name()` hashes: ids `@dev/dev/substrate/group`,
@@ -309,14 +312,14 @@ stacks `_dev.dev.substrate.group`, so a workload named like the environment, wit
 substrate and a workload deploy never touches it ([ADR 0006](../decisions/0006-infra-deployed-with-app.md)). `ExpansionResult.Owner` records the owner kind
 (`Workload` or `Environment`); an environment owner has no runtime, so workload-scope policies add nothing. In a substrate
 mapping `${workload.name}` therefore evaluates to `@<name>`; the `{workload}` naming placeholder drops the `@` through `allowed`. Its team is empty
-(`${workload.team}` is empty). The `environment` is `definition.Over(region, base)`: the definition's name and tier, the region given on the
+(`${workload.team}` is empty). The `environment` is `definition.Over(region, base)`: the definition's name and type, the region given on the
 command line, and the **base descriptor's values and `grantable`**, so mappings read `${env.…}` of the layer below.
 
 `DescriptorComposer` turns the resolved graph and the node outputs into the descriptor text: each export is evaluated with its
 requirement's node outputs; each `values` leaf is evaluated with those as the known `resource.*` references (a leaf that stays
 pending, or names a node or an unknown export, is an error); the result is merged into the base's values (a key the base has is a
 collision error), `grantable` is the union, and the composed text must pass `EnvironmentParser`, so every rule above holds.
-`region` is the caller's; the descriptor's `name` and `tier` are the definition's.
+`region` is the caller's; the descriptor's `name` and `type` are the definition's.
 
 ## Expressions
 
@@ -364,10 +367,10 @@ Every invalid expression in a string is reported (file, location, message) and t
 
 | Rule | Behaviour |
 |---|---|
-| Matching | A mapping matches when every `match` key equals the requirement's value. A requirement provides only `type`, `class` (default `standard`) and `tier` (from the environment); a mapping using any other key (`kind`, `runtime`) never matches a requirement. Specificity = number of `match` keys. A tie at the top is an error naming the tied files, never file order; no match is an error naming the requirement's type, class and tier. **Runtime:** each workload gets exactly one runtime mapping by the same rules, providing only `kind: runtime` and `tier`; a tie names the files, none names the tier; an environment definition (substrate owner) gets none. |
+| Matching | A mapping matches when every `match` key equals the requirement's value. A requirement provides only `type`, `class` (default `standard`) and `environmentType` (the environment's type); a mapping using any other key (`kind`, `runtime`) never matches a requirement. Specificity = number of `match` keys. A tie at the top is an error naming the tied files, never file order; no match is an error naming the requirement's type, class and environment type. **Runtime:** each workload gets exactly one runtime mapping by the same rules, providing only `kind: runtime` and `environmentType`; a tie names the files, none names the environment type; an environment definition (substrate owner) gets none. |
 | Type contract | A mapping's `exports` keys must equal its type's `exports` exactly; the catalog loader rejects a mismatch (missing or extra) at the mapping file, location `exports`. |
 | Expansion | Each node of the selected mapping becomes an expanded node (name, template, kind, config); config strings and mapping `exports` are evaluated with the effective requirement id as the current id and the mapping's node names in scope, other scalars pass through, objects and arrays recurse, and catalog tokens are cloned. Result per requirement: id, type, class, mapping file, nodes, exports (`Resolved` or `Pending`). Errors from all requirements are collected; a requirement with an error is left out of the result. |
-| Policy scope | **Node scope:** `match` uses only `type`, `class`, `tier`, `template`; a policy applies to a node when every key equals the node's value (`type`/`class` from its requirement, `tier` from the environment, `template` from the node). A node added by a policy has no type or class. All matching policies apply (no specificity). A `match` with `kind` or `runtime` is never node scope. **Workload scope:** `match` has `kind: runtime`, optionally `runtime` and `tier`; its `add` creates its nodes once per workload, and its `set`/`default` entries target `runtime.<path>`, a field of the runtime node (`runtime.variables.<NAME>` sets or defaults one workload variable), with the existing layer, conflict and provenance rules: `set` wins over a workload variable of that name, `default` only fills a variable the workload does not define. Their values may read the nodes workload-scope policies add (`${appinsights.connectionString}`), which makes the runtime node wait for them; a value reading `${resource.…}` stays pending until the second pass even when the export is static (only the workload variables see static exports resolved at expansion). The `runtime` key is not matched until a workload names a runtime. The catalog loader rejects a policy that fits neither scope, since it would silently do nothing: `runtime` without `kind: runtime`; a `kind` other than `runtime`; `kind: runtime` together with `type`, `class` or `template`; `add` on a node-scope policy; a workload-scope `set`/`default` path not starting with `runtime.` (a bare `runtime` with no dot is rejected too). |
+| Policy scope | **Node scope:** `match` uses only `type`, `class`, `environmentType`, `template`; a policy applies to a node when every key equals the node's value (`type`/`class` from its requirement, `environmentType` from the environment, `template` from the node). A node added by a policy has no type or class. All matching policies apply (no specificity). A `match` with `kind` or `runtime` is never node scope. **Workload scope:** `match` has `kind: runtime`, optionally `runtime` and `environmentType`; its `add` creates its nodes once per workload, and its `set`/`default` entries target `runtime.<path>`, a field of the runtime node (`runtime.variables.<NAME>` sets or defaults one workload variable), with the existing layer, conflict and provenance rules: `set` wins over a workload variable of that name, `default` only fills a variable the workload does not define. Their values may read the nodes workload-scope policies add (`${appinsights.connectionString}`), which makes the runtime node wait for them; a value reading `${resource.…}` stays pending until the second pass even when the export is static (only the workload variables see static exports resolved at expansion). The `runtime` key is not matched until a workload names a runtime. The catalog loader rejects a policy that fits neither scope, since it would silently do nothing: `runtime` without `kind: runtime`; a `kind` other than `runtime`; `kind: runtime` together with `type`, `class` or `template`; `add` on a node-scope policy; a workload-scope `set`/`default` path not starting with `runtime.` (a bare `runtime` with no dot is rejected too). |
 | Single pass | Requirement nodes, the runtime mapping's nodes and workload-scope added nodes receive node-scope policies once; an added node never triggers further adds. Added nodes are evaluated with their own name as the current id and the same policy's added nodes in scope; so is every runtime mapping node (the second pass uses the node's own name too, so `name()` agrees between the passes). |
 | Layering | Template default (not known to the resolver) < mapping < team override (only `overridable` fields, validated; post-MVP) < policy `set`. A policy `default` fills a field only when neither the mapping nor any `set` provides it. Fixes the old algorithm applying overrides after policies. |
 | Policy paths | `set`/`default` keys are dotted paths into a node's config; missing intermediate objects are created; a parent that exists but is not an object is an error. Values are evaluated like mapping config. A `set` of an object replaces the whole subtree: the old leaves' provenance is dropped and the policy becomes the source of every leaf of the new value. Config keys that contain `.` cannot be addressed by a policy path. |
@@ -412,7 +415,7 @@ A cycle is an error naming the nodes in it (`a -> b -> a`); a node referencing i
 
 ## Catalog CI — what makes it maintainable
 
-1. **Static checks:** every type has a mapping per environment tier; no ambiguous matches; every
+1. **Static checks:** every type has a mapping per environment type; no ambiguous matches; every
    `${…}` resolves to a real template config key or output; required template config supplied;
    mapping exports equal the type's exports exactly; naming fits the longest legal workload name.
    The template part is implemented offline by `TemplateLibrary.Check` in `jd.bp.pulumi` (templates are

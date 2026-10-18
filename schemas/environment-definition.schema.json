@@ -2,14 +2,10 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/environment-definition.schema.json",
   "title": "just-deliver environment definition",
-  "description": "What `jd env up` provisions for an environment: substrate requirements (matched by catalog mappings exactly like workload requirements) and the layout of the environment descriptor written from their outputs. Tier coupling: a `protected` environment must carry `approval` (written as anyOf because NJsonSchema ignores if/then). Rules the schema cannot express: effective requirement ids are unique, and the rules of environment.schema.json hold for the composed descriptor (checked before anything is created).",
+  "description": "What `jd env up` provisions for an environment: substrate requirements (matched by catalog mappings exactly like workload requirements) and the layout of the environment descriptor written from their outputs. Checked against the catalog, not here: the type is declared, and a type with `approval: true` carries the `approval` block. Rules the schema cannot express: effective requirement ids are unique, and the rules of environment.schema.json hold for the composed descriptor (checked before anything is created).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "name", "tier", "requires", "values"],
-  "anyOf": [
-    { "properties": { "tier": { "enum": ["team"] } } },
-    { "required": ["approval"] }
-  ],
+  "required": ["kind", "name", "type", "requires", "values"],
   "properties": {
     "kind": { "enum": ["EnvironmentDefinition"] },
     "name": {
@@ -17,7 +13,7 @@
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
     },
-    "tier": { "enum": ["team", "protected"] },
+    "type": { "description": "An environment type the catalog declares.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
     "requires": {
       "description": "Substrate the environment needs, declared by type like a workload's requirements.",
       "type": "array",

@@ -163,6 +163,11 @@ public static class Cli
             return Invalid;
         }
 
+        if (RefuseType(catalog, environment, resolve.Environment, stderr))
+        {
+            return Invalid;
+        }
+
         if (resolve is DeployOptions { DryRun: false } && RefuseGated(environment, "deploy", stderr))
         {
             return Invalid;
@@ -190,7 +195,7 @@ public static class Cli
         (await ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, options.DryRun, stdout, stderr, probe, cancellationToken)).Code;
 
     // An environment whose descriptor carries an approval policy takes deploys only through `jd promote` (docs/architecture/approvals.md section 2). The check reads
-    // the block, not the tier. Run before the identity, the records or the backend is touched; a preview creates nothing, so callers do not ask it.
+    // the block, not the type. Run before the identity, the records or the backend is touched; a preview creates nothing, so callers do not ask it.
     internal static bool RefuseGated(EnvironmentDescriptor environment, string command, TextWriter stderr)
     {
         if (environment.Approval is null)
@@ -199,6 +204,18 @@ public static class Cli
         }
 
         stderr.WriteLine($"jd: {command}: environment '{environment.Name}' is gated by an approval policy: use `jd promote`.");
+        return true;
+    }
+
+    // An environment's type must be the catalog's, and a type that requires an approval block must carry it (security boundary 13). Prints what is wrong, naming the file.
+    internal static bool RefuseType(Catalog catalog, EnvironmentDescriptor environment, string file, TextWriter stderr)
+    {
+        if (EnvironmentTypeCheck.Check(catalog, environment.Type, environment.Approval, file) is not { Count: > 0 } errors)
+        {
+            return false;
+        }
+
+        Print(errors, stderr);
         return true;
     }
 

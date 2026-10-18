@@ -87,7 +87,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, expansion.WorkloadImage, expansion.WorkloadPort, requirements, runtimeNodes, workloadNodes, errors);
     }
 
-    // Workload scope is kind: runtime, optionally narrowed by tier. The 'runtime' key is accepted but not matched yet:
+    // Workload scope is kind: runtime, optionally narrowed by environmentType. The 'runtime' key is accepted but not matched yet:
     // a workload names no runtime (see MappingMatcher.SelectRuntime).
     private bool IsWorkloadScope(Policy policy)
     {
@@ -96,19 +96,19 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             && criteria.All(c => c.Key switch
             {
                 MatchCriteria.KindKey or MatchCriteria.RuntimeKey => true,
-                MatchCriteria.TierKey => c.Value == environment.Tier,
+                MatchCriteria.EnvironmentTypeKey => c.Value == environment.Type,
                 _ => false,
             });
     }
 
-    // Node scope: only type/class/tier/template keys, each equal to the node's value. A node not tied to a requirement
+    // Node scope: only type/class/environmentType/template keys, each equal to the node's value. A node not tied to a requirement
     // has no type or class, so a policy matching on them does not apply to it.
     private bool MatchesNode(Policy policy, string template, string? type, string? cls) =>
         policy.Match.Criteria.All(c => c.Key switch
         {
             MatchCriteria.TypeKey => c.Value == type,
             MatchCriteria.ClassKey => c.Value == cls,
-            MatchCriteria.TierKey => c.Value == environment.Tier,
+            MatchCriteria.EnvironmentTypeKey => c.Value == environment.Type,
             MatchCriteria.TemplateKey => c.Value == template,
             _ => false,
         });

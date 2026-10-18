@@ -27,11 +27,11 @@ public sealed partial class ReleaseDeployCliTests
         await RunAsync(new RecordingBackend(), Deploy(set));
     }
 
-    // dev's descriptor as a protected `stage` that needs the set qualified on dev.
+    // dev's descriptor as a gated `stage` that needs the set qualified on dev.
     private async Task<string> StageAsync(int required = 1, string[]? approvers = null, bool separate = true)
     {
         var list = string.Join(", ", (approvers ?? [Alice]).Select(a => $"\"{a}\""));
-        var text = (await File.ReadAllTextAsync(Environment)).Replace("name: dev", "name: stage", StringComparison.Ordinal).Replace("tier: team", "tier: protected", StringComparison.Ordinal);
+        var text = (await File.ReadAllTextAsync(Environment)).Replace("name: dev", "name: stage", StringComparison.Ordinal).Replace("type: dev", "type: stage", StringComparison.Ordinal);
         var path = Path.Combine(_temp, "stage.env.yaml");
         await File.WriteAllTextAsync(path, text + $"approval:\n  qualifiedOn: dev\n  required: {required}\n  approvers: [{list}]\n  separateFromDeployer: {(separate ? "true" : "false")}\n");
         return path;
@@ -92,7 +92,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.StartsWith("2026-10-17T08:", approvedAt);
         Assert.Equal(approvedAt.Replace("-", string.Empty, StringComparison.Ordinal).Replace(":", string.Empty, StringComparison.Ordinal)[..^1] + "000Z-approve.json", Path.GetFileName(file));
         Assert.Equal("stage", (string?)record["environment"]!["name"]);
-        Assert.Equal("protected", (string?)record["environment"]!["tier"]);
+        Assert.Equal("stage", (string?)record["environment"]!["type"]);
         Assert.Equal("1.0.0", (string?)record["release"]!["label"]);
         Assert.Equal(Sha256(Path.Combine(_records, "dev", "1.0.0", "set.yaml")), (string?)record["release"]!["setSha256"]);
         Assert.Equal("dev", (string?)record["qualifiedOn"]);

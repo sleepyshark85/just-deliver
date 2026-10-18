@@ -16,7 +16,7 @@ public class PolicyApplierTests
 
     private static readonly string[] BaseFiles =
     [
-        "kind: Catalog\nversion: \"7\"\n",
+        "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
         "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard, isolated]\nexports: [endpoint]\n",
         "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
         "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n",
@@ -26,18 +26,18 @@ public class PolicyApplierTests
     private static string Policy(string name, string match, string body) =>
         $"kind: Policy\nname: {name}\nreason: because\nmatch: {match}\n{body}";
 
-    private static EnvironmentDescriptor Env(string tier = "team") =>
-        new("dev", "region", tier, new Dictionary<string, string> { ["host"] = "h1" }, [], null);
+    private static EnvironmentDescriptor Env(string type = "dev") =>
+        new("dev", "region", type, new Dictionary<string, string> { ["host"] = "h1" }, [], null);
 
-    private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string tier = "team", bool expectExpansionErrors = false)
+    private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string type = "dev", bool expectExpansionErrors = false)
     {
         var files = BaseFiles.Concat(policies).Append(TestCatalog.RuntimeMapping).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
-        var expansion = new Expander(loaded.Catalog!, Env(tier)).Expand(workload, "workload.yaml");
+        var expansion = new Expander(loaded.Catalog!, Env(type)).Expand(workload, "workload.yaml");
         Assert.Equal(expectExpansionErrors, expansion.Errors.Count > 0);
-        return new PolicyApplier(loaded.Catalog!, Env(tier)).Apply(expansion);
+        return new PolicyApplier(loaded.Catalog!, Env(type)).Apply(expansion);
     }
 
     private static ResolvedNode Node(PolicyResult result, string name, int requirement = 0) =>
@@ -153,14 +153,14 @@ public class PolicyApplierTests
     }
 
     [Fact]
-    public async Task Template_type_class_and_tier_keys_select_nodes()
+    public async Task Template_type_class_and_environmentType_keys_select_nodes()
     {
         var result = await ApplyAsync(
         [
             Policy("by-template", "{ template: t/m }", "set: { by: template }\n"),
             Policy("by-type", "{ type: sqldb, class: isolated }", "set: { by: type }\n"),
-            Policy("by-tier", "{ tier: protected }", "set: { guarded: true }\n"),
-            Policy("everything", "{ type: sqldb, class: standard, tier: team }", "set: { all: true }\n"),
+            Policy("by-environment-type", "{ environmentType: stage }", "set: { guarded: true }\n"),
+            Policy("everything", "{ type: sqldb, class: standard, environmentType: dev }", "set: { all: true }\n"),
         ], "  - type: sqldb\n  - type: sqldb\n    id: iso\n    class: isolated\n");
 
         Assert.Equal("template", Text(Node(result, "m").Config["by"]));
@@ -172,12 +172,12 @@ public class PolicyApplierTests
     }
 
     [Fact]
-    public async Task The_environment_tier_selects_tier_policies()
+    public async Task The_environment_type_selects_environmentType_policies()
     {
-        var protectedTier = await ApplyAsync([Policy("pol", "{ template: t/n, tier: protected }", "set: { failover: true }\n")], tier: "protected");
-        var team = await ApplyAsync([Policy("pol", "{ template: t/n, tier: protected }", "set: { failover: true }\n")]);
+        var gated = await ApplyAsync([Policy("pol", "{ template: t/n, environmentType: stage }", "set: { failover: true }\n")], type: "stage");
+        var team = await ApplyAsync([Policy("pol", "{ template: t/n, environmentType: stage }", "set: { failover: true }\n")]);
 
-        Assert.True(Node(protectedTier, "n").Config.ContainsKey("failover"));
+        Assert.True(Node(gated, "n").Config.ContainsKey("failover"));
         Assert.False(Node(team, "n").Config.ContainsKey("failover"));
     }
 
@@ -248,16 +248,16 @@ public class PolicyApplierTests
     }
 
     [Fact]
-    public async Task A_runtime_policy_never_applies_to_node_config_and_a_tier_narrows_workload_scope()
+    public async Task A_runtime_policy_never_applies_to_node_config_and_an_environment_type_narrows_workload_scope()
     {
         var policies = new[]
         {
             Policy("runtime-set", "{ kind: runtime }", "set: { runtime.size: 1 }\n"),
-            Policy("guarded-add", "{ kind: runtime, tier: protected }", "add:\n  extra:\n    template: t/x\n    config: {}\n"),
+            Policy("guarded-add", "{ kind: runtime, environmentType: stage }", "add:\n  extra:\n    template: t/x\n    config: {}\n"),
         };
 
         var team = await ApplyAsync(policies);
-        var guarded = await ApplyAsync(policies, tier: "protected");
+        var guarded = await ApplyAsync(policies, type: "stage");
 
         Assert.Equal(400, Number(Node(team, "n").Config["size"]));
         Assert.All(team.Requirements.SelectMany(r => r.Nodes), n => Assert.False(n.Config.ContainsKey("runtime")));
@@ -375,7 +375,7 @@ public class PolicyApplierTests
         var environment = new EnvironmentDescriptor(
             "dev",
             "region",
-            "team",
+            "dev",
             new Dictionary<string, string>
             {
                 ["resourceGroup"] = "rg",

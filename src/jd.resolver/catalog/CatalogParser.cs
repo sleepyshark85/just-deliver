@@ -62,9 +62,11 @@ public static class CatalogParser
         CheckSingleCatalog(catalogs, unreadable == 0, errors);
         CheckUnique(typeDocuments, "ResourceType", errors);
         CheckUnique(policyDocuments, "Policy", errors);
-        CheckMappingTypes(mappings, typeDocuments, errors);
+        // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
+        var environmentTypes = catalogs.FirstOrDefault() is { Valid: true } first ? Map(first.Body["environmentTypes"]).Select(e => e.Key).Order().ToList() : null;
+        CheckMappingTypes(mappings, typeDocuments, environmentTypes, errors);
         CheckMappingMatches(mappings, errors);
-        CheckPolicyScopes(policies, errors);
+        CheckPolicyScopes(policies, environmentTypes, errors);
         CheckPolicyPaths(policies, errors);
         CheckNodeNames(mappings, policies, errors);
         CheckRuntimeNode(mappings, policies, errors);
@@ -78,6 +80,7 @@ public static class CatalogParser
         var version = (string?)catalogs[0].Body["version"] ?? string.Empty;
         var catalog = new Catalog(
             version,
+            Map(catalogs[0].Body["environmentTypes"]).ToDictionary(e => e.Key, e => new EnvironmentType((bool?)e.Value["approval"] ?? false)),
             types,
             mappings,
             policies,
@@ -263,13 +266,14 @@ public static class CatalogParser
     }
 
     // Every policy must apply to node scope or workload scope (resolver.md, Policy scope); one that fits neither would silently do nothing.
-    private static void CheckPolicyScopes(List<Policy> policies, List<LoadError> errors)
+    private static void CheckPolicyScopes(List<Policy> policies, List<string>? environmentTypes, List<LoadError> errors)
     {
         foreach (var policy in policies)
         {
             var criteria = policy.Match.Criteria;
             var kind = criteria.GetValueOrDefault(MatchCriteria.KindKey);
             void Fail(string location, string message) => errors.Add(new LoadError(policy.Source, location, message));
+            CheckEnvironmentType(policy.Source, criteria, environmentTypes, errors);
 
             if (kind is not null && kind != MatchCriteria.RuntimeKind)
             {
@@ -279,7 +283,7 @@ public static class CatalogParser
             {
                 if (criteria.ContainsKey(MatchCriteria.RuntimeKey))
                 {
-                    Fail("match.runtime", $"'runtime' needs 'kind: {MatchCriteria.RuntimeKind}'; node-scope policies match type, class, tier and template.");
+                    Fail("match.runtime", $"'runtime' needs 'kind: {MatchCriteria.RuntimeKind}'; node-scope policies match type, class, environmentType and template.");
                 }
 
                 if (policy.Add.Count > 0)
@@ -315,7 +319,7 @@ public static class CatalogParser
         }
     }
 
-    private static void CheckMappingTypes(List<Mapping> mappings, List<Document> typeDocuments, List<LoadError> errors)
+    private static void CheckMappingTypes(List<Mapping> mappings, List<Document> typeDocuments, List<string>? environmentTypes, List<LoadError> errors)
     {
         var declared = typeDocuments.Select(NameOf).OfType<string>().Distinct().Order().ToList();
         foreach (var mapping in mappings)
@@ -325,6 +329,17 @@ public static class CatalogParser
                 var known = declared.Count == 0 ? "none" : string.Join(", ", declared);
                 errors.Add(new LoadError(mapping.Source, "match.type", $"'{type}' is not a declared ResourceType (declared: {known})."));
             }
+
+            CheckEnvironmentType(mapping.Source, mapping.Match.Criteria, environmentTypes, errors);
+        }
+    }
+
+    // A match on an environment type nobody declared would load and never apply.
+    private static void CheckEnvironmentType(string source, IReadOnlyDictionary<string, string> criteria, List<string>? environmentTypes, List<LoadError> errors)
+    {
+        if (environmentTypes is not null && criteria.TryGetValue(MatchCriteria.EnvironmentTypeKey, out var type) && !environmentTypes.Contains(type))
+        {
+            errors.Add(new LoadError(source, $"match.{MatchCriteria.EnvironmentTypeKey}", $"'{type}' is not a declared environment type (declared: {string.Join(", ", environmentTypes)})."));
         }
     }
 

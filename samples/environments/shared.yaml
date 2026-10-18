@@ -2,7 +2,7 @@
 #   jd env up samples/environments/shared.yaml --catalog catalog --out shared.env.yaml
 kind: EnvironmentDefinition
 name: shared
-tier: team
+type: shared
 requires:
   - type: shared-substrate
     id: substrate

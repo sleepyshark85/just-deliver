@@ -3,7 +3,7 @@ using Xunit;
 namespace jd.cli.tests;
 
 // A descriptor with an approval block is gated (docs/architecture/approvals.md section 2): the refusal comes before the principal, the records
-// directory or the backend is touched. The block is what gates, not the tier, so the gated descriptor here is a `team` one.
+// directory or the backend is touched. The block is what gates, not the type, so the gated descriptor here is a `dev` one.
 public sealed partial class ReleaseDeployCliTests
 {
     private const string ApprovalBlock = "approval:\n  qualifiedOn: build\n  required: 1\n  approvers: [\"00000000-0000-0000-0000-000000000000\"]\n  separateFromDeployer: true\n";
@@ -41,6 +41,28 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal(0, _identity.Calls);
         Assert.Empty(_live.Calls);
         Assert.Empty(Directory.GetFileSystemEntries(_records));
+    }
+
+    // The catalog's type rules (docs/architecture/components.md section 2, boundary 13) hold before anything is touched, also for a preview,
+    // which the gate lets through: a declared type, and the block on a type with approval: true (stage).
+    [Theory]
+    [InlineData("release deploy", "gold", "type: 'gold' is not an environment type of the catalog (declared: dev, prod, shared, stage).")]
+    [InlineData("deploy", "gold", "type: 'gold' is not an environment type of the catalog (declared: dev, prod, shared, stage).")]
+    [InlineData("release deploy", "stage", "approval: environment type 'stage' requires an 'approval' block")]
+    [InlineData("deploy", "stage", "approval: environment type 'stage' requires an 'approval' block")]
+    public async Task A_descriptor_of_an_undeclared_type_or_of_a_gated_type_without_its_block_is_refused_before_the_backend(string command, string type, string error)
+    {
+        var set = await CreateSetAsync();
+        var path = Path.Combine(_temp, "typed.env.yaml");
+        await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(Environment)).Replace("type: dev", $"type: {type}", StringComparison.Ordinal));
+        var backend = new RecordingBackend();
+
+        var (code, stdout, stderr) = await RunAsync(backend, Command(command, set, path, "--preview"));
+
+        Assert.Equal(1, code);
+        Assert.Contains($"{path}: {error}", stderr);
+        Assert.Empty(stdout);
+        Assert.Empty(backend.Calls);
     }
 
     [Theory]

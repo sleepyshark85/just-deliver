@@ -10,7 +10,7 @@
   },
   "environment": {
     "name": "dev",
-    "tier": "team",
+    "type": "dev",
     "region": "region-1",
     "catalogVersion": "1"
   },

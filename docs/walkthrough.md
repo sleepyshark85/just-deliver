@@ -125,6 +125,9 @@ done
 Re-running an `env up` (with `--force`) reports every node `unchanged (no changes, …)` and rewrites the same descriptor. `stage` ships with the all-zero
 approver; the scenarios make policy variants with `samples/walkthrough/stage-policy.sh` instead of editing it.
 
+Descriptors written before environment types (they say `tier:`, S21a) no longer load: run the three `env up` again with `--force`; every node is
+`unchanged` and each descriptor is rewritten with its `type`. Release and approval records written before stay readable.
+
 Release sets are created **once** and reused: a set carries its creation time, so creating it again gives other bytes, which a label that already has a
 `set.yaml` refuses.
 

@@ -13,10 +13,12 @@
       "description": "The gated environment approved for, as its descriptor names it.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "tier"],
+      "required": ["name"],
+      "anyOf": [{ "required": ["type"] }, { "required": ["tier"] }],
       "properties": {
         "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$" },
-        "tier": { "enum": ["team", "protected"] }
+        "type": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
+        "tier": { "description": "In records written before environment types; read, never written.", "enum": ["team", "protected"] }
       }
     },
     "release": {

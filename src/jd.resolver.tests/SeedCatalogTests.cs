@@ -28,7 +28,7 @@ public class SeedCatalogTests
         var root = Directory.CreateTempSubdirectory().FullName;
         try
         {
-            await File.WriteAllTextAsync(Path.Combine(root, "catalog.yaml"), "kind: Catalog\nversion: \"1\"\n");
+            await File.WriteAllTextAsync(Path.Combine(root, "catalog.yaml"), "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n");
             Directory.CreateDirectory(Path.Combine(root, "templates", "azure"));
             await File.WriteAllTextAsync(Path.Combine(root, "templates", "azure", "Pulumi.yaml"), "name: not-a-catalog-document\n");
 

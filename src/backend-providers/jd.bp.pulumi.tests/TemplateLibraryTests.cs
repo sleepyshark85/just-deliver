@@ -258,7 +258,7 @@ public partial class TemplateLibraryTests
     {
         var sources = new[]
         {
-            "kind: Catalog\nversion: \"1\"\n",
+            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n",
             "kind: Mapping\nmatch: { kind: runtime }\nprobe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
                 + "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffixOut, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n"
                 + "nodes:\n  runtime:\n    template: t/rt\n    config: { image: i }\n",
@@ -267,7 +267,7 @@ public partial class TemplateLibraryTests
         var loaded = await CatalogParser.ParseAsync(sources);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\ncontainer:\n  image: reg/app:1\nrequires: []\n");
-        var graph = jd.resolver.Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, new EnvironmentDescriptor("dev", "region-1", "team", new Dictionary<string, string>(), [], null));
+        var graph = jd.resolver.Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, new EnvironmentDescriptor("dev", "region-1", "dev", new Dictionary<string, string>(), [], null));
         Assert.Empty(graph.Errors);
 
         var error = Assert.Single(RuntimeLibrary().Check(graph));

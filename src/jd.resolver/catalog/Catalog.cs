@@ -8,11 +8,15 @@ namespace jd.resolver.catalog;
 
 public sealed record Catalog(
     string Version,
+    IReadOnlyDictionary<string, EnvironmentType> EnvironmentTypes,
     IReadOnlyList<ResourceType> Types,
     IReadOnlyList<Mapping> Mappings,
     IReadOnlyList<Policy> Policies,
     IReadOnlyDictionary<string, NamingRule> Naming,
     IReadOnlyDictionary<string, string> Roles);
+
+/// <summary>A declared environment type; <see cref="Approval"/>: an environment of this type must carry an approval block.</summary>
+public sealed record EnvironmentType(bool Approval);
 
 public sealed record ResourceType(
     string Source,
@@ -29,13 +33,13 @@ public enum NodeKind
 
 public sealed record Node(string Template, NodeKind Kind, IReadOnlyDictionary<string, JToken> Config);
 
-/// <summary>Criteria key (type, class, tier, kind, runtime, and for policies template) to the value it must equal.</summary>
+/// <summary>Criteria key (type, class, environmentType, kind, runtime, and for policies template) to the value it must equal.</summary>
 public sealed record MatchCriteria(IReadOnlyDictionary<string, string> Criteria)
 {
     // The keys a requirement provides to a mapping match; part of the mapping format.
     public const string TypeKey = "type";
     public const string ClassKey = "class";
-    public const string TierKey = "tier";
+    public const string EnvironmentTypeKey = "environmentType";
 
     // Keys only policies use: a node's template, and the runtime scope (kind: runtime) of a workload-scope policy.
     public const string TemplateKey = "template";

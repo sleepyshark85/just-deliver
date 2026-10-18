@@ -71,7 +71,7 @@ public sealed class EnvCliTests : IDisposable
         Assert.Equal(("dev", "region-1"), (descriptor.Name, descriptor.Region));
         Assert.Equal("cosmos-1", descriptor.Values["cosmos.accountName"]);
         Assert.Equal("db-dev", descriptor.Values["cosmos.databaseName"]);
-        Assert.Contains($"{dev}: environment dev", second.Out);
+        Assert.Contains($"{dev}: environment dev (region-1, dev) written.", second.Out);
     }
 
     [Fact]
@@ -92,12 +92,35 @@ public sealed class EnvCliTests : IDisposable
 
         Assert.Equal((1, 0), (refused.Code, up.Code));
         Assert.Equal(0, refusedCalls);
-        Assert.Contains("approval", refused.Err);
+        Assert.Contains($"{open}: approval: environment type 'stage' requires an 'approval' block", refused.Err);
         var descriptor = (await jd.resolver.environment.EnvironmentFile.LoadAsync(stage)).Descriptor!;
-        Assert.Equal(("stage", "protected"), (descriptor.Name, descriptor.Tier));
+        Assert.Equal(("stage", "stage"), (descriptor.Name, descriptor.Type));
         Assert.Equal(("dev", 1, true), (descriptor.Approval!.QualifiedOn, descriptor.Approval.Required, descriptor.Approval.SeparateFromDeployer));
         Assert.Equal(["00000000-0000-0000-0000-000000000000"], descriptor.Approval.Approvers);
         Assert.Equal(["_stage.stage.substrate.apps", "_stage.stage.substrate.database", "_stage.stage.substrate.group"], backend.Calls.Order().ToList());
+    }
+
+    // The catalog declares the types (docs/architecture/components.md section 2): the definition's and the base's are checked before anything is created.
+    [Fact]
+    public async Task Up_of_an_undeclared_type_or_on_a_base_of_one_creates_nothing_and_names_the_type_and_the_declared_ones()
+    {
+        var backend = new OutputBackend();
+        var shared = Path.Combine(_temp, "shared.env.yaml");
+        await RunAsync(backend, Region, "up", Shared, "--catalog", Catalog, "--out", shared);
+        backend.Calls.Clear();
+        var gold = Path.Combine(_temp, "gold.yaml");
+        await File.WriteAllTextAsync(gold, (await File.ReadAllTextAsync(Dev)).Replace("type: dev", "type: gold", StringComparison.Ordinal));
+        var goldBase = Path.Combine(_temp, "gold.env.yaml");
+        await File.WriteAllTextAsync(goldBase, (await File.ReadAllTextAsync(shared)).Replace("type: shared", "type: gold", StringComparison.Ordinal));
+
+        var definition = await RunAsync(backend, Region, "up", gold, "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "a.env.yaml"));
+        var onBase = await RunAsync(backend, Region, "up", Dev, "--catalog", Catalog, "--base", goldBase, "--out", Path.Combine(_temp, "b.env.yaml"));
+
+        Assert.Equal((1, 1), (definition.Code, onBase.Code));
+        Assert.Empty(backend.Calls);
+        const string Error = "type: 'gold' is not an environment type of the catalog (declared: dev, prod, shared, stage).";
+        Assert.Contains($"{gold}: {Error}", definition.Err);
+        Assert.Contains($"{goldBase}: {Error}", onBase.Err);
     }
 
     [Fact]

@@ -5,7 +5,7 @@ namespace jd.resolver.tests;
 
 public class CatalogParserTests
 {
-    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\n";
+    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n";
 
     private static string TypeFile(string name) => $"kind: ResourceType\nname: {name}\ndescription: test\nclasses: [standard]\nexports: [endpoint]\n";
 
@@ -17,6 +17,22 @@ public class CatalogParserTests
 
     private static Task<CatalogLoadResult> Parse(params (string Path, string Content)[] files) =>
         CatalogParser.ParseAsync(files.Select(f => new CatalogSource(f.Path, f.Content)));
+
+    // The environment types (docs/architecture/components.md section 2): declared in the Catalog file, named like requirement types, `default`
+    // excluded (the implementations' fallback key).
+    [Theory]
+    [InlineData("", "catalog.yaml: environmentTypes: ")]
+    [InlineData("environmentTypes: {}\n", "catalog.yaml: environmentTypes: ")]
+    [InlineData("environmentTypes: { default: {} }\n", "catalog.yaml: environmentTypes.default: ")]
+    [InlineData("environmentTypes: { Dev: {} }\n", "catalog.yaml: environmentTypes.Dev: ")]
+    [InlineData("environmentTypes: { dev: { approval: \"yes\" } }\n", "BooleanExpected: #/environmentTypes.dev.approval")]
+    public async Task Environment_types_are_required_and_well_formed(string declaration, string error)
+    {
+        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: \"1\"\n" + declaration));
+
+        Assert.Null(result.Catalog);
+        Assert.Contains(error, Assert.Single(result.Errors).ToString());
+    }
 
     [Fact]
     public async Task Valid_files_build_the_model()
@@ -32,6 +48,7 @@ public class CatalogParserTests
         Assert.Empty(result.Errors);
         var catalog = Assert.IsType<Catalog>(result.Catalog);
         Assert.Equal("1", catalog.Version);
+        Assert.Equal([("dev", false), ("stage", true)], catalog.EnvironmentTypes.Select(t => (t.Key, t.Value.Approval)).OrderBy(t => t.Key, StringComparer.Ordinal));
         Assert.Equal("alpha-db", Assert.Single(catalog.Types).Name);
         var mapping = Assert.Single(catalog.Mappings);
         Assert.Equal("maps/a.yaml", mapping.Source);
@@ -133,6 +150,27 @@ public class CatalogParserTests
     }
 
     [Fact]
+    public async Task Mapping_matching_an_undeclared_environment_type_is_an_error()
+    {
+        var mapping = "kind: Mapping\nmatch: { type: alpha-db, environmentType: stagee }\nnodes:\n  db:\n    template: t/db\n    config: {}\nexports:\n  endpoint: ${db.endpoint}\n";
+        var result = await Parse(("catalog.yaml", CatalogFile), ("types/a.yaml", TypeFile("alpha-db")), ("maps/a.yaml", mapping));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("maps/a.yaml", "match.environmentType"), (error.File, error.Location));
+        Assert.Contains("'stagee' is not a declared environment type (declared: dev, stage)", error.Message);
+    }
+
+    [Fact]
+    public async Task Policy_matching_an_undeclared_environment_type_is_an_error()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { template: t/x, environmentType: stagee }\nset: { a.b: 1 }\n"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("p.yaml", "match.environmentType"), (error.File, error.Location));
+        Assert.Contains("'stagee' is not a declared environment type (declared: dev, stage)", error.Message);
+    }
+
+    [Fact]
     public async Task Schema_violation_is_reported_with_file_and_location()
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("maps/bad.yaml", "kind: Mapping\nmatch: { type: x }\nnodes:\n  db:\n    template: t\nexports: {}\n"));
@@ -169,8 +207,8 @@ public class CatalogParserTests
     }
 
     [Theory]
-    [InlineData("{ template: t/x, tier: team }", "set: { a.b: 1 }\ndefault: { c: 2 }")]
-    [InlineData("{ kind: runtime, runtime: container-app, tier: team }", "set: { runtime.a: 1 }\ndefault: { runtime.b: 2 }\nadd:\n  n:\n    template: t/x\n    config: {}")]
+    [InlineData("{ template: t/x, environmentType: dev }", "set: { a.b: 1 }\ndefault: { c: 2 }")]
+    [InlineData("{ kind: runtime, runtime: container-app, environmentType: dev }", "set: { runtime.a: 1 }\ndefault: { runtime.b: 2 }\nadd:\n  n:\n    template: t/x\n    config: {}")]
     public async Task A_policy_in_either_scope_loads(string match, string body)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {match}\n{body}\n"));
@@ -354,7 +392,7 @@ public class CatalogParserTests
         var error = Assert.Single(result.Errors);
         Assert.Equal("catalog.yaml", error.File);
 
-        Assert.Contains("duplicate key 'version' at line 3", error.Message);
+        Assert.Contains("duplicate key 'version' at line 4", error.Message);
     }
 
     [Fact]
@@ -408,7 +446,7 @@ public class CatalogParserTests
     [Fact]
     public async Task Schema_invalid_catalog_file_still_counts_as_the_catalog()
     {
-        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: 1\n"), ("types/a.yaml", TypeFile("alpha-db")));
+        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: 1\nenvironmentTypes: { dev: {}, stage: { approval: true } }\n"), ("types/a.yaml", TypeFile("alpha-db")));
 
         var error = Assert.Single(result.Errors);
         Assert.Equal("catalog.yaml", error.File);

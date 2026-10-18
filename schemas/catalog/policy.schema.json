@@ -27,7 +27,7 @@
       "properties": {
         "type": { "type": "string" },
         "class": { "type": "string" },
-        "tier": { "type": "string" },
+        "environmentType": { "description": "The environment's type, as the catalog declares it.", "type": "string" },
         "kind": { "type": "string" },
         "runtime": { "type": "string" },
         "template": { "type": "string" }

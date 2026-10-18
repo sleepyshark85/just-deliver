@@ -1,2 +1,8 @@
 kind: Catalog
 version: "0.1.0"
+# Declared once; an environment definition or descriptor of any other type is an error (docs/architecture/components.md section 2).
+environmentTypes:
+  shared: {}                       # the shared layer's own type
+  dev:    {}
+  stage:  { approval: true }  # a definition or descriptor of this type must carry an `approval` block
+  prod:   { approval: true }

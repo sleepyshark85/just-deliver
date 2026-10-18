@@ -94,6 +94,11 @@ internal static class ReleaseDeployCli
             return Invalid;
         }
 
+        if (Cli.RefuseType(catalog, environment, options.Environment, stderr))
+        {
+            return Invalid;
+        }
+
         // A gated environment is deployed to only by promotion; this stops before the identity, the records or the backend is touched.
         if (!options.DryRun && options.Promotion is null && Cli.RefuseGated(environment, Command(options.Qualify), stderr))
         {

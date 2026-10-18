@@ -9,7 +9,7 @@ public class EnvironmentParserTests
         kind: Environment
         name: test-env
         region: testregion
-        tier: team
+        type: dev
         values:
           resourceGroup: rg-test
           cosmos: { accountName: acct, accountId: /acct/id, endpoint: "https://acct.example" }
@@ -33,7 +33,7 @@ public class EnvironmentParserTests
         var env = await Load(Valid);
         Assert.Equal("test-env", env.Name);
         Assert.Equal("testregion", env.Region);
-        Assert.Equal("team", env.Tier);
+        Assert.Equal("dev", env.Type);
         Assert.Equal("rg-test", env.Values["resourceGroup"]);
         Assert.Equal("https://acct.example", env.Values["cosmos.endpoint"]);
         Assert.Equal(["cosmos.accountId"], env.Grantable);
@@ -49,7 +49,7 @@ public class EnvironmentParserTests
     [Theory]
     [InlineData("name")]
     [InlineData("region")]
-    [InlineData("tier")]
+    [InlineData("type")]
     public async Task Reserved_key_in_values_is_rejected(string key)
     {
         var result = await Parse(Valid.Replace("  resourceGroup: rg-test", $"  resourceGroup: rg-test\n  {key}: x"));
@@ -75,18 +75,18 @@ public class EnvironmentParserTests
     }
 
     [Fact]
-    public async Task Bad_tier_is_rejected_with_its_location()
+    public async Task Bad_type_is_rejected_with_its_location()
     {
-        var result = await Parse(Valid.Replace("tier: team", "tier: gold"));
+        var result = await Parse(Valid.Replace("type: dev", "type: Gold"));
         Assert.Null(result.Descriptor);
-        Assert.Contains(result.Errors, e => e.Location == "tier" && e.File == "env.yaml");
+        Assert.Contains(result.Errors, e => e.Location == "type" && e.File == "env.yaml");
     }
 
     [Fact]
     public async Task Code_rule_errors_are_all_reported_together()
     {
-        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  tier: x").Replace("- cosmos.accountId", "- nope"));
-        Assert.Equal(["values.tier", "grantable.0"], result.Errors.Select(e => e.Location));
+        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  type: x").Replace("- cosmos.accountId", "- nope"));
+        Assert.Equal(["values.type", "grantable.0"], result.Errors.Select(e => e.Location));
     }
 
     [Fact]
@@ -121,8 +121,8 @@ public class EnvironmentParserTests
         Assert.Equal("test-env", name);
         Assert.True(env.TryGet("region", out var region));
         Assert.Equal("testregion", region);
-        Assert.True(env.TryGet("tier", out var tier));
-        Assert.Equal("team", tier);
+        Assert.True(env.TryGet("type", out var type));
+        Assert.Equal("dev", type);
     }
 
     [Fact]

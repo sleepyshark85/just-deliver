@@ -1,20 +1,22 @@
+using jd.resolver.catalog;
 using jd.resolver.environment;
 using Xunit;
 
 namespace jd.resolver.tests;
 
-// The approval block in the descriptor and the definition (docs/architecture/approvals.md section 3): the schemas, the tier coupling in their anyOf form, and the loader rules.
+// The approval block in the descriptor and the definition (docs/architecture/approvals.md section 3): the schemas and the loader rules, and the
+// catalog's type rules (docs/architecture/components.md section 2, boundary 13): a declared type, and the block on a type with approval: true.
 public class ApprovalEnvironmentTests
 {
     private const string Approver = "11111111-1111-1111-1111-111111111111";
 
     private const string Block = $"approval:\n  qualifiedOn: dev\n  required: 1\n  approvers: [\"{Approver}\"]\n  separateFromDeployer: true\n";
 
-    private static string Descriptor(string tier = "protected", string? approval = Block, string name = "stage") =>
-        $"kind: Environment\nname: {name}\nregion: r1\ntier: {tier}\nvalues: {{ a: b }}\n{approval}";
+    private static string Descriptor(string type = "stage", string? approval = Block, string name = "stage") =>
+        $"kind: Environment\nname: {name}\nregion: r1\ntype: {type}\nvalues: {{ a: b }}\n{approval}";
 
-    private static string Definition(string tier = "protected", string? approval = Block) =>
-        $"kind: EnvironmentDefinition\nname: stage\ntier: {tier}\nrequires: [{{ type: env-substrate }}]\nvalues: {{ a: b }}\n{approval}";
+    private static string Definition(string type = "stage", string? approval = Block) =>
+        $"kind: EnvironmentDefinition\nname: stage\ntype: {type}\nrequires: [{{ type: env-substrate }}]\nvalues: {{ a: b }}\n{approval}";
 
     private static async Task<EnvironmentDefinitionLoadResult> LoadDefinitionAsync(string text)
     {
@@ -22,6 +24,8 @@ public class ApprovalEnvironmentTests
         await File.WriteAllTextAsync(path, text);
         return await EnvironmentDefinitionFile.LoadAsync(path);
     }
+
+    private static async Task<Catalog> SeedCatalogAsync() => (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
 
     [Fact]
     public async Task A_descriptor_carries_its_policy()
@@ -34,31 +38,66 @@ public class ApprovalEnvironmentTests
         Assert.Equal([Approver], policy.Approvers);
     }
 
+    // The schemas no longer couple type and block: the catalog does, so both files load either way and the check below decides.
     [Theory]
-    [InlineData("team", true)]
-    [InlineData("team", false)]
-    [InlineData("protected", true)]
-    public async Task A_team_environment_may_carry_a_policy_or_not_and_a_protected_one_must(string tier, bool withApproval)
+    [InlineData("dev", true)]
+    [InlineData("dev", false)]
+    [InlineData("stage", true)]
+    [InlineData("stage", false)]
+    public async Task The_schemas_load_any_type_with_or_without_a_policy(string type, bool withApproval)
     {
-        var descriptor = await EnvironmentParser.ParseAsync("env.yaml", Descriptor(tier, withApproval ? Block : string.Empty));
-        var definition = await LoadDefinitionAsync(Definition(tier, withApproval ? Block : string.Empty));
+        var descriptor = await EnvironmentParser.ParseAsync("env.yaml", Descriptor(type, withApproval ? Block : string.Empty));
+        var definition = await LoadDefinitionAsync(Definition(type, withApproval ? Block : string.Empty));
 
         Assert.Empty(descriptor.Errors);
         Assert.Empty(definition.Errors);
-        Assert.Equal(withApproval, descriptor.Descriptor!.Approval is not null);
-        Assert.Equal(withApproval, definition.Definition!.Approval is not null);
+        Assert.Equal((type, withApproval), (descriptor.Descriptor!.Type, descriptor.Descriptor.Approval is not null));
+        Assert.Equal((type, withApproval), (definition.Definition!.Type, definition.Definition.Approval is not null));
     }
 
     [Fact]
-    public async Task A_protected_environment_without_a_policy_is_an_error_in_the_descriptor_and_the_definition()
+    public async Task A_type_that_is_not_a_type_name_is_a_schema_error_in_the_descriptor_and_the_definition()
     {
-        var descriptor = await EnvironmentParser.ParseAsync("env.yaml", Descriptor(approval: string.Empty));
-        var definition = await LoadDefinitionAsync(Definition(approval: string.Empty));
+        var descriptor = await EnvironmentParser.ParseAsync("env.yaml", Descriptor("Stage"));
+        var definition = await LoadDefinitionAsync(Definition("Stage"));
 
-        Assert.Null(descriptor.Descriptor);
-        Assert.Null(definition.Definition);
-        Assert.Contains("PropertyRequired: #/approval", Assert.Single(descriptor.Errors).Message);
-        Assert.Contains("PropertyRequired: #/approval", Assert.Single(definition.Errors).Message);
+        Assert.Equal("type", Assert.Single(descriptor.Errors).Location);
+        Assert.Equal("type", Assert.Single(definition.Errors).Location);
+    }
+
+    // As before types: any type may carry a block (the block is what gates); only a gated type must.
+    [Theory]
+    [InlineData("dev", true)]
+    [InlineData("dev", false)]
+    [InlineData("stage", true)]
+    public async Task A_declared_type_passes_with_its_policy_and_an_ungated_type_may_carry_one(string type, bool withApproval)
+    {
+        var descriptor = (await EnvironmentParser.ParseAsync("env.yaml", Descriptor(type, withApproval ? Block : string.Empty))).Descriptor!;
+
+        Assert.Empty(EnvironmentTypeCheck.Check(await SeedCatalogAsync(), descriptor.Type, descriptor.Approval, "env.yaml"));
+    }
+
+    [Fact]
+    public async Task A_gated_type_without_a_policy_is_an_error_in_the_descriptor_and_the_definition()
+    {
+        var catalog = await SeedCatalogAsync();
+        var descriptor = (await EnvironmentParser.ParseAsync("env.yaml", Descriptor(approval: string.Empty))).Descriptor!;
+        var definition = (await LoadDefinitionAsync(Definition(approval: string.Empty))).Definition!;
+
+        foreach (var error in new[] { Assert.Single(EnvironmentTypeCheck.Check(catalog, descriptor.Type, descriptor.Approval, "env.yaml")), Assert.Single(EnvironmentTypeCheck.Check(catalog, definition.Type, definition.Approval, "env.yaml")) })
+        {
+            Assert.Equal(("env.yaml", "approval"), (error.File, error.Location));
+            Assert.Contains("environment type 'stage' requires an 'approval' block", error.Message);
+        }
+    }
+
+    [Fact]
+    public async Task An_undeclared_type_is_an_error_naming_the_type_and_the_declared_ones_even_with_a_policy()
+    {
+        var error = Assert.Single(EnvironmentTypeCheck.Check(await SeedCatalogAsync(), "protected", new ApprovalPolicy("dev", 1, [Approver], true), "env.yaml"));
+
+        Assert.Equal(("env.yaml", "type"), (error.File, error.Location));
+        Assert.Equal("'protected' is not an environment type of the catalog (declared: dev, prod, shared, stage).", error.Message);
     }
 
     [Theory]

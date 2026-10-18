@@ -22,6 +22,7 @@
     <Content Include="../../samples/environments/*.yaml" Link="samples/environments/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../samples/walkthrough/**/*.yaml" Link="samples/walkthrough/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../jd.resolver.tests/golden/seed-environment.yaml;../jd.resolver.tests/golden/seed-workload.graph.json" Link="golden/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="golden/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
