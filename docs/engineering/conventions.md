@@ -47,8 +47,8 @@ rule says and this page for how it is applied; raise the conflict so one of them
     and `release deploy` — stack, config entries and secret flags, and the program's SHA-256 — snapshotted by
     `DeployedConfigSnapshotTests` in `src/jd.cli.tests/golden/deployed-config.json`; and (2) the code that calls Azure
     directly, whose effect no snapshot shows: `src/jd.azure`, `src/backend-providers`, `src/jd.orchestrator/ReleaseFlow.cs`,
-    `Qualifier.cs`, `src/jd.cli/HttpRevisionProbe.cs`, and the Azure tests themselves (`*AzureTests.cs`,
-    `DeployerIdentityTests.cs`).
+    `Qualifier.cs`, `src/jd.cli/HttpRevisionProbe.cs`. An edit to the Azure tests alone (`*AzureTests.cs`,
+    `DeployerIdentityTests.cs`) does not trigger a gate: the next gate runs them, at the latest the phase's exit gate.
   - **No gate** when `git diff origin/main -- src/jd.cli.tests/golden/deployed-config.json` is empty and none of the
     code in (2) changed. A slice that regenerates the snapshot must say why in its brief; the lead checks the diff is
     exactly the intended change. A refactor's proof is the unchanged snapshot.
