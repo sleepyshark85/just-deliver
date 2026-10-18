@@ -89,7 +89,8 @@ public static class CatalogParser
         var named = documents.Where(d => d.Kind is ComponentKind or RuntimeKind or SharedResourceKind).ToList();
         CheckUnique(named, errors);
         CheckReservedNames(named, errors);
-        var kinds = named.Where(d => NameOf(d) is not null).DistinctBy(NameOf).ToDictionary(d => NameOf(d)!, d => d.Kind);
+        var kinds = named.SelectMany(d => NameOf(d) is { } name ? [(Name: name, d.Kind)] : Array.Empty<(string Name, string Kind)>())
+            .DistinctBy(n => n.Name).ToDictionary(n => n.Name, n => n.Kind);
         // A duplicate name is reported by CheckUnique; the checks below read the first.
         var sharedByName = shared.DistinctBy(s => s.Name).ToDictionary(s => s.Name);
         CheckUses(sharedByName, components, runtimes, kinds, errors);
@@ -297,8 +298,9 @@ public static class CatalogParser
     private static List<Reader> Readers(List<SharedResource> shared, List<Component> components, List<Runtime> runtimes) =>
     [
         .. shared.Select(s => new Reader(s.Source, string.Empty, s.Name, s.Scope, s.Part, s.Uses, OwnComponent: null, OwnEnvironment: null)),
-        .. components.SelectMany(c => c.Implementations.Where(i => i.Value.Environment is not null).Select(i => new Reader(
-            c.Source, $"implementations.{i.Key}.environment.", c.Name, SharedScope.Environment, i.Value.Environment!, c.Uses, OwnComponent: null, OwnEnvironment: null))),
+        .. components.SelectMany(c => c.Implementations.SelectMany(i => i.Value.Environment is { } environment
+            ? [new Reader(c.Source, $"implementations.{i.Key}.environment.", c.Name, SharedScope.Environment, environment, c.Uses, OwnComponent: null, OwnEnvironment: null)]
+            : Array.Empty<Reader>())),
         .. components.SelectMany(c => ClassParts(c).Select(p => new Reader(c.Source, $"{p.Path}.", c.Name, Scope: null, p.Part, c.Uses, c.Name, p.Environment))),
         .. runtimes.SelectMany(r => r.Implementations.Select(i => new Reader(
             r.Source, $"implementations.{i.Key}.", r.Name, Scope: null, new Part(i.Value.Nodes, new Dictionary<string, string>()), r.Uses, OwnComponent: null, OwnEnvironment: null))),
