@@ -36,6 +36,8 @@ Any blocking finding means CHANGES REQUIRED. Findings cite a file and line and t
   single implementation and no test seam, dead or commented-out code?
 - Is there a simpler approach that meets the brief? Name it.
 - New dependency or project without a stated reason?
+- Does the slice stay inside the phase goal its brief names ([roadmap](../plans/roadmap.md))? Work outside it, or a
+  design choice that makes a later phase's idea harder (roadmap rule 4), is a finding.
 
 ## 4. Architecture and separation of concerns — blocking
 - Dependency direction per standards §3; inner layers free of Pulumi/Azure/CLI.
