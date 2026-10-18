@@ -32,9 +32,9 @@ A mapping is the "blessed" configuration for a resource type. Illustrative value
 | `cache` | `azure-redis` | sku `Basic`, eviction_policy `allkeys-lru`, persistence false, monitoring true |
 | `queue` | `azure-service-bus` | sku `Standard`, max_message_size 256 KB, default_ttl 14 days, monitoring true |
 
-The only mapping implemented today resolves `database` to a **Cosmos DB** SQL container (partition key `/id`) in
+The only component implemented today resolves `database` to a **Cosmos DB** SQL container (partition key `/id`) in
 the environment's shared database, with a container-scoped grant, and exports `engine: cosmos-sql` so the code
-knows what it got — see `catalog/mappings/database` and `catalog/templates/azure`. The mapping, not the type,
+knows what it got — see `catalog/components/database.yaml` and `catalog/templates/azure`. The implementation, not the contract,
 picks the engine (user decision, C52); changing it for an existing workload must later route to approval (F54).
 
 **Environment-specific values** (illustrative, `database`):
@@ -106,8 +106,8 @@ Refined by settled decisions ([0006](../decisions/0006-infra-deployed-with-app.m
 
 1. Validate schema (pre-upload too, H50); store the uploaded definition and its SHA ([0007](../decisions/0007-definition-upload-snapshot.md)).
 2. Resolve — pure, backend-agnostic `resolve(definition, environment, mappings, policies) → graph + provenance`
-   with open references ([resolver.md](resolver.md)). Per requirement: find mapping (env-specific, else
-   default; none → error), apply overrides (whitelist, prod approval), apply policies, validate final config,
+   with open references ([resolver.md](resolver.md)). Per requirement: look up the component's implementation (env-type-specific, else
+   `default`; none → error), apply overrides (whitelist, prod approval), apply policies, validate final config,
    generate resource id, record chain.
 3. Preview and approval gate on the resolved graph and `PreviewAsync`: sensitive-diff approval, replacement of
    protected resources ([0010](../decisions/0010-replacement-protection-classes.md)), destructive removals (C16).
@@ -195,14 +195,14 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   as JSON; an `fn::entries` object, the workload's variables, as a list of `{name, value}` items sorted by name). A value built
   from a secret output, directly or through an export, is a secret; a secret variable makes the whole `variables` entry secret. The walk stops at the first failure and reports what was deployed.
 - **Walk order.** The infrastructure-phase nodes first, in graph order; then the runtime node (phase `runtime`, the Container App from the
-  runtime mapping) through the release flow below; the **after-runtime nodes** (phase `after-runtime`: grants that reference `runtime.*`) are
+  runtime) through the release flow below; the **after-runtime nodes** (phase `after-runtime`: grants that reference `runtime.*`) are
   deployed inside that flow, in its Grants step. Topological order can put the runtime before unrelated infrastructure (its id sorts first),
   so the walk does not rely on it. Each node, the grants included, is reported as it completes; the runtime's report comes last.
 - **Release flow (the runtime node).** The `container-app` template takes `revisionSuffix` and `traffic` as inputs and owns no opinion on
   either, so one template deploys all the moves of the flow, in this order: (1) **Dark**: deploy with a revision suffix (below), and `traffic` =
   `[{revisionName: <live revision>, weight: 100}]`, so the new revision exists and the live one keeps all traffic; the first deploy has no live
   revision and passes `[{latestRevision: true, weight: 100}]`. The new revision is the dark deploy's `revisionOutput`. (2) **Grants**: the
-  after-runtime nodes, deployed with the dark deploy's outputs. (3) **Probe**: GET the new revision's `fqdnOutput` + the mapping's `probe.path`
+  after-runtime nodes, deployed with the dark deploy's outputs. (3) **Probe**: GET the new revision's `fqdnOutput` + the runtime's `probe.path`
   through `IRevisionProbe`; the orchestrator retries up to `1 + timeoutSeconds / intervalSeconds` times, waiting `intervalSeconds` between
   attempts, because grants may take minutes to propagate. (4) **Shift**: the same suffix with `traffic` = `[{revisionName: <new revision>,
   weight: 100}]`, which changes traffic only and creates no revision; it also runs on a first deploy, so the stack's traffic names the
@@ -211,12 +211,12 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   run, so traffic stays on the live revision. **First-deploy exception:** there is no live revision to keep, so the dark deploy puts the
   latest revision at 100% and it serves before it is probed; a failed probe is still reported `failed`, but nothing protects the traffic.
   The probe target is built only from the dark deploy's FQDN output and the
-  mapping's path (a missing or empty FQDN output fails the Probe step without a probe), never from workload data or another node.
+  runtime's path (a missing or empty FQDN output fails the Probe step without a probe), never from workload data or another node.
   **Suffix:** `r` + a config part + a salt, 15 characters (Azure's rule: lowercase letters, digits and `-`, starting with a letter; the revision
   name `<app>--<suffix>` at most 54 characters). The config part is the first 8 hex digits of the SHA-256 of the template content and the
   filled runtime parameters (key, value, secret flag, in key order; the suffix and traffic inputs excluded). Azure rejects any template
   change whose suffix names an existing revision, even when the template equals that revision's old one, so the engine reads the previous
-  suffix from the stack (the mapping's `suffixOutput`, which the template echoes like the traffic): if it starts with `r` + this config part,
+  suffix from the stack (the runtime's `suffixOutput`, which the template echoes like the traffic): if it starts with `r` + this config part,
   it is reused (the same config as the last deploy: a re-run is `unchanged`, and a re-run after a probe failure finds the failed revision
   and probes and shifts it, creating no other); otherwise (first deploy, changed config or template, a revert) the salt is the first 6 hex
   digits of the SHA-256 of the previous suffix (of the empty string when there is none), so A to B to A gives A a new suffix and the old
@@ -225,10 +225,10 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   revision (an image that cannot be pulled, a transient ARM error), the outputs keep the old suffix and a same-config re-run computes the
   same suffix and is rejected until the config changes, which a fixed image does; traffic is unaffected.
   **Live revision:** read from the stack before the dark deploy: the template echoes the traffic it was last given as an output (the
-  mapping's `trafficOutput`), and the live revision is the last item with a `revisionKey` (none on a first deploy, or when only
+  runtime's `trafficOutput`), and the live revision is the last item with a `revisionKey` (none on a first deploy, or when only
   `latestKey` items are there); the app's `latestReadyRevisionName` is the newest revision, not the live one, so it cannot tell. **Unchanged:** the dark deploy
   reports no changes and the new revision is the live one: the runtime is `unchanged`, Probe and Shift are `skipped`, and the grants still
-  deploy; this holds for a same-config re-run after a first deploy too, since that deploy's shift named the revision. The runtime mapping's `release` block names the inputs, outputs and the shape of a traffic item, so none is in code, and
+  deploy; this holds for a same-config re-run after a first deploy too, since that deploy's shift named the revision. The runtime's `release` block names the inputs, outputs and the shape of a traffic item, so none is in code, and
   its `probe` carries the retry bound. The engine alone sets the suffix and the traffic: `TemplateLibrary.Check` rejects a runtime node whose
   config sets either (a workload-scope policy could otherwise), and the engine's values replace any that reach the walk.
   **Known limitation:** old revisions are not deactivated. Container Apps keeps a 0%-traffic revision active in multiple-revision mode,
@@ -263,14 +263,14 @@ running it again resumes. The workloads' containers share the environment databa
 ### Substrate (`jd env up`)
 
 An environment's substrate is provisioned by the same path as a workload's infrastructure: `Resolver.ResolveSubstrate` resolves an
-**environment definition** (substrate requirements, matched by catalog mappings like workload requirements; the owner is
+**environment definition** (substrate requirements, looked up in the catalog's components like workload requirements; the owner is
 named `@<name>`, so its ids and stacks (`_dev.dev.substrate.group`) can never collide with a workload's, and it has no runtime, so
 workload-scope policies add nothing) and the orchestrator deploys the graph.
 There is no second resolution or deploy path. Because Azure allows one free-tier Cosmos account per subscription there are two
 layers: `shared` (once per subscription: resource group, Log Analytics workspace with a daily cap, the Cosmos account with free
 tier, `totalThroughputLimit: 1000` and key (local) authentication disabled) and one definition per environment on top of the shared descriptor (`--base`): resource
 group, Container Apps environment (Consumption) on the shared workspace, and a Cosmos SQL database with 400 RU/s shared throughput
-in the shared account. Two environments use 800 of the 1,000 free RU/s. These values live in the catalog mappings, not in code.
+in the shared account. Two environments use 800 of the 1,000 free RU/s. These values live in the catalog components, not in code.
 
 After the deploy, `DescriptorComposer` evaluates the definition's `values` (each an expression over `${resource.<id>.<export>}`):
 an export is evaluated with its requirement's node outputs (`NodeReport.Outputs` holds only non-secret outputs; null and secret ones are dropped by `ExportValues`, which the orchestrator's second pass shares), which makes

@@ -38,7 +38,7 @@ and the Azure credentials in the environment (`source ~/.just-deliver/<subscript
   value from a node that is not deployed yet is missing), `failed`. The runtime node comes last and is released in steps, one
   line each under it: `dark` (the new revision, with no traffic when a live revision exists), `grants` (the nodes that depend on
   the runtime are deployed here), `probe` (`GET https://<revision fqdn><path>` must answer the expected status, retried up to the
-  mapping's timeout) and `shift` (all traffic to the new revision, also on a first deploy). A revision that fails its probe
+  runtime's timeout) and `shift` (all traffic to the new revision, also on a first deploy). A revision that fails its probe
   never gets traffic when a live one exists; fix the cause and run again. The first deploy of a workload has no live revision,
   so its revision serves before it is probed: a failed probe is reported but cannot protect traffic. A re-run with unchanged
   config reports the runtime `unchanged`, with probe and shift `skipped`.
@@ -72,9 +72,9 @@ jd env up samples/environments/dev.yaml    --catalog catalog --base shared.env.y
 - Two layers, because Azure allows one free-tier Cosmos account per subscription: `shared` (once per subscription: resource
   group, capped Log Analytics workspace, the Cosmos account) and one definition per environment on top (`dev`, later `stage`:
   resource group, Container Apps environment bound to the shared workspace, a 400 RU/s database in the shared account).
-  Everything about them (SKUs, caps, throughput, names, tags) is catalog data: `catalog/mappings/shared-substrate`,
-  `catalog/mappings/env-substrate`, `catalog/naming.yaml`.
-- `--base` is the descriptor of the layer below. It is the `env` context while resolving (mappings read
+  Everything about them (SKUs, caps, throughput, names, tags) is catalog data: `catalog/components/shared-substrate.yaml`,
+  `catalog/components/env-substrate.yaml`, `catalog/naming.yaml`.
+- `--base` is the descriptor of the layer below. It is the `env` context while resolving (components read
   `${env.cosmos.accountName}` and so on), and the written descriptor is its values plus the definition's. A key the base
   already has is an error; `grantable` paths are added to the base's.
 - `--region` defaults to `JD_REGION`; one of them is required. The descriptor takes its name and type from the definition.
@@ -96,7 +96,7 @@ An environment definition (`kind: EnvironmentDefinition`, [schema](../schemas/en
 kind: EnvironmentDefinition
 name: dev                       # the environment's name
 type: dev                       # an environment type catalog.yaml declares (shared, dev, stage, prod in the seed)
-requires:                       # substrate, matched by catalog mappings exactly like a workload's requirements
+requires:                       # substrate, catalog components looked up exactly like a workload's requirements
   - type: env-substrate
     id: substrate
 values:                         # the descriptor layout; each leaf is an expression over the requirement's exports
