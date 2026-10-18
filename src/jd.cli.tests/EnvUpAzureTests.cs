@@ -63,6 +63,8 @@ public sealed class EnvUpAzureTests : IDisposable
     // The groups are named after their environment, so the suffix finds them even when a deploy failed before writing a descriptor.
     // A failed teardown fails the test: a resource group left behind must never go unnoticed. The environment groups are deleted in
     // parallel (each takes about 27 minutes), the shared group last: the Container Apps environment of every other group logs to its workspace.
+    // Every group's diagnostic settings go first: a group delete leaves them behind, and a resource created again under the same id
+    // collides with them.
     private List<string> TestGroups()
     {
         var list = _az.Run("group", "list", "--subscription", _az.Subscription, "--query", $"[?tags.project=='just-deliver-mvp' && contains(name, '{_suffix}')].name", "-o", "tsv");
@@ -74,6 +76,11 @@ public sealed class EnvUpAzureTests : IDisposable
     private void DeleteResourceGroups()
     {
         var groups = TestGroups();
+        foreach (var group in groups)
+        {
+            _az.DeleteDiagnosticSettings(group);
+        }
+
         var environments = groups.Where(g => !g.Contains(SharedName, StringComparison.Ordinal)).ToList();
         foreach (var group in environments)
         {

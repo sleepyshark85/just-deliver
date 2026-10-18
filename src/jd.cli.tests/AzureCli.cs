@@ -79,6 +79,38 @@ internal sealed class AzureCli : IDisposable
     /// <summary>Runs <c>az</c> with these arguments (one string each, so a JMESPath query needs no quoting); the subscription is not added, so commands name it.</summary>
     public (int Code, string Output, string Error) Run(params string[] arguments) => Start(arguments);
 
+    /// <summary>
+    /// Deletes every diagnostic setting on every resource in the group; a teardown calls it before deleting the group, which leaves them
+    /// behind (as <c>tools/azure/delete-diagnostic-settings.sh</c> does for the scripts). A resource type that has no diagnostic settings
+    /// answers <c>ResourceTypeNotSupported</c> and is skipped; any other failure throws, so the teardown fails.
+    /// </summary>
+    public void DeleteDiagnosticSettings(string group)
+    {
+        var resources = Run("resource", "list", "--resource-group", group, "--subscription", Subscription, "--query", "[].id", "-o", "tsv");
+        foreach (var id in Lines(resources, $"list the resources of {group}"))
+        {
+            var settings = Run("monitor", "diagnostic-settings", "list", "--resource", id, "--query", "[].name", "-o", "tsv");
+            if (settings.Code != 0 && settings.Error.Contains("ResourceTypeNotSupported", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            foreach (var name in Lines(settings, $"list the diagnostic settings of {id}"))
+            {
+                var delete = Run("monitor", "diagnostic-settings", "delete", "--resource", id, "--name", name);
+                if (delete.Code != 0)
+                {
+                    throw new InvalidOperationException($"Could not delete diagnostic setting {name} of {id}: {delete.Error}");
+                }
+            }
+        }
+    }
+
+    // The lines of a tsv answer, or a failure naming what could not be done.
+    private static string[] Lines((int Code, string Output, string Error) result, string what) => result.Code == 0
+        ? result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        : throw new InvalidOperationException($"Could not {what}: {result.Error}");
+
     private (int Code, string Output, string Error) Start(IEnumerable<string> arguments)
     {
         var info = new ProcessStartInfo("az") { RedirectStandardOutput = true, RedirectStandardError = true };
