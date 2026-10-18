@@ -5,6 +5,7 @@
 
 ## Now
 
+- **Phase:** 1 — components, base ([roadmap](roadmap.md)); phase 0 (MVP) done, awaiting the user's manual run.
 - **Next slice:** —
 - **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
   required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
