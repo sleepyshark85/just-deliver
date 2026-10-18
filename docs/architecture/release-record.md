@@ -10,8 +10,8 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 
 ## 1. Where and how it is stored
 
-- **Location is configuration:** `JD_RECORDS_DIR`, read at the composition root like `PULUMI_BACKEND_URL`. It must name an existing
-  directory; `jd release deploy` (not `--preview`) and `jd release qualify` refuse to start without it, before anything is created. It is
+- **Location:** `<data>/records` in jd's data directory, through `IRecordStore` (S23, [connections.md](connections.md); before S23,
+  `JD_RECORDS_DIR`, an existing directory, was required). It is
   not in the environment descriptor: the descriptor is generated from the substrate's outputs and describes the environment, not where
   the operator keeps evidence.
 - **One file per attempt, never per label:** `<records>/<environment>/<label>/<UTC yyyyMMddTHHmmssfffZ>-<activity>.json`, activity

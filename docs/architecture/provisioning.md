@@ -245,9 +245,11 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   per-resource changes, and the time. A node is `unchanged` when its summary has no operation other than `Same`; "re-run = zero changes"
   means every deployed node is `unchanged` (the runtime as described above). The runtime's report also carries its steps (`dark`, `grants`,
   `probe`, `shift`, each `done`, `planned`, `skipped` or `failed` with a detail), printed one line each under the node.
-- **Configuration.** `jd deploy` reads `PULUMI_BACKEND_URL` and `PULUMI_CONFIG_PASSPHRASE` (or `PULUMI_CONFIG_PASSPHRASE_FILE`)
-  in the composition root and refuses to run when they are unset (an empty passphrase is allowed: local/dev only); a default
-  state location would lose track of stacks between runs. Optional: `PULUMI_HOME`, `JD_SCRATCH_DIR`. The orchestrator
+- **Configuration.** Nothing is read from the machine ([connections.md](connections.md)): the composition root hands the backend
+  provider the state store in jd's data directory, `file://<data>/state`, and its passphrase file `<data>/state.key` (random, generated
+  once, mode 600), which the provider passes to Pulumi as `PULUMI_CONFIG_PASSPHRASE_FILE`, removing an ambient
+  `PULUMI_CONFIG_PASSPHRASE` (Pulumi would prefer it). The state stays in one place between runs. Optional: `PULUMI_HOME`, `JD_SCRATCH_DIR`.
+  Pulumi's Azure provider authenticates with the `ARM_*` service principal when it is set, else the Azure CLI sign-in. The orchestrator
   refuses a graph whose catalog version or environment differs from the catalog and environment it was given.
 
 ### Release sets (`jd release deploy`)
@@ -292,11 +294,11 @@ nodes are filled from `GetOutputsAsync`; references to nodes not yet deployed st
 
 ### Backend and state
 
-- Backend set via `PULUMI_BACKEND_URL` in code (`file://~` locally), never in `Pulumi.yaml`, keeping
+- Backend set in code (`file://<data>/state` locally, jd's data directory), never in `Pulumi.yaml`, keeping
   templates backend-agnostic. Target: Azure Blob Storage, self-hosted, no Pulumi Cloud
   (`azblob://pulumi-state`, see [phase-0-bootstrap.md](../plans/phase-0-bootstrap.md)).
-- The local backend still encrypts secrets, so `PULUMI_CONFIG_PASSPHRASE` is required non-interactively;
-  empty is acceptable for local/dev only (D25).
+- The local backend still encrypts secrets, so a passphrase is required non-interactively: jd generates `<data>/state.key` once and
+  keeps it beside the state (D25's empty passphrase is no longer used).
 - Local state is incompatible with ephemeral hosting (Container Apps Jobs, CI runners); switch to a remote
   backend before moving execution off a persistent machine.
 

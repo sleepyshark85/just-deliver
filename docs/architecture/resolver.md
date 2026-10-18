@@ -330,8 +330,8 @@ stacks `_dev.dev.substrate.group`, so a workload named like the environment, wit
 substrate and a workload deploy never touches it ([ADR 0006](../decisions/0006-infra-deployed-with-app.md)). `ExpansionResult.Owner` records the owner kind
 (`Workload` or `Environment`); an environment owner has no runtime, so workload-scope policies do not apply. In a substrate
 part `${workload.name}` therefore evaluates to `@<name>`; the `{workload}` naming placeholder drops the `@` through `allowed`. Its team is empty
-(`${workload.team}` is empty). The `environment` is `definition.Over(region, base)`: the definition's name and type, the region given on the
-command line, and the **base descriptor's values**.
+(`${workload.team}` is empty). The `environment` is `definition.Over(base)`: the definition's name, region and type, and the **base descriptor's
+values**.
 
 A part reads another as `${<part>.<export>}`: a part of the same run is evaluated in place (the export's text, so the read becomes the
 node references it is made of, chained through further parts); otherwise it is the base descriptor's `values.<part>.<export>`. The
@@ -341,7 +341,7 @@ graph's `Parts` (part name → export → expression) carry the exports to the p
 export evaluated with the deployed node outputs; secret and null outputs are dropped, so an export reading one, directly or through a
 chain, stays pending and is an error, and nothing is written. The result is merged with the base's values (new keys only),
 and the composed text must pass `EnvironmentParser`, so every rule above holds.
-`region` is the caller's; the descriptor's `name` and `type` are the definition's.
+The descriptor's `name`, `region` and `type` are the definition's.
 
 ## Expressions
 
