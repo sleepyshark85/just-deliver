@@ -132,9 +132,12 @@ public class SubstrateTests
 
         Assert.Equal(400L, Scalar(graph, "database", "throughput"));
         Assert.Equal(new Resolved("rg-shared-1"), ((ConfigText)graph.Nodes.Single(n => n.Name == "database").Config["resourceGroupName"]).Result);
-        var apps = graph.Nodes.Single(n => n.Name == "apps");
-        Assert.Equal(new Resolved("law-1"), ((ConfigText)apps.Config["workspaceName"]).Result);
-        Assert.Equal(["@dev/dev/substrate/group"], apps.DependsOn);
+        Assert.Equal(["@dev/dev/substrate/group"], graph.Nodes.Single(n => n.Name == "apps").DependsOn);
+        // The environment's logs go to the shared workspace by its resource id, read from the base; the setting waits on its environment only.
+        var logs = graph.Nodes.Single(n => n.Name == "logs");
+        Assert.Equal(new Resolved("/ws/id"), ((ConfigText)logs.Config["workspaceResourceId"]).Result);
+        Assert.Equal(new Reference(ReferenceKind.Node, "apps", "environmentId"), Assert.Single(((Pending)((ConfigText)logs.Config["resourceId"]).Result).References));
+        Assert.Equal(["@dev/dev/substrate/apps"], logs.DependsOn);
     }
 
     [Fact]
@@ -142,7 +145,7 @@ public class SubstrateTests
     {
         var (graph, _) = await PrepareAsync(await DefinitionAsync("dev.yaml"), await SharedDescriptorAsync());
 
-        Assert.Equal(["@dev/dev/substrate/apps", "@dev/dev/substrate/database", "@dev/dev/substrate/group"], graph.Nodes.Select(n => n.Id).Order(StringComparer.Ordinal).ToList());
+        Assert.Equal(["@dev/dev/substrate/apps", "@dev/dev/substrate/database", "@dev/dev/substrate/group", "@dev/dev/substrate/logs"], graph.Nodes.Select(n => n.Id).Order(StringComparer.Ordinal).ToList());
         Assert.Equal(["components/database.yaml", "shared/apps-env.yaml", "shared/env-group.yaml"],
             graph.Nodes.SelectMany(n => n.Provenance.Values).Select(p => p.Source).Distinct().Order(StringComparer.Ordinal).ToList());
     }
@@ -154,7 +157,7 @@ public class SubstrateTests
         var (dev, _) = await PrepareAsync(await DefinitionAsync("dev.yaml", text => text.Replace("container-app, database, monitoring", "container-app, monitoring")), shared);
         var (layer, _) = await PrepareAsync(await DefinitionAsync(edit: text => text.Replace("container-app, database, monitoring", "container-app, monitoring")));
 
-        Assert.Equal(["apps", "group"], dev.Nodes.Select(n => n.Name).Order(StringComparer.Ordinal).ToList());
+        Assert.Equal(["apps", "group", "logs"], dev.Nodes.Select(n => n.Name).Order(StringComparer.Ordinal).ToList());
         Assert.Equal(["group", "workspace"], layer.Nodes.Select(n => n.Name).Order(StringComparer.Ordinal).ToList());
     }
 

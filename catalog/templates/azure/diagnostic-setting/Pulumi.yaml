@@ -1,0 +1,33 @@
+name: diagnostic-setting
+runtime: yaml
+description: >
+  Azure Monitor diagnostic setting that sends a resource's logs of one category group to a Log Analytics workspace, addressed by the
+  workspace's resource id: Azure RBAC on the deploying side, no workspace key.
+
+configuration:
+  # Resource ID of the resource whose logs are sent
+  resourceId:
+    type: String
+  # Resource ID of the Log Analytics workspace the logs go to (output workspaceId of log-analytics)
+  workspaceResourceId:
+    type: String
+  # Name of the setting, unique among the resource's diagnostic settings
+  settingName:
+    type: String
+  # Log category group to send, for example allLogs; the categories it holds are the resource type's
+  categoryGroup:
+    type: String
+
+resources:
+  setting:
+    type: azure-native:monitor:DiagnosticSetting
+    properties:
+      resourceUri: ${resourceId}
+      workspaceId: ${workspaceResourceId}
+      name: ${settingName}
+      logs:
+        - categoryGroup: ${categoryGroup}
+          enabled: true
+
+outputs:
+  settingId: ${setting.id}

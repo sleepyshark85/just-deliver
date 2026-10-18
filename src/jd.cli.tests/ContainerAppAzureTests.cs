@@ -4,9 +4,9 @@ using Xunit;
 namespace jd.cli.tests;
 
 /// <summary>
-/// Real resources, free tier only: a test-only catalog whose one type maps to a resource group, a capped Log Analytics workspace, a
-/// Container Apps environment and a <c>container-app</c> running the public sample image on Consumption (0.25 vCPU, 0.5Gi, scale to
-/// zero, one replica at most). Every value comes from the test catalog, none from the template. Deploys it with the real Pulumi backend
+/// Real resources, free tier only: a test-only catalog whose one type maps to a resource group, a Container Apps environment (no
+/// diagnostic setting, so its logs go nowhere; the env-up test covers that) and a <c>container-app</c> running the public sample image on
+/// Consumption (0.25 vCPU, 0.5Gi, scale to zero, one replica at most). Every value comes from the test catalog, none from the template. Deploys it with the real Pulumi backend
 /// on a local file state, checks revision mode, scale, identity and the variable through <c>az</c>, deploys again for zero changes, and
 /// always deletes the resource group. It creates no Cosmos account, so it can run next to the env-up test.
 /// Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>, <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment and the pulumi CLI.
@@ -53,22 +53,12 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
                           resourceGroupName: ${probe-group.name}
                           location: ${env.region}
                           tags: { project: just-deliver-mvp }
-                      workspace:
-                        template: azure/log-analytics
-                        config:
-                          resourceGroupName: ${group.resourceGroupName}
-                          location: ${group.location}
-                          workspaceName: ${name('law')}
-                          dailyQuotaGb: 0.15
                       apps:
                         template: azure/container-apps-environment
                         config:
                           resourceGroupName: ${group.resourceGroupName}
                           location: ${group.location}
                           environmentName: ${name('cae')}
-                          workspaceResourceGroupName: ${group.resourceGroupName}
-                          workspaceName: ${workspace.workspaceName}
-                          workspaceCustomerId: ${workspace.workspaceCustomerId}
                       app:
                         template: azure/container-app
                         config:
@@ -93,7 +83,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
             """);
         WriteRuntimeStandIn();
         WriteProbeGroup();
-        CopyTemplates("resource-group", "log-analytics", "container-apps-environment", "container-app");
+        CopyTemplates("resource-group", "container-apps-environment", "container-app");
     }
 
     [Fact]
@@ -125,7 +115,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
 
         var (secondCode, second) = await DeployAsync(backend, workload, environment, catalog);
         Assert.True(secondCode == 0, second);
-        foreach (var node in new[] { "group", "workspace", "apps", "app" })
+        foreach (var node in new[] { "group", "apps", "app" })
         {
             Assert.Contains($"probe/{node}: unchanged (no changes", second);
         }

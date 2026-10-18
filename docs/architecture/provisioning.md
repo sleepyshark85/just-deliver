@@ -273,7 +273,7 @@ There is no second resolution or deploy path. Because Azure allows one free-tier
 layers: `shared` (layer `shared`, once per subscription, deploying the shared resources: resource group, Log Analytics workspace with a daily cap, the Cosmos account with free
 tier, `totalThroughputLimit: 1000` and key (local) authentication disabled) and one definition per environment on top of the shared descriptor (`--base`),
 which never deploys a shared resource (one it reaches must be in the base, else an error before anything is created): resource
-group, Container Apps environment (Consumption) on the shared workspace, and a Cosmos SQL database with 400 RU/s shared throughput
+group, Container Apps environment (Consumption) whose diagnostic setting sends its logs to the shared workspace (no workspace key), and a Cosmos SQL database with 400 RU/s shared throughput
 in the shared account. Two environments use 800 of the 1,000 free RU/s. These values live in the catalog components, not in code.
 
 After the deploy, `DescriptorComposer` writes `values.<part>.<export>`: each part's export evaluated with the node outputs

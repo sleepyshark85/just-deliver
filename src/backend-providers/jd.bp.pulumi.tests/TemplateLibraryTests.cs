@@ -77,6 +77,26 @@ public partial class TemplateLibraryTests
         Assert.Equal(("w/dev/s/incomplete", "resourceGroupName"), (error.File, error.Location));
     }
 
+    [Fact]
+    public async Task The_diagnostic_setting_template_declares_its_inputs_and_output_and_refuses_an_unknown_input()
+    {
+        var library = await TemplateLibrary.LoadAsync(Templates);
+        string[] inputs = ["resourceId", "workspaceResourceId", "settingName", "categoryGroup"];
+        Dictionary<string, ConfigValue> Config(IEnumerable<string> keys) => keys.ToDictionary(k => k, k => (ConfigValue)Text("x"));
+        var setting = Node("setting", "azure/diagnostic-setting", Config(inputs));
+        var consumer = Node("consumer", "azure/resource-group", new() { ["resourceGroupName"] = Ref("setting", "settingId"), ["location"] = Text("x"), ["tags"] = Text("x") });
+        var incomplete = Node("incomplete", "azure/diagnostic-setting", Config(inputs.Skip(1)));
+        // The workspace key is not an input: the setting addresses the workspace by its resource id.
+        var keyed = Node("keyed", "azure/diagnostic-setting", Config([.. inputs, "sharedKey"]));
+
+        Assert.Empty(library.Check(Graph([setting, consumer])));
+        var missing = Assert.Single(library.Check(Graph([incomplete])));
+        Assert.Equal(("w/dev/s/incomplete", "resourceId"), (missing.File, missing.Location));
+        var unknown = Assert.Single(library.Check(Graph([keyed])));
+        Assert.Equal(("w/dev/s/keyed", "sharedKey"), (unknown.File, unknown.Location));
+        Assert.Contains("does not declare the input", unknown.Message);
+    }
+
     [GeneratedRegex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")]
     private static partial Regex Guid();
 

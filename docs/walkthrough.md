@@ -106,7 +106,8 @@ RECORDS="${JD_DATA_DIR:-$HOME/.local/share/jd}/records"             # where the 
 Signed in as a service principal instead (`az login --service-principal …`)? Pulumi's CLI authentication does not cover one: export
 `ARM_TENANT_ID`, `ARM_CLIENT_ID` and `ARM_CLIENT_SECRET` (all three; jd refuses a partial set) and `ARM_SUBSCRIPTION_ID` for Pulumi.
 
-Environments (exit 0 each; one node line per substrate node, then the descriptor path):
+Environments (exit 0 each; one node line per substrate node, then the descriptor path; shared has `group`, `workspace` and `cosmos`, dev and
+stage each `group`, `apps`, `logs` (the environment's diagnostic setting) and `database`):
 
 ```bash
 jd env up samples/environments/shared.yaml --catalog catalog --out "$JD_WALK/shared.env.yaml"

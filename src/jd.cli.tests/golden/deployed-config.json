@@ -111,7 +111,7 @@
   },
   {
     "stack": "_dev.dev.substrate.apps",
-    "contentSha256": "69acd461b24f55a767a4e67db16a4b7ac11d6cf1d1d7abfb0649607608b715bd",
+    "contentSha256": "6fc386dc156687121b575a8d23ce293191203bdc02c42fccd55b6321c63c2c4c",
     "config": {
       "environmentName": {
         "value": "cae-dev-7dae27",
@@ -124,17 +124,27 @@
       "resourceGroupName": {
         "value": "_dev.dev.substrate.group/resourceGroupName",
         "secret": false
-      },
-      "workspaceCustomerId": {
-        "value": "_shared.shared.substrate.workspace/workspaceCustomerId",
+      }
+    }
+  },
+  {
+    "stack": "_dev.dev.substrate.logs",
+    "contentSha256": "4e1308ab8db5fdf8703c74a495cec8c8dc5f70c5269fb145433f48063d80f796",
+    "config": {
+      "categoryGroup": {
+        "value": "allLogs",
         "secret": false
       },
-      "workspaceName": {
-        "value": "_shared.shared.substrate.workspace/workspaceName",
+      "resourceId": {
+        "value": "_dev.dev.substrate.apps/environmentId",
         "secret": false
       },
-      "workspaceResourceGroupName": {
-        "value": "_shared.shared.substrate.group/resourceGroupName",
+      "settingName": {
+        "value": "to-shared-workspace",
+        "secret": false
+      },
+      "workspaceResourceId": {
+        "value": "_shared.shared.substrate.workspace/workspaceId",
         "secret": false
       }
     }
@@ -181,7 +191,7 @@
   },
   {
     "stack": "_stage.stage.substrate.apps",
-    "contentSha256": "69acd461b24f55a767a4e67db16a4b7ac11d6cf1d1d7abfb0649607608b715bd",
+    "contentSha256": "6fc386dc156687121b575a8d23ce293191203bdc02c42fccd55b6321c63c2c4c",
     "config": {
       "environmentName": {
         "value": "cae-stage-32fe4c",
@@ -194,17 +204,27 @@
       "resourceGroupName": {
         "value": "_stage.stage.substrate.group/resourceGroupName",
         "secret": false
-      },
-      "workspaceCustomerId": {
-        "value": "_shared.shared.substrate.workspace/workspaceCustomerId",
+      }
+    }
+  },
+  {
+    "stack": "_stage.stage.substrate.logs",
+    "contentSha256": "4e1308ab8db5fdf8703c74a495cec8c8dc5f70c5269fb145433f48063d80f796",
+    "config": {
+      "categoryGroup": {
+        "value": "allLogs",
         "secret": false
       },
-      "workspaceName": {
-        "value": "_shared.shared.substrate.workspace/workspaceName",
+      "resourceId": {
+        "value": "_stage.stage.substrate.apps/environmentId",
         "secret": false
       },
-      "workspaceResourceGroupName": {
-        "value": "_shared.shared.substrate.group/resourceGroupName",
+      "settingName": {
+        "value": "to-shared-workspace",
+        "secret": false
+      },
+      "workspaceResourceId": {
+        "value": "_shared.shared.substrate.workspace/workspaceId",
         "secret": false
       }
     }

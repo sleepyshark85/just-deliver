@@ -1,6 +1,8 @@
 name: container-apps-environment
 runtime: yaml
-description: Provisions a Container Apps environment (Consumption only) that logs to a Log Analytics workspace
+description: >
+  Provisions a Container Apps environment (Consumption only) that sends its logs through Azure Monitor; a diagnostic setting on the
+  environment (diagnostic-setting) says where they go, so the environment holds no workspace key
 
 configuration:
   # Resource group of the environment
@@ -12,23 +14,6 @@ configuration:
   # Name of the Container Apps environment
   environmentName:
     type: String
-  # Resource group of the Log Analytics workspace
-  workspaceResourceGroupName:
-    type: String
-  # Name of the Log Analytics workspace the environment logs to
-  workspaceName:
-    type: String
-  # Customer id of that workspace (output workspaceCustomerId of log-analytics)
-  workspaceCustomerId:
-    type: String
-
-variables:
-  workspaceKeys:
-    fn::invoke:
-      function: azure-native:operationalinsights:getSharedKeys
-      arguments:
-        resourceGroupName: ${workspaceResourceGroupName}
-        workspaceName: ${workspaceName}
 
 resources:
   environment:
@@ -39,12 +24,7 @@ resources:
       environmentName: ${environmentName}
       # No workloadProfiles: the environment is Consumption only.
       appLogsConfiguration:
-        destination: log-analytics
-        logAnalyticsConfiguration:
-          customerId: ${workspaceCustomerId}
-          # Neither side is secret in the provider schema; without fn::secret the key would sit in state in clear text.
-          sharedKey:
-            fn::secret: ${workspaceKeys.primarySharedKey}
+        destination: azure-monitor
 
 outputs:
   environmentId: ${environment.id}

@@ -59,25 +59,44 @@
       "kind": "Create",
       "stack": "_stage.stage.substrate.apps",
       "phase": "Infrastructure",
-      "hash": "e675d54121e23ebf516fe538dea0374f1bb30660be37df4175ed1ef0c7a80280",
+      "hash": "30d260473c1872adefeb5c040f72aea9b3509e8086911a45e63bbfd41d42f86a",
       "dependsOn": [
         "@stage/stage/substrate/group"
       ],
       "config": {
         "environmentName": "cae-stage-32fe4c",
         "location": "${env-group.location}",
-        "resourceGroupName": "${env-group.name}",
-        "workspaceCustomerId": "00000000-0000-0000-0000-000000000001",
-        "workspaceName": "law-shared",
-        "workspaceResourceGroupName": "rg-shared"
+        "resourceGroupName": "${env-group.name}"
       },
       "provenance": {
         "environmentName": "Implementation: shared/apps-env.yaml",
         "location": "Implementation: shared/apps-env.yaml",
-        "resourceGroupName": "Implementation: shared/apps-env.yaml",
-        "workspaceCustomerId": "Implementation: shared/apps-env.yaml",
-        "workspaceName": "Implementation: shared/apps-env.yaml",
-        "workspaceResourceGroupName": "Implementation: shared/apps-env.yaml"
+        "resourceGroupName": "Implementation: shared/apps-env.yaml"
+      }
+    },
+    {
+      "id": "@stage/stage/substrate/logs",
+      "scope": "substrate",
+      "name": "logs",
+      "template": "azure/diagnostic-setting",
+      "kind": "Create",
+      "stack": "_stage.stage.substrate.logs",
+      "phase": "Infrastructure",
+      "hash": "87540c522dbd0db306c39bc7a91cfe40ef969fac3e9a62864690817acf905e1c",
+      "dependsOn": [
+        "@stage/stage/substrate/apps"
+      ],
+      "config": {
+        "categoryGroup": "allLogs",
+        "resourceId": "${apps.environmentId}",
+        "settingName": "to-shared-workspace",
+        "workspaceResourceId": "/subscriptions/s/resourceGroups/rg-shared/providers/Microsoft.OperationalInsights/workspaces/law-shared"
+      },
+      "provenance": {
+        "categoryGroup": "Implementation: shared/apps-env.yaml",
+        "resourceId": "Implementation: shared/apps-env.yaml",
+        "settingName": "Implementation: shared/apps-env.yaml",
+        "workspaceResourceId": "Implementation: shared/apps-env.yaml"
       }
     }
   ],

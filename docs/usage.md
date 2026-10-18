@@ -86,7 +86,7 @@ jd env up samples/environments/dev.yaml    --catalog catalog --base shared.env.y
 
 - Two layers, because Azure allows one free-tier Cosmos account per subscription: `shared` (once per subscription: resource
   group, capped Log Analytics workspace, the Cosmos account) and one definition per environment on top (`dev`, later `stage`:
-  resource group, Container Apps environment bound to the shared workspace, a 400 RU/s database in the shared account).
+  resource group, Container Apps environment whose diagnostic setting sends its logs to the shared workspace, a 400 RU/s database in the shared account).
   What a layer deploys follows from its `offers`: the shared resources (`catalog/shared/`) and components' `environment` parts the
   offered components and runtime reach through `uses`. Everything about them (SKUs, caps, throughput, names, tags) is catalog data:
   `catalog/shared/*.yaml`, `catalog/components/database.yaml`, `catalog/naming.yaml`.
