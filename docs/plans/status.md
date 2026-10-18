@@ -6,7 +6,7 @@
 ## Now
 
 - **Phase:** 1 — components, base ([roadmap](roadmap.md)); phase 0 (MVP) done, awaiting the user's manual run.
-- **Next slice:** S21d (in progress). **Waiting for the user:** —
+- **Next slice:** S21f (in progress). **Waiting for the user:** —
 - **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
   required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
   leaves the deployment live; ADR 0007 kept (the set file's bytes are stored write-once as `set.yaml` per label).
@@ -59,7 +59,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S21b | Components and runtimes (implementations per type) | done | S21b PR | 3 | Opus developer, fixes by the fixer, one comment by the lead. Round 1: 2 blocking (a class-set check whose mutation survived; a public helper used only inside the resolver); round 2: 1 (uncommented `!` the fixer added); round 3 APPROVE. `Component`/`Runtime` replace `ResourceType`/`Mapping`; exact lookup by environment type with `default`; `MappingMatcher` deleted. Production +403/−395 (net ≈0; lead accepted the gross size as a replacement). Azure gate: none, artifact unchanged (snapshot diff empty). Azure fixtures converted → phase-exit gate. |
 | S21c | Monitoring as a requirement; policies require | done | S21c PR | 2 | Opus developer, fixes by the fixer, comment trim by the lead. Round 1: 2 blocking (a declared monitoring requirement with a bad class also got a false "add monitoring" error; resolver.md still described policy `add`). Production +69/−79. Snapshot diff exactly the §5 monitoring change (reviewer-checked). Azure gate: green (CLI 214/214, 1h20m, subscription empty). Upgrade gate (main 5a5ba14 → 7c8bc74, one state): env up all `unchanged`; per workload exactly `monitoring/appinsights` + `monitoring/access` created, runtime updated (dark, probe, shift), database nodes `unchanged`, IQ passed; usage.md's orphan-removal recipe run on one workload (works); teardown, subscription empty. |
 | S21d | Shared resources, `uses`, load checks | done | S21d PR | 3 | Opus developer (fresh one for round 1's fixes), lead fixed round 2. Round 1: 7 blocking (node-name rule skipped shared/environment parts; a second cycle detector beside `TopologicalOrder`; name lookups built three times, long parameter lists; two surviving mutations; public helpers); round 2: 1 (uncommented `!`); round 3 APPROVE. `SharedResource` (5 seed files), implementations' `environment` part, `uses`, load checks (names, uses/scope/cycles, roots and exports, node names); loaded, not consumed. Production +188/−37. Azure gate: none, artifact unchanged (snapshot and goldens diff empty). |
-| S21e | Environments from offers | todo | | | ~200; no gate (snapshot unchanged) |
+| S21e | Environments from offers | done | S21e PR | 2 | Opus developer, fixes by the fixer. Round 1: 3 blocking (a node in one part could shadow a shared resource another part reads, now a load error; a dead `includeSecrets` option and stale doc in `ExportValues`; a surviving `.All`→`.Any` mutant, check simplified to part presence); round 2 APPROVE. `offers`, the type's `layer`, `env up` collects parts into `substrate`, in-run exports in place, descriptor keyed by part (old descriptors need `env up --force`); transitional substrate components deleted; teardown.sh/walkthrough keyed reads (run at the phase-exit gate). Implicit groups deployed when anything offered uses them (§2 reworded). Azure gate: none, snapshot unchanged. |
 | S21f | Workloads through `uses`; grant target rule; `grantable` removed | todo | | | ~220; no gate (snapshot unchanged); then the phase-exit gate |
 | S22 | Container Apps logs without the workspace shared key | todo | | | After phase 1 (user, 2026-10-18). The apps environment sends logs through Azure Monitor (diagnostic settings) instead of `appLogsConfiguration` with the shared key; changes the environment's artifact → Azure gate + upgrade gate. Phase goal to name in the brief. |
 
@@ -115,6 +115,8 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-18 (S21a–e)** — S21a–e merged (rounds 2, 1–2, 2, 3, 2). User decisions (#59): phase-1 exit wording, App Insights recreation (a), Cosmos local auth off, Log Analytics shared key removal as S22. Azure gate only when what reaches Azure changes; S21c alone ran the gate and the upgrade gate (lead script in the session scratchpad). Next: S21f, then the phase-1 exit gate (`verify.sh --azure` + upgrade-style run incl. teardown.sh and walkthrough keyed reads), then S22; the user runs the MVP manually after the refactor.
 
 - **2026-10-18 (roadmap, principles, S21 design)** — User: a north star (workloads as components), broken into ideas N1–N10 and
   phases 0–5 (`roadmap.md`; every brief names its phase goal). Design principles 6–14 from the discussions (explicit over implicit,
