@@ -99,7 +99,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     [Fact]
     public async Task Deploy_creates_a_multi_revision_app_scaled_to_zero_with_an_identity_and_the_variable_and_a_second_deploy_changes_nothing()
     {
-        var (backend, workload, environment, catalog) = Prepare();
+        var (backend, workload, environment, catalog) = await PrepareAsync();
         WriteCatalog("a", LatestRevisionTraffic);
 
         var (firstCode, first) = await DeployAsync(backend, workload, environment, catalog);
@@ -134,7 +134,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     [Fact]
     public async Task A_dark_revision_gets_no_traffic_and_the_shift_moves_all_of_it_to_the_new_revision_without_creating_one()
     {
-        var (backend, workload, environment, catalog) = Prepare();
+        var (backend, workload, environment, catalog) = await PrepareAsync();
 
         WriteCatalog("a", LatestRevisionTraffic);
         var (liveCode, live) = await DeployAsync(backend, workload, environment, catalog);
@@ -167,9 +167,9 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     private const string LatestRevisionTraffic = "[{ latestRevision: true, weight: 100 }]";
 
     // The backend, workload, environment and catalog directory of one probe; the catalog files are written by WriteCatalog.
-    private (IBackEndProvider Backend, string Workload, string Environment, string Catalog) Prepare()
+    private async Task<(IBackEndProvider Backend, string Workload, string Environment, string Catalog)> PrepareAsync()
     {
-        var environment = Write("environment.yaml", $"kind: Environment\nname: s15a-{Suffix}\nregion: {Region}\ntype: dev\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
+        var environment = Write("environment.yaml", $"kind: Environment\nname: s15a-{Suffix}\nregion: {await RegionAsync()}\ntype: dev\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
         var workload = Write("workload.yaml", "apiVersion: just-deliver/v1\nkind: Workload\nmetadata: { name: s15a-probe, team: platform-team }\ncontainer:\n  image: example.invalid/probe:1\nrequires:\n  - type: probe\n");
         return (CreateBackend(), workload, environment, Path.Combine(Root, "catalog"));
     }

@@ -275,7 +275,7 @@ public sealed partial class ReleaseDeployCliTests
 
         var stderr = new StringWriter();
         var code = await ReleaseDeployCli.PromoteAsync(
-            "dev/1.0.0/set.yaml", stage, Catalog, changed, new StringWriter(), stderr, backend, backend, _live, _clock, name => name == "JD_DATA_DIR" ? _data : null, CancellationToken.None);
+            stage, Catalog, changed, new StringWriter(), stderr, backend, backend, _live, _clock, name => name == "JD_DATA_DIR" ? _data : null, CancellationToken.None);
 
         Assert.Equal(1, code);
         Assert.Contains("changed since it was checked", stderr.ToString());

@@ -50,7 +50,7 @@ public sealed class DeployAzureTests : ProbeAzureTest
         WriteProbeGroup();
         CopyTemplates("resource-group", "log-analytics");
 
-        var environment = Write("environment.yaml", $"kind: Environment\nname: s11-{Suffix}\nregion: {Region}\ntype: dev\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
+        var environment = Write("environment.yaml", $"kind: Environment\nname: s11-{Suffix}\nregion: {await RegionAsync()}\ntype: dev\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
         var workload = Write("workload.yaml", "apiVersion: just-deliver/v1\nkind: Workload\nmetadata: { name: s11-probe, team: platform-team }\ncontainer:\n  image: example.invalid/probe:1\nrequires:\n  - type: probe\n");
 
         var backend = CreateBackend();

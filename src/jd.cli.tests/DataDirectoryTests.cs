@@ -33,6 +33,7 @@ public sealed class DataDirectoryTests : IDisposable
 
         Assert.Equal((Path.Combine(_temp, "data", "state"), Path.Combine(_temp, "data", "state.key")), (state, key));
         Assert.True(Directory.Exists(state));
+        Assert.Equal(new[] { state, key }, Directory.GetFileSystemEntries(Path.Combine(_temp, "data")).Order(StringComparer.Ordinal)); // nothing left beside the key
         Assert.Equal((state, key), again);
         Assert.Equal(generated, File.ReadAllText(key));
         Assert.Equal(32, Convert.FromBase64String(generated).Length);

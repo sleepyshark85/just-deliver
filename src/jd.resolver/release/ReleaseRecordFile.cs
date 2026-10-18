@@ -14,6 +14,9 @@ public static class ReleaseRecordFile
     /// <summary>The name of the set kept beside a label's records.</summary>
     public const string SetFileName = "set.yaml";
 
+    /// <summary>How messages name the set kept for <paramref name="label"/> on <paramref name="environment"/>: <c>&lt;environment&gt;/&lt;label&gt;/set.yaml</c>.</summary>
+    public static string KeptSetName(string environment, string label) => $"{environment}/{label}/{SetFileName}";
+
     /// <summary>The activity of a record written by <c>release deploy</c>.</summary>
     public const string DeployActivity = "deploy";
 

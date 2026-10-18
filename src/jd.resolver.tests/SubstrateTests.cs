@@ -377,13 +377,21 @@ public class SubstrateTests
     public async Task The_definitions_region_is_the_descriptors_and_a_definition_without_one_is_a_schema_error()
     {
         var (_, dev) = await PrepareAsync(await DefinitionAsync("dev.yaml", text => text.Replace("region: southeastasia", "region: region-9", StringComparison.Ordinal)), await SharedDescriptorAsync());
-        var path = Path.Combine(Directory.CreateTempSubdirectory("jd-def").FullName, "dev.yaml");
-        await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(Sample("dev.yaml"))).Replace("region: southeastasia\n", string.Empty, StringComparison.Ordinal));
+        var directory = Directory.CreateTempSubdirectory("jd-def").FullName;
+        try
+        {
+            var path = Path.Combine(directory, "dev.yaml");
+            await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(Sample("dev.yaml"))).Replace("region: southeastasia\n", string.Empty, StringComparison.Ordinal));
 
-        Assert.Equal("region-9", (await ComposeAsync(dev, DevOutputs)).Region);
-        var loaded = await EnvironmentDefinitionFile.LoadAsync(path);
-        Assert.Null(loaded.Definition);
-        Assert.Contains(loaded.Errors, e => e.File == path && e.Message.Contains("region", StringComparison.Ordinal));
+            Assert.Equal("region-9", (await ComposeAsync(dev, DevOutputs)).Region);
+            var loaded = await EnvironmentDefinitionFile.LoadAsync(path);
+            Assert.Null(loaded.Definition);
+            Assert.Contains(loaded.Errors, e => e.File == path && e.Message.Contains("region", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]

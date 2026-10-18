@@ -79,8 +79,7 @@ internal static class PromoteCli
         }
 
         stdout.WriteLine($"promoting {label} from {policy.QualifiedOn} (set sha256 {setSha256})");
-        // The kept set is named in messages as the records lay it out.
         return await ReleaseDeployCli.PromoteAsync(
-            $"{policy.QualifiedOn}/{label}/{ReleaseRecordFile.SetFileName}", to, catalog, new ReleaseDeployCli.Promotion(principal, policy.QualifiedOn, label, setSha256), stdout, stderr, backend, probe, liveRevisions, time, environmentVariable, cancellationToken);
+            to, catalog, new ReleaseDeployCli.Promotion(principal, policy.QualifiedOn, label, setSha256), stdout, stderr, backend, probe, liveRevisions, time, environmentVariable, cancellationToken);
     }
 }

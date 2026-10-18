@@ -45,14 +45,20 @@ internal sealed class DataDirectory
         var key = Path.Combine(Path.GetFullPath(Root), KeyFile);
         if (!File.Exists(key))
         {
+            // Written whole beside it, then moved into place: a run that stops part-way never leaves a partial key that would be kept.
+            var written = $"{key}.{Path.GetRandomFileName()}";
             var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
             if (!OperatingSystem.IsWindows())
             {
                 options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
             }
 
-            using var stream = new FileStream(key, options);
-            stream.Write(Encoding.ASCII.GetBytes(Convert.ToBase64String(RandomNumberGenerator.GetBytes(KeyLength))));
+            using (var stream = new FileStream(written, options))
+            {
+                stream.Write(Encoding.ASCII.GetBytes(Convert.ToBase64String(RandomNumberGenerator.GetBytes(KeyLength))));
+            }
+
+            File.Move(written, key);
         }
 
         return (state, key);

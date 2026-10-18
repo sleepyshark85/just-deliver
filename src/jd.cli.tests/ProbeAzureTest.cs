@@ -22,7 +22,7 @@ public abstract class ProbeAzureTest : IDisposable
 
     protected string ResourceGroup => $"rg-jd-{Tag}-{Suffix}";
 
-    protected static string Region => AzureCli.Region;
+    protected static Task<string> RegionAsync() => AzureCli.RegionAsync();
 
     public void Dispose()
     {

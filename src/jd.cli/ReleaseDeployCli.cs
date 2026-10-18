@@ -50,11 +50,13 @@ internal static class ReleaseDeployCli
         return await RunCheckedAsync(options, backend, probe, identity, liveRevisions, time, environmentVariable, stdout, stderr, cancellationToken);
     }
 
-    // The walk of `jd promote` on the target, below the gate that refuses a direct deploy: the kept set's name in messages, the target, the catalog, and what promote settled.
+    // The walk of `jd promote` on the target, below the gate that refuses a direct deploy: the target, the catalog, and what promote settled. The kept
+    // set is named in messages as the records name it.
     public static Task<int> PromoteAsync(
-        string keptSet, string environment, string catalog, Promotion promotion, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe,
+        string environment, string catalog, Promotion promotion, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe,
         ILiveRevisions? liveRevisions, TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken) =>
-        RunCheckedAsync(new Options(keptSet, environment, catalog, false, false) { Promotion = promotion }, backend, probe, null, liveRevisions, time, environmentVariable, stdout, stderr, cancellationToken);
+        RunCheckedAsync(
+            new Options(ReleaseRecordFile.KeptSetName(promotion.QualifiedOn, promotion.Label), environment, catalog, false, false) { Promotion = promotion }, backend, probe, null, liveRevisions, time, environmentVariable, stdout, stderr, cancellationToken);
 
     private static async Task<int> RunCheckedAsync(
         Options options, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions, TimeProvider time,
