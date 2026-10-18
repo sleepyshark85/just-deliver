@@ -55,7 +55,7 @@ catalog/
 The directory layout is organisational only. The loader takes every `*.yaml` under the catalog root
 (except `templates/`, which holds Pulumi YAML) as **one YAML document per file** (no `---`
 multi-document files) and finds out what it is from the required top-level `kind`: `Catalog`,
-`Component`, `Runtime`, `SharedResource`, `Policy`, `Naming` or `Roles`. An unknown or missing `kind` is an error; the retired kinds `ResourceType` and
+`Component`, `Runtime`, `SharedResource`, `Policy`, `Naming`, `Roles` or `Grants`. An unknown or missing `kind` is an error; the retired kinds `ResourceType` and
 `Mapping` are rejected with a message saying what replaced them.
 
 The catalog is versioned as one unit; a deployment records the catalog version next to the
@@ -77,6 +77,7 @@ loader; the expression evaluator interprets them later.
 | `Policy` | `name`, `reason`, `match`, and at least one of `set` / `default` / `require` | `name` unique. `require` names a declared component, only on a workload-scope policy. `add` is retired: a policy with it is rejected with a message saying `require` replaces it |
 | `Naming` | `rules` (resource kind → `pattern`, `maxLength`, `allowed`) | files merge; a rule is defined once; `allowed` must be a valid regex character class that accepts every hex digit `0-9a-f` |
 | `Roles` | `roles` (name → role-definition GUID) | files merge; a role is defined once |
+| `Grants` | `targets` (grant template → the input that names its target) | files merge; a template is listed once. Every `grant` node's template must be listed ([Engine rules](#engine-rules-generic-code-written-once), Security) |
 
 A node is `{ template, kind?: create | grant, config }`; `kind` defaults to `create`. Policy `match`
 keys are `type`, `class`, `environmentType`, `kind`, `runtime` and `template`.
@@ -99,6 +100,7 @@ way; a missing class is an error naming the component, the class and the environ
 kind: Component
 name: database
 description: A database for the workload. The platform's implementation decides the engine (today a container in the environment's shared Cosmos DB, SQL API); the `engine` export tells the code which one it got.
+uses: [cosmos-account]                              # the shared resource its parts read
 exports: [engine, endpoint, database, container]   # the only valid ${resource.<id>.*}
 implementations:
   default:                                          # every environment type without its own key
@@ -108,29 +110,29 @@ implementations:
           container:
             template: azure/cosmos-sql-container
             config:
-              accountId: ${env.cosmos-account.id}
-              databaseName: ${env.database.databaseName}
+              accountId: ${cosmos-account.id}
+              databaseName: ${database.databaseName}        # its own component's environment part
               containerName: ${name('cosmos-container')}
               partitionKeyPath: /id
           access:
             kind: grant                                   # surfaced in the approval diff
             template: azure/cosmos-sql-role-assignment
             config:
-              accountId: ${env.cosmos-account.id}
-              scope: ${container.scope}                   # this container only, not the account
+              accountId: ${cosmos-account.id}             # not the target: a grant may read what the component uses
+              scope: ${container.scope}                   # the target (grants.yaml): this container only, not the account
               principalId: ${runtime.principalId}         # this reference alone orders it after the revision step
               roleGuid: ${role.cosmos-data-contributor}
               roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
         exports:
           engine: cosmos-sql                              # a literal from data: what the code is talking to
-          endpoint: ${env.cosmos-account.endpoint}
-          database: ${env.database.databaseName}
+          endpoint: ${cosmos-account.endpoint}
+          database: ${database.databaseName}
           container: ${container.containerName}
 ```
 
 Team overrides are out of the MVP, so the format has no `overridable` block yet.
 
-The Cosmos account and one shared-throughput database (400 RU/s) per environment are substrate resources (the shared resource `cosmos-account` and the component's `environment` part, deployed by `jd env up`), so the implementation reads them from `${env.cosmos-account.…}` and `${env.database.…}` and creates only the workload's container (it has no throughput of its own) plus a grant scoped to that container. A grant node reads only grantable environment values, so the grant template derives everything else from `accountId`.
+The Cosmos account and one shared-throughput database (400 RU/s) per environment are substrate resources (the shared resource `cosmos-account` and the component's `environment` part, deployed by `jd env up`), so the implementation reads them as `${cosmos-account.…}` (through `uses`) and `${database.…}` (its own environment part), resolved from the descriptor's values, and creates only the workload's container (it has no throughput of its own) plus a grant targeting that container. The grant's target is its own node's output; the template derives the rest from `accountId`.
 
 ### Policy — IT Ops layer
 
@@ -202,14 +204,15 @@ revision and shift traffic to it; [provisioning.md](provisioning.md)).
 
 A `Runtime` produces the workload's runtime: a node named `runtime` ([ADR 0013](../decisions/0013-container-apps-runtime.md)). Its
 implementation is looked up like a component's (the environment's type, else `default`), and the engine expands it like any other
-implementation, once per workload, so the app is not special-cased. Until workloads choose a runtime (S21f), the catalog declares
-exactly one `Runtime`; none or several is an error for every workload.
+implementation, once per workload, so the app is not special-cased. A workload gets the runtime its environment offers (an environment
+definition offers at most one); a descriptor that offers none is an error for every workload ("environment X offers no runtime").
 
 ```yaml
 # runtimes/container-app.yaml
 kind: Runtime
 name: container-app
 description: Every workload runs as a Container App on Consumption in the environment's Container Apps environment.
+uses: [env-group, apps-env]                          # the environment's group and Container Apps environment
 implementations:
   default:
     probe: { path: /health, expectedStatus: 200, timeoutSeconds: 300, intervalSeconds: 5 }   # data for the release flow; the resolver only carries it
@@ -228,9 +231,9 @@ implementations:
       runtime:
         template: azure/container-app
         config:
-          resourceGroupName: ${env.env-group.name}
+          resourceGroupName: ${env-group.name}
           location: ${env.region}
-          containerAppsEnvironmentId: ${env.apps-env.id}
+          containerAppsEnvironmentId: ${apps-env.id}
           containerAppName: ${name('ca')}
           image: ${workload.image}
           targetPort: ${workload.port}
@@ -264,7 +267,7 @@ properties, so a variable may itself be named `fn::entries`. A policy gives indi
 - A variable's value is text that may contain only `${resource.<id>.<output>}` references; the workload validator
   (`WorkloadRules`) rejects any other `${…}` (`env`, `name()`, `workload`, `runtime`, `role`, a node), naming the variable, because a
   variable is workload input crossing into the platform ([D19](../open-questions.md)). `${resource.<id>.<export>}` takes the value of that requirement's export. An export
-  that is already a value (`${env.cosmos-account.endpoint}`) is resolved at expansion, so preview shows it; one that reads a node output
+  that is already a value (`${cosmos-account.endpoint}`) is resolved at expansion, so preview shows it; one that reads a node output
   (`${container.containerName}`) stays pending and adds an edge from the runtime node to that node (see Security and the depends-on
   field). An unknown id or export is an error naming the variable, reported against the workload file at `container.variables.<NAME>`, as is any
   other problem in a variable's value.
@@ -287,35 +290,32 @@ name: dev                 # same pattern as workload ids
 region: southeastasia
 type: dev                 # an environment type catalog.yaml declares
 offers: [container-app, database, monitoring]   # the definition's offers; a shared layer's descriptor offers nothing
-values:                   # keyed by part: each deployed part's exports, read as ${env.<part>.<export>} (in a later env up as ${<part>.<export>})
+values:                   # keyed by part: each deployed part's exports, read as ${<part>.<export>} by a part that uses it
   shared-group: { name: rg-…, location: … }       # from the base (the shared layer)
   cosmos-account: { id: …, name: …, endpoint: …, resourceGroup: … }
   log-analytics: { id: …, name: …, customerId: …, resourceGroup: … }
   env-group: { name: rg-…, location: … }          # this layer's own parts
   apps-env: { id: …, defaultDomain: … }
   database: { databaseName: …, databaseId: … }
-grantable:                # paths under values that workloads may grant on (transitional until S21f)
-  - cosmos-account.id
 ```
 
 - **Type:** `catalog.yaml` declares the environment types (`environmentTypes`: type → `layer: shared | environment`, optional
   `approval: true`; implementations are keyed by environment-layer types or `default`). A descriptor or
   definition of an undeclared type is an error naming the declared ones, and one of a type with `approval: true` must carry `approval`
   (`EnvironmentTypeCheck`, called by the CLI with the catalog before anything resolves or deploys).
-- **Lookup:** `env.name`, `env.region` and `env.type` are reserved and come from the top-level
-  fields; any other `env.<dot.path>` resolves to a string inside `values`. A path to a group (for
-  example `env.cosmos-account`) or to nothing is not found.
+- **Lookup:** `env.name`, `env.region` and `env.type` come from the top-level fields and are the only `env.*` reads; any other
+  `env.<path>` is an error at load and in the evaluator. `values.<part>.<export>` is read as `${<part>.<export>}` by a part whose
+  `uses` (or own component) names it.
 - **Rules beyond the schema:** `values` must not define `name`, `region` or `type`; no key in `values`
-  may contain `.` (a dot path must be unambiguous); every `grantable` path must be a value in `values`. The loader reports all errors with their location.
-- **Security:** `grantable` is the boundary the engine enforces for `grant` nodes
-  ([D19](../open-questions.md)): a workload can only grant on the listed `env.*` resources.
+  may contain `.` (a dot path must be unambiguous). The loader reports all errors with their location.
+- **Offers:** a workload's requirement must name a component in `offers`, else an error naming the environment and the component;
+  the workload's runtime is the offered one.
 
 ### Environment definition
 
 The descriptor is produced from an **environment definition**
 ([`schemas/environment-definition.schema.json`](../../schemas/environment-definition.schema.json), `jd.resolver`):
-`kind: EnvironmentDefinition`, `name`, `type`, `offers` (names of catalog components and runtimes, at most one runtime) and the transitional
-`grantable` (until S21f). What the environment deploys follows from the offers and the type's layer ([components.md](components.md) §2–3),
+`kind: EnvironmentDefinition`, `name`, `type` and `offers` (names of catalog components and runtimes, at most one runtime). What the environment deploys follows from the offers and the type's layer ([components.md](components.md) §2–3),
 collected by `Expander.ExpandEnvironment` into one scope `substrate` (`Expander.SubstrateScope`):
 
 - **shared layer:** the `scope: shared` resources the offered components and runtime reach through `uses`;
@@ -331,7 +331,7 @@ substrate and a workload deploy never touches it ([ADR 0006](../decisions/0006-i
 (`Workload` or `Environment`); an environment owner has no runtime, so workload-scope policies do not apply. In a substrate
 part `${workload.name}` therefore evaluates to `@<name>`; the `{workload}` naming placeholder drops the `@` through `allowed`. Its team is empty
 (`${workload.team}` is empty). The `environment` is `definition.Over(region, base)`: the definition's name and type, the region given on the
-command line, and the **base descriptor's values and `grantable`**.
+command line, and the **base descriptor's values**.
 
 A part reads another as `${<part>.<export>}`: a part of the same run is evaluated in place (the export's text, so the read becomes the
 node references it is made of, chained through further parts); otherwise it is the base descriptor's `values.<part>.<export>`. The
@@ -340,13 +340,13 @@ graph's `Parts` (part name → export → expression) carry the exports to the p
 `DescriptorComposer` turns the resolved graph and the node outputs into the descriptor text: `values.<part>.<export>` is each part's
 export evaluated with the deployed node outputs; secret and null outputs are dropped, so an export reading one, directly or through a
 chain, stays pending and is an error, and nothing is written. The result is merged with the base's values (new keys only),
-`grantable` is the union, and the composed text must pass `EnvironmentParser`, so every rule above holds.
+and the composed text must pass `EnvironmentParser`, so every rule above holds.
 `region` is the caller's; the descriptor's `name` and `type` are the definition's.
 
 ## Expressions
 
 Config values, exports and workload variables are strings that may mix text and `${…}` expressions
-(`${env.cosmos-account.id}/dbs/${env.database.databaseName}`). Non-string values are never
+(`${cosmos-account.id}/dbs/${database.databaseName}`). Non-string values are never
 touched. There is no escaping and no operators. Evaluation is pure (`jd.resolver.expressions`): the caller supplies a
 context (catalog roles and naming, environment descriptor, workload name and team, the current id, the node names in
 scope, the outputs already known) and a file/location for error reports.
@@ -360,21 +360,21 @@ path       := segment { '.' segment }          # segment: letters, digits, '_' a
 
 | Path | Meaning |
 |---|---|
-| `env.<path>` | `EnvironmentDescriptor.TryGet`; an unknown path is an error |
+| `env.name`, `env.region`, `env.type` | the environment's own fields (`EnvironmentDescriptor.TryGet`); any other `env.<path>` is an error |
 | `role.<name>` | role GUID from the catalog `Roles`; unknown is an error |
 | `workload.name`, `workload.team` | the workload being resolved |
 | `workload.image`, `workload.port` | `container.image`, and the first of `container.ports`; a workload with no ports makes `workload.port` an error naming the workload. Like every expression result it is text (`"8080"`): Pulumi config values are strings, and the template's `Integer` input parses it. Meant for runtimes; the graph carries both (`WorkloadImage`, `WorkloadPort`), so the orchestrator's second pass evaluates them like the first |
 | `resource.<id>.<export>` | reference to a requirement's export: **pending** unless the caller knows its value. Read only by the `runtime` node (its workload variables); an error in any other node |
 | `runtime.<output>` | **pending** reference to the runtime node (an edge to it); an environment definition has no runtime, so there it is an error |
 | `<node>.<output>` | **pending** reference to an output of a node in scope |
-| `<part>.<export>` | not a node in scope: an export of a part of this environment run, evaluated in place; else the base descriptor's `values.<part>.<export>`, reported like an `env.*` read; a path found in neither is an error |
+| `<part>.<export>` | not a node in scope: an export of a part of this environment run, evaluated in place; else the descriptor's `values.<part>.<export>` (a workload run deploys no part, so every read comes from there), recorded as a part read; a path found in neither is an error |
 
 **Two phases.** An expression evaluates to `Resolved(value)`, or to `Pending(original, references)` when it needs
 values that exist only at deploy time. `references` is the set of `(node, output)` or `(resource id, export)` pairs
 it waits on; the graph builder turns them into edges. A reference the context already knows resolves at once, so
 the orchestrator re-runs the same evaluator with the stack outputs it has collected, and `Pending` becomes
 `Resolved`. A string is pending when any expression in it is; a function is pending when any argument is.
-Every invalid expression in a string is reported (file, location, message) and the string yields no result. The evaluator also reports the `env.<path>` values a string read, because a resolved value no longer shows where it came from; the grant check ([Engine rules](#engine-rules-generic-code-written-once)) needs them.
+Every invalid expression in a string is reported (file, location, message) and the string yields no result. The evaluator also reports the `<part>.<export>` values a string read from the descriptor (`PartReads`), because a resolved value no longer shows where it came from; preview prints them as `(from cosmos-account.id)`.
 
 **Built-ins** (the only functions; an unknown function or wrong arity is an error):
 
@@ -390,7 +390,7 @@ Every invalid expression in a string is reported (file, location, message) and t
 
 | Rule | Behaviour |
 |---|---|
-| Lookup | Exact, no matching. A requirement's `type` names a component (else an error); its implementation is the key equal to the environment's type, else `default`, else an error naming the component and the type; its class (default `standard`) must exist there, else an error naming the component, the class and the type. **Runtime:** each workload gets the catalog's one runtime, its implementation looked up the same way; an environment definition (substrate owner) gets none. |
+| Lookup | Exact, no matching. A requirement's `type` names a component (else an error); its implementation is the key equal to the environment's type, else `default`, else an error naming the component and the type; its class (default `standard`) must exist there, else an error naming the component, the class and the type. **Offers:** the requirement's component must be in the descriptor's `offers`, else an error naming the environment and the component. **Runtime:** each workload gets the runtime the descriptor offers (none offered is an error), its implementation looked up the same way; an environment definition (substrate owner) gets none. |
 | Contract | Every class of every implementation exports exactly the component's `exports`; the catalog loader rejects a mismatch (missing or extra) at the component file, location `implementations.<key>.classes.<class>.exports`. |
 | Expansion | Each node of the selected class becomes an expanded node (name, template, kind, config); config strings and `exports` are evaluated with the effective requirement id as the current id and the class's node names in scope, other scalars pass through, objects and arrays recurse, and catalog tokens are cloned. Result per requirement: id, type, class, component file, nodes, exports (`Resolved` or `Pending`). Errors from all requirements are collected; a requirement with an error is left out of the result. |
 | Policy scope | **Node scope:** `match` uses only `type`, `class`, `environmentType`, `template`; a policy applies to a node when every key equals the node's value (`type`/`class` from its requirement, `environmentType` from the environment, `template` from the node). A runtime node has no type or class. All matching policies apply (no specificity). A `match` with `kind` or `runtime` is never node scope. **Workload scope:** `match` has `kind: runtime`, optionally `runtime` and `environmentType`; its `require` names a component every workload must require (an error at the workload's `requires` otherwise), and its `set`/`default` entries target `runtime.<path>`, a field of the runtime node (`runtime.variables.<NAME>` sets or defaults one workload variable), with the existing layer, conflict and provenance rules: `set` wins over a workload variable of that name, `default` only fills a variable the workload does not define. A value reading `${resource.…}` stays pending until the second pass even when the export is static (only the workload variables see static exports resolved at expansion). The `runtime` key is not matched until a workload names a runtime. The catalog loader rejects a policy that fits neither scope, since it would silently do nothing: `runtime` without `kind: runtime`; a `kind` other than `runtime`; `kind: runtime` together with `type`, `class` or `template`; `require` on a node-scope policy; a workload-scope `set`/`default` path not starting with `runtime.` (a bare `runtime` with no dot is rejected too). |
@@ -402,7 +402,7 @@ Every invalid expression in a string is reported (file, location, message) and t
 | References | Static values resolve immediately. `${node.output}` stays a pending reference ([Expressions](#expressions)) and becomes a graph edge. |
 | Phases | Derived from edges, never listed per template: `runtime` for the runtime node itself; `after-runtime` when a node depends on the runtime node (it references `runtime.*`) directly or through a node that does; `infrastructure` otherwise. |
 | Built-ins | `name(kind)` and `guid(...)` as defined in [Expressions](#expressions) ([C14](../open-questions.md)). Role GUIDs come from `roles.yaml`. Nothing else. |
-| Security | References may target only the workload's own nodes and `env.*` resources the [environment descriptor](#environment-descriptor) lists as grantable. Cross-workload references are rejected by the engine. The graph builder enforces it statically ([D19](../open-questions.md)): every `env.<path>` a `grant` node's config reads, including inside functions and set or defaulted by a policy, must be in `grantable`, otherwise an error names the node, the field and the path. Other nodes may read any `env.*` value. **Only the node named `runtime` of the runtime may read `${resource.<id>.<export>}`** (its workload variables), and it is never a grant. Every other node (a requirement's, grant or not, another node of the runtime, a grant there) gets an error naming the node and field, whether the export is static or pending: requirement scopes must not read each other, and an export can carry `env.*` values the grantable check on a grant's own fields would not see. A class's `exports` cannot contain `${resource.…}` either (the catalog loader rejects it at `…exports.<name>`); an export may read `env.*`, its own nodes' outputs and `runtime.*`. Edges in a requirement's scope come only from references to nodes in the same scope. |
+| Security | A part reads only its own nodes, what its `uses` names, in a class its own component, and `env.name`/`region`/`type` (checked at load); cross-workload references are rejected by the engine. **Grant target rule** ([components.md](components.md) §3, [D19](../open-questions.md)): a `grant` node sits only in a class part or the runtime, its template is listed in `grants.yaml`, and its target input is exactly `${<node>.<output>}` of a node of its own part or `runtime` (no literal, text around it, function, shared or environment resource, `env.*`, `resource.*` or `role.*`). The loader checks it on the catalog; the graph builder checks it again after policies, so a policy cannot point a grant elsewhere: the target must be one pending reference to a node of the grant's scope or the runtime node, else an error names the node and the field. A grant's other inputs may read what its component uses. **Only the node named `runtime` of the runtime may read `${resource.<id>.<export>}`** (its workload variables), and it is never a grant. Every other node (a requirement's, grant or not, another node of the runtime, a grant there) gets an error naming the node and field, whether the export is static or pending: requirement scopes must not read each other. A class's `exports` cannot contain `${resource.…}` either (the catalog loader rejects it at `…exports.<name>`); an export may read its own nodes' outputs, what its component uses, `env.*` and `runtime.*`. Edges in a requirement's scope come only from references to nodes in the same scope. |
 
 ## Output: ResolvedGraph
 
