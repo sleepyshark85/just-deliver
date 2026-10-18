@@ -6,12 +6,12 @@
 ## Now
 
 - **Phase:** 1 — components, base ([roadmap](roadmap.md)); phase 0 (MVP) done, awaiting the user's manual run.
-- **Next slice:** phase-1 exit gate (lead), then S22. **Waiting for the user:** —
+- **Next slice:** phase-1 exit gate (lead), then S23 (MVP: nothing set on the machine), then the user's manual run, then S22. **Waiting for the user:** —
 - **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
   required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
   leaves the deployment live; ADR 0007 kept (the set file's bytes are stored write-once as `set.yaml` per label).
 - **In progress:** —
-- **For the user:** manual testing with [walkthrough.md](../walkthrough.md) and `samples/walkthrough/` after the phase-1 refactor (user, 2026-10-18).
+- **For the user:** manual testing with [walkthrough.md](../walkthrough.md) and `samples/walkthrough/` after the phase-1 refactor and S23 (user, 2026-10-18). For review: the S23 design, [connections.md](../architecture/connections.md).
 - **User decisions (2026-10-18):** phase 1 exit wording as proposed (roadmap); the one-time App Insights recreation (components.md §5, option a) accepted as the one exception to principle 13; Cosmos `disableLocalAuth: true` kept; the Log Analytics shared key accepted for now, its removal planned as a slice after phase 1 (below).
 - **Blocked:** —
 
@@ -61,7 +61,8 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S21d | Shared resources, `uses`, load checks | done | S21d PR | 3 | Opus developer (fresh one for round 1's fixes), lead fixed round 2. Round 1: 7 blocking (node-name rule skipped shared/environment parts; a second cycle detector beside `TopologicalOrder`; name lookups built three times, long parameter lists; two surviving mutations; public helpers); round 2: 1 (uncommented `!`); round 3 APPROVE. `SharedResource` (5 seed files), implementations' `environment` part, `uses`, load checks (names, uses/scope/cycles, roots and exports, node names); loaded, not consumed. Production +188/−37. Azure gate: none, artifact unchanged (snapshot and goldens diff empty). |
 | S21e | Environments from offers | done | [#61](https://github.com/sleepyshark85/just-deliver/pull/61) | 2 | Opus developer, fixes by the fixer. Round 1: 3 blocking (a node in one part could shadow a shared resource another part reads, now a load error; a dead `includeSecrets` option and stale doc in `ExportValues`; a surviving `.All`→`.Any` mutant, check simplified to part presence); round 2 APPROVE. `offers`, the type's `layer`, `env up` collects parts into `substrate`, in-run exports in place, descriptor keyed by part (old descriptors need `env up --force`); transitional substrate components deleted; teardown.sh/walkthrough keyed reads (run at the phase-exit gate). Implicit groups deployed when anything offered uses them (§2 reworded). Azure gate: none, snapshot unchanged. |
 | S21f | Workloads through `uses`; grant target rule; `grantable` removed | done | S21f PR | 2 | Opus developer, fixes by the fixer. Round 1: 1 blocking (usage/walkthrough notes said only pre-S21e descriptors are refused; S21e ones carry `grantable`, now refused) plus structure suggestions taken (one `env.*` limit message, grant rule text beside `SingleReference`); round 2 APPROVE. Parts and the runtime read `${<name>.<export>}`; `env.*` only name/region/type (load and evaluator); `PartReads`; `grants.yaml` and the target rule (load, graph build); `grantable` deleted; offers check; runtime from offers (two runtimes an error). Production +168/−91. Azure gate: none, snapshot unchanged; Azure test edits (probe-group, offers) wait for the phase-exit gate. |
-| S22 | Container Apps logs without the workspace shared key | todo | | | After phase 1 (user, 2026-10-18). The apps environment sends logs through Azure Monitor (diagnostic settings) instead of `appLogsConfiguration` with the shared key; changes the environment's artifact → Azure gate + upgrade gate. Phase goal to name in the brief. |
+| S23 | Nothing set on the machine (MVP) | todo | | | User, 2026-10-18: "nothing need to be set in any machine running jd"; external concerns behind abstractions, local by default; part of the MVP, before the user's manual run. Design: [connections.md](../architecture/connections.md). Direct-Azure code changes → Azure gate. |
+| S22 | Container Apps logs without the workspace shared key | todo | | | After phase 1 and S23 (user, 2026-10-18). The apps environment sends logs through Azure Monitor (diagnostic settings) instead of `appLogsConfiguration` with the shared key; changes the environment's artifact → Azure gate + upgrade gate. Phase goal to name in the brief. |
 
 ## Carry-forward notes
 
