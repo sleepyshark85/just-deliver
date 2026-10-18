@@ -4,6 +4,11 @@
 
 # The walkthrough's own working directory: descriptors, release sets, catalog copy, policy variants.
 export JD_WALK="<absolute path to a directory>"
+if [[ $JD_WALK != /* ]]; then
+  echo "JD_WALK must be an absolute path (it is '$JD_WALK'): edit this file, then source it again" >&2
+  return 1
+fi
+mkdir -p "$JD_WALK"
 
 # az signed in as the deployer in its own config directory, apart from any personal login (as the Azure tests do).
 export AZURE_CONFIG_DIR="$JD_WALK/az"
