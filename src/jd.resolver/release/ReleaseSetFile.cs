@@ -59,7 +59,12 @@ public static class ReleaseSetFile
         }
 
         // One read: the text parsed here and the bytes handed back are the same file content.
-        var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+        return await ParseAsync(path, await File.ReadAllBytesAsync(path, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>Reads a set from its bytes, as <see cref="LoadAsync"/> reads its file; errors name <paramref name="path"/>.</summary>
+    public static async Task<ReleaseSetResult> ParseAsync(string path, byte[] bytes, CancellationToken cancellationToken = default)
+    {
         using var reader = new StreamReader(new MemoryStream(bytes), detectEncodingFromByteOrderMarks: true);
         var (body, parseErrors) = await ReleaseDocument.ParseAsync(path, await reader.ReadToEndAsync(cancellationToken), ReleaseDocument.SetSchema, cancellationToken);
         if (body is null)

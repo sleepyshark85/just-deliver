@@ -9,7 +9,7 @@ namespace jd.cli.tests;
 /// zero, one replica at most). Every value comes from the test catalog, none from the template. Deploys it with the real Pulumi backend
 /// on a local file state, checks revision mode, scale, identity and the variable through <c>az</c>, deploys again for zero changes, and
 /// always deletes the resource group. It creates no Cosmos account, so it can run next to the env-up test.
-/// Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>, <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI.
+/// Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>, <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment and the pulumi CLI.
 /// </summary>
 [Trait("Category", "Azure")]
 public sealed class ContainerAppAzureTests : ProbeAzureTest

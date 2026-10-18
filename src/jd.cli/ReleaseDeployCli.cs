@@ -1,6 +1,7 @@
 using System.Globalization;
 using jd.core.bp;
 using jd.core.identity;
+using jd.core.records;
 using jd.core.revisions;
 using jd.orchestrator;
 using jd.resolver.catalog;
@@ -27,11 +28,11 @@ internal static class ReleaseDeployCli
         public Promotion? Promotion { get; init; }
     }
 
-    // What `jd promote` has settled before the walk: who runs it, and the hash of the kept set that the walk must read.
-    internal sealed record Promotion(DeployerIdentity Principal, string SetSha256);
+    // What `jd promote` has settled before the walk: who runs it, where the set to deploy is kept (its label on the policy's qualifiedOn) and the hash it must have.
+    internal sealed record Promotion(DeployerIdentity Principal, string QualifiedOn, string Label, string SetSha256);
 
     // What a recorded run has before anything is deployed: where the records go, who deploys, and the kept set's hash.
-    private sealed record Recording(string Directory, DeployerIdentity Identity, string SetSha256);
+    private sealed record Recording(IRecordStore Records, DeployerIdentity Identity, string SetSha256);
 
     // args are the arguments after "release deploy" or "release qualify" (qualify).
     public static async Task<int> RunAsync(
@@ -49,7 +50,7 @@ internal static class ReleaseDeployCli
         return await RunCheckedAsync(options, backend, probe, identity, liveRevisions, time, environmentVariable, stdout, stderr, cancellationToken);
     }
 
-    // The walk of `jd promote` on the target, below the gate that refuses a direct deploy: the kept set, the target, the catalog, and what promote settled.
+    // The walk of `jd promote` on the target, below the gate that refuses a direct deploy: the kept set's name in messages, the target, the catalog, and what promote settled.
     public static Task<int> PromoteAsync(
         string keptSet, string environment, string catalog, Promotion promotion, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe,
         ILiveRevisions? liveRevisions, TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken) =>
@@ -59,11 +60,8 @@ internal static class ReleaseDeployCli
         Options options, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions, TimeProvider time,
         Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        // A preview deploys nothing, so it records nothing and needs no directory; a qualification records the check.
-        var records = environmentVariable(Cli.RecordsDirectoryVariable);
-        var problem = Arguments.Unreadable(options.Set, options.Environment, options.Catalog) ?? (backend is null ? Cli.BackendSettingsProblem(environmentVariable) : null)
-            ?? (options.DryRun ? null : Cli.RecordsDirectoryProblem(records));
-        if (problem is not null)
+        // A promotion's set is the kept one it read, and its target and catalog were checked by promote.
+        if (options.Promotion is null && Arguments.Unreadable(options.Set, options.Environment, options.Catalog) is { } problem)
         {
             stderr.WriteLine($"jd: {problem}");
             return UsageError;
@@ -71,7 +69,8 @@ internal static class ReleaseDeployCli
 
         try
         {
-            return await DeployAsync(options, options.DryRun ? null : records, backend, probe, identity, liveRevisions, time, environmentVariable, stdout, stderr, cancellationToken);
+            // A preview deploys nothing, so it records nothing; a qualification records the check.
+            return await DeployAsync(options, options.DryRun ? null : Cli.Records(environmentVariable), backend, probe, identity, liveRevisions, time, environmentVariable, stdout, stderr, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -81,11 +80,14 @@ internal static class ReleaseDeployCli
     }
 
     private static async Task<int> DeployAsync(
-        Options options, string? recordsDirectory, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions, TimeProvider time,
+        Options options, IRecordStore? records, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions, TimeProvider time,
         Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var started = time.GetUtcNow();
-        var setResult = await ReleaseSetFile.LoadAsync(options.Set, cancellationToken);
+        // A promotion is never a preview, so it has the records.
+        var setResult = options.Promotion is { } promoted
+            ? await ReleaseSetFile.ParseAsync(options.Set, await records!.ReadAsync(promoted.QualifiedOn, promoted.Label, ReleaseRecordFile.SetFileName, cancellationToken), cancellationToken)
+            : await ReleaseSetFile.LoadAsync(options.Set, cancellationToken);
         var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog, cancellationToken);
         var environmentResult = await EnvironmentFile.LoadAsync(options.Environment, cancellationToken);
         if (setResult.Set is not { } set || catalogResult.Catalog is not { } catalog || environmentResult.Descriptor is not { } environment)
@@ -127,9 +129,9 @@ internal static class ReleaseDeployCli
 
         // A recorded run knows who deploys, and that no other set was deployed under this label, before it calls the backend.
         Recording? recording = null;
-        if (recordsDirectory is not null)
+        if (records is not null)
         {
-            recording = await StartRecordingAsync(recordsDirectory, options.Promotion?.Principal, identity, environmentVariable, setResult.Bytes, set.Label, environment.Name, stderr, cancellationToken);
+            recording = await StartRecordingAsync(records, options.Promotion?.Principal, identity, environmentVariable, setResult.Bytes, set.Label, environment.Name, stderr, cancellationToken);
             if (recording is null)
             {
                 return Invalid;
@@ -154,7 +156,7 @@ internal static class ReleaseDeployCli
 
         if (options.Qualify)
         {
-            // recordsDirectory is null only for a --preview, which qualify refuses at parse time, so a qualification always has a recording and a qualifier here.
+            // records is null only for a --preview, which qualify refuses at parse time, so a qualification always has a recording and a qualifier here.
             return await QualifyAsync(recording!, set, environment, graphs, qualifier!, started, time, stdout, stderr, cancellationToken);
         }
 
@@ -221,7 +223,7 @@ internal static class ReleaseDeployCli
 
     // Null, with the reason on stderr, when the run must not start: the principal (known already, for a promotion) cannot be named, the label cannot name a directory, or it holds another set.
     private static async Task<Recording?> StartRecordingAsync(
-        string recordsDirectory, DeployerIdentity? known, IDeployerIdentity? identity, Func<string, string?> environmentVariable, ReadOnlyMemory<byte> setBytes, string label, string environmentName,
+        IRecordStore records, DeployerIdentity? known, IDeployerIdentity? identity, Func<string, string?> environmentVariable, ReadOnlyMemory<byte> setBytes, string label, string environmentName,
         TextWriter stderr, CancellationToken cancellationToken)
     {
         if ((known ?? await Cli.GetIdentityAsync(identity, environmentVariable, stderr, cancellationToken)) is not { } principal)
@@ -231,10 +233,10 @@ internal static class ReleaseDeployCli
 
         try
         {
-            var (sha256, conflict) = await ReleaseRecordFile.KeepSetAsync(recordsDirectory, environmentName, label, setBytes, cancellationToken);
+            var (sha256, conflict) = await ReleaseRecordFile.KeepSetAsync(records, environmentName, label, setBytes, cancellationToken);
             if (conflict is null)
             {
-                return new Recording(recordsDirectory, principal, sha256);
+                return new Recording(records, principal, sha256);
             }
 
             stderr.WriteLine($"jd: {conflict}");
@@ -254,7 +256,7 @@ internal static class ReleaseDeployCli
     {
         try
         {
-            stdout.WriteLine($"record: {await ReleaseRecordFile.WriteAsync(recording.Directory, environmentName, label, finished, activity, json, cancellationToken)}");
+            stdout.WriteLine($"record: {await ReleaseRecordFile.WriteAsync(recording.Records, environmentName, label, finished, activity, json, cancellationToken)}");
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

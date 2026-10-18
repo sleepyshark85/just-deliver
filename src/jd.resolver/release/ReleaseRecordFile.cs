@@ -1,17 +1,18 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using jd.core.records;
 
 namespace jd.resolver.release;
 
 /// <summary>
-/// The write-once store of release records: <c>&lt;records&gt;/&lt;environment&gt;/&lt;label&gt;/</c> holds <c>set.yaml</c> (the set's exact bytes,
-/// ADR 0007) and one JSON file per attempt. Nothing is ever opened for write twice (<see cref="FileMode.CreateNew"/>), so an existing path is
-/// an <see cref="IOException"/>. Rules: docs/architecture/release-record.md.
+/// The release records of a label in the <see cref="IRecordStore"/>: <c>set.yaml</c> (the set's exact bytes, ADR 0007) and one JSON file per attempt.
+/// Nothing is ever written twice, so an existing name is an <see cref="IOException"/>. Rules: docs/architecture/release-record.md.
 /// </summary>
 public static class ReleaseRecordFile
 {
-    internal const string SetFileName = "set.yaml";
+    /// <summary>The name of the set kept beside a label's records.</summary>
+    public const string SetFileName = "set.yaml";
 
     /// <summary>The activity of a record written by <c>release deploy</c>.</summary>
     public const string DeployActivity = "deploy";
@@ -45,38 +46,34 @@ public static class ReleaseRecordFile
     /// Throws <see cref="ArgumentException"/> for an environment or label that is not a single path segment.
     /// </summary>
     public static async Task<(string Sha256, string? Problem)> KeepSetAsync(
-        string recordsDirectory, string environment, string label, ReadOnlyMemory<byte> setBytes, CancellationToken cancellationToken = default)
+        IRecordStore records, string environment, string label, ReadOnlyMemory<byte> setBytes, CancellationToken cancellationToken = default)
     {
-        var directory = LabelDirectory(recordsDirectory, environment, label);
-        var path = KeptSetPath(recordsDirectory, environment, label);
         var sha256 = ReleaseDocument.Sha256(setBytes.Span);
-        if (File.Exists(path))
+        if ((await records.ListAsync(environment, label, cancellationToken)).Contains(SetFileName))
         {
-            var kept = ReleaseDocument.Sha256(await File.ReadAllBytesAsync(path, cancellationToken));
+            var kept = ReleaseDocument.Sha256(await records.ReadAsync(environment, label, SetFileName, cancellationToken));
             return (sha256, kept == sha256
                 ? null
-                : $"'{path}' holds a different release set for label {label} on {environment} (sha256 {kept}, this one {sha256}); a label names one set, so use a new label.");
+                : $"the kept {SetFileName} holds a different release set for label {label} on {environment} (sha256 {kept}, this one {sha256}); a label names one set, so use a new label.");
         }
 
-        Directory.CreateDirectory(directory);
-        await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
-        await stream.WriteAsync(setBytes, cancellationToken);
+        await records.CreateAsync(environment, label, SetFileName, setBytes, cancellationToken);
         return (sha256, null);
     }
 
     /// <summary>
-    /// Creates the record <c>&lt;UTC time&gt;-&lt;activity&gt;.json</c> and returns its path; throws <see cref="IOException"/> if it exists,
+    /// Creates the record <c>&lt;UTC time&gt;-&lt;activity&gt;.json</c> and returns where it is; throws <see cref="IOException"/> if it exists,
     /// because a record is never changed. Throws <see cref="ArgumentException"/> for an environment or label that is not a single path segment.
     /// </summary>
-    public static async Task<string> WriteAsync(
-        string recordsDirectory, string environment, string label, DateTimeOffset at, string activity, string json, CancellationToken cancellationToken = default)
+    public static Task<string> WriteAsync(
+        IRecordStore records, string environment, string label, DateTimeOffset at, string activity, string json, CancellationToken cancellationToken = default) =>
+        records.CreateAsync(environment, label, at.UtcDateTime.ToString(NameTimeFormat, CultureInfo.InvariantCulture) + NameEnd(activity), new UTF8Encoding(false).GetBytes(json), cancellationToken);
+
+    /// <summary>A record's text, as a file of it is read (a byte order mark names the encoding). Throws as <see cref="IRecordStore.ReadAsync"/>.</summary>
+    internal static async Task<string> ReadTextAsync(IRecordStore records, string environment, string label, string name, CancellationToken cancellationToken)
     {
-        var directory = LabelDirectory(recordsDirectory, environment, label);
-        Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, at.UtcDateTime.ToString(NameTimeFormat, CultureInfo.InvariantCulture) + NameEnd(activity));
-        await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
-        await stream.WriteAsync(new UTF8Encoding(false).GetBytes(json), cancellationToken);
-        return path;
+        using var reader = new StreamReader(new MemoryStream(await records.ReadAsync(environment, label, name, cancellationToken)), detectEncodingFromByteOrderMarks: true);
+        return await reader.ReadToEndAsync(cancellationToken);
     }
 
     /// <summary>Splits <c>&lt;time&gt;-&lt;activity&gt;.json</c> into its time part and activity; null when the name is not that of a record.</summary>
@@ -102,31 +99,10 @@ public static class ReleaseRecordFile
         SegmentProblem(label) ?? (Regex.IsMatch(label, LabelPattern, RegexOptions.CultureInvariant) ? null : $"'{label}' is not a release label (like 1.0.0 or 1.0.0-rc.1).");
 
     /// <summary>Why <paramref name="segment"/> cannot name a directory of the store (empty, or contains '..', '/' or '\\'); null when it can.</summary>
-    private static string? SegmentProblem(string segment) =>
+    internal static string? SegmentProblem(string segment) =>
         segment.Length == 0 || segment.Contains("..", StringComparison.Ordinal) || segment.AsSpan().IndexOfAny('/', '\\') >= 0
             ? $"'{segment}' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'."
             : null;
-
-    /// <summary>
-    /// The directory of a label's files. Both names come from validated formats; the store still refuses anything that could leave its directory:
-    /// throws <see cref="ArgumentException"/> for an environment or label that is not a single path segment.
-    /// </summary>
-    public static string LabelDirectory(string recordsDirectory, string environment, string label)
-    {
-        foreach (var segment in new[] { environment, label })
-        {
-            if (SegmentProblem(segment) is { } problem)
-            {
-                throw new ArgumentException(problem);
-            }
-        }
-
-        return Path.Combine(recordsDirectory, environment, label);
-    }
-
-    /// <summary>The path of the set kept for a label (<c>set.yaml</c> in its directory). Throws as <see cref="LabelDirectory"/>.</summary>
-    public static string KeptSetPath(string recordsDirectory, string environment, string label) =>
-        Path.Combine(LabelDirectory(recordsDirectory, environment, label), SetFileName);
 
     /// <summary>The hash a record names for a set: the lowercase hex SHA-256 of its bytes.</summary>
     public static string Sha256(ReadOnlySpan<byte> setBytes) => ReleaseDocument.Sha256(setBytes);

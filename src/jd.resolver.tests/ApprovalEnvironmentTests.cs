@@ -16,7 +16,7 @@ public class ApprovalEnvironmentTests
         $"kind: Environment\nname: {name}\nregion: r1\ntype: {type}\noffers: []\nvalues: {{ a: b }}\n{approval}";
 
     private static string Definition(string type = "stage", string? approval = Block) =>
-        $"kind: EnvironmentDefinition\nname: stage\ntype: {type}\noffers: [database]\n{approval}";
+        $"kind: EnvironmentDefinition\nname: stage\nregion: region-1\ntype: {type}\noffers: [database]\n{approval}";
 
     private static async Task<EnvironmentDefinitionLoadResult> LoadDefinitionAsync(string text)
     {

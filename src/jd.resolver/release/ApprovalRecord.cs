@@ -1,5 +1,6 @@
 using System.Globalization;
 using jd.core.identity;
+using jd.core.records;
 using jd.resolver.environment;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -51,34 +52,28 @@ public static class ApprovalRecord
     /// <see cref="ArgumentException"/> when <paramref name="target"/> has no approval policy or the label is not a single path segment.
     /// </summary>
     public static async Task<ApprovalReading> ReadAsync(
-        string recordsDirectory, EnvironmentDescriptor target, string label, string setSha256, CancellationToken cancellationToken = default)
+        IRecordStore records, EnvironmentDescriptor target, string label, string setSha256, CancellationToken cancellationToken = default)
     {
         var policy = Policy(target);
-        var directory = ReleaseRecordFile.LabelDirectory(recordsDirectory, target.Name, label);
-        if (!Directory.Exists(directory))
-        {
-            return new ApprovalReading([], []);
-        }
-
-        string[] paths;
+        IReadOnlyList<string> names;
         try
         {
-            paths = Directory.EnumerateFiles(directory, "*" + ReleaseRecordFile.NameEnd(ReleaseRecordFile.ApproveActivity)).Order(StringComparer.Ordinal).ToArray();
+            names = await records.ListAsync(target.Name, label, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return new ApprovalReading([], [$"'{directory}' cannot be read: {ex.Message}"]);
+            return new ApprovalReading([], [$"the records of label {label} on {target.Name} cannot be read: {ex.Message}"]);
         }
 
         var expected = new Expected(target.Name, label, setSha256, policy.QualifiedOn);
         var approvers = new List<string>();
         var ignored = new List<string>();
-        foreach (var path in paths)
+        foreach (var name in names.Where(n => n.EndsWith(ReleaseRecordFile.NameEnd(ReleaseRecordFile.ApproveActivity), StringComparison.Ordinal)))
         {
-            var (stored, problem) = await LoadAsync(path, expected, cancellationToken);
+            var (stored, problem) = await LoadAsync(records, name, expected, cancellationToken);
             if (stored is null)
             {
-                ignored.Add($"{Path.GetFileName(path)}: {problem}");
+                ignored.Add($"{name}: {problem}");
             }
             else
             {
@@ -90,9 +85,9 @@ public static class ApprovalRecord
     }
 
     // The approval when the file is a valid one that belongs here, else why it is ignored.
-    private static async Task<(Stored? Approval, string? Problem)> LoadAsync(string path, Expected expected, CancellationToken cancellationToken)
+    private static async Task<(Stored? Approval, string? Problem)> LoadAsync(IRecordStore records, string name, Expected expected, CancellationToken cancellationToken)
     {
-        if (ReleaseRecordFile.TimeOf(Path.GetFileName(path), ReleaseRecordFile.ApproveActivity) is not { } time || !ReleaseRecordFile.IsNameTime(time))
+        if (ReleaseRecordFile.TimeOf(name, ReleaseRecordFile.ApproveActivity) is not { } time || !ReleaseRecordFile.IsNameTime(time))
         {
             return (null, $"is not named <time>-{ReleaseRecordFile.ApproveActivity}.json with a time like 20261017T030405123Z.");
         }
@@ -100,7 +95,8 @@ public static class ApprovalRecord
         JObject body;
         try
         {
-            using var reader = new JsonTextReader(new StringReader(await File.ReadAllTextAsync(path, cancellationToken))) { DateParseHandling = DateParseHandling.None };
+            var text = await ReleaseRecordFile.ReadTextAsync(records, expected.Environment, expected.Label, name, cancellationToken);
+            using var reader = new JsonTextReader(new StringReader(text)) { DateParseHandling = DateParseHandling.None };
             body = JObject.Load(reader);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -108,7 +104,7 @@ public static class ApprovalRecord
             return (null, $"cannot be read: {ex.Message}");
         }
 
-        var errors = await ReleaseDocument.ValidateAsync(Path.GetFileName(path), body, ReleaseDocument.ApprovalSchema, cancellationToken);
+        var errors = await ReleaseDocument.ValidateAsync(name, body, ReleaseDocument.ApprovalSchema, cancellationToken);
         if (errors.Count > 0)
         {
             return (null, $"is not a valid approval record: {string.Join("; ", errors)}");

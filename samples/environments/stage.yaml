@@ -4,6 +4,7 @@
 # service principals that may; and a principal that deployed a label on dev may not approve it.
 kind: EnvironmentDefinition
 name: stage
+region: southeastasia
 type: stage
 offers: [container-app, database, monitoring]
 approval:

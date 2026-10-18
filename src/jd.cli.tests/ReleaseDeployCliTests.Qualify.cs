@@ -123,24 +123,6 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Contains($"jd: IQ failed: {Worker}: the live revisions could not be checked: Azure refused to list the revisions of 'x': HTTP 404, ResourceNotFound.", stderr);
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("absent")]
-    public async Task Without_an_existing_records_directory_a_qualification_exits_2_before_the_backend_or_the_principal_is_asked(string? variable)
-    {
-        var set = await CreateSetAsync();
-        _recordsVariable = variable is null ? null : Path.Combine(_temp, variable);
-        var backend = new RecordingBackend { Deployed = true };
-
-        var (code, _, stderr) = await RunAsync(backend, Qualify(set));
-
-        Assert.Equal(2, code);
-        Assert.Contains("JD_RECORDS_DIR must name an existing directory", stderr);
-        Assert.Empty(backend.Calls);
-        Assert.Equal(0, _identity.Calls);
-        Assert.Empty(_live.Calls);
-    }
-
     [Fact]
     public async Task A_principal_that_cannot_be_named_stops_a_qualification_before_any_backend_call()
     {
@@ -161,13 +143,14 @@ public sealed partial class ReleaseDeployCliTests
     public async Task A_reader_of_live_revisions_that_cannot_be_built_stops_a_qualification_before_any_backend_call()
     {
         var set = await CreateSetAsync();
-        _reader = null; // built from the ARM_* variables, which this run does not have
+        _reader = null; // built from the ARM_* variables, which this run has only in part
+        _variables["ARM_TENANT_ID"] = "tenant-1";
         var backend = new RecordingBackend { Deployed = true };
 
         var (code, _, stderr) = await RunAsync(backend, Qualify(set));
 
         Assert.Equal(1, code);
-        Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET", stderr);
+        Assert.Contains("ARM_CLIENT_ID, ARM_CLIENT_SECRET are not set", stderr);
         Assert.Empty(backend.Calls);
         Assert.Empty(QualifyRecordFiles);
     }

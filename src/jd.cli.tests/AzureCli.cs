@@ -23,6 +23,19 @@ internal sealed class AzureCli : IDisposable
 
     public string Subscription { get; }
 
+    /// <summary>The region of the Azure tests: the one the sample environment definitions carry (the sandbox's allowed region).</summary>
+    public static string Region { get; } = jd.resolver.environment.EnvironmentDefinitionFile.LoadAsync(
+        Path.Combine(AppContext.BaseDirectory, "samples", "environments", "shared.yaml")).GetAwaiter().GetResult().Definition?.Region
+        ?? throw new InvalidOperationException("samples/environments/shared.yaml is not a valid environment definition.");
+
+    /// <summary>What a jd run of an Azure test sees: the process environment (the <c>ARM_*</c> identity), with jd's data and scratch directories under the test's <paramref name="root"/>.</summary>
+    public static Func<string, string?> Variables(string root) => name => name switch
+    {
+        "JD_DATA_DIR" => Path.Combine(root, "data"),
+        "JD_SCRATCH_DIR" => Path.Combine(root, "scratch"),
+        _ => System.Environment.GetEnvironmentVariable(name),
+    };
+
     /// <summary>Fails unless started by <c>tools/verify.sh --azure</c>, and with a message naming the missing variables; there is no fallback to an ambient <c>az</c> login.</summary>
     public static AzureCli Login()
     {

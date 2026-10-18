@@ -148,7 +148,7 @@ public sealed partial class ReleaseDeployCliTests
 
         Assert.Equal(1, code);
         Assert.Empty(backend.Calls);
-        Assert.Contains($"'{kept}' holds a different release set for label 1.0.0 on dev", stderr);
+        Assert.Contains("the kept set.yaml holds a different release set for label 1.0.0 on dev", stderr);
         Assert.Equal(keptBytes, await File.ReadAllBytesAsync(kept));
         Assert.Single(RecordFiles);
     }
@@ -182,36 +182,14 @@ public sealed partial class ReleaseDeployCliTests
         var broken = await CreateSetAsync(app => app.Replace("- type: database", "- type: no-such-type\n    id: database"), "broken.yaml");
         var backend = new RecordingBackend();
 
-        _recordsVariable = null; // a preview needs no records directory
         var (previewCode, _, _) = await RunAsync(backend, Deploy(set, "--preview"));
-        _recordsVariable = _records; // and writes nothing where one is set
-        var (recordedPreviewCode, _, _) = await RunAsync(backend, Deploy(set, "--preview"));
         var (usageCode, _, _) = await RunAsync(backend, "release", "deploy");
         var (resolutionCode, _, _) = await RunAsync(backend, Deploy(broken));
 
         Assert.Equal(0, previewCode);
-        Assert.Equal(0, recordedPreviewCode);
         Assert.Equal(2, usageCode);
         Assert.Equal(1, resolutionCode);
         Assert.Empty(Directory.GetFileSystemEntries(_records));
-        Assert.Equal(0, _identity.Calls);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("absent")]
-    public async Task Without_an_existing_records_directory_it_exits_2_before_the_backend_or_the_principal_is_asked(string? variable)
-    {
-        var set = await CreateSetAsync();
-        _recordsVariable = variable is { Length: > 0 } ? Path.Combine(_temp, variable) : variable;
-        var backend = new RecordingBackend();
-
-        var (code, _, stderr) = await RunAsync(backend, Deploy(set));
-
-        Assert.Equal(2, code);
-        Assert.Contains("JD_RECORDS_DIR must name an existing directory", stderr);
-        Assert.Empty(backend.Calls);
         Assert.Equal(0, _identity.Calls);
     }
 
@@ -231,16 +209,17 @@ public sealed partial class ReleaseDeployCliTests
     }
 
     [Fact]
-    public async Task Without_the_arm_variables_the_run_stops_naming_them_before_the_backend_is_called_and_creates_no_set_yaml()
+    public async Task With_part_of_the_arm_variables_the_run_stops_naming_the_missing_ones_before_the_backend_is_called_and_creates_no_set_yaml()
     {
         var set = await CreateSetAsync();
-        _port = null; // the composition root builds the identity from the ARM_* variables, which this run does not have
+        _port = null; // the composition root builds the identity from the ARM_* variables, which this run has only in part
+        _variables["ARM_CLIENT_ID"] = "client-1";
         var backend = new RecordingBackend();
 
         var (code, _, stderr) = await RunAsync(backend, Deploy(set));
 
         Assert.Equal(1, code);
-        Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET", stderr);
+        Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_SECRET are not set", stderr);
         Assert.Empty(backend.Calls);
         Assert.Empty(Directory.GetFileSystemEntries(_records));
     }

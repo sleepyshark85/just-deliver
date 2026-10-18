@@ -5,7 +5,7 @@
   "description": "What `jd env up` provisions for an environment: the parts its offers reach in its type's layer (docs/architecture/components.md section 3); the descriptor's values are those parts' exports, keyed by part name. Checked against the catalog, not here: the type is declared, a type with `approval: true` carries the `approval` block, and the offers name declared components and at most one runtime.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "name", "type", "offers"],
+  "required": ["kind", "name", "region", "type", "offers"],
   "properties": {
     "kind": { "enum": ["EnvironmentDefinition"] },
     "name": {
@@ -13,6 +13,7 @@
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
     },
+    "region": { "description": "Where the environment is deployed; the descriptor's region (env.region), the same on every machine.", "type": "string", "minLength": 1 },
     "type": { "description": "An environment type the catalog declares.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
     "offers": {
       "description": "The components and the runtime (at most one) the environment offers, by name. `jd env up` deploys what they reach: the layer's shared resources reached through `uses` and, in an `environment` layer, the offered components' environment parts.",

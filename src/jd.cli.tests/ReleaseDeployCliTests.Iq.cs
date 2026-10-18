@@ -107,13 +107,14 @@ public sealed partial class ReleaseDeployCliTests
     public async Task A_reader_of_live_revisions_that_cannot_be_built_stops_the_run_before_anything_is_deployed()
     {
         var set = await CreateSetAsync();
-        _reader = null; // built from the ARM_* variables, which this run does not have
+        _reader = null; // built from the ARM_* variables, which this run has only in part
+        _variables["ARM_TENANT_ID"] = "tenant-1";
         var backend = new RecordingBackend();
 
         var (code, _, stderr) = await RunAsync(backend, Deploy(set));
 
         Assert.Equal(1, code);
-        Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET", stderr);
+        Assert.Contains("ARM_CLIENT_ID, ARM_CLIENT_SECRET are not set", stderr);
         Assert.Empty(backend.Calls);
         Assert.Empty(RecordFiles);
     }

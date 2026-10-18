@@ -94,7 +94,7 @@ public sealed class ArmLiveRevisionsTests
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => new ArmLiveRevisions(new RefusingCredential(), options).GetAsync(AppId, CancellationToken.None));
 
-        Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_ID and ARM_CLIENT_SECRET", error.Message, StringComparison.Ordinal);
+        Assert.Contains("check ARM_TENANT_ID, ARM_CLIENT_ID and ARM_CLIENT_SECRET when they are set (is the secret correct and unexpired?), else the Azure CLI sign-in (az login)", error.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("AADSTS", error.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("the-secret", error.Message, StringComparison.Ordinal);
     }

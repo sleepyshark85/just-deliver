@@ -4,7 +4,6 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using jd.bp.pulumi;
 using jd.core.bp;
 using jd.resolver.environment;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,7 +27,7 @@ namespace jd.cli.tests;
 /// (same bytes, a deploy record with IQ passed, the same image digests). Last, the worker's image is changed out of band: <c>qualify</c> fails naming the image check and <c>approve</c> and <c>promote</c> are refused as not qualified. It is one scenario because
 /// Azure allows one free-tier Cosmos account per subscription and the substrate here is that account. Always deletes the resource
 /// groups it created. Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>,
-/// <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI, and a subscription
+/// <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment and the pulumi CLI, and a subscription
 /// <b>without an existing free-tier Cosmos account</b> (Azure allows one per subscription; the test creates it and deletes it).
 /// </summary>
 [Trait("Category", "Azure")]
@@ -126,11 +125,11 @@ public sealed class EnvUpAzureTests : IDisposable
         return result.Code == 0 ? result.Output.Trim() : throw new InvalidOperationException($"az {string.Join(' ', arguments)} failed: {result.Error}");
     }
 
-    private static async Task<(int Code, string Output)> UpAsync(IBackEndProvider backend, string region, params string[] args)
+    private async Task<(int Code, string Output)> UpAsync(IBackEndProvider backend, params string[] args)
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(["env", "up", .. args, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog"), "--region", region, "--force"], stdout, stderr, CancellationToken.None, backend);
+        var code = await Cli.RunAsync(["env", "up", .. args, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog"), "--force"], stdout, stderr, CancellationToken.None, backend, AzureCli.Variables(_root));
         return (code, stdout + stderr.ToString());
     }
 
@@ -142,16 +141,14 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.DoesNotContain(": deployed", output);
     }
 
-    // The directory of the release records (JD_RECORDS_DIR); the identity of a release deploy is the ARM_* principal of the process.
-    private string Records => Path.Combine(_root, "records");
+    // The release records in jd's data directory of the run; the identity of a release deploy is the ARM_* principal of the process.
+    private string Records => Path.Combine(_root, "data", "records");
 
     private async Task<(int Code, string Output)> ReleaseAsync(IBackEndProvider backend, params string[] args)
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        Directory.CreateDirectory(Records);
-        var code = await Cli.RunAsync(
-            ["release", .. args], stdout, stderr, CancellationToken.None, backend, name => name == "JD_RECORDS_DIR" ? Records : System.Environment.GetEnvironmentVariable(name));
+        var code = await Cli.RunAsync(["release", .. args], stdout, stderr, CancellationToken.None, backend, AzureCli.Variables(_root));
         return (code, stdout + stderr.ToString());
     }
 
@@ -198,7 +195,7 @@ public sealed class EnvUpAzureTests : IDisposable
         var stderr = new StringWriter();
         var code = await Cli.RunAsync(
             ["approve", label, "--env", stageDescriptor, "--meaning", "Azure test: reviewed the evidence."], stdout, stderr, CancellationToken.None,
-            environmentVariable: name => name == "JD_RECORDS_DIR" ? Records : System.Environment.GetEnvironmentVariable(name));
+            environmentVariable: AzureCli.Variables(_root));
         return (code, stdout + stderr.ToString());
     }
 
@@ -209,7 +206,7 @@ public sealed class EnvUpAzureTests : IDisposable
         var stderr = new StringWriter();
         var code = await Cli.RunAsync(
             ["promote", label, "--to", stageDescriptor, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog")], stdout, stderr, CancellationToken.None, backend,
-            name => name == "JD_RECORDS_DIR" ? Records : System.Environment.GetEnvironmentVariable(name));
+            AzureCli.Variables(_root));
         return (code, stdout + stderr.ToString());
     }
 
@@ -301,24 +298,13 @@ public sealed class EnvUpAzureTests : IDisposable
     [Fact]
     public async Task Shared_then_dev_are_provisioned_and_a_release_set_deploys_onto_dev_within_the_free_tier_and_reruns_change_nothing()
     {
-        var region = System.Environment.GetEnvironmentVariable("JD_REGION")
-            ?? throw new InvalidOperationException("The Azure tests need JD_REGION (see docs/plans/status.md, Environment).");
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.RegisterPulumiBackend(options =>
-        {
-            options.BackendUrl = "file://" + Path.Combine(_root, "state");
-            options.ConfigPassPhrase = "test-passphrase";
-            options.ScratchDirectory = Path.Combine(_root, "scratch");
-        });
-        Directory.CreateDirectory(Path.Combine(_root, "state"));
-        var backend = services.BuildServiceProvider().GetRequiredService<IBackEndProvider>();
+        var backend = Cli.CreatePulumiBackend(AzureCli.Variables(_root));
         var shared = Definition("shared", SharedName);
         var dev = Definition("dev", DevName);
         var sharedDescriptor = Path.Combine(_root, "shared.env.yaml");
         var devDescriptor = Path.Combine(_root, "dev.env.yaml");
 
-        var (sharedCode, sharedOutput) = await UpAsync(backend, region, shared, "--out", sharedDescriptor);
+        var (sharedCode, sharedOutput) = await UpAsync(backend, shared, "--out", sharedDescriptor);
         Assert.True(sharedCode == 0, sharedOutput);
         var loadedShared = (await EnvironmentFile.LoadAsync(sharedDescriptor)).Descriptor;
         Assert.NotNull(loadedShared);
@@ -329,7 +315,7 @@ public sealed class EnvUpAzureTests : IDisposable
         var cap = Az("monitor", "log-analytics", "workspace", "show", "--workspace-name", loadedShared.Values["log-analytics.name"], "--resource-group", sharedGroup, "--query", "workspaceCapping.dailyQuotaGb");
         Assert.Equal(0.15, double.Parse(cap, System.Globalization.CultureInfo.InvariantCulture));
 
-        var (devCode, devOutput) = await UpAsync(backend, region, dev, "--base", sharedDescriptor, "--out", devDescriptor);
+        var (devCode, devOutput) = await UpAsync(backend, dev, "--base", sharedDescriptor, "--out", devDescriptor);
         Assert.True(devCode == 0, devOutput);
         var loadedDev = (await EnvironmentFile.LoadAsync(devDescriptor)).Descriptor;
         Assert.NotNull(loadedDev);
@@ -338,10 +324,10 @@ public sealed class EnvUpAzureTests : IDisposable
         var database = loadedDev.Values["database.databaseName"];
         Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", database, "--query", "resource.throughput"));
 
-        var (againSharedCode, againShared) = await UpAsync(backend, region, shared, "--out", sharedDescriptor);
+        var (againSharedCode, againShared) = await UpAsync(backend, shared, "--out", sharedDescriptor);
         Assert.True(againSharedCode == 0, againShared);
         AssertNothingChanged(againShared, 3);
-        var (againDevCode, againDev) = await UpAsync(backend, region, dev, "--base", sharedDescriptor, "--out", devDescriptor);
+        var (againDevCode, againDev) = await UpAsync(backend, dev, "--base", sharedDescriptor, "--out", devDescriptor);
         Assert.True(againDevCode == 0, againDev);
         AssertNothingChanged(againDev, 3);
 
@@ -349,7 +335,7 @@ public sealed class EnvUpAzureTests : IDisposable
         // and the account limit stays; the descriptor says protected and carries the policy; running it again changes nothing.
         var stage = Definition("stage", StageName);
         var stageDescriptor = Path.Combine(_root, "stage.env.yaml");
-        var (stageCode, stageOutput) = await UpAsync(backend, region, stage, "--base", sharedDescriptor, "--out", stageDescriptor);
+        var (stageCode, stageOutput) = await UpAsync(backend, stage, "--base", sharedDescriptor, "--out", stageDescriptor);
         Assert.True(stageCode == 0, stageOutput);
         var loadedStage = (await EnvironmentFile.LoadAsync(stageDescriptor)).Descriptor;
         Assert.NotNull(loadedStage);
@@ -361,7 +347,7 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", stageDatabase, "--query", "resource.throughput"));
         Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", database, "--query", "resource.throughput"));
         Assert.Equal("1000", Az("cosmosdb", "show", "--name", account, "--resource-group", sharedGroup, "--query", "capacity.totalThroughputLimit"));
-        var (againStageCode, againStage) = await UpAsync(backend, region, stage, "--base", sharedDescriptor, "--out", stageDescriptor);
+        var (againStageCode, againStage) = await UpAsync(backend, stage, "--base", sharedDescriptor, "--out", stageDescriptor);
         Assert.True(againStageCode == 0, againStage);
         AssertNothingChanged(againStage, 3);
 

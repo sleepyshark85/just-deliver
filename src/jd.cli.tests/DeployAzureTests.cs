@@ -6,7 +6,7 @@ namespace jd.cli.tests;
 /// Real resources, free tier only: a test-only catalog whose one type maps to a resource group and a Log Analytics workspace
 /// (daily cap 0.15 GB, the template's default 30-day retention) that references the group's outputs. Deploys it with the real
 /// Pulumi backend on a local file state, deploys again for zero changes, and always deletes the resource group.
-/// Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>, <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment, <c>JD_REGION</c> and the pulumi CLI.
+/// Run with <c>tools/verify.sh --azure</c>; needs the sandbox team identity (<c>ARM_CLIENT_ID</c>, <c>ARM_CLIENT_SECRET</c>, <c>ARM_TENANT_ID</c>, <c>ARM_SUBSCRIPTION_ID</c>) in the environment and the pulumi CLI.
 /// </summary>
 [Trait("Category", "Azure")]
 public sealed class DeployAzureTests : ProbeAzureTest

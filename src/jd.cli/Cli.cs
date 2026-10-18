@@ -3,6 +3,7 @@ using jd.azure;
 using jd.bp.pulumi;
 using jd.core.bp;
 using jd.core.identity;
+using jd.core.records;
 using jd.core.revisions;
 using jd.orchestrator;
 using jd.resolver;
@@ -35,7 +36,7 @@ public static class Cli
           jd approve <label> --env <environment.yaml> --meaning <text>
           jd promote <label> --to <environment.yaml> --catalog <dir>
           jd deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]
-          jd env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--region <region>] [--force]
+          jd env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--force]
           jd --help
 
         validate  checks a workload against its schema and rules.
@@ -43,17 +44,18 @@ public static class Cli
         release   create writes an immutable release set (pinned workloads, deploy order) from a manifest; show prints one;
                   deploy resolves every workload of a set, then deploys them in deploy order, stopping at the first failure, and writes a release record
                   (not with --preview); qualify re-checks a deployed set without deploying (no drift, the pinned image on every revision that serves traffic) and writes a record.
-        approve   records that the principal of the ARM_* credential approves the kept set of <label> for a gated environment (its descriptor has an approval block);
+        approve   records that the signed-in principal approves the kept set of <label> for a gated environment (its descriptor has an approval block);
                   refused unless the set is qualified on the policy's qualifiedOn environment and the principal may approve it; --meaning (1 to 500 characters) says what the approval asserts.
         promote   deploys the kept set of <label> to a gated environment (--to: its descriptor): refused unless the set is qualified on the policy's qualifiedOn environment and enough
                   principals approved it; then the same walk as release deploy, with the same set bytes, and IQ.
         deploy    provisions the infrastructure nodes in order, then releases the runtime: dark revision, grants, probe, traffic shift (--preview: only shows the changes; nothing is created).
-        env up    provisions an environment's substrate from its definition and writes the environment descriptor from the outputs.
-                  --base: the descriptor of the layer below (the new values are added to it); --region defaults to JD_REGION;
-                  --force: overwrite an existing --out.
+        env up    provisions an environment's substrate from its definition (in the definition's region) and writes the environment descriptor from the outputs.
+                  --base: the descriptor of the layer below (the new values are added to it); --force: overwrite an existing --out.
         Gated (deploy, release deploy, release qualify): an environment whose descriptor has an approval block refuses them (exit 1; --preview is allowed): it is deployed to only by `jd promote`.
-        Backend (deploy, release deploy, release qualify, promote, env up): PULUMI_BACKEND_URL and PULUMI_CONFIG_PASSPHRASE (or _FILE) are required; PULUMI_HOME, JD_SCRATCH_DIR optional.
-        Records (release deploy, not --preview; release qualify; approve; promote): JD_RECORDS_DIR, an existing directory, and the service principal that deploys or approves in ARM_TENANT_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET.
+        Data (deploy, release deploy, release qualify, approve, promote, env up): the deployment state, its key and the release records are kept in jd's data
+                  directory: jd in the local application data folder (~/.local/share/jd on Linux), or JD_DATA_DIR. PULUMI_HOME, JD_SCRATCH_DIR optional.
+        Identity: the Azure CLI sign-in (az login), or the service principal in ARM_TENANT_ID, ARM_CLIENT_ID and ARM_CLIENT_SECRET when all three are set;
+                  it deploys, and the records name it as the principal that deployed or approved.
         Exit codes: 0 success, 1 validation, resolution or deployment errors, 2 usage errors.
 
         """;
@@ -68,13 +70,9 @@ public static class Cli
 
     private sealed record DeployOptions(string Workload, string Environment, string Catalog, bool DryRun) : ResolveOptions(Workload, Environment, Catalog);
 
-    private const string BackendUrlVariable = "PULUMI_BACKEND_URL";
-    private const string PassphraseVariable = "PULUMI_CONFIG_PASSPHRASE";
-    private const string PassphraseFileVariable = "PULUMI_CONFIG_PASSPHRASE_FILE";
-
-    // backend is the one deploy uses; when null, the Pulumi backend configured from the process environment variables.
+    // backend is the one deploy uses; when null, the Pulumi backend on the state in jd's data directory.
     // environmentVariable reads them (null: the process environment). probe checks a new revision is healthy (null: an HTTP GET).
-    // identity names the deploying principal (null: from the ARM_* variables); time stamps the release record (null: the system clock);
+    // identity names the deploying principal (null: the Azure CLI sign-in or the ARM_* variables); time stamps the release record (null: the system clock);
     // liveRevisions reads what runs (null: Azure, with the same variables). All six are test seams.
     public static async Task<int> RunAsync(
         string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, IBackEndProvider? backend = null, Func<string, string?>? environmentVariable = null,
@@ -119,12 +117,6 @@ public static class Cli
         if (unreadable is not null)
         {
             stderr.WriteLine($"jd: {unreadable}");
-            return UsageError;
-        }
-
-        if (options is DeployOptions && backend is null && BackendSettingsProblem(environmentVariable) is { } missing)
-        {
-            stderr.WriteLine($"jd: {missing}");
             return UsageError;
         }
 
@@ -270,27 +262,10 @@ public static class Cli
         return (Success, run);
     }
 
-    internal const string RecordsDirectoryVariable = "JD_RECORDS_DIR";
+    // The release, qualification and approval records, in jd's data directory.
+    internal static IRecordStore Records(Func<string, string?> environmentVariable) => DataDirectory.Resolve(environmentVariable).Records;
 
-    // Null when records names an existing directory.
-    internal static string? RecordsDirectoryProblem(string? records) =>
-        Directory.Exists(records) ? null : $"{RecordsDirectoryVariable} must name an existing directory where release records are kept (it is {(string.IsNullOrEmpty(records) ? "not set" : $"'{records}'")}).";
-
-    // State location and secrets passphrase must be set explicitly: a default would lose track of stacks between runs, or
-    // encrypt with a passphrase nobody chose. An empty passphrase is a choice (local/dev); a passphrase file is another.
-    internal static string? BackendSettingsProblem(Func<string, string?> environmentVariable)
-    {
-        if (environmentVariable(BackendUrlVariable) is null)
-        {
-            return $"{BackendUrlVariable} is not set. Set it to where Pulumi keeps state, for example file://<directory> or an Azure blob URL; without it stacks would be lost between runs.";
-        }
-
-        return environmentVariable(PassphraseVariable) is null && environmentVariable(PassphraseFileVariable) is null
-            ? $"{PassphraseVariable} is not set. Set it (empty is acceptable for local/dev only), or set {PassphraseFileVariable}."
-            : null;
-    }
-
-    // The principal the run authenticates with, from the ARM_* variables Pulumi uses too. Throws InvalidOperationException naming the unset ones.
+    // The principal the run authenticates with: the ARM_* service principal Pulumi uses too, or the Azure CLI sign-in. Throws InvalidOperationException naming the unset ones of a partial ARM_* set.
     internal static IDeployerIdentity CreateDeployerIdentity(Func<string, string?> environmentVariable) => new ArmDeployerIdentity(ArmCredential(environmentVariable));
 
     // The principal the run authenticates as; null, with the reason on stderr, when the credential is missing, malformed or refused.
@@ -318,14 +293,21 @@ public static class Cli
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.RegisterPulumiBackend(options =>
+        services.RegisterPulumiBackend(PulumiSettings(environmentVariable));
+        return services.BuildServiceProvider().GetRequiredService<IBackEndProvider>();
+    }
+
+    // The Pulumi backend on the state in jd's data directory (created on first use) and its key, with the optional Pulumi home and scratch directory.
+    internal static Action<PulumiBackendOptions> PulumiSettings(Func<string, string?> environmentVariable)
+    {
+        var (state, key) = DataDirectory.Resolve(environmentVariable).PrepareState();
+        return options =>
         {
-            options.BackendUrl = environmentVariable(BackendUrlVariable);
-            options.ConfigPassPhrase = environmentVariable(PassphraseVariable);
+            options.BackendUrl = "file://" + state;
+            options.ConfigPassPhraseFile = key;
             options.PulumiHome = environmentVariable("PULUMI_HOME");
             options.ScratchDirectory = environmentVariable("JD_SCRATCH_DIR") ?? options.ScratchDirectory;
-        });
-        return services.BuildServiceProvider().GetRequiredService<IBackEndProvider>();
+        };
     }
 
     internal static void Print(IEnumerable<LoadError> errors, TextWriter writer)
