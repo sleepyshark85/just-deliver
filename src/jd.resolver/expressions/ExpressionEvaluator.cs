@@ -39,12 +39,18 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     [GeneratedRegex(@"^[a-z][a-z0-9]*$")]
     private static partial Regex FunctionNamePattern();
 
+    /// <summary>The first segments of a path that are not node names: the namespaces and the runtime node, always in scope.</summary>
+    public static readonly IReadOnlySet<string> ReservedRoots = new HashSet<string> { EnvNamespace, RoleNamespace, WorkloadNamespace, ResourceNamespace, RuntimeNode };
+
+    /// <summary>Whether an expression in <paramref name="text"/> reads a <c>resource.</c> path, as a bare path or a function argument.</summary>
+    public static bool ReadsResource(string text) => Paths(text).Any(p => p.StartsWith(ResourceNamespace + ".", StringComparison.Ordinal));
+
     /// <summary>
-    /// Whether an expression in <paramref name="text"/> reads a <c>resource.</c> path, as a bare path or a function argument. It scans
-    /// with the evaluator's own rules (where an expression ends, how arguments split, what a path is), so the two cannot disagree;
-    /// text the evaluator rejects is left to it.
+    /// The dotted paths the expressions in <paramref name="text"/> read, as bare paths or function arguments. It scans with the evaluator's
+    /// own rules (where an expression ends, how arguments split, what a path is), so the two cannot disagree; text the evaluator rejects
+    /// is left to it.
     /// </summary>
-    public static bool ReadsResource(string text)
+    public static IEnumerable<string> Paths(string text)
     {
         var pos = 0;
         while (text.IndexOf("${", pos, StringComparison.Ordinal) is var start and >= 0 && FindClosingBrace(text, start + 2) is var end and >= 0)
@@ -52,15 +58,13 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
             var expression = text[(start + 2)..end].Trim();
             var open = expression.IndexOf('(');
             var arguments = open < 0 ? [expression] : expression.EndsWith(')') ? SplitArguments(expression[(open + 1)..^1]) : [];
-            if (arguments.Any(a => PathPattern().IsMatch(a) && a.StartsWith(ResourceNamespace + ".", StringComparison.Ordinal)))
+            foreach (var path in arguments.Where(a => PathPattern().IsMatch(a)))
             {
-                return true;
+                yield return path;
             }
 
             pos = end + 1;
         }
-
-        return false;
     }
 
     // Text is null while the value waits on References. EnvPaths are the env.<path> values read to produce it.

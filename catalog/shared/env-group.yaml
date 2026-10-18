@@ -1,0 +1,15 @@
+kind: SharedResource
+name: env-group
+description: The environment's resource group, holding its environment-scope resources and its workloads.
+scope: environment
+# Loaded and checked; deployed from S21e (see shared-group.yaml). Until then the transitional env-substrate component deploys these nodes.
+nodes:
+  group:
+    template: azure/resource-group
+    config:
+      resourceGroupName: ${name('rg')}
+      location: ${env.region}
+      tags: { project: just-deliver-mvp, tier: substrate }
+exports:
+  name: ${group.resourceGroupName}
+  location: ${group.location}

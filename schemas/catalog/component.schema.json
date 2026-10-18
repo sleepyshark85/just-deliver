@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/catalog/component.schema.json",
   "title": "just-deliver catalog component",
-  "description": "What a workload asks for by name (for example 'database'): one contract, and an implementation per environment type. Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across components and runtimes.",
+  "description": "What a workload asks for by name (for example 'database'): one contract, and an implementation per environment type. Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across shared resources, components and runtimes.",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "name", "description", "exports", "implementations"],
@@ -20,6 +20,12 @@
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 }
     },
+    "uses": {
+      "description": "The shared resources its parts may read as ${<name>.<export>} (checked by the resolver).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
     "implementations": {
       "description": "Environment type (declared in the Catalog file) or 'default' -> implementation. An environment uses its type's implementation, else 'default'; every implementation declares the same classes (checked by the resolver).",
       "type": "object",
@@ -29,6 +35,10 @@
         "additionalProperties": false,
         "required": ["classes"],
         "properties": {
+          "environment": {
+            "description": "The nodes deployed once per environment that offers the component, and their exports; its class parts read them as ${<component>.<export>}.",
+            "$ref": "#/definitions/part"
+          },
           "classes": {
             "description": "Class (what a workload may request with 'class') -> the nodes each requiring workload gets and its exports.",
             "type": "object",
@@ -52,7 +62,7 @@
           "additionalProperties": { "$ref": "#/definitions/node" }
         },
         "exports": {
-          "description": "Export name -> expression producing it; exactly the component's exports.",
+          "description": "Export name -> expression producing it; in a class, exactly the component's exports.",
           "type": "object",
           "additionalProperties": { "type": "string", "minLength": 1 }
         }

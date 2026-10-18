@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/catalog/runtime.schema.json",
   "title": "just-deliver catalog runtime",
-  "description": "The compute every workload gets. Never required by name: it has no contract and no classes. Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across components and runtimes.",
+  "description": "The compute every workload gets. Never required by name: it has no contract and no classes. Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across shared resources, components and runtimes.",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "name", "description", "implementations"],
@@ -10,6 +10,12 @@
     "kind": { "enum": ["Runtime"] },
     "name": { "description": "Same pattern as a component name.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
     "description": { "description": "What the runtime gives a team.", "type": "string", "minLength": 1 },
+    "uses": {
+      "description": "The shared resources its nodes may read as ${<name>.<export>} (checked by the resolver).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
     "implementations": {
       "description": "Environment type (declared in the Catalog file) or 'default' -> implementation. An environment uses its type's implementation, else 'default'.",
       "type": "object",
