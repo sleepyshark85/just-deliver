@@ -140,9 +140,11 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
             "kind: Component\nname: cache\ndescription: d\nexports: [engine, endpoint, database, container]\nimplementations:\n  default:\n    classes:\n      standard:\n"
             + "        nodes:\n          n:\n            template: azure/no-such-template\n            config: {}\n        exports: { engine: e, endpoint: e, database: e, container: e }\n");
         var set = await CreateSetAsync(app => app.Replace("- type: database", "- type: cache\n    id: database"));
+        var environment = Path.Combine(_temp, "dev.env.yaml");
+        await File.WriteAllTextAsync(environment, (await File.ReadAllTextAsync(Environment)).Replace("offers: [container-app, database, monitoring]", "offers: [container-app, database, monitoring, cache]"));
         var backend = new RecordingBackend();
 
-        var (code, stdout, stderr) = await RunAsync(backend, ["release", "deploy", set, "--env", Environment, "--catalog", catalog]);
+        var (code, stdout, stderr) = await RunAsync(backend, ["release", "deploy", set, "--env", environment, "--catalog", catalog]);
 
         Assert.Equal(1, code);
         Assert.Empty(backend.Calls);

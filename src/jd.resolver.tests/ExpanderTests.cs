@@ -30,11 +30,11 @@ public class ExpanderTests
         + "  stage:\n    classes:\n      standard: { nodes: { n: { template: t/n, config: {} } }, exports: { endpoint: guarded } }\n";
 
     private static EnvironmentDescriptor Env(string type = "dev") =>
-        new("dev", "region", type, new Dictionary<string, string> { ["host"] = "h1" }, [], null);
+        new("dev", "region", type, new Dictionary<string, string>(), ["sqldb", "container-app"], null);
 
     private static async Task<Catalog> LoadAsync(params string[] components)
     {
-        var files = BaseFiles.Concat(components).Append(TestCatalog.RuntimeFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
+        var files = BaseFiles.Concat(components).Append(TestCatalog.RuntimeFile).Append(TestCatalog.GrantsFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var result = await CatalogParser.ParseAsync(files);
         Assert.Empty(result.Errors);
         return result.Catalog!;
@@ -50,8 +50,8 @@ public class ExpanderTests
     public async Task A_requirement_expands_its_component_class_with_the_requirement_id()
     {
         var catalog = await LoadAsync(Sqldb(
-            "  n:\n    template: t/n\n    kind: grant\n    config:\n      name: ${name('thing')}\n      host: ${env.host}\n",
-            "  endpoint: ${env.host}\n"));
+            "  n:\n    template: t/g\n    kind: grant\n    config:\n      scope: ${runtime.id}\n      name: ${name('thing')}\n      host: ${env.region}\n",
+            "  endpoint: ${env.region}\n"));
 
         var result = Expand(catalog, "  - type: sqldb\n    id: orders\n");
 
@@ -59,10 +59,10 @@ public class ExpanderTests
         var requirement = Assert.Single(result.Requirements);
         Assert.Equal(("orders", "sqldb", "standard", ComponentFile), (requirement.Id, requirement.Type, requirement.Class, requirement.Source));
         var node = Assert.Single(requirement.Nodes);
-        Assert.Equal(("n", "t/n", NodeKind.Grant), (node.Name, node.Template, node.Kind));
+        Assert.Equal(("n", "t/g", NodeKind.Grant), (node.Name, node.Template, node.Kind));
         Assert.Equal("shop-orders", Text(node.Config["name"]));
-        Assert.Equal("h1", Text(node.Config["host"]));
-        Assert.Equal("h1", Assert.IsType<Resolved>(requirement.Exports["endpoint"]).Value);
+        Assert.Equal("region", Text(node.Config["host"]));
+        Assert.Equal("region", Assert.IsType<Resolved>(requirement.Exports["endpoint"]).Value);
     }
 
     [Theory]
@@ -158,18 +158,46 @@ public class ExpanderTests
         Assert.Equal(template, Assert.Single(result.Runtime!.Nodes).Template);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(2)]
-    public async Task A_catalog_without_exactly_one_runtime_is_an_error_for_a_workload(int count)
+    // Boundary 11: a requirement's component must be among the environment's offers; the other requirements still expand.
+    [Fact]
+    public async Task A_requirement_whose_component_the_environment_does_not_offer_is_an_error_naming_both()
     {
-        var runtimes = Enumerable.Range(0, count).Select(i => TestCatalog.Runtime(RuntimeNodes).Replace("name: container-app", $"name: runtime-{i}")).ToArray();
+        var catalog = await LoadAsync(Sqldb(), Sqldb().Replace("name: sqldb", "name: cache", StringComparison.Ordinal));
 
-        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "dev", runtimes);
+        var result = new Expander(catalog, Env() with { Offers = ["cache", "container-app"] }).Expand(Workload("  - type: sqldb\n  - type: cache\n"), "workload.yaml");
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("workload.yaml", "requires[0]", "requirement 'sqldb': environment 'dev' does not offer sqldb (offers: cache, container-app)."), (error.File, error.Location, error.Message));
+        Assert.Equal(["cache"], result.Requirements.Select(r => r.Id));
+    }
+
+    // The runtime is the environment's offered one, not the catalog's (docs/architecture/components.md section 3).
+    [Theory]
+    [InlineData("", "environment 'dev' offers no runtime, so no workload can deploy on it.")]
+    [InlineData("sqldb", "environment 'dev' offers no runtime, so no workload can deploy on it.")]
+    [InlineData("container-app,other-app", "environment 'dev' offers more than one runtime (container-app, other-app); a workload runs on exactly one.")]
+    public async Task A_workload_needs_exactly_one_offered_runtime(string offers, string message)
+    {
+        var result = await ExpandOfferingAsync(offers.Split(',', StringSplitOptions.RemoveEmptyEntries));
 
         var error = Assert.Single(result.Errors);
         Assert.Null(result.Runtime);
-        Assert.Equal(("workload.yaml", $"the catalog must declare exactly one Runtime; it declares {count}."), (error.File, error.Message));
+        Assert.Equal(("workload.yaml", "runtime", message), (error.File, error.Location, error.Message));
+    }
+
+    [Fact]
+    public async Task A_workload_gets_the_runtime_its_environment_offers_among_those_the_catalog_declares()
+    {
+        var result = await ExpandOfferingAsync(["other-app"]);
+
+        Assert.Empty(result.Errors);
+        Assert.Equal(("t/other", $"f{BaseFiles.Length + 1}.yaml"), (Assert.Single(result.Runtime!.Nodes).Template, result.Runtime.Source));
+    }
+
+    private static async Task<ExpansionResult> ExpandOfferingAsync(string[] offers)
+    {
+        var catalog = await LoadWithoutRuntimeAsync([TestCatalog.Runtime(RuntimeNodes), TestCatalog.Runtime(RuntimeNodes.Replace("t/rt", "t/other")).Replace("name: container-app", "name: other-app")]);
+        return new Expander(catalog, Env() with { Offers = offers }).Expand(WorkloadWith("  image: i\n  ports:\n    - port: 80\n"), "workload.yaml");
     }
 
     [Fact]
@@ -197,7 +225,7 @@ public class ExpanderTests
     [Fact]
     public async Task Config_is_walked_through_objects_and_arrays_and_scalars_pass_through()
     {
-        var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config:\n      size: 400\n      on: true\n      none: null\n      tags: [x, '${env.host}', 7]\n      nested: { deep: { host: '${env.host}' }, count: 2 }\n"));
+        var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config:\n      size: 400\n      on: true\n      none: null\n      tags: [x, '${env.region}', 7]\n      nested: { deep: { host: '${env.region}' }, count: 2 }\n"));
 
         var node = Assert.Single(Assert.Single(Expand(catalog, "  - type: sqldb\n").Requirements).Nodes);
 
@@ -205,10 +233,10 @@ public class ExpanderTests
         Assert.True((bool)Assert.IsType<ConfigScalar>(node.Config["on"]).Value);
         Assert.Equal(JTokenType.Null, Assert.IsType<ConfigScalar>(node.Config["none"]).Value.Type);
         var tags = Assert.IsType<ConfigArray>(node.Config["tags"]).Items;
-        Assert.Equal(("x", "h1"), (Text(tags[0]), Text(tags[1])));
+        Assert.Equal(("x", "region"), (Text(tags[0]), Text(tags[1])));
         Assert.Equal(7, (int)Assert.IsType<ConfigScalar>(tags[2]).Value);
         var nested = Assert.IsType<ConfigObject>(node.Config["nested"]).Properties;
-        Assert.Equal("h1", Text(Assert.IsType<ConfigObject>(nested["deep"]).Properties["host"]));
+        Assert.Equal("region", Text(Assert.IsType<ConfigObject>(nested["deep"]).Properties["host"]));
         Assert.Equal(2, (int)Assert.IsType<ConfigScalar>(nested["count"]).Value);
     }
 
@@ -230,7 +258,7 @@ public class ExpanderTests
     [Fact]
     public async Task Expression_errors_are_collected_across_requirements_with_the_mapping_file_and_requirement()
     {
-        var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config: { a: '${env.nope}', b: '${role.nope}' }\n"));
+        var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config: { a: '${workload.nope}', b: '${role.nope}' }\n"));
 
         var result = Expand(catalog, "  - type: sqldb\n    id: one\n  - type: sqldb\n    id: two\n");
 
@@ -273,7 +301,7 @@ public class ExpanderTests
                 ["cosmos-account.endpoint"] = "https://acct",
                 ["log-analytics.id"] = "/law",
             },
-            [],
+            ["container-app", "database", "monitoring"],
             null);
 
         var result = new Expander(catalog, environment).Expand(workload, "workload.yaml");
@@ -285,6 +313,11 @@ public class ExpanderTests
         var runtime = Assert.IsType<ExpandedRuntime>(result.Runtime);
         Assert.Equal(("runtime", "azure/container-app"), (Assert.Single(runtime.Nodes).Name, runtime.Nodes[0].Template));
         Assert.Equal(("8080", "/health", 200), (Text(runtime.Nodes[0].Config["targetPort"]), runtime.Probe!.Path, runtime.Probe.ExpectedStatus));
+
+        // Boundary 7: only the requirements' class parts and the runtime, never a shared resource or an environment part (the database
+        // node, the groups, the account), although the descriptor holds their values.
+        Assert.Equal(["access", "access", "appinsights", "container", "runtime"], result.Requirements.SelectMany(r => r.Nodes).Concat(runtime.Nodes).Select(n => n.Name).Order(StringComparer.Ordinal));
+        Assert.Empty(result.Parts);
         var access = requirement.Nodes.Single(n => n.Name == "access");
         Assert.Equal(NodeKind.Grant, access.Kind);
         Assert.Equal(["container", "database", "endpoint", "engine"], requirement.Exports.Keys.Order(StringComparer.Ordinal));

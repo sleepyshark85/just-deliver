@@ -80,6 +80,26 @@ public abstract class ProbeAzureTest : IDisposable
     }
 
     /// <summary>
+    /// The resource group the test creates, as a shared resource the probe component reads through <c>uses</c> as
+    /// <c>${probe-group.name}</c>: the descriptor carries its value, and no <c>env up</c> deploys it here.
+    /// </summary>
+    protected void WriteProbeGroup()
+    {
+        Write("catalog/shared/probe-group.yaml", """
+            kind: SharedResource
+            name: probe-group
+            description: Test-only; its name is the descriptor's value.
+            scope: environment
+            nodes:
+              stand-in:
+                template: azure/resource-group
+                config: { resourceGroupName: unused, location: '${env.region}' }
+            exports:
+              name: ${stand-in.resourceGroupName}
+            """);
+    }
+
+    /// <summary>
     /// Every workload needs a runtime. This test-only one points at a template with no resources, so the release flow
     /// deploys it without reaching Azure (<see cref="DeployAsync"/> gives the flow a probe that passes: there is no app behind the
     /// stand-in's fqdn); it declares the inputs and outputs the release block names.

@@ -112,8 +112,8 @@ STAGE_RG=$(sed -n '/^  env-group:$/,/^  [^ ]/s/^    name: *//p' "$JD_WALK/stage.
 ```
 
 Each run deploys what the definition's `offers` reach: the shared layer the shared resources, dev and stage their own parts on the shared
-descriptor; the descriptor's `values` are keyed by part (`env-group.name`, `cosmos-account.id`, …). A descriptor written before S21e is
-refused (its layout changed): re-run the three `jd env up` with `--force`; every node is `unchanged`.
+descriptor; the descriptor's `values` are keyed by part (`env-group.name`, `cosmos-account.id`, …). A descriptor written before S21f is
+refused (its layout changed; S21e ones carry `grantable`): re-run the three `jd env up` with `--force`; every node is `unchanged`.
 
 Look at: the Cosmos account is free tier, capped at 1,000 RU/s, refuses keys; `db-dev` and `db-stage` hold 400 RU/s each.
 

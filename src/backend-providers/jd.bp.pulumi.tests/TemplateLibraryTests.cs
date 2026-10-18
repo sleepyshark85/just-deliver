@@ -40,7 +40,7 @@ public partial class TemplateLibraryTests
         var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
         var environment = (await EnvironmentFile.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", "seed-environment.yaml"))).Descriptor!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
-        var graph = new GraphBuilder(environment).Build(new PolicyApplier(catalog, environment).Apply(new Expander(catalog, environment).Expand(workload, "workload.yaml")));
+        var graph = new GraphBuilder(environment, catalog.GrantTargets).Build(new PolicyApplier(catalog, environment).Apply(new Expander(catalog, environment).Expand(workload, "workload.yaml")));
         var library = await TemplateLibrary.LoadAsync(Templates);
 
         Assert.Empty(graph.Errors);
@@ -268,7 +268,7 @@ public partial class TemplateLibraryTests
         var loaded = await CatalogParser.ParseAsync(sources);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\ncontainer:\n  image: reg/app:1\nrequires: []\n");
-        var graph = jd.resolver.Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, new EnvironmentDescriptor("dev", "region-1", "dev", new Dictionary<string, string>(), [], null));
+        var graph = jd.resolver.Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, new EnvironmentDescriptor("dev", "region-1", "dev", new Dictionary<string, string>(), ["container-app"], null));
         Assert.Empty(graph.Errors);
 
         var error = Assert.Single(RuntimeLibrary().Check(graph));

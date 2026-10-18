@@ -21,7 +21,7 @@ dotnet run --project src/jd.cli -- --help
 | Command | What it does |
 |---|---|
 | `validate` | Checks the workload against `workload.schema.json` (embedded in `jd.definitionvalidator`) and the workload rules. Prints one error per line as `file: location: message`. |
-| `preview` | Validates the workload first, then loads the catalog and environment descriptor, expands requirements, applies policies and builds the graph. Prints each node in graph order with id, template, kind, phase, stack, short hash, dependencies and every config field with its value (`pending: <expression>` when it waits for a runtime or dependency output; `(from env.<path>)` when read from the environment) and provenance (layer and rule). `--json` prints the graph as the stable JSON the golden snapshot pins instead. |
+| `preview` | Validates the workload first, then loads the catalog and environment descriptor, expands requirements, applies policies and builds the graph. Prints each node in graph order with id, template, kind, phase, stack, short hash, dependencies and every config field with its value (`pending: <expression>` when it waits for a runtime or dependency output; `(from <part>.<export>)` when read from the environment descriptor, such as `(from cosmos-account.id)`) and provenance (layer and rule). `--json` prints the graph as the stable JSON the golden snapshot pins instead. |
 
 ### `jd deploy`
 
@@ -101,20 +101,19 @@ jd env up samples/environments/dev.yaml    --catalog catalog --base shared.env.y
 - `--base` is the descriptor of the layer below. Its values are keyed by part (`cosmos-account.name` and so on); a part of the run reads
   another as `${cosmos-account.name}`, in place when it is deployed in the same run, else from the base. The written descriptor is the
   base's values plus each deployed part's exports. A shared resource the offers reach must be in the base (an environment never deploys
-  one), and a part the base already has is an error; `grantable` paths are added to the base's.
+  one), and a part the base already has is an error.
 - `--region` defaults to `JD_REGION`; one of them is required. The descriptor takes its name and type from the definition.
 - `--out` must not exist unless `--force` is given; this is checked before anything is created.
 - Before anything is created the definition's type (and the base's) must be one `catalog.yaml` declares under `environmentTypes`, and a
   definition of a type with `approval: true` must carry an `approval` block; otherwise the error names the type (and the declared ones) and
   nothing is deployed. `jd preview`, `deploy`, `release deploy`, `release qualify` and `promote` check a descriptor the same way.
 - Then the definition is resolved and the descriptor is composed with its values still pending: an
-  unknown offer, two runtimes, a component without an implementation for the type, a collision with the base, or a descriptor rule broken (reserved key, `grantable` path
-  that is not a value) is reported and nothing is deployed. After the deploy the descriptor is composed from the outputs,
+  unknown offer, two runtimes, a component without an implementation for the type, a collision with the base, or a descriptor rule broken (reserved key, a dotted key) is reported and nothing is deployed. After the deploy the descriptor is composed from the outputs,
   validated by the descriptor loader and only then written. Secret or null outputs are never written; a value that needs
   one is an error.
 - Running a command again reports every node `unchanged` and rewrites the same descriptor (with `--force`).
-- A descriptor written before S21e (values keyed by layout, not by part) is refused: run the `env up`s again with `--force`; every node is
-  `unchanged` and the descriptors are rewritten in the new layout.
+- A descriptor written before S21f is refused (before S21e its values were keyed by layout, not by part; S21e ones carry `grantable`): run the
+  `env up`s again with `--force`; every node is `unchanged` and the descriptors are rewritten in the new layout.
 - If a deploy fails nothing is written; running again resumes (deployed nodes are `unchanged`).
 
 An environment definition (`kind: EnvironmentDefinition`, [schema](../schemas/environment-definition.schema.json)):
@@ -124,7 +123,6 @@ kind: EnvironmentDefinition
 name: dev                       # the environment's name
 type: dev                       # an environment type catalog.yaml declares (shared, dev, stage, prod in the seed)
 offers: [container-app, database, monitoring]   # catalog components and at most one runtime; the parts follow from them
-grantable: [cosmos-account.id]  # may name base values; transitional until S21f
 approval:                       # optional, required for a type with approval: true (stage, prod); copied as it is into the descriptor
   qualifiedOn: dev              # the environment whose records must show the set qualified
   required: 1                   # distinct approvers needed (1 to the number listed)

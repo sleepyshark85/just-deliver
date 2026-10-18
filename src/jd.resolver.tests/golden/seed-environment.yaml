@@ -9,4 +9,3 @@ values:
   cosmos-account: { name: cosmos-dev, id: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev, endpoint: "https://cosmos-dev.documents.azure.com:443/" }
   database: { databaseName: db-dev, databaseId: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev/sqlDatabases/db-dev }
   log-analytics: { id: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev }
-grantable: [cosmos-account.id]

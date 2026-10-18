@@ -62,7 +62,6 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
             ["type"] = environment.Type,
             ["offers"] = new JArray(offers),
             ["values"] = values,
-            ["grantable"] = new JArray(environment.Grantable.Concat(definition.Grantable).Distinct().Order(StringComparer.Ordinal)),
         };
         if (environment.Approval is { } approval)
         {
@@ -71,7 +70,7 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
 
         var yaml = Serializer.Serialize(Plain(document));
 
-        // The descriptor rules (reserved keys, dotted keys, grantable paths) are the loader's, applied to the composed document.
+        // The descriptor rules (reserved keys, dotted keys) are the loader's, applied to the composed document.
         var parsed = await EnvironmentParser.ParseAsync(definitionFile, yaml, cancellationToken);
         errors.AddRange(parsed.Errors);
         return new ComposedDescriptor(errors.Count == 0 ? yaml : null, errors);

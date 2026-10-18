@@ -22,7 +22,7 @@ public class GraphBuilderTests
     ];
 
     private static readonly EnvironmentDescriptor Env =
-        new("dev", "region", "dev", new Dictionary<string, string> { ["host"] = "h1", ["grant.ok"] = "g1" }, ["grant.ok"], null);
+        new("dev", "region", "dev", new Dictionary<string, string> { ["cosmos-account.id"] = "/acct" }, ["sqldb", "container-app"], null);
 
     // One component node as YAML; config is a flow mapping body, written as it would be in the catalog.
     private static string N(string name, string config, string kind = "create", string template = "")
@@ -36,12 +36,12 @@ public class GraphBuilderTests
     private static async Task<ResolvedGraph> BuildAsync(string nodes, string requires = "  - type: sqldb\n", params string[] policies)
     {
         var component = TestCatalog.Component("sqldb", "[endpoint]", $"nodes:\n{nodes}exports:\n  endpoint: x\n");
-        var files = BaseFiles.Append(component).Concat(policies).Append(TestCatalog.RuntimeFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
+        var files = BaseFiles.Append(component).Concat(policies).Append(TestCatalog.RuntimeFile).Append(TestCatalog.GrantsFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
         var applied = new PolicyApplier(loaded.Catalog!, Env).Apply(new Expander(loaded.Catalog!, Env).Expand(workload, "workload.yaml"));
-        return new GraphBuilder(Env).Build(applied);
+        return new GraphBuilder(Env, loaded.Catalog!.GrantTargets).Build(applied);
     }
 
     private static GraphNode Node(ResolvedGraph graph, string scope, string name) => graph.Nodes.Single(n => n.Id == Id(scope, name));
@@ -165,7 +165,8 @@ public class GraphBuilderTests
         Assert.Equal(baseline, Hash(await BuildAsync(N("n", "b: x, a: 1"))));
         Assert.NotEqual(baseline, Hash(await BuildAsync(N("n", "a: 2, b: x"))));
         Assert.NotEqual(baseline, Hash(await BuildAsync(N("n", "a: 1, b: x", template: "t/other"))));
-        Assert.NotEqual(baseline, Hash(await BuildAsync(N("n", "a: 1, b: x", kind: "grant"))));
+        var created = Hash(await BuildAsync(N("n", "scope: '${runtime.id}'", template: "t/g")));
+        Assert.NotEqual(created, Hash(await BuildAsync(N("n", "scope: '${runtime.id}'", kind: "grant", template: "t/g"))));
     }
 
     [Fact]
@@ -180,41 +181,56 @@ public class GraphBuilderTests
     }
 
     [Theory]
-    [InlineData("v: '${env.host}'", "v")]
-    [InlineData("nested: { v: 'a-${env.host}' }", "nested.v")]
-    [InlineData("v: \"${guid(env.host, 'x')}\"", "v")]
-    [InlineData("v: \"${guid(env.host, runtime.principalId)}\"", "v")]
-    public async Task A_grant_using_an_environment_path_that_is_not_grantable_is_an_error(string config, string field)
+    [InlineData("'${c.id}'")]
+    [InlineData("'${ c.id }'")]
+    [InlineData("'${runtime.principalId}'")]
+    public async Task A_grant_targeting_its_own_node_or_the_runtime_is_accepted(string target)
     {
-        var graph = await BuildAsync(N("g", config, kind: "grant"));
-
-        var error = Assert.Single(graph.Errors);
-        Assert.Equal((ComponentFile, field), (error.File, error.Location));
-        Assert.Contains($"node '{Id("sqldb", "g")}'", error.Message);
-        Assert.Contains("env.host", error.Message);
-        Assert.Contains("grantable", error.Message);
-    }
-
-    [Fact]
-    public async Task A_grant_using_a_grantable_path_and_other_nodes_using_any_path_are_accepted()
-    {
-        var graph = await BuildAsync(
-            N("g", "v: '${env.grant.ok}', w: \"${guid(env.grant.ok, 'x')}\"", kind: "grant") + N("c", "v: '${env.host}'"));
+        var graph = await BuildAsync(N("c", "k: 1") + N("g", $"scope: {target}", kind: "grant", template: "t/g"));
 
         Assert.Empty(graph.Errors);
         Assert.Equal(3, graph.Nodes.Count);
     }
 
-    [Fact]
-    public async Task The_grant_check_sees_paths_a_policy_adds_and_names_the_policy_file()
+    // After policies the target is still one reference to the grant's own scope or the runtime (security boundary 1): a policy cannot
+    // point it at a shared resource, a literal, text around a reference or a function.
+    [Theory]
+    [InlineData("'${cosmos-account.id}'")]
+    [InlineData("/subscriptions/s/accounts/a")]
+    [InlineData("'x-${c.id}'")]
+    [InlineData("\"${guid(c.id)}\"")]
+    public async Task A_policy_setting_a_grant_target_to_anything_but_its_own_node_is_refused_at_graph_build(string value)
     {
         var graph = await BuildAsync(
-            N("g", "k: 1", kind: "grant", template: "t/g"),
+            N("c", "k: 1") + N("g", "scope: '${c.id}'", kind: "grant", template: "t/g"),
             "  - type: sqldb\n",
-            "kind: Policy\nname: pol\nreason: r\nmatch: { template: t/g }\nset: { extra: '${env.host}' }\n");
+            $"kind: Policy\nname: pol\nreason: r\nmatch: {{ template: t/g }}\nset: {{ scope: {value} }}\n");
 
         var error = Assert.Single(graph.Errors);
-        Assert.Equal(("f2.yaml", "extra"), (error.File, error.Location));
+        Assert.Equal(("f2.yaml", "scope"), (error.File, error.Location));
+        Assert.Contains($"node '{Id("sqldb", "g")}'", error.Message);
+        Assert.Contains("grant's target ('scope')", error.Message);
+    }
+
+    [Fact]
+    public void A_grant_whose_template_has_no_target_or_whose_target_waits_on_another_node_is_refused_at_graph_build()
+    {
+        var target = new ConfigText(new Pending("${c.id}", new HashSet<Reference> { new(ReferenceKind.Node, "c", "id") }), new HashSet<string>());
+        var grant = new ResolvedNode("g", "t/g", NodeKind.Grant, new Dictionary<string, ConfigValue> { ["scope"] = target }, new Dictionary<string, Provenance>());
+        var create = new ResolvedNode("c", "t/c", NodeKind.Create, new Dictionary<string, ConfigValue>(), new Dictionary<string, Provenance>());
+        var policy = new PolicyResult(
+            "1", "shop", "crew", null, null, [new ResolvedRequirement("sqldb", "sqldb", "standard", "m.yaml", new Dictionary<string, EvalResult>(), [create, grant])],
+            [], [], new Dictionary<string, IReadOnlyDictionary<string, string>>());
+
+        Assert.Empty(new GraphBuilder(Env, new Dictionary<string, string> { ["t/g"] = "scope" }).Build(policy).Errors);
+        var error = Assert.Single(new GraphBuilder(Env, new Dictionary<string, string>()).Build(policy).Errors);
+        Assert.Equal((Id("sqldb", "g"), "template"), (error.File, error.Location));
+        Assert.Contains("'t/g' is not a grant template", error.Message);
+
+        // A part of the run read in place is written as one reference but waits on another part's node: not the grant's own.
+        var inPlace = new ConfigText(new Pending("${shared-group.name}", new HashSet<Reference> { new(ReferenceKind.Node, "c", "id") }), new HashSet<string>());
+        var reached = policy with { Requirements = [policy.Requirements[0] with { Nodes = [create, grant with { Config = new Dictionary<string, ConfigValue> { ["scope"] = inPlace } }] }] };
+        Assert.Equal(["scope"], new GraphBuilder(Env, new Dictionary<string, string> { ["t/g"] = "scope" }).Build(reached).Errors.Select(e => e.Location));
     }
 
     [Fact]

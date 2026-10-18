@@ -41,6 +41,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
             name: probe
             description: Test-only component.
             exports: [app]
+            uses: [probe-group]
             implementations:
               default:
                 classes:
@@ -49,7 +50,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
                       group:
                         template: azure/resource-group
                         config:
-                          resourceGroupName: ${env.probeGroup}
+                          resourceGroupName: ${probe-group.name}
                           location: ${env.region}
                           tags: { project: just-deliver-mvp }
                       workspace:
@@ -91,6 +92,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
                       app: ${app.containerAppId}
             """);
         WriteRuntimeStandIn();
+        WriteProbeGroup();
         CopyTemplates("resource-group", "log-analytics", "container-apps-environment", "container-app");
     }
 
@@ -167,7 +169,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     // The backend, workload, environment and catalog directory of one probe; the catalog files are written by WriteCatalog.
     private (IBackEndProvider Backend, string Workload, string Environment, string Catalog) Prepare()
     {
-        var environment = Write("environment.yaml", $"kind: Environment\nname: s15a-{Suffix}\nregion: {Region}\ntype: dev\noffers: []\nvalues:\n  probeGroup: {ResourceGroup}\n");
+        var environment = Write("environment.yaml", $"kind: Environment\nname: s15a-{Suffix}\nregion: {Region}\ntype: dev\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
         var workload = Write("workload.yaml", "apiVersion: just-deliver/v1\nkind: Workload\nmetadata: { name: s15a-probe, team: platform-team }\ncontainer:\n  image: example.invalid/probe:1\nrequires:\n  - type: probe\n");
         return (CreateBackend(), workload, environment, Path.Combine(Root, "catalog"));
     }

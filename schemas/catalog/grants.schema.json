@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/catalog/grants.schema.json",
+  "title": "just-deliver catalog grants",
+  "description": "Grant template -> the input naming the resource the grant is on (its target). A kind: grant node may use only a template listed here, and its target input must be exactly ${<node>.<output>} of a node of its own part or the runtime. Files of this kind are merged; a template may be listed only once.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "targets"],
+  "properties": {
+    "kind": { "enum": ["Grants"] },
+    "targets": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    }
+  }
+}

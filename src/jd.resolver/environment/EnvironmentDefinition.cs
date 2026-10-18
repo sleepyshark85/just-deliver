@@ -7,11 +7,11 @@ namespace jd.resolver.environment;
 /// What <c>jd env up</c> provisions: what the <see cref="Offers"/> (component and runtime names) reach in its type's layer. Format:
 /// schemas/environment-definition.schema.json.
 /// </summary>
-public sealed record EnvironmentDefinition(string Name, string Type, IReadOnlyList<string> Offers, IReadOnlyList<string> Grantable, ApprovalPolicy? Approval)
+public sealed record EnvironmentDefinition(string Name, string Type, IReadOnlyList<string> Offers, ApprovalPolicy? Approval)
 {
-    /// <summary>The environment the definition is resolved in: its own name, type and approval policy, the given region, and the base descriptor's values.</summary>
+    /// <summary>The environment the definition is resolved in: its own name, type, offers and approval policy, the given region, and the base descriptor's values.</summary>
     public EnvironmentDescriptor Over(string region, EnvironmentDescriptor? baseDescriptor) =>
-        new(Name, region, Type, baseDescriptor?.Values ?? new Dictionary<string, string>(), baseDescriptor?.Grantable ?? [], Approval);
+        new(Name, region, Type, baseDescriptor?.Values ?? new Dictionary<string, string>(), Offers, Approval);
 }
 
 /// <summary><see cref="Definition"/> is set exactly when <see cref="Errors"/> is empty.</summary>
@@ -51,10 +51,10 @@ public static class EnvironmentDefinitionFile
         // The schema guarantees these exist and have these shapes.
         return new EnvironmentDefinitionLoadResult(
             new EnvironmentDefinition(
-                (string)body["name"]!, (string)body["type"]!, Strings(body["offers"]), Strings(body["grantable"]),
+                (string)body["name"]!, (string)body["type"]!, Strings(body["offers"]),
                 body["approval"] is { } approval ? ApprovalPolicy.FromJson(approval) : null),
             []);
     }
 
-    private static List<string> Strings(JToken? token) => token is JArray array ? array.Select(t => (string)t!).ToList() : [];
+    internal static List<string> Strings(JToken? token) => token is JArray array ? array.Select(t => (string)t!).ToList() : [];
 }

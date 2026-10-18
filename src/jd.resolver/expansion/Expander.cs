@@ -173,13 +173,20 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             catalog.Roles, catalog.Naming, environment, owner.Name, owner.Team, currentId, nodeNames.ToHashSet(), known ?? new Dictionary<Reference, string>(), owner.Image, owner.Port,
             parts ?? new Dictionary<string, IReadOnlyDictionary<string, string>>()));
 
-    // Exact lookup, no matching: the component named by the type, its implementation for the environment's type (else the default), the class.
+    // Exact lookup, no matching: the component named by the type, which the environment must offer (security boundary 11), its
+    // implementation for the environment's type (else the default), the class.
     private ExpandedRequirement? ExpandOne(Requirement requirement, Owner owner, string ownerFile, string location, List<LoadError> errors)
     {
         void Fail(string message) => errors.Add(new LoadError(ownerFile, location, $"requirement '{requirement.Id}': {message}"));
         if (!catalog.Components.TryGetValue(requirement.Type, out var component))
         {
             Fail($"'{requirement.Type}' is not a component in the catalog.");
+            return null;
+        }
+
+        if (!environment.Offers.Contains(component.Name))
+        {
+            Fail($"environment '{environment.Name}' does not offer {component.Name} (offers: {string.Join(", ", environment.Offers)}).");
             return null;
         }
 
@@ -214,16 +221,23 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
     private string NoImplementation(string owner) =>
         $"{owner} has no implementation for environment type '{environment.Type}' and no '{ImplementationKey.Default}' implementation.";
 
-    // Every workload gets the catalog's one runtime, in the implementation for the environment's type; each node is evaluated with its own
-    // name as the current id. A workload variable reading an export that is already a value resolves here; the others wait for the second pass.
+    // Every workload gets the runtime the environment offers, in the implementation for the environment's type; each node is evaluated
+    // with its own name as the current id. A workload variable reading an export that is already a value resolves here; the others wait
+    // for the second pass.
     private ExpandedRuntime? ExpandRuntime(Owner owner, List<ExpandedRequirement> requirements, string ownerFile, List<LoadError> errors)
     {
         const string location = ExpressionEvaluator.RuntimeNode;
-        if (catalog.Runtimes.Values.ToList() is not [var runtime])
+        var offered = environment.Offers.Where(catalog.Runtimes.ContainsKey).ToList();
+        if (offered is not [var name])
         {
-            errors.Add(new LoadError(ownerFile, location, $"the catalog must declare exactly one Runtime; it declares {catalog.Runtimes.Count}."));
+            // env up lets a definition offer at most one runtime; a descriptor is still read as written.
+            errors.Add(new LoadError(ownerFile, location, offered.Count == 0
+                ? $"environment '{environment.Name}' offers no runtime, so no workload can deploy on it."
+                : $"environment '{environment.Name}' offers more than one runtime ({string.Join(", ", offered)}); a workload runs on exactly one."));
             return null;
         }
+
+        var runtime = catalog.Runtimes[name];
 
         if (ImplementationKey.For(runtime.Implementations, environment.Type) is not { } key)
         {

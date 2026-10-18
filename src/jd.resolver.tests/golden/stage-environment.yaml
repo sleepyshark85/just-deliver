@@ -29,8 +29,6 @@ values:
   env-group:
     name: rg-stage-1
     location: region-1
-grantable:
-- cosmos-account.id
 approval:
   qualifiedOn: dev
   required: 1

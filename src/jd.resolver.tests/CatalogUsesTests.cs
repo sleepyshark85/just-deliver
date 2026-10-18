@@ -170,6 +170,23 @@ public class CatalogUsesTests
         Assert.Equal("'cosmos.id' reads unknown root 'cosmos'; expected a node of this part (node), a name in uses, 'alpha-db', or one of env, resource, role, runtime, workload.", error.Message);
     }
 
+    // Boundary 4: env.* reads only the environment's own fields, so it cannot read a part past uses; every part kind is checked.
+    [Theory]
+    [InlineData("s.yaml", "nodes.n-cosmos-account.config.group", "{ group: '${env.shared-group.name}' }", null, null)]
+    [InlineData("c.yaml", TestCatalog.PartPath + ".nodes.node.config.account", null, "{ account: \"${guid(env.cosmos-account.id)}\" }", null)]
+    [InlineData("c.yaml", TestCatalog.PartPath + ".nodes.node.config.account", null, "{ account: '${env.region.name}' }", null)]
+    [InlineData("r.yaml", "implementations.default.nodes.runtime.config.group", null, null, "{ group: '${env.apps-env.id}' }")]
+    public async Task Env_other_than_name_region_and_type_is_a_load_error(string file, string location, string? shared, string? component, string? runtime)
+    {
+        var error = SingleError(await Parse(
+            ("s.yaml", Shared("cosmos-account", config: shared ?? "{ v: '${env.name}-${env.region}-${env.type}' }")),
+            ("c.yaml", Component(config: component ?? "{}")),
+            ("r.yaml", Runtime("[]", runtime ?? "{}"))));
+
+        Assert.Equal((file, location), (error.File, error.Location));
+        Assert.Contains("env.* reads only env.name, env.region, env.type; read a deployed part's export as ${<name>.<export>} through uses.", error.Message);
+    }
+
     // Every part kind is checked: a shared resource, an environment part, a class part (config and exports, inside a function call) and the runtime.
     [Theory]
     [InlineData("s.yaml", "nodes.n-cosmos-account.config.group", "{ group: '${shared-group.name}' }", null, null, null)]

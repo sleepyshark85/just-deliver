@@ -119,6 +119,7 @@ metadata:
 
     [Theory]
     [InlineData("${env.cosmos.accountId}")]
+    [InlineData("${cosmos-account.id}")]                   // a deployed part's export: platform-side, never a workload input (boundary 6)
     [InlineData("${name('ca')}")]
     [InlineData("${workload.team}")]
     [InlineData("${runtime.principalId}")]

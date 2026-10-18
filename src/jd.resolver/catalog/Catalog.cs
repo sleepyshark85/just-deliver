@@ -5,6 +5,7 @@ namespace jd.resolver.catalog;
 // The in-memory form of a catalog directory. Formats: schemas/catalog/*.schema.json.
 // Expressions (${...}) and config values are kept exactly as written; the expression
 // evaluator interprets them later. Source is the catalog-relative file a record came from.
+// GrantTargets: grant template to the input naming the resource the grant is on (catalog/grants.yaml).
 
 public sealed record Catalog(
     string Version,
@@ -12,6 +13,7 @@ public sealed record Catalog(
     IReadOnlyDictionary<string, Component> Components,
     IReadOnlyDictionary<string, SharedResource> SharedResources,
     IReadOnlyDictionary<string, Runtime> Runtimes,
+    IReadOnlyDictionary<string, string> GrantTargets,
     IReadOnlyList<Policy> Policies,
     IReadOnlyDictionary<string, NamingRule> Naming,
     IReadOnlyDictionary<string, string> Roles);

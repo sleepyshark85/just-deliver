@@ -6,7 +6,6 @@ kind: EnvironmentDefinition
 name: stage
 type: stage
 offers: [container-app, database, monitoring]
-grantable: [cosmos-account.id]    # transitional until grant targets replace it (docs/architecture/components.md section 7, S21f)
 approval:
   qualifiedOn: dev                # the environment whose records must show the set qualified
   required: 1                     # distinct approvers needed

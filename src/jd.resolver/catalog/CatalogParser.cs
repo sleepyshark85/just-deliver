@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using jd.definitionvalidator;
+using jd.resolver.environment;
 using jd.resolver.expressions;
 using Newtonsoft.Json.Linq;
 
@@ -19,8 +20,9 @@ public static class CatalogParser
     private const string PolicyKind = "Policy";
     private const string NamingKind = "Naming";
     private const string RolesKind = "Roles";
+    private const string GrantsKind = "Grants";
 
-    private static readonly string[] Kinds = [CatalogKind, ComponentKind, RuntimeKind, SharedResourceKind, PolicyKind, NamingKind, RolesKind];
+    private static readonly string[] Kinds = [CatalogKind, ComponentKind, RuntimeKind, SharedResourceKind, PolicyKind, NamingKind, RolesKind, GrantsKind];
 
     // Kinds of earlier catalogs, and what replaced them (docs/architecture/components.md section 2).
     private static readonly Dictionary<string, string> ReplacedKinds = new()
@@ -80,6 +82,7 @@ public static class CatalogParser
         var naming = Merge(namingDocuments, "rules", ToNamingRule, errors);
         CheckNamingAllowed(namingDocuments, errors);
         var roles = Merge(OfKind(documents, RolesKind).Where(d => d.Valid), "roles", role => (string?)role ?? string.Empty, errors);
+        var grantTargets = Merge(OfKind(documents, GrantsKind).Where(d => d.Valid), "targets", Text, errors);
 
         // A file whose kind could not be read might have been the missing Catalog, so do not claim it is missing.
         CheckSingleCatalog(catalogs, unreadable == 0, errors);
@@ -98,6 +101,7 @@ public static class CatalogParser
         CheckNodeNames(readers, errors);
         CheckReads(readers, sharedByName, kinds, errors);
         CheckScopeNodeNames(readers, sharedByName.Keys, errors);
+        CheckGrants(readers, grantTargets, errors);
         CheckUnique(policyDocuments, errors);
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
         var environmentTypes = catalogs.FirstOrDefault() is { Valid: true } first
@@ -124,6 +128,7 @@ public static class CatalogParser
             components.ToDictionary(c => c.Name),
             sharedByName,
             runtimes.ToDictionary(r => r.Name),
+            grantTargets,
             policies,
             naming,
             roles);
@@ -346,7 +351,9 @@ public static class CatalogParser
                     var kind = kinds.GetValueOrDefault(root);
                     var exports = reader.Uses.Contains(root) ? shared.GetValueOrDefault(root)?.Part.Exports : root == reader.OwnComponent ? reader.OwnEnvironment?.Exports : null;
                     var problem =
-                        ExpressionEvaluator.ReservedRoots.Contains(root) || reader.Part.Nodes.ContainsKey(root) ? null
+                        root == ExpressionEvaluator.EnvNamespace && !(segments.Length == 2 && EnvironmentDescriptor.ReservedKeys.Contains(segments[1]))
+                            ? ExpressionEvaluator.EnvLimit(path)
+                        : ExpressionEvaluator.ReservedRoots.Contains(root) || reader.Part.Nodes.ContainsKey(root) ? null
                         : reader.Uses.Contains(root) && exports is null ? null // its file failed its schema, or uses names no shared resource: reported on its own
                         : exports is not null ? (segments.Length == 2 && exports.ContainsKey(segments[1]) ? null : $"'{path}': '{root}' exports {string.Join(", ", exports.Keys)}.")
                         : root == reader.OwnComponent ? $"'{path}': component '{root}' has no environment part in this implementation."
@@ -383,6 +390,34 @@ public static class CatalogParser
             {
                 errors.Add(new LoadError(reader.Source, $"{reader.Prefix}nodes.{node}",
                     $"node '{node}' is also declared by '{first.Owner}' ({first.Source}); node names are unique across the parts of one {$"{group.Key.Scope}".ToLowerInvariant()} scope."));
+            }
+        }
+    }
+
+    // A grant's target may only be the workload's own resource (security boundaries 1 and 2): a grant node sits in a class part or the
+    // runtime, its template is listed in grants.yaml, and the input that names its target is exactly ${<node>.<output>} of a node of the
+    // same part or the runtime. Its other inputs may read what the component uses. The graph builder checks the target again after policies.
+    private static void CheckGrants(List<Reader> readers, IReadOnlyDictionary<string, string> targets, List<LoadError> errors)
+    {
+        foreach (var reader in readers)
+        {
+            foreach (var (name, node) in reader.Part.Nodes.Where(n => n.Value.Kind == NodeKind.Grant))
+            {
+                var location = $"{reader.Prefix}nodes.{name}";
+                if (reader.Scope is not null)
+                {
+                    errors.Add(new LoadError(reader.Source, location, $"a grant node belongs only in a class part or the runtime, not in a part of the {$"{reader.Scope}".ToLowerInvariant()} scope: a grant targets only the workload's own resources."));
+                }
+                else if (!targets.TryGetValue(node.Template, out var input))
+                {
+                    errors.Add(new LoadError(reader.Source, $"{location}.template", $"'{node.Template}' is not a grant template in the catalog's {GrantsKind} targets ({string.Join(", ", targets.Keys.Order(StringComparer.Ordinal))}); list it with the input that names its target."));
+                }
+                else if (!(node.Config.GetValueOrDefault(input) is JValue { Type: JTokenType.String } target
+                    && ExpressionEvaluator.SingleReference(Text(target)) is { } reference
+                    && (reader.Part.Nodes.ContainsKey(reference.Node) || reference.Node == ExpressionEvaluator.RuntimeNode)))
+                {
+                    errors.Add(new LoadError(reader.Source, $"{location}.config.{input}", ExpressionEvaluator.GrantTargetRule(input)));
+                }
             }
         }
     }
@@ -493,7 +528,7 @@ public static class CatalogParser
                 // An export is evaluated in its own requirement's scope, where another requirement's exports are out of reach.
                 foreach (var export in part.Exports.Where(e => ExpressionEvaluator.ReadsResource(e.Value)).Select(e => e.Key))
                 {
-                    errors.Add(new LoadError(component.Source, $"{path}.exports.{export}", "an export cannot reference ${resource.<id>.<export>}; it may read env.*, its own nodes' outputs and runtime.*."));
+                    errors.Add(new LoadError(component.Source, $"{path}.exports.{export}", "an export cannot reference ${resource.<id>.<export>}; it may read its own nodes' outputs, what its component uses, env.* and runtime.*."));
                 }
 
                 var missing = component.Exports.Where(e => !part.Exports.ContainsKey(e)).ToList();

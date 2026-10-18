@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using jd.resolver.environment;
 
 namespace jd.resolver.expressions;
 
@@ -15,7 +16,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     public const string RuntimeNode = "runtime";
 
     // Namespaces (first path segment) and the node they reference; part of the expression format.
-    private const string EnvNamespace = "env";
+    internal const string EnvNamespace = "env";
     private const string RoleNamespace = "role";
     private const string WorkloadNamespace = "workload";
     private const string ResourceNamespace = "resource";
@@ -31,7 +32,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     };
 
     private static readonly IReadOnlySet<Reference> NoReferences = new HashSet<Reference>();
-    private static readonly IReadOnlySet<string> NoEnvPaths = new HashSet<string>();
+    private static readonly IReadOnlySet<string> NoPartReads = new HashSet<string>();
 
     [GeneratedRegex(@"^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$")]
     private static partial Regex PathPattern();
@@ -67,23 +68,41 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
         }
     }
 
-    // Text is null while the value waits on References. EnvPaths are the env.<path> values read to produce it.
-    private sealed record Value(string? Text, IReadOnlySet<Reference> References, IReadOnlySet<string> EnvPaths);
+    /// <summary>The env.* limit as the loader and the evaluator report it.</summary>
+    internal static string EnvLimit(string path) =>
+        $"'{path}' is not an environment field; env.* reads only {string.Join(", ", EnvironmentDescriptor.ReservedKeys.Select(k => $"{EnvNamespace}.{k}"))}; read a deployed part's export as ${{<name>.<export>}} through uses.";
+
+    /// <summary>The grant target rule, as the loader and the graph builder report it.</summary>
+    internal static string GrantTargetRule(string input) =>
+        $"a grant's target ('{input}') must be exactly ${{<node>.<output>}} of a node of its own part or the runtime: no literal, no text around it, no shared or environment resource, no env.*, resource.*, role.* or function.";
+
+    /// <summary>
+    /// The node and output of <paramref name="text"/> when it is exactly one <c>${&lt;node&gt;.&lt;output&gt;}</c>: no text around it, no function,
+    /// no literal, two segments. Null otherwise. What a grant's target must be (docs/architecture/components.md section 3).
+    /// </summary>
+    internal static (string Node, string Output)? SingleReference(string text) =>
+        text.StartsWith("${", StringComparison.Ordinal) && FindClosingBrace(text, 2) == text.Length - 1
+        && text[2..^1].Trim() is var path && PathPattern().IsMatch(path) && path.Split('.') is [var node, var output]
+            ? (node, output)
+            : null;
+
+    // Text is null while the value waits on References. PartReads are the <name>.<export> values read from the descriptor to produce it.
+    private sealed record Value(string? Text, IReadOnlySet<Reference> References, IReadOnlySet<string> PartReads);
 
     /// <summary>
     /// Evaluates every expression in <paramref name="text"/>. Returns null, with every problem added to
     /// <paramref name="errors"/> at <paramref name="file"/>/<paramref name="location"/>, when any expression is invalid.
-    /// The environment paths read (<c>env.&lt;path&gt;</c>, without <c>env.</c>) are added to <paramref name="envPaths"/>:
-    /// a resolved value no longer shows where it came from, and the grant check needs to know.
+    /// The deployed parts' exports read (<c>&lt;name&gt;.&lt;export&gt;</c> from the descriptor) are added to <paramref name="partReads"/>:
+    /// a resolved value no longer shows where it came from, and the preview shows it.
     /// </summary>
-    public EvalResult? Evaluate(string text, string file, string location, ICollection<LoadError> errors, ISet<string>? envPaths = null)
+    public EvalResult? Evaluate(string text, string file, string location, ICollection<LoadError> errors, ISet<string>? partReads = null)
     {
         if (EvaluateText(text, message => errors.Add(new LoadError(file, location, message))) is not { } value)
         {
             return null;
         }
 
-        envPaths?.UnionWith(value.EnvPaths);
+        partReads?.UnionWith(value.PartReads);
         return value.References.Count == 0 ? new Resolved(value.Text ?? string.Empty) : new Pending(text, value.References);
     }
 
@@ -92,7 +111,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     {
         var output = new StringBuilder();
         var references = new HashSet<Reference>();
-        var envPaths = new HashSet<string>();
+        var partReads = new HashSet<string>();
         var valid = true;
         var pos = 0;
         while (pos < text.Length)
@@ -120,14 +139,14 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
             else
             {
                 references.UnionWith(value.References);
-                envPaths.UnionWith(value.EnvPaths);
+                partReads.UnionWith(value.PartReads);
                 output.Append(value.Text);
             }
 
             pos = end + 1;
         }
 
-        return valid ? new Value(references.Count == 0 ? output.ToString() : null, references, envPaths) : null;
+        return valid ? new Value(references.Count == 0 ? output.ToString() : null, references, partReads) : null;
     }
 
     // The first '}' outside a single-quoted literal.
@@ -191,16 +210,16 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
             return null;
         }
 
-        var envs = values.SelectMany(v => v.EnvPaths).ToHashSet();
+        var reads = values.SelectMany(v => v.PartReads).ToHashSet();
         var pending = values.Where(v => v.Text is null).SelectMany(v => v.References).ToHashSet();
         if (pending.Count > 0)
         {
-            return new Value(null, pending, envs);
+            return new Value(null, pending, reads);
         }
 
         var texts = values.Select(v => v.Text ?? throw new UnreachableException("pending arguments are handled above")).ToList();
         var result = function == BuiltIns.NameFunction ? BuiltIns.Name(context, texts[0], fail) : BuiltIns.Guid(texts);
-        return result is null ? null : new Value(result, NoReferences, envs);
+        return result is null ? null : new Value(result, NoReferences, reads);
     }
 
     private static List<string> SplitArguments(string inner)
@@ -252,13 +271,14 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
         switch (segments[0])
         {
             case EnvNamespace:
-                var envPath = string.Join('.', segments[1..]);
-                if (segments.Length > 1 && context.Environment.TryGet(envPath, out var envValue))
+                // Only the environment's own fields: a part's exports are read through uses as ${<name>.<export>}, so env.* cannot skip
+                // the uses and grant target checks (security boundary 4).
+                if (segments.Length == 2 && context.Environment.TryGet(segments[1], out var envValue))
                 {
-                    return new Value(envValue, NoReferences, new HashSet<string> { envPath });
+                    return Known(envValue);
                 }
 
-                fail($"'{path}' is not a value of environment '{context.Environment.Name}'.");
+                fail(EnvLimit(path));
                 return null;
 
             case RoleNamespace:
@@ -321,7 +341,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
 
     // A part of this run is read by evaluating its export in place, so the read becomes the node references it is made of
     // (docs/architecture/components.md section 2); the catalog loader keeps uses acyclic, so this ends. Any other part was deployed
-    // before: its exports are the descriptor's values, recorded like an env.* read so the grantable check sees them.
+    // before: its exports are the descriptor's values, recorded so the preview can show where a value came from.
     private Value? ResolvePart(string[] segments, string path, Action<string> fail)
     {
         if (context.Parts.TryGetValue(segments[0], out var exports))
@@ -346,7 +366,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
 
     // A deploy-time value: resolved if the caller already knows it, otherwise pending on it.
     private Value Await(Reference reference) =>
-        context.KnownOutputs.TryGetValue(reference, out var known) ? Known(known) : new Value(null, new HashSet<Reference> { reference }, NoEnvPaths);
+        context.KnownOutputs.TryGetValue(reference, out var known) ? Known(known) : new Value(null, new HashSet<Reference> { reference }, NoPartReads);
 
-    private static Value Known(string text) => new(text, NoReferences, NoEnvPaths);
+    private static Value Known(string text) => new(text, NoReferences, NoPartReads);
 }
