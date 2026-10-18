@@ -5,8 +5,8 @@
 
 ## Now
 
-- **Phase:** 1 — components, base ([roadmap](roadmap.md)); phase 0 (MVP) done, awaiting the user's manual run.
-- **Next slice:** phase-1 exit gate (lead), then S23 (MVP: nothing set on the machine), then the user's manual run, then S22. **Waiting for the user:** —
+- **Phase:** 1 — components, base: **done** (2026-10-18, exit evidence below). Phase 0 (MVP) reopened for S23 (user), then the user's manual run.
+- **Next slice:** S23 (MVP: nothing set on the machine), then the user's manual run, then S22. **Waiting for the user:** —
 - **For the user's review (lead decisions, S17 design):** `jd deploy` writes no record (a release is the unit); `JD_RECORDS_DIR`
   required; new adapter project `jd.azure` (standards §1 exception for Azure protocol constants, §3 row); IQ failure exits 1 and
   leaves the deployment live; ADR 0007 kept (the set file's bytes are stored write-once as `set.yaml` per label).
@@ -116,6 +116,8 @@ Picked up by the slice named; remove once done.
 ## Session log
 
 Newest first. One entry per session: what moved, decisions taken, anything the next session must know.
+
+- **2026-10-18 (S21f, phase 1 exit, S23 design)** — S21f merged (#62, 2 rounds). **Phase 1 exit evidence:** (1) same Azure resources for the same inputs: deployed-config snapshot byte-identical through S21a/b/d/e/f; S21c's diff exactly the monitoring move, checked by its upgrade gate; phase-exit upgrade run (S21c 42c0f23 → main 6adfc71, one Pulumi state): `env up` shared and dev all 17 nodes `unchanged`, release v1 `0 deployed, 2 unchanged`, IQ passed; (2) catalog laid out per component (`components/`, `runtimes/`, `shared/`, `grants.yaml`; `types/`, `mappings/` gone); (3) E2E green: `verify.sh --azure` on 6adfc71, CLI 214/214, all suites green, 1 h 29 m. New `teardown.sh` and the walkthrough's keyed `DEV_RG` read run on Azure for the first time (correct groups; subscription empty after). User: nothing set on a machine running jd, external concerns abstract and local by default, part of the MVP → S23 ([connections.md](../architecture/connections.md)), before the user's manual run; S22 after.
 
 - **2026-10-18 (S21a–e)** — S21a–e merged (rounds 2, 1–2, 2, 3, 2). User decisions (#59): phase-1 exit wording, App Insights recreation (a), Cosmos local auth off, Log Analytics shared key removal as S22. Azure gate only when what reaches Azure changes; S21c alone ran the gate and the upgrade gate (lead script in the session scratchpad). Next: S21f, then the phase-1 exit gate (`verify.sh --azure` + upgrade-style run incl. teardown.sh and walkthrough keyed reads), then S22; the user runs the MVP manually after the refactor.
 
