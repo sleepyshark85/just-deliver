@@ -10,7 +10,7 @@ where a step is not covered by a test, it says so.
 | Part | What it is | Depth |
 |---|---|---|
 | Workload definition | What a team declares: image (pinned by digest), variables, ports, `requires` by type (`database`). No Azure detail. | [workload-definition.md](architecture/workload-definition.md) |
-| Catalog (`catalog/`) | The platform's knowledge as data: **components** (the contract and its implementations per environment type: requirement → graph nodes), **runtimes** (the workload's runtime), **templates** (Pulumi YAML), **policies** (IT Ops rules: add, set, forbid), **naming**, **roles**. | [resolver.md](architecture/resolver.md), [provisioning.md](architecture/provisioning.md) |
+| Catalog (`catalog/`) | The platform's knowledge as data: **components** (the contract and its implementations per environment type: requirement → graph nodes), **runtimes** (the workload's runtime), **templates** (Pulumi YAML), **policies** (IT Ops rules: set, default, require a component), **naming**, **roles**. | [resolver.md](architecture/resolver.md), [provisioning.md](architecture/provisioning.md) |
 | Environment definition → descriptor | `jd env up` provisions an environment's substrate (`shared` once, then `dev`, `stage`) and writes its **descriptor**: the real ids workloads resolve against, and for `stage` the **approval policy**. | [resolver.md](architecture/resolver.md#environment-descriptor), [approvals.md](architecture/approvals.md) |
 | Resolver → graph | Workload + catalog + descriptor → a graph of nodes (template, config with provenance, dependencies, phase). Pure, offline: `jd preview` prints it. | [resolver.md](architecture/resolver.md) |
 | Orchestrator + Pulumi Automation | Deploys the graph node by node, one Pulumi stack each, in order; the runtime node last as a release: dark revision, grants, probe, traffic shift. | [provisioning.md](architecture/provisioning.md#orchestrator) |
@@ -159,8 +159,8 @@ jd deploy  samples/workloads/sample-app.yaml --env "$JD_WALK/dev.env.yaml" --cat
 jd deploy  samples/workloads/sample-app.yaml --env "$JD_WALK/dev.env.yaml" --catalog catalog
 ```
 
-Expected: `preview` lists five nodes (`@workload/appinsights`, `database/container`, `@workload/runtime`, and the grants `database/access`,
-`@workload/appinsights-access`) with provenance, e.g. `APPLICATIONINSIGHTS_CONNECTION_STRING … [PolicySet: enforce-monitoring …]`. The first `deploy`
+Expected: `preview` lists five nodes (`database/container`, `monitoring/appinsights`, `@workload/runtime`, and the grants `database/access`,
+`monitoring/access`) with provenance, e.g. `APPLICATIONINSIGHTS_CONNECTION_STRING … [Workload: container.variables]`. The first `deploy`
 exits 0 with `…: deployed (create 1, …)` per node; the runtime last with `dark: done (<revision>)`, `grants: done`, `probe: done (HTTP 200)`,
 `shift: done (<revision>)`. The re-run exits 0 with every node `unchanged (no changes, …)` and the runtime's probe and shift `skipped`. No record is written.
 

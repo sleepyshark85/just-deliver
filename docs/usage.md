@@ -56,6 +56,29 @@ and the Azure credentials in the environment (`source ~/.just-deliver/<subscript
 
 Errors from any stage are printed to stderr with file and location; results go to stdout.
 
+#### Monitoring
+
+Every workload requires the `monitoring` component (Application Insights reporting to the environment's workspace) and maps its
+connection string to its own variable; the `enforce-monitoring` policy requires the component, never the variable, and adds nothing:
+
+```yaml
+container:
+  variables:
+    APPLICATIONINSIGHTS_CONNECTION_STRING: ${resource.monitoring.connectionString}
+requires:
+  - type: monitoring
+```
+
+A workload without it fails to resolve with `requires: policy 'enforce-monitoring' (policies/enforce-monitoring.yaml) requires a
+'monitoring' requirement (…)`. Without the variable mapping the component is deployed but the app gets no connection string.
+
+**Upgrading a workload deployed before S21c**, when App Insights came from the policy: the next deploy creates `monitoring/appinsights` and
+`monitoring/access` and rolls a new revision (probe, then shift). jd deletes nothing, so the old App Insights and its role assignment stay in
+the stacks `<workload>.<env>._workload.appinsights` and `<workload>.<env>._workload.appinsights-access`, with the telemetry history. They
+cost nothing and go with the environment's resource group at teardown. To remove them earlier, with the same `PULUMI_BACKEND_URL` and
+passphrase, from the template's directory (`catalog/templates/azure/role-assignment`, then `catalog/templates/azure/application-insights`):
+`pulumi destroy --stack <stack> --yes`, then `pulumi stack rm <stack> --yes`.
+
 ### `jd env up`
 
 Provisions an environment's **substrate** from an environment definition and writes the environment descriptor

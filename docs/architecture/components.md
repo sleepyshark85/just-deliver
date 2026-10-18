@@ -1,6 +1,6 @@
 # Catalog by component
 
-> Status: design note for S21, **phase 1: components, base** ([roadmap](../plans/roadmap.md); serves N1, N3, N5). S21a built (environment types); S21b built (components and runtimes); S21c–f not built. Direction:
+> Status: design note for S21, **phase 1: components, base** ([roadmap](../plans/roadmap.md); serves N1, N3, N5). S21a built (environment types); S21b built (components and runtimes); S21c built (monitoring, policy `require`); S21d–f not built. Direction:
 > [context.md](../context.md) § "Catalog by component". Refines [resolver.md](resolver.md), [provisioning.md](provisioning.md) (Substrate) and
 > [approvals.md](approvals.md) §1–2. The user's choices: [section 8](#8-choices-taken-by-the-user-2026-10-18).
 
@@ -293,9 +293,11 @@ A grant's **target** may only be a node created by the workload's own requiremen
 ### Policies: `require`
 
 `enforce-monitoring` becomes `match: { kind: runtime }`, `require: monitoring` (its `reason` unchanged). The narrowest form: `require` names **one** declared component, only on a workload-scope policy (`kind: runtime`, optionally
-`environmentType`). A workload with no requirement of that type (any id, any class) is an error at its `requires`, naming the policy and its
-reason. `require` guarantees only that the monitoring resource exists in the workload; it does not guarantee that the workload maps
-`APPLICATIONINSIGHTS_CONNECTION_STRING` to it. Whether the policy also requires that variable is decided in the S21c brief (lead). A policy cannot add nodes (`add` is gone), require a class or a count. Node-scope `set`/`default` and workload-scope
+`environmentType`). A workload with no requirement of that type (any id, any class) is an error at its `requires`, naming the policy, its
+file and its reason. `require` guarantees only that the monitoring resource exists in the workload; it does not guarantee that the workload maps
+`APPLICATIONINSIGHTS_CONNECTION_STRING` to it. **Decided (lead, S21c):** the policy requires only the requirement, not the variable; each
+workload maps `APPLICATIONINSIGHTS_CONNECTION_STRING: ${resource.monitoring.connectionString}` itself (principle 6: what it gets, it writes).
+A policy cannot add nodes (`add` is gone: a policy file with `add` is a load error saying `require` replaces it), require a class or a count. Node-scope `set`/`default` and workload-scope
 `set`/`default` on `runtime.*` are unchanged.
 
 ### Security boundaries (D19) that move

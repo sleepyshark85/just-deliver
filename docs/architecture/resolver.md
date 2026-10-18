@@ -44,6 +44,7 @@ catalog/
   catalog.yaml                               # catalog version — recorded on every deployment
   components/database.yaml                   # contract teams bind to + implementations (environment type → class → nodes)
   runtimes/container-app.yaml                # the workload's runtime, per environment type
+  components/monitoring.yaml                 # Application Insights per workload, required by the policy below
   policies/enforce-monitoring.yaml           # IT Ops layer
   templates/azure/cosmos-account/Pulumi.yaml # mechanics only
   naming.yaml                                # name rules per resource kind
@@ -69,9 +70,9 @@ loader; the expression evaluator interprets them later.
 | Kind | Required fields | Cardinality |
 |---|---|---|
 | `Catalog` | `version` | exactly one |
-| `Component` | `name`, `description`, `exports`, `implementations` | `name` unique among components and runtimes. `implementations` is keyed by a declared environment type or `default` (an undeclared key would never be selected, so it is rejected); each implementation has `classes`, and every implementation declares the same classes. Each class has `nodes` and `exports`, whose keys equal the component's `exports` exactly. `runtime` is reserved: no class or policy `add` declares a node of that name. |
+| `Component` | `name`, `description`, `exports`, `implementations` | `name` unique among components and runtimes. `implementations` is keyed by a declared environment type or `default` (an undeclared key would never be selected, so it is rejected); each implementation has `classes`, and every implementation declares the same classes. Each class has `nodes` and `exports`, whose keys equal the component's `exports` exactly. `runtime` is reserved: no class declares a node of that name. |
 | `Runtime` | `name`, `description`, `implementations` | `name` unique among components and runtimes; keys as for a component. Each implementation has a `probe`, a `release` and `nodes` with a node named `runtime` ([below](#runtime)); no `exports`. Only a runtime has a `probe` (`path` starting with `/`, `expectedStatus` 100-599, `timeoutSeconds` and `intervalSeconds` at least 1 with the interval not above the timeout) or a `release`. The `runtime` node's config must not set the two inputs `release` names, since the release flow sets them. |
-| `Policy` | `name`, `reason`, `match`, and at least one of `set` / `default` / `add` | `name` unique |
+| `Policy` | `name`, `reason`, `match`, and at least one of `set` / `default` / `require` | `name` unique. `require` names a declared component, only on a workload-scope policy. `add` is retired: a policy with it is rejected with a message saying `require` replaces it |
 | `Naming` | `rules` (resource kind → `pattern`, `maxLength`, `allowed`) | files merge; a rule is defined once; `allowed` must be a valid regex character class that accepts every hex digit `0-9a-f` |
 | `Roles` | `roles` (name → role-definition GUID) | files merge; a role is defined once |
 
@@ -131,7 +132,8 @@ The Cosmos account and one shared-throughput database (400 RU/s) per environment
 
 ### Policy — IT Ops layer
 
-Can `set` fields (wins over everything), fill `default`s, or `add` nodes. One policy per file:
+Can `set` fields (wins over everything), fill `default`s, or `require` a component of every workload it matches. A policy requires, it
+never adds: what a workload gets is in its own `requires` ([components.md](components.md) §3). One policy per file:
 
 ```yaml
 # policies/enforce-monitoring.yaml
@@ -139,13 +141,12 @@ kind: Policy
 name: enforce-monitoring
 reason: Every workload reports to the environment workspace
 match: { kind: runtime }
-add:
-  appinsights:
-    template: azure/application-insights
-    config: { workspaceResourceId: ${env.logAnalytics.id}, appInsightsName: ${name('appi')} }
-set:
-  runtime.appInsightsConnectionString: ${appinsights.connectionString}
+require: monitoring
 ```
+
+A workload without a `monitoring` requirement (any id, any class) fails to resolve at its `requires`, naming the policy, its file and its
+reason. The policy does not give the workload the connection string: the workload maps
+`APPLICATIONINSIGHTS_CONNECTION_STRING: ${resource.monitoring.connectionString}` itself.
 
 ```yaml
 # policies/prod-cosmos-failover.yaml
@@ -248,7 +249,7 @@ The workload's `container.variables` reach the runtime node through the one **co
 and the node deploys it as a list of `{name, value}` items sorted by name (ordinal), because a Pulumi YAML template cannot turn a
 map into the list a Container App's `env` wants. The form is exactly `{ fn::entries: workload.variables }`, and it is valid only as the
 value of a **top-level field of the `runtime` node's config** in the runtime, and never in a `grant`. Anywhere else (nested in
-an object, an array item, another node, a component, a policy `add` or `set` value, a literal map as the source) it is an
+an object, an array item, another node, a component, a policy `set` value, a literal map as the source) it is an
 error: `fn::entries is not valid here`. Only the walk of that one field is given the workload's variables, which are walked as plain
 properties, so a variable may itself be named `fn::entries`. A policy gives individual variables, `runtime.variables.<NAME>`, as a
 **string** (an expression string is fine); not the whole field (which would drop the list form), not a path below a variable
@@ -312,7 +313,7 @@ unique), `values` (the descriptor's layout; each leaf an expression, normally `$
 the name `@<name>` (a workload name cannot start with `@`) in node ids, stacks and `name()` hashes: ids `@dev/dev/substrate/group`,
 stacks `_dev.dev.substrate.group`, so a workload named like the environment, with a requirement `substrate`, shares nothing with the
 substrate and a workload deploy never touches it ([ADR 0006](../decisions/0006-infra-deployed-with-app.md)). `ExpansionResult.Owner` records the owner kind
-(`Workload` or `Environment`); an environment owner has no runtime, so workload-scope policies add nothing. In a substrate
+(`Workload` or `Environment`); an environment owner has no runtime, so workload-scope policies do not apply. In a substrate
 component `${workload.name}` therefore evaluates to `@<name>`; the `{workload}` naming placeholder drops the `@` through `allowed`. Its team is empty
 (`${workload.team}` is empty). The `environment` is `definition.Over(region, base)`: the definition's name and type, the region given on the
 command line, and the **base descriptor's values and `grantable`**, so implementations read `${env.…}` of the layer below.
@@ -372,12 +373,12 @@ Every invalid expression in a string is reported (file, location, message) and t
 | Lookup | Exact, no matching. A requirement's `type` names a component (else an error); its implementation is the key equal to the environment's type, else `default`, else an error naming the component and the type; its class (default `standard`) must exist there, else an error naming the component, the class and the type. **Runtime:** each workload gets the catalog's one runtime, its implementation looked up the same way; an environment definition (substrate owner) gets none. |
 | Contract | Every class of every implementation exports exactly the component's `exports`; the catalog loader rejects a mismatch (missing or extra) at the component file, location `implementations.<key>.classes.<class>.exports`. |
 | Expansion | Each node of the selected class becomes an expanded node (name, template, kind, config); config strings and `exports` are evaluated with the effective requirement id as the current id and the class's node names in scope, other scalars pass through, objects and arrays recurse, and catalog tokens are cloned. Result per requirement: id, type, class, component file, nodes, exports (`Resolved` or `Pending`). Errors from all requirements are collected; a requirement with an error is left out of the result. |
-| Policy scope | **Node scope:** `match` uses only `type`, `class`, `environmentType`, `template`; a policy applies to a node when every key equals the node's value (`type`/`class` from its requirement, `environmentType` from the environment, `template` from the node). A node added by a policy has no type or class. All matching policies apply (no specificity). A `match` with `kind` or `runtime` is never node scope. **Workload scope:** `match` has `kind: runtime`, optionally `runtime` and `environmentType`; its `add` creates its nodes once per workload, and its `set`/`default` entries target `runtime.<path>`, a field of the runtime node (`runtime.variables.<NAME>` sets or defaults one workload variable), with the existing layer, conflict and provenance rules: `set` wins over a workload variable of that name, `default` only fills a variable the workload does not define. Their values may read the nodes workload-scope policies add (`${appinsights.connectionString}`), which makes the runtime node wait for them; a value reading `${resource.…}` stays pending until the second pass even when the export is static (only the workload variables see static exports resolved at expansion). The `runtime` key is not matched until a workload names a runtime. The catalog loader rejects a policy that fits neither scope, since it would silently do nothing: `runtime` without `kind: runtime`; a `kind` other than `runtime`; `kind: runtime` together with `type`, `class` or `template`; `add` on a node-scope policy; a workload-scope `set`/`default` path not starting with `runtime.` (a bare `runtime` with no dot is rejected too). |
+| Policy scope | **Node scope:** `match` uses only `type`, `class`, `environmentType`, `template`; a policy applies to a node when every key equals the node's value (`type`/`class` from its requirement, `environmentType` from the environment, `template` from the node). A runtime node has no type or class. All matching policies apply (no specificity). A `match` with `kind` or `runtime` is never node scope. **Workload scope:** `match` has `kind: runtime`, optionally `runtime` and `environmentType`; its `require` names a component every workload must require (an error at the workload's `requires` otherwise), and its `set`/`default` entries target `runtime.<path>`, a field of the runtime node (`runtime.variables.<NAME>` sets or defaults one workload variable), with the existing layer, conflict and provenance rules: `set` wins over a workload variable of that name, `default` only fills a variable the workload does not define. A value reading `${resource.…}` stays pending until the second pass even when the export is static (only the workload variables see static exports resolved at expansion). The `runtime` key is not matched until a workload names a runtime. The catalog loader rejects a policy that fits neither scope, since it would silently do nothing: `runtime` without `kind: runtime`; a `kind` other than `runtime`; `kind: runtime` together with `type`, `class` or `template`; `require` on a node-scope policy; a workload-scope `set`/`default` path not starting with `runtime.` (a bare `runtime` with no dot is rejected too). |
 | Single pass | Requirement nodes, the runtime's nodes and workload-scope added nodes receive node-scope policies once; an added node never triggers further adds. Added nodes are evaluated with their own name as the current id and the same policy's added nodes in scope; so is every runtime node (the second pass uses the node's own name too, so `name()` agrees between the passes). |
 | Layering | Template default (not known to the resolver) < implementation < team override (only `overridable` fields, validated; post-MVP) < policy `set`. A policy `default` fills a field only when neither the implementation nor any `set` provides it. Fixes the old algorithm applying overrides after policies. |
 | Policy paths | `set`/`default` keys are dotted paths into a node's config; missing intermediate objects are created; a parent that exists but is not an object is an error. Values are evaluated like implementation config. A `set` of an object replaces the whole subtree: the old leaves' provenance is dropped and the policy becomes the source of every leaf of the new value. Config keys that contain `.` cannot be addressed by a policy path. |
 | Policy conflicts | Within the `set` layer, and separately within `default`, these are errors naming the policies (and their files): two policies giving the same field of the same node different values (compared as written); two policies whose paths overlap, where one is a strict prefix of the other (`a` and `a.b`), regardless of values, because the result would depend on application order. The same value on the same path is fine; provenance names the first policy in name order. Inside a single policy, a `set` or `default` path that is a strict prefix of another of its own paths (`a: {b: 1}` with `a.b: 2`) is rejected at load for the same reason. Two workload-scope policies adding a node with the same name is also an error, as is one adding a node the runtime declares. A requirement dropped by expansion keeps its errors in the policy result. |
-| Provenance | Every leaf config field of every node carries `{source file, rule, layer}`: rule is the component or runtime file or the policy `name`; layer is `implementation`, `workload`, `policy-set`, `policy-default` or `policy-add`. Keyed by dotted path; an array is one leaf. The result carries the catalog `version`. The result is usable only when its error list is empty. |
+| Provenance | Every leaf config field of every node carries `{source file, rule, layer}`: rule is the component or runtime file or the policy `name`; layer is `implementation`, `workload`, `policy-set` or `policy-default`. Keyed by dotted path; an array is one leaf. The result carries the catalog `version`. The result is usable only when its error list is empty. |
 | References | Static values resolve immediately. `${node.output}` stays a pending reference ([Expressions](#expressions)) and becomes a graph edge. |
 | Phases | Derived from edges, never listed per template: `runtime` for the runtime node itself; `after-runtime` when a node depends on the runtime node (it references `runtime.*`) directly or through a node that does; `infrastructure` otherwise. |
 | Built-ins | `name(kind)` and `guid(...)` as defined in [Expressions](#expressions) ([C14](../open-questions.md)). Role GUIDs come from `roles.yaml`. Nothing else. |
@@ -395,7 +396,7 @@ Per node:
 | Field | Meaning |
 |---|---|
 | id | `<workload>/<env>/<scope>/<node>`. Scope is the requirement's effective id, or `@workload` for the runtime's nodes and the nodes added by workload-scope policies (requirement ids cannot contain `@`); the runtime node is `<workload>/<env>/@workload/runtime`. |
-| stack | The id with `/` replaced by `.` and `@` by `_` (Pulumi stack names allow `[A-Za-z0-9_.-]`), for example `shop.dev.orders.database` and `shop.dev._workload.appinsights`: one backend stack per node, so workloads never share a stack. Unique by construction: ids contain no `.` or `_`, and `_workload` cannot be a requirement id. Node names (component and runtime `nodes:` keys and policy `add:` keys) must match `^[a-z]([a-z0-9-]*[a-z0-9])?$`; the catalog loader enforces it in code, since the schema validator ignores `propertyNames`. Length limits of the backend are the adapter's concern. |
+| stack | The id with `/` replaced by `.` and `@` by `_` (Pulumi stack names allow `[A-Za-z0-9_.-]`), for example `shop.dev.orders.database` and `shop.dev._workload.runtime`: one backend stack per node, so workloads never share a stack. Unique by construction: ids contain no `.` or `_`, and `_workload` cannot be a requirement id. Node names (component and runtime `nodes:` keys) must match `^[a-z]([a-z0-9-]*[a-z0-9])?$`; the catalog loader enforces it in code, since the schema validator ignores `propertyNames`. Length limits of the backend are the adapter's concern. |
 | scope, name, template, kind | As expanded (`kind`: `create` or `grant`). |
 | config, provenance | Values (`Resolved` or `Pending`) and where each leaf came from. |
 | depends-on | Ids of nodes in the same scope referenced by a pending `${node.output}`, the runtime node's id when the config references `runtime.*`, and, for the runtime node reading `${resource.<id>.<export>}`, the nodes that export waits on (its own `${node.output}` references, in the requirement's scope); sorted. |
