@@ -15,7 +15,7 @@ namespace jd.orchestrator.tests;
 // Real resolver, fake backend: the graph is what the resolver makes of a tiny catalog, the backend records what it is asked.
 public partial class OrchestratorTests
 {
-    private static readonly EnvironmentDescriptor Env = new("dev", "region-1", "team", new Dictionary<string, string>(), [], null);
+    private static readonly EnvironmentDescriptor Env = new("dev", "region-1", "dev", new Dictionary<string, string>(), [], null);
 
     // group -> app (references group outputs); rt waits on the runtime through app.
     private const string Mapping = """
@@ -65,7 +65,7 @@ public partial class OrchestratorTests
     {
         var files = new[]
             {
-                "kind: Catalog\nversion: \"1\"\n",
+                "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
                 "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out, key]\n",
                 "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
                 mapping,

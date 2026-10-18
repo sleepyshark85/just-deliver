@@ -35,7 +35,7 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
             ["kind"] = "Environment",
             ["name"] = environment.Name,
             ["region"] = environment.Region,
-            ["tier"] = environment.Tier,
+            ["type"] = environment.Type,
             ["values"] = merged,
             ["grantable"] = new JArray(environment.Grantable.Concat(definition.Grantable).Distinct().Order(StringComparer.Ordinal)),
         };

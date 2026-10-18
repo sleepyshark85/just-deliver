@@ -19,7 +19,7 @@ public sealed class ApprovalRecordTests : IDisposable
 
     private static readonly DateTimeOffset At = new(2026, 10, 17, 3, 4, 5, TimeSpan.Zero);
     private static readonly DeployerIdentity Principal = new("tenant-1", "client-1", Alice);
-    private static readonly EnvironmentDescriptor Stage = new("stage", "region-1", "protected", new Dictionary<string, string>(), [], new ApprovalPolicy("dev", 1, [Alice], true));
+    private static readonly EnvironmentDescriptor Stage = new("stage", "region-1", "stage", new Dictionary<string, string>(), [], new ApprovalPolicy("dev", 1, [Alice], true));
 
     private readonly string _records = Directory.CreateTempSubdirectory("jd-approval-tests").FullName;
 
@@ -72,7 +72,8 @@ public sealed class ApprovalRecordTests : IDisposable
     [InlineData("extra")]
     [InlineData("identity")]
     [InlineData("setSha256")]
-    [InlineData("tier")]
+    [InlineData("type")]
+    [InlineData("noType")]
     [InlineData("emptyMeaning")]
     [InlineData("longMeaning")]
     [InlineData("newlineMeaning")]
@@ -85,7 +86,8 @@ public sealed class ApprovalRecordTests : IDisposable
             case "extra": record["approver"] = "someone"; break;
             case "identity": record.Remove("identity"); break;
             case "setSha256": record["release"]!["setSha256"] = "abc"; break;
-            case "tier": record["environment"]!["tier"] = "production"; break;
+            case "type": record["environment"]!["type"] = "Not A Type"; break;
+            case "noType": ((JObject)record["environment"]!).Remove("type"); break;
             case "emptyMeaning": record["meaning"] = string.Empty; break;
             case "longMeaning": record["meaning"] = new string('m', 501); break;
             case "newlineMeaning": record["meaning"] = "ok\n"; break;
@@ -117,6 +119,18 @@ public sealed class ApprovalRecordTests : IDisposable
         var record = Parse(ApprovalRecord.Build(Stage, "1.0.0", Set, new DeployerIdentity("tenant-1", "client-1", objectId), "ready", at));
         forge?.Invoke(record);
         return Path.GetFileName(await ReleaseRecordFile.WriteAsync(_records, environment, label, at, ReleaseRecordFile.ApproveActivity, record.ToString(Formatting.Indented)));
+    }
+
+    // Records written before environment types carry a tier; they stay valid and count (components.md section 6).
+    [Fact]
+    public async Task An_approval_written_with_a_tier_before_environment_types_still_validates_and_counts()
+    {
+        await WriteApprovalAsync("object-a", 1, record => record["environment"] = new JObject { ["name"] = "stage", ["tier"] = "protected" });
+
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
+
+        Assert.Equal(["object-a"], reading.Approvers);
+        Assert.Empty(reading.Ignored);
     }
 
     [Fact]

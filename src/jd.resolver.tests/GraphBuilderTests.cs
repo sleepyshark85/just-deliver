@@ -18,13 +18,13 @@ public class GraphBuilderTests
 
     private static readonly string[] BaseFiles =
     [
-        "kind: Catalog\nversion: \"7\"\n",
+        "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
         "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard]\nexports: [endpoint]\n",
         "kind: ResourceType\nname: other\ndescription: d\nclasses: [standard]\nexports: [endpoint]\n",
     ];
 
     private static readonly EnvironmentDescriptor Env =
-        new("dev", "region", "team", new Dictionary<string, string> { ["host"] = "h1", ["grant.ok"] = "g1" }, ["grant.ok"], null);
+        new("dev", "region", "dev", new Dictionary<string, string> { ["host"] = "h1", ["grant.ok"] = "g1" }, ["grant.ok"], null);
 
     // One mapping node as YAML; config is a flow mapping body, written as it would be in the catalog.
     private static string N(string name, string config, string kind = "create", string template = "")

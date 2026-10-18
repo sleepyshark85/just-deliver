@@ -28,7 +28,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     // The test catalog; the revision suffix and the traffic (flow YAML) are what the tests vary between deploys.
     private void WriteCatalog(string revisionSuffix, string traffic)
     {
-        Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\n");
+        Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
         Write("catalog/types/probe.yaml", "kind: ResourceType\nname: probe\ndescription: Test-only type.\nclasses: [standard]\nexports: [app]\n");
         Write("catalog/naming.yaml", """
             kind: Naming
@@ -162,7 +162,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     // The backend, workload, environment and catalog directory of one probe; the catalog files are written by WriteCatalog.
     private (IBackEndProvider Backend, string Workload, string Environment, string Catalog) Prepare()
     {
-        var environment = Write("environment.yaml", $"kind: Environment\nname: s15a-{Suffix}\nregion: {Region}\ntier: team\nvalues:\n  probeGroup: {ResourceGroup}\n");
+        var environment = Write("environment.yaml", $"kind: Environment\nname: s15a-{Suffix}\nregion: {Region}\ntype: dev\nvalues:\n  probeGroup: {ResourceGroup}\n");
         var workload = Write("workload.yaml", "apiVersion: just-deliver/v1\nkind: Workload\nmetadata: { name: s15a-probe, team: platform-team }\ncontainer:\n  image: example.invalid/probe:1\nrequires:\n  - type: probe\n");
         return (CreateBackend(), workload, environment, Path.Combine(Root, "catalog"));
     }

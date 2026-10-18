@@ -1,7 +1,7 @@
 kind: Environment
 name: stage
 region: region-1
-tier: protected
+type: stage
 values:
   shared:
     resourceGroup: rg-shared-1

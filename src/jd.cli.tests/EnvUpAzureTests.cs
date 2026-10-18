@@ -16,7 +16,7 @@ namespace jd.cli.tests;
 /// Real resources, free tier only: the sample <c>shared</c> and <c>dev</c> definitions (renamed with a random suffix, so names cannot
 /// collide) brought up with <c>jd env up</c> on a local file state. Checks the descriptors, the free-tier Cosmos account and its
 /// RU/s cap and the workspace's daily cap through <c>az</c>, and that running each again changes nothing. The <c>stage</c> definition
-/// (tier <c>protected</c>, with its approval policy) is brought up on the same account: its own database of 400 RU/s, the account limit still
+/// (type <c>stage</c>, with its approval policy) is brought up on the same account: its own database of 400 RU/s, the account limit still
 /// 1000, a descriptor that carries the policy, and a re-run that changes nothing. Then the sample release set is
 /// deployed on <c>dev</c> (<c>jd release create</c>, <c>jd release deploy</c>): the workloads get distinct containers in the dev database
 /// without throughput of their own, so the free-tier RU/s budget holds, and a second deploy changes nothing. The live apps hold no key (the account
@@ -353,7 +353,7 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.True(stageCode == 0, stageOutput);
         var loadedStage = (await EnvironmentFile.LoadAsync(stageDescriptor)).Descriptor;
         Assert.NotNull(loadedStage);
-        Assert.Equal(("protected", "dev", 1, true), (loadedStage.Tier, loadedStage.Approval?.QualifiedOn, loadedStage.Approval?.Required, loadedStage.Approval?.SeparateFromDeployer));
+        Assert.Equal(("stage", "dev", 1, true), (loadedStage.Type, loadedStage.Approval?.QualifiedOn, loadedStage.Approval?.Required, loadedStage.Approval?.SeparateFromDeployer));
         Assert.Equal(["00000000-0000-0000-0000-000000000000"], loadedStage.Approval!.Approvers);
         Assert.Equal(account, loadedStage.Values["cosmos.accountName"]);
         var stageDatabase = loadedStage.Values["cosmos.databaseName"];

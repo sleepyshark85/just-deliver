@@ -78,6 +78,7 @@ public static class CatalogParser
         var version = (string?)catalogs[0].Body["version"] ?? string.Empty;
         var catalog = new Catalog(
             version,
+            Map(catalogs[0].Body["environmentTypes"]).ToDictionary(e => e.Key, e => new EnvironmentType((bool?)e.Value["approval"] ?? false)),
             types,
             mappings,
             policies,
@@ -279,7 +280,7 @@ public static class CatalogParser
             {
                 if (criteria.ContainsKey(MatchCriteria.RuntimeKey))
                 {
-                    Fail("match.runtime", $"'runtime' needs 'kind: {MatchCriteria.RuntimeKind}'; node-scope policies match type, class, tier and template.");
+                    Fail("match.runtime", $"'runtime' needs 'kind: {MatchCriteria.RuntimeKind}'; node-scope policies match type, class, environmentType and template.");
                 }
 
                 if (policy.Add.Count > 0)

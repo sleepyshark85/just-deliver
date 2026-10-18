@@ -77,9 +77,12 @@ jd env up samples/environments/dev.yaml    --catalog catalog --base shared.env.y
 - `--base` is the descriptor of the layer below. It is the `env` context while resolving (mappings read
   `${env.cosmos.accountName}` and so on), and the written descriptor is its values plus the definition's. A key the base
   already has is an error; `grantable` paths are added to the base's.
-- `--region` defaults to `JD_REGION`; one of them is required. The descriptor takes its name and tier from the definition.
+- `--region` defaults to `JD_REGION`; one of them is required. The descriptor takes its name and type from the definition.
 - `--out` must not exist unless `--force` is given; this is checked before anything is created.
-- Before anything is created the definition is resolved and the descriptor is composed with its values still pending: an
+- Before anything is created the definition's type (and the base's) must be one `catalog.yaml` declares under `environmentTypes`, and a
+  definition of a type with `approval: true` must carry an `approval` block; otherwise the error names the type (and the declared ones) and
+  nothing is deployed. `jd preview`, `deploy`, `release deploy`, `release qualify` and `promote` check a descriptor the same way.
+- Then the definition is resolved and the descriptor is composed with its values still pending: an
   unknown requirement or export, a collision with the base, or a descriptor rule broken (reserved key, `grantable` path
   that is not a value) is reported and nothing is deployed. After the deploy the descriptor is composed from the outputs,
   validated by the descriptor loader and only then written. Secret or null outputs are never written; a value that needs
@@ -92,7 +95,7 @@ An environment definition (`kind: EnvironmentDefinition`, [schema](../schemas/en
 ```yaml
 kind: EnvironmentDefinition
 name: dev                       # the environment's name
-tier: team                      # team | protected
+type: dev                       # an environment type catalog.yaml declares (shared, dev, stage, prod in the seed)
 requires:                       # substrate, matched by catalog mappings exactly like a workload's requirements
   - type: env-substrate
     id: substrate
@@ -100,14 +103,14 @@ values:                         # the descriptor layout; each leaf is an express
   resourceGroup: ${resource.substrate.resourceGroupName}
   cosmos: { databaseName: ${resource.substrate.databaseName} }
 grantable: [cosmos.accountId]   # may name base values
-approval:                       # optional for team, required for protected; copied as it is into the descriptor
+approval:                       # optional, required for a type with approval: true (stage, prod); copied as it is into the descriptor
   qualifiedOn: dev              # the environment whose records must show the set qualified
   required: 1                   # distinct approvers needed (1 to the number listed)
   approvers: ["00000000-0000-0000-0000-000000000000"]   # Entra object ids (lower case) that may approve
   separateFromDeployer: true    # an approver may not be a principal that deployed the label on qualifiedOn; required, no default
 ```
 
-`samples/environments/stage.yaml` is `dev`'s layout plus such a block, tier `protected`: bring it up like `dev`
+`samples/environments/stage.yaml` is `dev`'s layout plus such a block, type `stage`: bring it up like `dev`
 (`jd env up samples/environments/stage.yaml --catalog catalog --base shared.env.yaml --out stage.env.yaml`). It gets its own resource group,
 Container Apps environment and 400 RU/s database (`db-stage`) on the shared Cosmos account and workspace, so `dev` and `stage` use 800 of the free
 1,000 RU/s; a third environment would not fit. As shipped the approver is the all-zero id, which matches no principal: replace it with the object ids of
@@ -115,8 +118,9 @@ the service principals that may approve before anything can be promoted.
 
 #### Gated environments
 
-An environment whose **descriptor carries an `approval` block** is gated, whatever its tier (the tool tests for the block, never for a tier name). The
-schemas only require the block for tier `protected`, so one cannot be written without it. A `protected` environment without an `approval` block fails the schema check (`NotAnyOf … PropertyRequired: #/approval`). `jd deploy`, `jd release deploy` and `jd release qualify`
+An environment whose **descriptor carries an `approval` block** is gated, whatever its type (the tool tests for the block, never for a type name). The
+catalog requires the block for a type declared with `approval: true` (`stage`, `prod`), so one cannot be written without it: such a definition or
+descriptor without the block fails with "environment type 'stage' requires an 'approval' block". `jd deploy`, `jd release deploy` and `jd release qualify`
 on a gated descriptor exit 1 with "environment '<name>' is gated by an approval policy: use `jd promote`" before the principal, `JD_RECORDS_DIR` or the
 backend is touched: no call, no record, no `set.yaml`. `--preview` is not refused (it creates nothing), and neither is `jd env up` (the substrate is not a
 release). `jd approve` records an approval for a gated environment (below); `jd promote`, the only way a set reaches one, is below ([approvals.md](architecture/approvals.md)).

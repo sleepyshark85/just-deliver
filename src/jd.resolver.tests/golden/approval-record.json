@@ -3,7 +3,7 @@
   "approvedAt": "2026-10-17T03:04:05Z",
   "environment": {
     "name": "stage",
-    "tier": "protected"
+    "type": "stage"
   },
   "release": {
     "label": "1.0.0",

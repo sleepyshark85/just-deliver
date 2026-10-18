@@ -163,6 +163,12 @@ public static class Cli
             return Invalid;
         }
 
+        if (EnvironmentTypeCheck.Check(catalog, environment.Type, environment.Approval, resolve.Environment) is { Count: > 0 } typeErrors)
+        {
+            Print(typeErrors, stderr);
+            return Invalid;
+        }
+
         if (resolve is DeployOptions { DryRun: false } && RefuseGated(environment, "deploy", stderr))
         {
             return Invalid;
@@ -190,7 +196,7 @@ public static class Cli
         (await ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, options.DryRun, stdout, stderr, probe, cancellationToken)).Code;
 
     // An environment whose descriptor carries an approval policy takes deploys only through `jd promote` (docs/architecture/approvals.md section 2). The check reads
-    // the block, not the tier. Run before the identity, the records or the backend is touched; a preview creates nothing, so callers do not ask it.
+    // the block, not the type. Run before the identity, the records or the backend is touched; a preview creates nothing, so callers do not ask it.
     internal static bool RefuseGated(EnvironmentDescriptor environment, string command, TextWriter stderr)
     {
         if (environment.Approval is null)

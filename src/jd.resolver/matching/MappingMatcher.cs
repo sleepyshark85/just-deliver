@@ -17,32 +17,32 @@ public static class MappingMatcher
     /// Returns the most specific mapping whose every <c>match</c> criterion equals the requirement's value. A tie at the top
     /// or no match is added to <paramref name="errors"/> at <paramref name="file"/>/<paramref name="location"/>, and null returned.
     /// </summary>
-    public static Mapping? Select(IEnumerable<Mapping> mappings, Requirement requirement, string tier, string file, string location, ICollection<LoadError> errors)
+    public static Mapping? Select(IEnumerable<Mapping> mappings, Requirement requirement, string environmentType, string file, string location, ICollection<LoadError> errors)
     {
         // Any other key (kind, runtime) belongs to runtime mappings and never matches a requirement.
         var provided = new Dictionary<string, string>
         {
             [MatchCriteria.TypeKey] = requirement.Type,
             [MatchCriteria.ClassKey] = requirement.Class,
-            [MatchCriteria.TierKey] = tier,
+            [MatchCriteria.EnvironmentTypeKey] = environmentType,
         };
-        var described = $"requirement '{requirement.Id}' (type '{requirement.Type}', class '{requirement.Class}', tier '{tier}')";
+        var described = $"requirement '{requirement.Id}' (type '{requirement.Type}', class '{requirement.Class}', environment type '{environmentType}')";
         return Select(mappings, provided, described, file, location, errors);
     }
 
     /// <summary>
-    /// Returns the most specific runtime mapping (<c>kind: runtime</c>, optionally <c>tier</c>) of a workload, with the errors of
+    /// Returns the most specific runtime mapping (<c>kind: runtime</c>, optionally <c>environmentType</c>) of a workload, with the errors of
     /// <see cref="Select(IEnumerable{Mapping}, Requirement, string, string, string, ICollection{LoadError})"/>. The <c>runtime</c> key
     /// is reserved until a workload can name a runtime, so a mapping using it is never selected.
     /// </summary>
-    public static Mapping? SelectRuntime(IEnumerable<Mapping> mappings, string tier, string file, ICollection<LoadError> errors)
+    public static Mapping? SelectRuntime(IEnumerable<Mapping> mappings, string environmentType, string file, ICollection<LoadError> errors)
     {
         var provided = new Dictionary<string, string>
         {
             [MatchCriteria.KindKey] = MatchCriteria.RuntimeKind,
-            [MatchCriteria.TierKey] = tier,
+            [MatchCriteria.EnvironmentTypeKey] = environmentType,
         };
-        return Select(mappings, provided, $"the runtime of the workload (tier '{tier}')", file, MatchCriteria.RuntimeKind, errors);
+        return Select(mappings, provided, $"the runtime of the workload (environment type '{environmentType}')", file, MatchCriteria.RuntimeKind, errors);
     }
 
     private static Mapping? Select(IEnumerable<Mapping> mappings, Dictionary<string, string> provided, string described, string file, string location, ICollection<LoadError> errors)

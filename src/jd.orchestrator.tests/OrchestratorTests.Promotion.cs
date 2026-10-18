@@ -1,6 +1,7 @@
 using jd.core.identity;
 using jd.resolver.environment;
 using jd.resolver.release;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace jd.orchestrator.tests;
@@ -14,7 +15,7 @@ public partial class OrchestratorTests
 
     // stage, gated by a policy over dev. The default deployer of the Ledger ("object-1") is listed so a test can make the deployer approve.
     private static EnvironmentDescriptor Stage(int required = 1, bool separate = true) =>
-        new("stage", "region-1", "protected", new Dictionary<string, string>(), [], new ApprovalPolicy("dev", required, [Alice, Bob, "object-1"], separate));
+        new("stage", "region-1", "stage", new Dictionary<string, string>(), [], new ApprovalPolicy("dev", required, [Alice, Bob, "object-1"], separate));
 
     // An approval by objectId at the given minute, written through the store into stage's directory for the label, as `jd approve` would.
     private static async Task ApproveAsync(Ledger ledger, string objectId, int minute, string? setSha256 = null)
@@ -39,6 +40,29 @@ public partial class OrchestratorTests
         Assert.True(decision.MayPromote, string.Join("; ", decision.Reasons));
         Assert.Equal(ledger.SetSha256, decision.SetSha256);
         Assert.Empty(decision.IgnoredApprovals);
+    }
+
+    // Records written before environment types carry a tier, not a type: the qualifying deploy and the approval still count (components.md section 6).
+    [Fact]
+    public async Task Records_written_with_a_tier_before_environment_types_still_qualify_and_approve()
+    {
+        static void Untyped(JObject record, string tier)
+        {
+            var environment = (JObject)record["environment"]!;
+            environment.Remove("type");
+            environment["tier"] = tier;
+        }
+
+        using var ledger = await Ledger.CreateAsync();
+        Ledger.Forge(await ledger.DeployAsync(1, PassingIq), r => Untyped(r, "team"));
+        var at = RecordStart.AddMinutes(2);
+        var approval = JObject.Parse(ApprovalRecord.Build(Stage(), "1.0.0", ledger.SetSha256, new DeployerIdentity("tenant-1", "client-1", Alice), "ready", at));
+        Untyped(approval, "protected");
+        await ReleaseRecordFile.WriteAsync(ledger.Records, "stage", "1.0.0", at, ReleaseRecordFile.ApproveActivity, approval.ToString());
+
+        var decision = await CheckAsync(ledger, Stage());
+
+        Assert.True(decision.MayPromote, string.Join("; ", decision.Reasons.Concat(decision.IgnoredApprovals)));
     }
 
     [Fact]

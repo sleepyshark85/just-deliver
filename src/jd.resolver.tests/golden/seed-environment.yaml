@@ -1,7 +1,7 @@
 kind: Environment
 name: dev
 region: southeastasia
-tier: team
+type: dev
 values:
   resourceGroup: rg-dev
   containerAppsEnvironment: { id: /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.App/managedEnvironments/cae-dev }

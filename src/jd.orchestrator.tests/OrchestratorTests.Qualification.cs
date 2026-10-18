@@ -178,21 +178,23 @@ public partial class OrchestratorTests
     }
 
     [Fact]
-    public async Task A_record_that_fails_the_schema_is_a_reason_for_an_extra_property_a_missing_identity_and_a_deploy_without_iq()
+    public async Task A_record_that_fails_the_schema_is_a_reason_for_an_extra_property_a_missing_identity_or_environment_type_and_a_deploy_without_iq()
     {
         using var ledger = await Ledger.CreateAsync();
         var extra = await ledger.DeployAsync(1, PassingIq);
         var noIdentity = await ledger.DeployAsync(2, PassingIq);
         var noIq = await ledger.DeployAsync(3, PassingIq);
+        var noType = await ledger.DeployAsync(4, PassingIq); // neither a type nor, as before types, a tier
         Ledger.Forge(extra, r => r["approved"] = true);
         Ledger.Forge(noIdentity, r => r.Remove("identity"));
         Ledger.Forge(noIq, r => r.Remove("iq"));
+        Ledger.Forge(noType, r => ((JObject)r["environment"]!).Remove("type"));
 
         var result = await ledger.ReadAsync();
 
         Assert.False(result.Qualified);
-        Assert.Equal(3, result.Reasons.Count);
-        Assert.All(new[] { extra, noIdentity, noIq }, path => Assert.Contains(result.Reasons, r => r.StartsWith($"{Name(path)}: is not a valid release record: ", StringComparison.Ordinal)));
+        Assert.Equal(4, result.Reasons.Count);
+        Assert.All(new[] { extra, noIdentity, noIq, noType }, path => Assert.Contains(result.Reasons, r => r.StartsWith($"{Name(path)}: is not a valid release record: ", StringComparison.Ordinal)));
         Assert.All(result.Reasons, r => Assert.DoesNotContain(ledger.Records, r, StringComparison.Ordinal)); // the file name says where, not the full path again
     }
 

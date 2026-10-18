@@ -13,7 +13,7 @@ public class ExpanderTests
 {
     private static readonly string[] BaseFiles =
     [
-        "kind: Catalog\nversion: \"1\"\n",
+        "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
         "kind: ResourceType\nname: sqldb\ndescription: d\nclasses: [standard, isolated]\nexports: [endpoint]\n",
         "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
         "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n",
@@ -22,8 +22,8 @@ public class ExpanderTests
     private static string Mapping(string match, string nodes = "  n:\n    template: t/n\n    config: { a: 1 }\n", string exports = "  endpoint: ${n.out}\n") =>
         $"kind: Mapping\nmatch: {match}\nnodes:\n{nodes}exports:\n{exports}";
 
-    private static EnvironmentDescriptor Env(string tier = "team") =>
-        new("dev", "region", tier, new Dictionary<string, string> { ["host"] = "h1" }, [], null);
+    private static EnvironmentDescriptor Env(string type = "dev") =>
+        new("dev", "region", type, new Dictionary<string, string> { ["host"] = "h1" }, [], null);
 
     private static async Task<Catalog> LoadAsync(params string[] mappings)
     {
@@ -36,8 +36,8 @@ public class ExpanderTests
     private static JObject Workload(string requires) =>
         (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
 
-    private static ExpansionResult Expand(Catalog catalog, string requires, string tier = "team") =>
-        new Expander(catalog, Env(tier)).Expand(Workload(requires), "workload.yaml");
+    private static ExpansionResult Expand(Catalog catalog, string requires, string type = "dev") =>
+        new Expander(catalog, Env(type)).Expand(Workload(requires), "workload.yaml");
 
     [Fact]
     public async Task Single_match_expands_nodes_and_exports_with_the_requirement_id()
@@ -74,7 +74,7 @@ public class ExpanderTests
     [Fact]
     public async Task A_tie_at_the_top_is_an_error_naming_both_files()
     {
-        var catalog = await LoadAsync(Mapping("{ type: sqldb, class: standard }"), Mapping("{ type: sqldb, tier: team }"));
+        var catalog = await LoadAsync(Mapping("{ type: sqldb, class: standard }"), Mapping("{ type: sqldb, environmentType: dev }"));
 
         var result = Expand(catalog, "  - type: sqldb\n");
 
@@ -85,7 +85,7 @@ public class ExpanderTests
     }
 
     [Fact]
-    public async Task No_match_is_an_error_naming_the_requirement_type_class_and_tier()
+    public async Task No_match_is_an_error_naming_the_requirement_type_class_and_environment_type()
     {
         var catalog = await LoadAsync(Mapping("{ type: sqldb, class: standard }"));
 
@@ -94,16 +94,16 @@ public class ExpanderTests
         var error = Assert.Single(result.Errors);
         Assert.Equal("requires[0]", error.Location);
         Assert.Contains("'orders'", error.Message);
-        Assert.Contains("type 'sqldb', class 'isolated', tier 'team'", error.Message);
+        Assert.Contains("type 'sqldb', class 'isolated', environment type 'dev'", error.Message);
     }
 
     [Fact]
-    public async Task The_environment_tier_takes_part_in_matching()
+    public async Task The_environment_type_takes_part_in_matching()
     {
-        var catalog = await LoadAsync(Mapping("{ type: sqldb }", exports: "  endpoint: plain\n"), Mapping("{ type: sqldb, tier: protected }", exports: "  endpoint: guarded\n"));
+        var catalog = await LoadAsync(Mapping("{ type: sqldb }", exports: "  endpoint: plain\n"), Mapping("{ type: sqldb, environmentType: stage }", exports: "  endpoint: guarded\n"));
 
-        var team = Assert.Single(Expand(catalog, "  - type: sqldb\n", "team").Requirements);
-        var guarded = Assert.Single(Expand(catalog, "  - type: sqldb\n", "protected").Requirements);
+        var team = Assert.Single(Expand(catalog, "  - type: sqldb\n", "dev").Requirements);
+        var guarded = Assert.Single(Expand(catalog, "  - type: sqldb\n", "stage").Requirements);
 
         Assert.Equal("plain", Assert.IsType<Resolved>(team.Exports["endpoint"]).Value);
         Assert.Equal("guarded", Assert.IsType<Resolved>(guarded.Exports["endpoint"]).Value);
@@ -129,8 +129,8 @@ public class ExpanderTests
     private static JObject WorkloadWith(string container) =>
         (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\ncontainer:\n{container}requires: []\n");
 
-    private static async Task<ExpansionResult> ExpandRuntimeAsync(string container, string tier, params string[] mappings) =>
-        new Expander(await LoadWithoutRuntimeAsync(mappings), Env(tier)).Expand(WorkloadWith(container), "workload.yaml");
+    private static async Task<ExpansionResult> ExpandRuntimeAsync(string container, string type, params string[] mappings) =>
+        new Expander(await LoadWithoutRuntimeAsync(mappings), Env(type)).Expand(WorkloadWith(container), "workload.yaml");
 
     private static async Task<Catalog> LoadWithoutRuntimeAsync(string[] mappings)
     {
@@ -142,7 +142,7 @@ public class ExpanderTests
     [Fact]
     public async Task A_workload_gets_the_runtime_nodes_of_the_matching_runtime_mapping_with_image_port_and_probe()
     {
-        var result = await ExpandRuntimeAsync("  image: reg.example/app:1\n  ports:\n    - port: 8080\n    - port: 9090\n", "team",
+        var result = await ExpandRuntimeAsync("  image: reg.example/app:1\n  ports:\n    - port: 8080\n    - port: 9090\n", "dev",
             RuntimeMapping());
 
         Assert.Empty(result.Errors);
@@ -156,20 +156,20 @@ public class ExpanderTests
     }
 
     [Fact]
-    public async Task The_most_specific_runtime_mapping_wins_by_tier()
+    public async Task The_most_specific_runtime_mapping_wins_by_environment_type()
     {
         var plain = RuntimeMapping().Replace("t/rt", "t/plain");
-        var guarded = RuntimeMapping("{ kind: runtime, tier: protected }").Replace("t/rt", "t/guarded");
+        var guarded = RuntimeMapping("{ kind: runtime, environmentType: stage }").Replace("t/rt", "t/guarded");
         const string container = "  image: i\n  ports:\n    - port: 80\n";
 
-        Assert.Equal("t/plain", (await ExpandRuntimeAsync(container, "team", plain, guarded)).Runtime!.Nodes[0].Template);
-        Assert.Equal("t/guarded", (await ExpandRuntimeAsync(container, "protected", plain, guarded)).Runtime!.Nodes[0].Template);
+        Assert.Equal("t/plain", (await ExpandRuntimeAsync(container, "dev", plain, guarded)).Runtime!.Nodes[0].Template);
+        Assert.Equal("t/guarded", (await ExpandRuntimeAsync(container, "stage", plain, guarded)).Runtime!.Nodes[0].Template);
     }
 
     [Fact]
     public async Task Two_runtime_mappings_that_tie_are_an_error_naming_both_files()
     {
-        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "team", RuntimeMapping(), RuntimeMapping("{ kind: runtime }", "# second\n"));
+        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "dev", RuntimeMapping(), RuntimeMapping("{ kind: runtime }", "# second\n"));
 
         var error = Assert.Single(result.Errors);
         Assert.Null(result.Runtime);
@@ -177,19 +177,19 @@ public class ExpanderTests
     }
 
     [Fact]
-    public async Task No_runtime_mapping_for_the_tier_is_an_error_naming_the_tier()
+    public async Task No_runtime_mapping_for_the_environment_type_is_an_error_naming_it()
     {
-        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "team", RuntimeMapping("{ kind: runtime, tier: protected }"));
+        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "dev", RuntimeMapping("{ kind: runtime, environmentType: stage }"));
 
         var error = Assert.Single(result.Errors);
         Assert.Null(result.Runtime);
-        Assert.Contains("no mapping matches the runtime of the workload (tier 'team')", error.Message);
+        Assert.Contains("no mapping matches the runtime of the workload (environment type 'dev')", error.Message);
     }
 
     [Fact]
     public async Task A_runtime_mapping_naming_a_runtime_is_never_selected_until_workloads_can_name_one()
     {
-        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "team", RuntimeMapping("{ kind: runtime, runtime: container-app }"));
+        var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "dev", RuntimeMapping("{ kind: runtime, runtime: container-app }"));
 
         Assert.Contains("no mapping matches the runtime", Assert.Single(result.Errors).Message);
     }
@@ -197,7 +197,7 @@ public class ExpanderTests
     [Fact]
     public async Task Reading_the_port_of_a_workload_without_ports_is_an_error_naming_the_workload()
     {
-        var result = await ExpandRuntimeAsync("  image: i\n", "team", RuntimeMapping());
+        var result = await ExpandRuntimeAsync("  image: i\n", "dev", RuntimeMapping());
 
         var error = Assert.Single(result.Errors);
         Assert.Null(result.Runtime);
@@ -292,7 +292,7 @@ public class ExpanderTests
         var environment = new EnvironmentDescriptor(
             "dev",
             "region",
-            "team",
+            "dev",
             new Dictionary<string, string>
             {
                 ["resourceGroup"] = "rg",

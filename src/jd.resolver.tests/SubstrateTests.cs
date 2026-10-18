@@ -107,7 +107,7 @@ public class SubstrateTests
 
         var descriptor = await ComposeAsync(dev, DevOutputs);
 
-        Assert.Equal(("dev", Region, "team"), (descriptor.Name, descriptor.Region, descriptor.Tier));
+        Assert.Equal(("dev", Region, "dev"), (descriptor.Name, descriptor.Region, descriptor.Type));
         Assert.Equal("cosmos-1", descriptor.Values["cosmos.accountName"]);
         Assert.Equal("db-dev", descriptor.Values["cosmos.databaseName"]);
         Assert.Equal("rg-dev-1", descriptor.Values["resourceGroup"]);
@@ -134,7 +134,7 @@ public class SubstrateTests
         Assert.Empty(composed.Errors);
         Assert.Equal(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", "stage-environment.yaml")), composed.Yaml);
         var descriptor = (await EnvironmentParser.ParseAsync("stage.env.yaml", composed.Yaml!)).Descriptor!;
-        Assert.Equal(("stage", "protected"), (descriptor.Name, descriptor.Tier));
+        Assert.Equal(("stage", "stage"), (descriptor.Name, descriptor.Type));
         Assert.Equal(("dev", 1, true), (descriptor.Approval!.QualifiedOn, descriptor.Approval.Required, descriptor.Approval.SeparateFromDeployer));
         Assert.Equal(["00000000-0000-0000-0000-000000000000"], descriptor.Approval.Approvers);
     }
@@ -211,13 +211,13 @@ public class SubstrateTests
     {
         var files = new[]
         {
-            "kind: Catalog\nversion: \"1\"\n",
+            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
             "kind: ResourceType\nname: thing\ndescription: d\nclasses: [standard]\nexports: [out]\n",
             "kind: Naming\nrules:\n  rg:\n    pattern: \"rg-{env}-{hash}\"\n    maxLength: 90\n    allowed: \"[a-z0-9-]\"\n",
             "kind: Mapping\nmatch: { type: thing }\nnodes:\n  group:\n    template: t/group\n    config:\n      groupName: ${name('rg')}\nexports:\n  out: ${group.groupName}\n",
         }.Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var catalog = (await CatalogParser.ParseAsync(files)).Catalog!;
-        var definition = new EnvironmentDefinition("dev", "team", [new JObject { ["type"] = "thing", ["id"] = "substrate" }], [], [], null);
+        var definition = new EnvironmentDefinition("dev", "dev", [new JObject { ["type"] = "thing", ["id"] = "substrate" }], [], [], null);
         var environment = definition.Over(Region, null);
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: dev, team: crew }\nrequires:\n  - type: thing\n    id: substrate\n");
 
@@ -261,9 +261,9 @@ public class SubstrateTests
     {
         var dir = Directory.CreateTempSubdirectory("jd-def").FullName;
         var path = Path.Combine(dir, "d.yaml");
-        await File.WriteAllTextAsync(path, "kind: EnvironmentDefinition\nname: xyz\ntier: team\nrequires:\n  - type: env-substrate\n  - type: env-substrate\nvalues: {}\n");
+        await File.WriteAllTextAsync(path, "kind: EnvironmentDefinition\nname: xyz\ntype: dev\nrequires:\n  - type: env-substrate\n  - type: env-substrate\nvalues: {}\n");
         var duplicate = await EnvironmentDefinitionFile.LoadAsync(path);
-        await File.WriteAllTextAsync(path, "kind: EnvironmentDefinition\nname: xyz\ntier: team\nvalues: {}\n");
+        await File.WriteAllTextAsync(path, "kind: EnvironmentDefinition\nname: xyz\ntype: dev\nvalues: {}\n");
         var schema = await EnvironmentDefinitionFile.LoadAsync(path);
 
         Assert.Equal($"{path}: requires[1]: requirement id 'env-substrate' is used twice; give one an 'id'.", Assert.Single(duplicate.Errors).ToString());

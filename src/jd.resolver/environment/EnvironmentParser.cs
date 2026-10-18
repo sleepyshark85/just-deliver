@@ -57,7 +57,7 @@ public static class EnvironmentParser
         errors.AddRange(approval is null ? [] : CheckApproval(approval, name, source));
         return errors.Count > 0
             ? new EnvironmentLoadResult(null, errors)
-            : new EnvironmentLoadResult(new EnvironmentDescriptor(name, (string)body["region"]!, (string)body["tier"]!, values, grantable, approval), errors);
+            : new EnvironmentLoadResult(new EnvironmentDescriptor(name, (string)body["region"]!, (string)body["type"]!, values, grantable, approval), errors);
     }
 
     // What the schema cannot say: the policy must refer to another environment and be satisfiable.

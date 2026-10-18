@@ -7,11 +7,11 @@ namespace jd.resolver.environment;
 /// What <c>jd env up</c> provisions: substrate requirements (like a workload's) and the layout of the descriptor written from
 /// their outputs. Format: schemas/environment-definition.schema.json. <see cref="Values"/> leaves are expressions.
 /// </summary>
-public sealed record EnvironmentDefinition(string Name, string Tier, JArray Requires, JObject Values, IReadOnlyList<string> Grantable, ApprovalPolicy? Approval)
+public sealed record EnvironmentDefinition(string Name, string Type, JArray Requires, JObject Values, IReadOnlyList<string> Grantable, ApprovalPolicy? Approval)
 {
-    /// <summary>The environment the definition is resolved in: its own name, tier and approval policy, the given region, and the base descriptor's values.</summary>
+    /// <summary>The environment the definition is resolved in: its own name, type and approval policy, the given region, and the base descriptor's values.</summary>
     public EnvironmentDescriptor Over(string region, EnvironmentDescriptor? baseDescriptor) =>
-        new(Name, region, Tier, baseDescriptor?.Values ?? new Dictionary<string, string>(), baseDescriptor?.Grantable ?? [], Approval);
+        new(Name, region, Type, baseDescriptor?.Values ?? new Dictionary<string, string>(), baseDescriptor?.Grantable ?? [], Approval);
 }
 
 /// <summary><see cref="Definition"/> is set exactly when <see cref="Errors"/> is empty.</summary>
@@ -57,7 +57,7 @@ public static class EnvironmentDefinitionFile
             ? new EnvironmentDefinitionLoadResult(null, errors)
             : new EnvironmentDefinitionLoadResult(
                 new EnvironmentDefinition(
-                    (string)body["name"]!, (string)body["tier"]!, requires, (JObject)body["values"]!, body["grantable"] is JArray g ? g.Select(t => (string)t!).ToList() : [],
+                    (string)body["name"]!, (string)body["type"]!, requires, (JObject)body["values"]!, body["grantable"] is JArray g ? g.Select(t => (string)t!).ToList() : [],
                     body["approval"] is { } approval ? ApprovalPolicy.FromJson(approval) : null),
                 errors);
     }

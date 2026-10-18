@@ -20,7 +20,7 @@ public class ExpressionEvaluatorTests
     private static readonly EnvironmentDescriptor Env = new(
         "dev",
         "testregion",
-        "team",
+        "dev",
         new Dictionary<string, string>
         {
             ["resourceGroup"] = "rg-test",

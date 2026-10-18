@@ -13,9 +13,9 @@ protects against mistakes and against edits of what was approved, not against so
 ## 1. The `stage` substrate on the free tier
 
 `stage` is one more environment on top of the shared substrate, brought up like `dev` (`jd env up samples/environments/stage.yaml --catalog catalog
---base shared.env.yaml --out stage.env.yaml`). **No catalog change is needed:** the mapping `env-substrate/standard` has no tier in its `match`,
-so `stage` (tier `protected`) resolves to the same mapping as `dev`. The A4 candidate (identical policy set across tiers; scale may differ) holds
-trivially; per-tier SKUs are out of the MVP.
+--base shared.env.yaml --out stage.env.yaml`). **No catalog change is needed:** the mapping `env-substrate/standard` has no environment type in its
+`match`, so `stage` (type `stage`, S21a; tier `protected` before) resolves to the same mapping as `dev`. The A4 candidate (identical policy set across
+types; scale may differ) holds trivially; per-type SKUs are out of the MVP.
 
 | Part | `stage` | Shared with `dev`? |
 |---|---|---|
@@ -47,10 +47,11 @@ trivially; per-tier SKUs are out of the MVP.
 ## 2. "Protected": a descriptor with an approval policy
 
 The gate is **data-driven: an environment whose descriptor carries an `approval` block (section 3) accepts deploys only through `jd promote`.** The CLI
-tests for the block, never for a tier name; there is no tier constant and no tier rule in C#. `tier: protected` stays what it is today, a value
-the schemas enumerate and mappings and policies match on; the only coupling is in the schemas: **if `tier` is `protected` the definition (and the
-descriptor) must carry `approval`**, so a protected environment cannot be written without a gate. (A `team` environment may carry one too and is then
-gated the same way; nothing forbids it.)
+tests for the block, never for a type name; there is no type constant and no type rule in C#. Since S21a the environment's `type` is one the
+catalog declares ([components.md](components.md) section 2), and the only coupling is in the catalog: **a type declared with `approval: true`
+(`stage`, `prod`) requires the definition (and the descriptor) to carry `approval`**, so such an environment cannot be written without a gate
+(`EnvironmentTypeCheck`, at `env up` and before any resolve). Before S21a the schemas held this coupling for `tier: protected`. (A `dev` environment
+may carry a block too and is then gated the same way; nothing forbids it.)
 
 - **Direct deploys are refused.** `jd release deploy`, `jd deploy` **and `jd release qualify`** on a descriptor with an `approval` block exit 1 and say
   "this environment is gated by an approval policy: use `jd promote`" (S19), **before** the identity, the records directory or the backend is touched.
@@ -76,7 +77,7 @@ carries it and no command needs another input. It is not an expression: the leav
 ```yaml
 kind: EnvironmentDefinition
 name: stage
-tier: protected
+type: stage                             # tier: protected before S21a
 requires: [{ type: env-substrate, id: substrate }]
 values: { ... as dev ... }
 approval:
@@ -89,9 +90,9 @@ approval:
 - **Schema and rules** (`environment-definition` and `environment` schemas, the loader for what the schema cannot say): `qualifiedOn` has the
   environment-name pattern and is not the environment's own name; `required` is an integer >= 1 and <= `approvers.length` (a policy that can never
   be met is an error at `env up`); `approvers` are unique GUIDs, at least one; `separateFromDeployer` is **required**, not defaulted (a silent
-  default would be a silent weakening). **Tier coupling, in the schemas only:** `tier: protected` requires `approval`, written as `"anyOf": [ { "properties": { "tier": { "enum": ["team"] } } }, { "required": ["approval"] } ]`
-  (NJsonSchema 11.0.2 silently ignores `if`/`then`, so this form is used; no C# rule). That is the
-  "policy per tier": the tier decides in the schema whether there must be a policy, the environment definition holds its values.
+  default would be a silent weakening). **Type coupling, from the catalog** (S21a; before, a schema `anyOf` on `tier: protected`): a type with
+  `approval: true` requires `approval`. That is the "policy per type": the catalog decides whether there must be a policy, the environment
+  definition holds its values.
 - **Evaluation** is two pure functions in `jd.resolver` (no I/O, golden-tested), over the policy, the distinct approvals and the deployers:
   `Counts(approver, deployers)` (the principal is listed in `approvers`, and is not in `deployers` when `separateFromDeployer`) and
   `Evaluate(approvals, deployers)` (the number of distinct `objectId`s among approvals that `Counts`, against `required`). `jd approve` uses `Counts`
@@ -122,7 +123,7 @@ directory, where S19 looks; the set is read from the source environment's direct
 
 ```json
 { "kind": "ApprovalRecord", "approvedAt": "2026-10-17T03:04:05Z",
-  "environment": { "name": "stage", "tier": "protected" },
+  "environment": { "name": "stage", "type": "stage" },
   "release": { "label": "1.0.0", "setSha256": "<sha256 of dev/1.0.0/set.yaml>" },
   "qualifiedOn": "dev",
   "identity": { "tenantId": "...", "clientId": "...", "objectId": "..." },

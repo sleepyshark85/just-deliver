@@ -2,16 +2,33 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/catalog/catalog.schema.json",
   "title": "just-deliver catalog descriptor",
-  "description": "Identifies the catalog. The catalog is versioned as one unit and the version is recorded on every deployment. Exactly one file of this kind per catalog.",
+  "description": "Identifies the catalog and declares its environment types. The catalog is versioned as one unit and the version is recorded on every deployment. Exactly one file of this kind per catalog.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "version"],
+  "required": ["kind", "version", "environmentTypes"],
   "properties": {
     "kind": { "enum": ["Catalog"] },
     "version": {
       "description": "Catalog version, recorded next to the definition SHA of every deployment.",
       "type": "string",
       "minLength": 1
+    },
+    "environmentTypes": {
+      "description": "The environment types, declared once: an environment definition or descriptor of any other type is an error. Names use the requirement-type pattern; `default` is not a type (docs/architecture/components.md section 2).",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(?!default$)[a-z][a-z0-9-]{1,14}[a-z0-9]$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layer"],
+          "properties": {
+            "layer": { "description": "Which `jd env up` layer an environment of this type is: the shared layer or an environment on top of it.", "enum": ["shared", "environment"] },
+            "approval": { "description": "true: an environment of this type must carry an `approval` block, so it cannot be written ungated. Any type may carry one; the block is what gates.", "type": "boolean" }
+          }
+        }
+      }
     }
   }
 }

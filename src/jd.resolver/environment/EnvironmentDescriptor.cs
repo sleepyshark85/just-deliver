@@ -10,7 +10,7 @@ namespace jd.resolver.environment;
 public sealed record EnvironmentDescriptor(
     string Name,
     string Region,
-    string Tier,
+    string Type,
     IReadOnlyDictionary<string, string> Values,
     IReadOnlyList<string> Grantable,
     ApprovalPolicy? Approval)
@@ -18,9 +18,9 @@ public sealed record EnvironmentDescriptor(
     // Top-level fields addressed as env.<key>; values may not shadow them.
     private const string NameKey = "name";
     private const string RegionKey = "region";
-    private const string TierKey = "tier";
+    private const string TypeKey = "type";
 
-    public static readonly IReadOnlyList<string> ReservedKeys = [NameKey, RegionKey, TierKey];
+    public static readonly IReadOnlyList<string> ReservedKeys = [NameKey, RegionKey, TypeKey];
 
     /// <summary>
     /// Resolves the part of an <c>env.&lt;path&gt;</c> reference after <c>env.</c>: the reserved keys come from the
@@ -32,7 +32,7 @@ public sealed record EnvironmentDescriptor(
         {
             NameKey => Name,
             RegionKey => Region,
-            TierKey => Tier,
+            TypeKey => Type,
             _ => Values.GetValueOrDefault(path),
         };
         return value is not null;

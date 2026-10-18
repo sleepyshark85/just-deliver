@@ -86,7 +86,7 @@ public static class ReleaseRecordBuilder
             ["environment"] = new JObject
             {
                 ["name"] = environment.Name,
-                ["tier"] = environment.Tier,
+                ["type"] = environment.Type,
                 ["region"] = environment.Region,
                 ["catalogVersion"] = graphs[0].CatalogVersion,
             },

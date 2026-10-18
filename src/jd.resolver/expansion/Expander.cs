@@ -64,7 +64,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 
     private ExpandedRequirement? ExpandOne(Requirement requirement, Owner owner, string ownerFile, string location, List<LoadError> errors)
     {
-        var mapping = MappingMatcher.Select(catalog.Mappings, requirement, environment.Tier, ownerFile, location, errors);
+        var mapping = MappingMatcher.Select(catalog.Mappings, requirement, environment.Type, ownerFile, location, errors);
         if (mapping is null)
         {
             return null;
@@ -88,7 +88,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
     // A workload variable reading an export that is already a value resolves here; the others wait for the second pass.
     private ExpandedRuntime? ExpandRuntime(Owner owner, List<ExpandedRequirement> requirements, string ownerFile, List<LoadError> errors)
     {
-        var mapping = MappingMatcher.SelectRuntime(catalog.Mappings, environment.Tier, ownerFile, errors);
+        var mapping = MappingMatcher.SelectRuntime(catalog.Mappings, environment.Type, ownerFile, errors);
         if (mapping is null)
         {
             return null;
