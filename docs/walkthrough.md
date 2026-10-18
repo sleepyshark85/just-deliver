@@ -261,7 +261,7 @@ jd release create "$JD_WALK/clash.manifest.yaml" --out "$JD_WALK/clash.set.yaml"
 jd release deploy "$JD_WALK/clash.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog catalog; echo "exit $?"
 ```
 
-Expected: exit 1, `jd: '…/dev/1.2.0/set.yaml' holds a different release set for label 1.2.0 on dev (sha256 …, this one …); a label names one set, so use a new label.`
+Expected: exit 1, `jd: the kept set.yaml holds a different release set for label 1.2.0 on dev (sha256 …, this one …); a label names one set, so use a new label.`
 
 ### 5. A policy added as a catalog file only (offline)
 
@@ -391,7 +391,7 @@ DEPLOY=$(newest dev 1.1.0 deploy)
 | A record copied to a later name: `cp "$DEPLOY" "$RECORDS/dev/1.1.0/29991231T235959000Z-deploy.json"` | `jd promote 1.1.0 --to "$JD_WALK/stage.relaxed.env.yaml" --catalog catalog` | `  not qualified on dev: 29991231T235959000Z-deploy.json: finishedAt … does not match the time '29991231T235959000Z' in its name.` |
 | The approval edited: `sed -i 's/"label": "1.1.0"/"label": "1.2.0"/' "$RECORDS"/stage/1.1.0/*-approve.json` | `jd promote 1.1.0 --to "$JD_WALK/stage.relaxed.env.yaml" --catalog catalog` | `jd: promote: ignored <time>-approve.json: approves label '1.2.0', not '1.1.0'.` and `  0 of 1 required approvals for 'stage' count.` |
 | The kept set edited: `echo "# edited" >> "$RECORDS/dev/1.1.0/set.yaml"` | `jd approve …` or `jd promote …` as above | every record: `<time>-deploy.json: pins set <old>, but set.yaml hashes to <new>.` |
-| (same) | `jd release deploy "$JD_WALK/v1.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog catalog` | `jd: '…/dev/1.1.0/set.yaml' holds a different release set for label 1.1.0 on dev (sha256 <new>, this one <old>); a label names one set, so use a new label.` |
+| (same) | `jd release deploy "$JD_WALK/v1.set.yaml" --env "$JD_WALK/dev.env.yaml" --catalog catalog` | `jd: the kept set.yaml holds a different release set for label 1.1.0 on dev (sha256 <new>, this one <old>); a label names one set, so use a new label.` |
 
 Run one edit at a time and restore after each:
 

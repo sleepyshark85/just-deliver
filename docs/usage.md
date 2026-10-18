@@ -68,8 +68,8 @@ A workload without it fails to resolve with `requires: policy 'enforce-monitorin
 **Upgrading a workload deployed before S21c**, when App Insights came from the policy: the next deploy creates `monitoring/appinsights` and
 `monitoring/access` and rolls a new revision (probe, then shift). jd deletes nothing, so the old App Insights and its role assignment stay in
 the stacks `<workload>.<env>._workload.appinsights` and `<workload>.<env>._workload.appinsights-access`, with the telemetry history. They
-cost nothing and go with the environment's resource group at teardown. To remove them earlier, with `PULUMI_BACKEND_URL=file://<data>/state` and
-`PULUMI_CONFIG_PASSPHRASE_FILE=<data>/state.key`, from the template's directory (`catalog/templates/azure/role-assignment`, then `catalog/templates/azure/application-insights`):
+cost nothing and go with the environment's resource group at teardown. To remove them earlier, with `PULUMI_BACKEND_URL=file://<data>/state`,
+`PULUMI_CONFIG_PASSPHRASE_FILE=<data>/state.key` and `PULUMI_CONFIG_PASSPHRASE` unset (Pulumi prefers it to the file), from the template's directory (`catalog/templates/azure/role-assignment`, then `catalog/templates/azure/application-insights`):
 `pulumi destroy --stack <stack> --yes`, then `pulumi stack rm <stack> --yes`.
 
 ### `jd env up`
@@ -165,7 +165,7 @@ workloads:
 | `release create <manifest> --out <set>` | Validates every listed workload definition, requires each image to be pinned by digest (`@sha256:` and 64 hex digits; a tag is rejected), checks names and dependencies, works out the deploy order and writes the release set. Refuses to overwrite an existing file: sets are immutable, so a changed release gets a new file. Prints every problem as `file: location: message`. |
 | `release show <set>` | Re-verifies each embedded definition against its recorded SHA-256 and re-applies the create rules, then prints (derived from the definitions) the label, the deploy order and, per workload, team, definition SHA-256, image and dependencies. A modified set, or one that breaks a rule, is an error (exit 1). |
 
-| `release deploy <set> --env <environment> --catalog <dir> [--preview]` | Loads the set (re-verifying it like `show`), resolves **every** workload on the environment and checks every graph against the templates, and only then deploys each workload (infrastructure, then the runtime release) in the set's deploy order. Same resolver, template check and orchestrator as `jd deploy`, and the same backend variables (`PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE`), plus `JD_RECORDS_DIR` and the `ARM_*` principal (below) unless `--preview`. **Creates real Azure resources.** |
+| `release deploy <set> --env <environment> --catalog <dir> [--preview]` | Loads the set (re-verifying it like `show`), resolves **every** workload on the environment and checks every graph against the templates, and only then deploys each workload (infrastructure, then the runtime release) in the set's deploy order. Same resolver, template check and orchestrator as `jd deploy`, and the same state and sign-in ([Data and identity](#data-and-identity)), plus the records (below) unless `--preview`. **Creates real Azure resources.** |
 | `release qualify <set> --env <environment> --catalog <dir>` | Re-checks a deployed set without deploying anything (installation qualification, IQ): resolves like `release deploy`, then checks that no node of any workload has drifted and that every revision serving traffic runs the pinned image. Same variables as a recorded `release deploy`. Writes a record (below). |
 
 Exit codes are the same as above (a manifest, set or `--out` path problem is 2; invalid content is 1).

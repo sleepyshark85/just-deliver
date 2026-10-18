@@ -32,7 +32,7 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
   It is never overwritten. Records refer to it by `setSha256`. *Residual:* it is written in place, not through a temp file and rename, so a crash in the middle of the write leaves a truncated `set.yaml`, which the next attempt reports as a different set; delete it by hand.
 - **Order of a recorded run (S17b):** parse and resolve everything (as today, no backend call); then obtain the deployer identity, token
   included; then check or create `set.yaml`; then the first backend call. A bad credential or a different set under the label therefore stops
-  the run before anything is deployed (exit 1; a missing or invalid `JD_RECORDS_DIR` is a usage error, exit 2, checked first). `release qualify` follows the same order and also creates `set.yaml` when it is missing. A failure after `set.yaml` is created but before the walk starts (building the backend or the live-revisions reader) writes no record, as a killed process writes none; `set.yaml` stays and the next attempt reuses it.
+  the run before anything is deployed (exit 1; before S23 a missing or invalid `JD_RECORDS_DIR` was a usage error, exit 2, checked first). `release qualify` follows the same order and also creates `set.yaml` when it is missing. A failure after `set.yaml` is created but before the walk starts (building the backend or the live-revisions reader) writes no record, as a killed process writes none; `set.yaml` stays and the next attempt reuses it.
 - **`jd deploy <workload>` writes no record:** it has no label; the release is the unit that is deployed and promoted. It is the unrecorded
   development path ([usage.md](../usage.md)); the evidence of S20 comes from release sets.
 
@@ -194,7 +194,8 @@ The total (~550) is one slice's worth of work three times over (S17c, estimated 
 ## Decisions (lead, pending the user's review)
 
 1. `jd deploy <workload>` writes no record; a release is the unit. It is the unrecorded development path. Success criterion 7 is met by release sets.
-2. `JD_RECORDS_DIR` is required for `release deploy` (not `--preview`) and `release qualify`.
+2. ~~`JD_RECORDS_DIR` is required for `release deploy` (not `--preview`) and `release qualify`.~~ Superseded by S23: the records are in jd's
+   data directory, nothing is set ([connections.md](connections.md)).
 3. A new adapter project `jd.azure`; the package `Azure.ResourceManager.AppContainers` arrives in S17c1 (S17a needs only Azure.Identity, already pinned);
    standards section 3 is amended in S17a.
 4. No deviation from ADR 0007: the record directory keeps the set file's bytes (`set.yaml`, section 1); records reference it by `setSha256`.
