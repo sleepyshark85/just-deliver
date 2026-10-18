@@ -65,7 +65,7 @@ by a meta-schema (`schemas/x-jd.schema.json`): an unknown keyword or role is an 
 | `message: <text>` | any subschema | the error text when that subschema fails |
 
 **The YAML files do not change**, except the runtime file in S24e (section 9). The binder also honours two plain JSON Schema annotations: `default` (an absent field binds the default: `class: standard`, node
-`kind: create`) and `enum` order on the `layer` definition (deploy order).
+`kind: create`) and the order of the `layer` definition's `enum` (deploy order: `shared` before `environment`), which a plain JSON Schema `enum` does not promise by itself, so the order is stated, not implied: the `layer` role (Appendix B) is defined as "the enum's listed order is the deploy order", and the definition carries a `$comment` saying so (no tenth keyword).
 
 **Validator (NJsonSchema 11.0.2), reproduced in a spike, deleted.** It keeps unknown `x-*` keywords as `ExtensionData` on every subschema, also
 through `$ref`. Each `ValidationError.Schema` is the failing subschema, so `message` attaches (shown for `pattern` and for
@@ -82,14 +82,14 @@ is written as `oneOf` + `message`: the policy-scope shapes stay code (concept 10
 | `SchemaIndex` | per kind, built once: role → instance paths, with the enclosing `select`s and scopes; namespace → defining and referring paths |
 | `Binder` | fills **concept records** from a document's roles, each value with its location; writes a document of a kind from concept records (section 5) |
 
-The concept records stay typed and the algorithms keep using them unchanged: `Node`, `Part` (gains `Scope`, `Reads` and its location),
+The concept records stay typed and the algorithms stay the same, their reads adjusted to the new records (`PartOwner` replaces five types, so `Expander` and `PolicyApplier` read it where they read those): `Node`, `Part` (gains `Scope`, `Reads` and its location),
 `PartOwner` (name, source, `uses`, contract, its parts by selection keys; replaces `Component`, `SharedResource`, `Runtime`, `Implementation`,
 `RuntimeImplementation`), `Probe`, `RuntimeRelease`, `Policy`, `NamingRule`, `ApprovalPolicy`, `Environment` (one record for a definition and
 a descriptor; replaces `EnvironmentDefinition` and `EnvironmentDescriptor`, as `EnvironmentDefinition.Over` already does),
 `Requirement`, `ReleaseWorkload`. **Deleted**: the per-file types `Catalog` (its fields are one collection per file kind), `EnvironmentDefinition`,
 `CatalogSource`, every `*LoadResult` (one `LoadResult<T>` of value and errors), `ApprovalRecord.Stored*` (choice 2 a only), the `To*`
 converters, `ImplementationKey`, `SharedScope`, `MatchCriteria`. `Expander`, `GraphBuilder`, `ReleaseFlow`, `Qualifier` and `PreviewFormatter`
-read the same records as today, so their algorithms and output do not change.
+read the concept records instead of today's types: same algorithms, reads adjusted, and their output does not change.
 
 ### Annotated: one component (`schemas/catalog/component.schema.json`, excerpt)
 
@@ -105,7 +105,7 @@ read the same records as today, so their algorithms and output do not change.
         "classes": { "type": "object", "x-jd": { "select": "requirement.class" },
                      "additionalProperties": { "$ref": "part.schema.json", "x-jd": { "scope": "workload" } } } } } } } }
 // part.schema.json, shared by Component, Runtime and SharedResource (today three copies of `node`):
-{ "x-jd": { "is": "part" }, "definitions": { "layer": { "enum": ["shared", "environment"], "x-jd": { "is": "layer" } } },
+{ "x-jd": { "is": "part" }, "definitions": { "layer": { "enum": ["shared", "environment"], "$comment": "listed order = deploy order (role layer, Appendix B)", "x-jd": { "is": "layer" } } },
   "properties": {
     "nodes":   { "type": "object", "additionalProperties": false, "x-jd": { "is": "part.nodes",
                  "message": "node names are lowercase letters, digits and hyphens, starting with a letter and not ending in a hyphen" },
@@ -289,14 +289,16 @@ Left out on purpose: user-defined roles, roles bound in the catalog (choice 1), 
 
 As in phase 1: the **deployed-config snapshot** (`src/jd.cli.tests/golden/deployed-config.json`) is byte-identical through every slice; the
 **graph goldens** (`GoldenGraphTests`, `GoldenSubstrateTests`) are byte-identical except S24e's additive lines (below); the files jd writes are
-byte-identical for the same inputs: the release-set, release-record and approval-record goldens exist (`ReleaseTests.cs:343`,
+byte-identical for the same inputs, except `graph.sha256` in the record goldens after S24e (below): the release-set, release-record and approval-record goldens exist (`ReleaseTests.cs:343`,
 `OrchestratorTests.Record.cs:96`, `ApprovalRecordTests.cs:42`), a composed-descriptor golden is added in S24a1's first commit. Old records and
 sets still read. Error message changes are listed per slice.
 
 **S24e and the graph JSON.** The rollout's suffix rule, full weight and probe scheme become runtime data, so they are release inputs the graph
 must carry: `GraphJson` writes them in the runtime node's `probe` and `release` blocks. The graph goldens gain exactly those lines and
-`graph.sha256` changes for the same inputs; nothing compares it across jd versions (it is written at `ReleaseRecordBuilder.cs:109` and read by
-no code). Leaving them out would let the hash miss a deploy input.
+`graph.sha256` changes for the same inputs. That hash is written into the record goldens, `workloads[].graph.sha256` at
+`src/jd.orchestrator.tests/golden/release-record.json:30,167` and `qualify-record.json:30,77`; S24e updates exactly those lines and nothing else in
+them. Nothing compares the hash across jd versions (it is written at `ReleaseRecordBuilder.cs:109` and read by no code). Leaving the fields out
+would let the hash miss a deploy input.
 
 **Azure gate** (conventions): not while the snapshot and the direct-Azure code are unchanged. S24e changes `ReleaseFlow.cs`,
 `HttpRevisionProbe.cs` and `Qualifier.cs:73` (values move to data, same values), so it runs the gate; the phase ends with one gate as its exit
@@ -320,7 +322,7 @@ place so the next builds on a green tree. Lines are production lines (C#, schema
 | **S24c1** Environment | `Environment` record bound from a definition or a descriptor; `EnvironmentDefinition`, `EnvironmentDescriptor` field knowledge deleted; descriptor reserved-values check proven or deleted | — | ~+100 / −130 | no | boundaries 4, 13; `${env.values…}`, `${env.offers}` refused; quality |
 | **S24c2** Workload | workload and requirement roles; `ExpressionContext` takes `Environment` and the workload owner; `WorkloadRules` on bound values, returning `LoadError`s; `ReleaseBuilder` reads the same bindings | — | ~+120 / −130 | no | boundaries 6, 11; an unbound workload field carrying `${cosmos-account.id}` is inert; quality |
 | **S24d** Policies | `match:` criteria, `policy.*` roles; `MatchCriteria` deleted; scope-shape rules (concept 10) take field names from the binding | — | ~+80 / −110 | no | every policy negative test kept, messages unchanged; quality |
-| **S24e** Rollout data | `probe.*`, `rollout.*` by `is`. **Catalog file change**: `runtimes/container-app.yaml` gains `release.suffix: { prefix: r, configDigits: 8, saltDigits: 6 }`, `release.fullWeight: 100`, `probe.scheme: https`; `runtime.schema.json` requires them with a `message`, so an older catalog fails at load naming the field (catalogs ship beside the jd they run on); `GraphJson` writes them | — | ~+90 / −70 | **yes** | snapshot identical; graph goldens differ by exactly those lines; release-flow tests unchanged; quality |
+| **S24e** Rollout data | `probe.*`, `rollout.*` by `is`. **Catalog file change**: `runtimes/container-app.yaml` gains `release.suffix: { prefix: r, configDigits: 8, saltDigits: 6 }`, `release.fullWeight: 100`, `probe.scheme: https`; `runtime.schema.json` requires them with a `message`, so an older catalog fails at load naming the field (catalogs ship beside the jd they run on), and bounds them so the revision name `<app>--<suffix>` stays within Azure's 54 characters: `prefix` `pattern: ^[a-z][a-z0-9-]{0,3}$`, `configDigits` and `saltDigits` `minimum: 1`, `maximum: 16` (suffix at most 36, app name at most 16, `--` 2: 54); `GraphJson` writes them. The test catalogs' runtimes gain the same required fields | — | ~+90 / −70 | **yes** | snapshot identical; graph goldens differ by exactly those lines; the record goldens (`release-record.json`, `qualify-record.json`) differ by exactly their `graph.sha256` lines; release-flow tests unchanged; a runtime without the fields, and one with digits over the maximum, fail at load naming the field; quality |
 | **S24f** YAML jd writes | the binder writes the descriptor and the release set and reads the manifest and set; `DescriptorComposer` and `ReleaseSetFile` field names gone | — | ~+100 / −90 | no | descriptor and release-set goldens identical; old sets read; quality |
 | **S24g** Docs and standards | standards §1 ("allowed in code: the concepts of documents.md §2; formats are data"); resolver.md, components.md §4, conventions "Data drives the platform"; guard allowlist final; an ADR (Proposed) for the vocabulary | — | docs | **yes**: exit gate | E2E green; allowlist = section 2's exceptions |
 
@@ -338,7 +340,7 @@ passes it, so the reviewer judges role names against Appendix B, and prose in me
 
 **Phase 1.5 exit criteria** (proposed): (1) the literal guard passes with only section 2's exceptions allowed; (2) the same Azure resources
 and the same written documents for the same inputs: snapshot and the written-file goldens byte-identical through every slice, the graph
-goldens except S24e's lines; (3) every D19 boundary keeps its tests, and binding completeness has its own; (4) E2E green at the end.
+goldens except S24e's lines and the record goldens except S24e's `graph.sha256` lines; (3) every D19 boundary keeps its tests, and binding completeness has its own; (4) E2E green at the end.
 **Roadmap change proposed:** insert phase 1.5 "The code knows no file structure" (serves N1, N10) before S22 and phase 2; phase 2's exit
 "added as components only, no C# change" gains "and no schema change outside the component's own kinds".
 
@@ -502,6 +504,8 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 | Policy | `policy.name`, `policy.reason`, `policy.scope`, `policy.runtime`, `policy.set`, `policy.default`, `policy.require` (criteria use `match:` with the roles above) | 7 |
 | Runtime | `probe.path`, `probe.expected-status`, `probe.timeout`, `probe.interval`, `probe.scheme`, `rollout.suffix-input`, `rollout.traffic-input`, `rollout.traffic-output`, `rollout.suffix-output`, `rollout.revision-output`, `rollout.fqdn-output`, `rollout.revision-key`, `rollout.latest-key`, `rollout.weight-key`, `rollout.resource-id-output`, `rollout.suffix-prefix`, `rollout.suffix-config-digits`, `rollout.suffix-salt-digits`, `rollout.full-weight` | 19 |
 | Release | `release.label`, `release.created-at`, `release.workloads` *many*, `release.definition`, `release.definition-path`, `release.definition-sha256`, `release.depends-on` | 7 |
+
+The `layer` role's value set is ordered: the `enum`'s listed order is the deploy order (`shared` before `environment`); the definition says so in a `$comment`.
 
 Namespaces (`define`/`ref`): `part-owner`, `component`, `shared-resource`, `runtime`, `policy`,
 `environment-type`, `naming-kind`, `role`, `grant-template`, `environment`.
