@@ -2,7 +2,7 @@
 
 > Status: design note for S21, **phase 1: components, base** ([roadmap](../plans/roadmap.md); serves N1, N3, N5). Not built. Direction:
 > [context.md](../context.md) § "Catalog by component". Refines [resolver.md](resolver.md), [provisioning.md](provisioning.md) (Substrate) and
-> [approvals.md](approvals.md) §1. Open choices for the user: [section 8](#8-open-choices).
+> [approvals.md](approvals.md) §1–2. The user's choices: [section 8](#8-choices-taken-by-the-user-2026-10-18).
 
 ## 1. Problem
 
@@ -11,71 +11,94 @@ mapping (`mappings/database/standard.yaml`), two templates, part of the env-subs
 shared-substrate mapping (the Cosmos account), a role line and two naming rules. The dependency is implicit: the substrate decides on its
 own that `env.cosmos.*` exists, and the database mapping assumes those names. Nothing at load ties `${env.cosmos.accountId}` to the
 resource that produces it. An environment cannot say "no database here". A typo in an `env.*` path is found only when a workload resolves
-against a real descriptor.
+against a real descriptor. And a policy adds resources (App Insights) that no workload asked for.
 
 ## 2. The model
 
 ### File kinds
 
-`kind` stays on every file, and the loader still reads every `*.yaml` outside `templates/`. Three kinds replace `ResourceType` and
-`Mapping`. `Policy`, `Naming`, `Roles`, `Catalog` and the templates stay, shared on purpose.
+`kind` stays on every file, and the loader still reads every `*.yaml` outside `templates/`. `ResourceType` and `Mapping` go. `Naming`,
+`Roles` and the templates stay, shared on purpose.
 
 | Kind | Fields | Replaces |
 |---|---|---|
-| `SharedResource` | `name`, `description`, `scope` (`shared` \| `environment`), `uses`, `nodes`, `exports`, `grantable` (export names) | the substrate mappings' nodes, and the environment's `grantable` |
-| `Component` | `name`, `description`, `exports` (the contract), `uses`, `environment` (optional: `nodes`, `exports`), `classes` (class → `nodes`, `exports`) | `ResourceType` + its requirement mappings + its slice of the substrate |
-| `Runtime` | `name`, `description`, `uses`, `probe`, `release`, `nodes` (must include `runtime`) | the runtime mapping (`match: { kind: runtime }`) |
-| `Policy` | unchanged, plus `uses` | — |
+| `Catalog` | `version`, **`environmentTypes`** (type → `layer`, optional `approval: true`) | `tier` enums in the schemas |
+| `SharedResource` | `name`, `description`, `scope` (`shared` \| `environment`), `uses`, `nodes`, `exports` | the substrate mappings' nodes |
+| `Component` | `name`, `description`, `exports` (the contract), `uses`, `implementations` (environment type or `default` → `environment` part (optional), `classes` (class → `nodes`, `exports`)) | `ResourceType` + its mappings + its slice of the substrate |
+| `Runtime` | `name`, `description`, `uses`, `implementations` (environment type or `default` → `probe`, `release`, `nodes`, which must include `runtime`) | the runtime mapping (`match: { kind: runtime }`) |
+| `Grants` | `targets` (grant template → its target input) | the environment's `grantable` |
+| `Policy` | `match` key `environmentType` replaces `tier`; **+ `require`**; **− `add`** | — |
 
-A **part** is a set of nodes with one scope: a shared resource, a component's `environment` part, a component's class part, the runtime, or a
-policy's `add`. Node format (`template`, `kind: create | grant`, `config`), expressions, `name()`, `guid()` and `fn::entries` do not change.
+A **part** is a set of nodes with one scope: a shared resource, an implementation's `environment` part, a class part, or the runtime. Node
+format (`template`, `kind: create | grant`, `config`), expressions, `name()`, `guid()` and `fn::entries` do not change.
 
 **Names.** Shared resource, component and runtime names share one namespace and use the requirement-type pattern
-(`^[a-z][a-z0-9-]{1,14}[a-z0-9]$`, 3–16 characters), so the seed names are short: `env-group`, `apps-env`. A name may not be `env`,
-`role`, `workload`, `resource` or `runtime` (the reserved roots).
+(`^[a-z][a-z0-9-]{1,14}[a-z0-9]$`), so the seed names are short: `env-group`, `apps-env`. A name may not be `env`, `role`, `workload`,
+`resource` or `runtime` (the reserved roots). Environment types use the same pattern; `default` is not a type (it is the fallback key).
+
+### Environment types
+
+The catalog declares the environment types once; an environment definition or descriptor of any other type is an error (at `env up` and
+at resolve). Today's `tier` (`team`/`protected`) becomes the **type**.
+
+```yaml
+# catalog/catalog.yaml
+kind: Catalog
+version: "0.1.0"
+environmentTypes:
+  shared: { layer: shared }                     # the shared layer's own type
+  dev:    { layer: environment }
+  stage:  { layer: environment, approval: true }  # a definition of this type must carry an `approval` block
+  prod:   { layer: environment, approval: true }
+```
+
+- **One contract, implementations per type.** A component or runtime is looked up as `implementations.<type>`, else
+  `implementations.default`, else an error naming the component and the type. Exact key lookup: no matching, no specificity, no ties. An
+  implementation replaces `default` whole (no merging).
+- **Load checks:** implementation keys are declared types of layer `environment`, or `default`; every implementation declares the same
+  classes (so a workload's `class` is valid in every environment); every class part exports exactly the contract.
+- `approval: true` replaces the schema coupling `tier: protected` → `approval` ([approvals.md](approvals.md) §2): a definition or descriptor
+  of such a type without the block is an error. As today, any type may carry a block, and the CLI gates on the block, never on the type.
+- Policies may match the type (`match: { environmentType: prod }`). `env.tier` becomes `env.type`.
 
 ### Scopes
 
 | Scope | Deployed by | Once per | Parts |
 |---|---|---|---|
-| shared | `jd env up` of a `layer: shared` definition (platform identity) | shared layer (today: per subscription) | `SharedResource` with `scope: shared` |
-| environment | `jd env up` of an environment definition (platform identity) | environment | `SharedResource` with `scope: environment`; a component's `environment` part |
-| workload | `jd deploy` / `release deploy` / `promote` | workload | a component's class part (per requirement); the runtime; workload-scope policy `add` |
+| shared | `jd env up` of a definition whose type has `layer: shared` (platform identity) | shared layer (today: per subscription) | `SharedResource` with `scope: shared` |
+| environment | `jd env up` of a definition whose type has `layer: environment` (platform identity) | environment | `SharedResource` with `scope: environment`; the selected implementation's `environment` part |
+| workload | `jd deploy` / `release deploy` / `promote` | workload | the selected implementation's class part, per requirement; the runtime |
 
-`uses` lists shared resources only. Allowed: shared → shared; environment → shared, environment; component, runtime, policy → any. The
-`uses` graph has no cycles. A workload deploy never expands a shared resource or an `environment` part (section 3).
+`uses` lists shared resources only. Allowed: shared → shared; environment → shared, environment; component, runtime → any. The `uses` graph
+has no cycles. A workload deploy never expands a shared resource or an `environment` part (section 3). No policy creates anything.
 
 ### Reading another part: `${<name>.<export>}`
 
-A part reads a shared resource as `${cosmos-account.endpoint}`, never as `env.*`. In a component's class part, the component's own
-`environment` part is read by the component's name (`${database.databaseName}`). Every other root is unchanged.
+A part reads a shared resource as `${cosmos-account.endpoint}`, never as `env.*`. A class part reads its own component's `environment` part
+by the component's name (`${database.databaseName}`). Every other root is unchanged.
 
 | Root in a part | Allowed when | Resolves to |
 |---|---|---|
 | `<node>.<output>` | a node of the same part | pending node output (as today) |
-| `<name>.<export>` | `<name>` is in the part's `uses`, or is the part's own component (class parts only) | when `<name>` is deployed **in the same run**: its export expression, evaluated in place (below); otherwise the descriptor value `values.<name>.<export>` |
-| `env.name`, `env.region`, `env.tier` | always | the descriptor's top-level fields |
-| `env.<anything else>` | **never** (an error); otherwise `env.*` would read past `uses` and `grantable` | — |
+| `<name>.<export>` | `<name>` is in the component's `uses`, or is the part's own component (class parts only) | when `<name>` is deployed **in the same run**: its export expression, evaluated in place (below); otherwise the descriptor value `values.<name>.<export>` |
+| `env.name`, `env.region`, `env.type` | always | the descriptor's top-level fields |
+| `env.<anything else>` | **never** (an error), so `env.*` cannot read past `uses` | — |
 | `role.*`, `workload.*`, `runtime.*`, `resource.*` | as today | as today |
 
 **Checked at load (new):** every root in a part's config and exports is a node of that part, a name in its `uses`, its own component, or a
-reserved root. `<export>` is declared in that part's `exports`. Unknown names, undeclared exports and missing `uses` are load errors at the
-file and location. Today these errors surface only at resolve. A node name may not equal a name the part can read as a root.
+reserved root; `<export>` is declared in that part's `exports`. Unknown names, undeclared exports and missing `uses` are load errors at the
+file and location (today they surface only at resolve). A node name may not equal a name the part can read as a root.
 
 **In-run reads are evaluated in place.** All parts of one `env up` run expand into one scope whose node names are unique (section 3). So
-when `<name>` is a part of the run, the evaluator evaluates `<name>`'s export expression in place, in the same context, and the read
-becomes ordinary node references: in the shared run, `${shared-group.name}` in `log-analytics` → `${group.resourceGroupName}` → node
-reference `group.resourceGroupName`. Chained exports resolve the same way: `${cosmos-account.resourceGroup}` → `${shared-group.name}` →
-`group.resourceGroupName`.
+when `<name>` is a part of the run, the evaluator evaluates `<name>`'s export expression in place, and the read becomes ordinary node
+references: in the shared run, `${shared-group.name}` in `log-analytics` → `${group.resourceGroupName}`. Chained exports resolve the same
+way: `${cosmos-account.resourceGroup}` → `${shared-group.name}` → `group.resourceGroupName`.
 
-- Graph edges, `ExportValues` and the orchestrator's second pass are unchanged: they see node references, as today. Only
-  `ExpressionContext` gains the run's part exports (part → export → expression; empty in a workload run). The second pass re-evaluates the
-  pending text with the same part exports, so it rewrites the same way, and a secret node output is still flagged secret.
-- The run's parts come first, then the descriptor. A run's part whose name is already in the base's values is an error (new keys only,
-  as today).
-- **Cycles cannot occur.** `uses` is acyclic, and an export may read only its own part's nodes, its `uses` and the reserved roots (load
-  checks). In-place evaluation therefore follows `uses` edges and ends. The evaluator has no guard of its own; the negative tests of those
-  two load checks (S21b) are the cycle tests.
+- Graph edges, `ExportValues` and the second pass are unchanged (they see node references); only `ExpressionContext` gains the run's part
+  exports (empty in a workload run), and a secret output stays secret.
+- The run's parts come first, then the descriptor. A run's part whose name is already in the base's values is an error (new keys only).
+- **Cycles cannot occur:** `uses` is acyclic and an export reads only its own part's nodes, its `uses` and reserved roots (load checks),
+  so in-place evaluation follows `uses` edges and ends. The negative tests of those two checks are the cycle tests.
 
 ### Example: `database`
 
@@ -84,171 +107,152 @@ reference `group.resourceGroupName`. Chained exports resolve the same way: `${co
 kind: Component
 name: database
 description: A database for the workload; the engine (today a container in the environment's Cosmos SQL database) is the platform's choice, and `engine` says which.
-exports: [engine, endpoint, database, container]     # the contract: every class exports exactly these
+exports: [engine, endpoint, database, container]     # the contract: every class of every implementation exports exactly these
 uses: [cosmos-account]
-environment:                                         # once per environment that offers database
-  nodes:
-    database:
-      template: azure/cosmos-sql-database
-      config:
-        resourceGroupName: ${cosmos-account.resourceGroup}
-        accountName: ${cosmos-account.name}
-        databaseName: ${name('db')}
-        throughput: 400                              # shared by the environment's containers; two environments use 800 of the free 1000
-  exports:
-    databaseName: ${database.databaseName}
-    databaseId: ${database.databaseId}
-classes:
-  standard:                                          # what each requiring workload gets
-    nodes:
-      container:
-        template: azure/cosmos-sql-container
-        config:
-          accountId: ${cosmos-account.id}
-          databaseName: ${database.databaseName}     # this component's environment part
-          containerName: ${name('cosmos-container')}
-          partitionKeyPath: /id
-      access:
-        kind: grant
-        template: azure/cosmos-sql-role-assignment
-        config:
-          accountId: ${cosmos-account.id}            # grantable: cosmos-account lists `id`
-          scope: ${container.scope}
-          principalId: ${runtime.principalId}
-          roleGuid: ${role.cosmos-data-contributor}
-          roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
-    exports:
-      engine: cosmos-sql
-      endpoint: ${cosmos-account.endpoint}
-      database: ${database.databaseName}
-      container: ${container.containerName}
+implementations:
+  default:                                           # every environment type without its own key (all of them, in the seed)
+    environment:                                     # once per environment that offers database
+      nodes:
+        database:                                    # config as today, with ${cosmos-account.resourceGroup} and ${cosmos-account.name}
+          template: azure/cosmos-sql-database
+          config: { resourceGroupName: ${cosmos-account.resourceGroup}, accountName: ${cosmos-account.name}, databaseName: ${name('db')}, throughput: 400 }
+      exports: { databaseName: ${database.databaseName}, databaseId: ${database.databaseId} }
+    classes:
+      standard:                                      # what each requiring workload gets
+        nodes:
+          container:                                 # databaseName reads this component's environment part
+            template: azure/cosmos-sql-container
+            config: { accountId: ${cosmos-account.id}, databaseName: ${database.databaseName}, containerName: ${name('cosmos-container')}, partitionKeyPath: /id }
+          access:
+            kind: grant
+            template: azure/cosmos-sql-role-assignment
+            config:
+              accountId: ${cosmos-account.id}        # not the target: may read what the component uses
+              scope: ${container.scope}              # the target (grants.yaml): this workload's own container only
+              principalId: ${runtime.principalId}
+              roleGuid: ${role.cosmos-data-contributor}
+              roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
+        exports:
+          engine: cosmos-sql
+          endpoint: ${cosmos-account.endpoint}
+          database: ${database.databaseName}
+          container: ${container.containerName}
 ```
+
+### Example: `monitoring` (explicit observability)
+
+```yaml
+# catalog/components/monitoring.yaml
+kind: Component
+name: monitoring
+description: Application Insights for the workload, reporting to the shared Log Analytics workspace.
+exports: [connectionString]
+uses: [env-group, log-analytics]
+implementations:
+  default:
+    classes:
+      standard:
+        nodes:
+          appinsights:                               # today's policy-added node, config unchanged but for the roots
+            template: azure/application-insights
+            config: { resourceGroupName: ${env-group.name}, location: ${env.region}, workspaceResourceId: ${log-analytics.id}, appInsightsName: ${name('appi')} }
+          access:                                    # today's appinsights-access, unchanged
+            kind: grant
+            template: azure/role-assignment
+            config: { scope: ${appinsights.appInsightsId}, principalId: ${runtime.principalId}, roleGuid: …, roleAssignmentId: … }
+        exports: { connectionString: ${appinsights.connectionString} }
+```
+
+A workload asks for it (`requires: [{ type: monitoring }]`) and maps the export to its variable like any other contract:
+`APPLICATIONINSIGHTS_CONNECTION_STRING: ${resource.monitoring.connectionString}`.
 
 ### Shared resources (the seed catalog)
 
-| Name | Scope | Uses | Node (unchanged name) | Exports | Grantable |
-|---|---|---|---|---|---|
-| `shared-group` | shared | — | `group` (resource-group) | `name`, `location` | — |
-| `log-analytics` | shared | `shared-group` | `workspace` | `id`, `name`, `customerId`, `resourceGroup` | — |
-| `cosmos-account` | shared | `shared-group` | `cosmos` | `id`, `name`, `endpoint`, `resourceGroup` | `id` |
-| `env-group` | environment | — | `group` (resource-group) | `name`, `location` | — |
-| `apps-env` | environment | `env-group`, `log-analytics` | `apps` | `id`, `defaultDomain` | — |
+| Name | Scope | Uses | Node (unchanged name) | Exports |
+|---|---|---|---|---|
+| `shared-group` | shared | — | `group` (resource-group) | `name`, `location` |
+| `log-analytics` | shared | `shared-group` | `workspace` | `id`, `name`, `customerId`, `resourceGroup` |
+| `cosmos-account` | shared | `shared-group` | `cosmos` | `id`, `name`, `endpoint`, `resourceGroup` |
+| `env-group` | environment | — | `group` (resource-group) | `name`, `location` |
+| `apps-env` | environment | `env-group`, `log-analytics` | `apps` | `id`, `defaultDomain` |
 
-```yaml
-# catalog/shared/cosmos-account.yaml
-kind: SharedResource
-name: cosmos-account
-description: The one free-tier Cosmos DB account (Azure allows one per subscription).
-scope: shared
-uses: [shared-group]
-nodes:
-  cosmos:
-    template: azure/cosmos-account
-    config:
-      resourceGroupName: ${shared-group.name}
-      location: ${shared-group.location}
-      accountName: ${name('cosmos')}
-      enableFreeTier: true
-      totalThroughputLimit: 1000
-      disableLocalAuth: true
-exports: { id: ${cosmos.accountId}, name: ${cosmos.accountName}, endpoint: ${cosmos.documentEndpoint}, resourceGroup: ${shared-group.name} }
-grantable: [id]
-```
+E.g. `catalog/shared/cosmos-account.yaml`: `kind: SharedResource`, `scope: shared`, `uses: [shared-group]`, today's `cosmos` node with
+`${shared-group.name}`/`.location` for the group, and `exports: { id: ${cosmos.accountId}, name: …, endpoint: …, resourceGroup:
+${shared-group.name} }`. A shared resource has no implementations: the shared layer has one type.
+
+### The platform-owned implicit resources
+
+Implicit provisioning is limited to these. Workloads only read them through `uses`; no grant can target them (boundary 1).
+
+| Resource | Part | Layer | When |
+|---|---|---|---|
+| shared resource group `rg-shared-…` | `shared-group` | shared | always |
+| Log Analytics workspace `law-shared-…` | `log-analytics` | shared | when an offered component or runtime uses it |
+| Cosmos DB account `cosmos-shared-…` (free tier) | `cosmos-account` | shared | when an offered component uses it |
+| environment resource group `rg-<env>-…` | `env-group` | environment | always |
+| Container Apps environment `cae-<env>-…` | `apps-env` | environment | when the offered runtime uses it |
+| Cosmos SQL database `db-<env>` | `database`'s environment part | environment | when the environment offers `database` |
+
+Per workload, the only implicit node is its compute, the **runtime** (a Container App), which is the workload's own. Everything else a
+workload gets comes from its `requires`.
 
 ### The runtime
 
-The runtime is **not** a `Component`. It has no contract, no classes, and is never required. A workload names no runtime. The environment
-offers exactly one, and every workload deployed there gets it. It keeps its own kind so its checks stay in one place: the `probe`, the
-`release` block, the reserved `runtime` node and the inputs the release flow owns. Those checks are today's, moved from the runtime mapping.
-`MappingMatcher` goes. With offers, nothing is left to match (choice 3).
+The runtime is **not** a `Component`: it has no contract and no classes and is never required. The environment offers exactly one, and every
+workload deployed there gets it. It keeps its own kind so its checks stay in one place: the `probe`, the `release` block, the reserved
+`runtime` node and the inputs the release flow owns (today's checks, per implementation). `MappingMatcher` goes.
 
-```yaml
-# catalog/runtimes/container-app.yaml
-kind: Runtime
-name: container-app
-uses: [env-group, apps-env]
-probe: { ... }        # unchanged
-release: { ... }      # unchanged
-nodes:
-  runtime:
-    template: azure/container-app
-    config:
-      resourceGroupName: ${env-group.name}
-      location: ${env.region}
-      containerAppsEnvironmentId: ${apps-env.id}
-      # the rest unchanged
-```
+`catalog/runtimes/container-app.yaml`: `kind: Runtime`, `uses: [env-group, apps-env]`, `implementations.default` holding today's `probe`,
+`release` and `runtime` node, which now reads `${env-group.name}` and `${apps-env.id}`.
 
-`enforce-monitoring` gains `uses: [env-group, log-analytics]` and reads `${env-group.name}` and `${log-analytics.id}`.
-
-### Catalog layout
-
-```
-catalog/
-  catalog.yaml  naming.yaml  roles.yaml                  # shared, unchanged
-  components/database.yaml                               # contract + environment part + classes
-  runtimes/container-app.yaml
-  shared/{shared-group,log-analytics,cosmos-account,env-group,apps-env}.yaml
-  policies/enforce-monitoring.yaml                       # + uses
-  templates/azure/*/Pulumi.yaml                          # unchanged, generic, shared
-```
-
-Deleted: `types/`, `mappings/`. The layout stays organisational only: the loader goes by `kind`.
+**Layout:** `catalog/` keeps `catalog.yaml`, `naming.yaml`, `roles.yaml`, `templates/` and `policies/`, and gains `grants.yaml`,
+`components/{database,monitoring}.yaml`, `runtimes/container-app.yaml` and `shared/<name>.yaml`. Deleted: `types/`, `mappings/`. The
+layout is organisational only: the loader goes by `kind`.
 
 ## 3. Scopes and who deploys
 
-### Environment definitions: layer and offers
+### Environment definitions: type and offers
 
 ```yaml
-# samples/environments/shared.yaml
-kind: EnvironmentDefinition
-name: shared
-layer: shared                 # deploys the shared scope; its descriptor is the --base of environments
-tier: team
-offers: [container-app, database]
-
-# samples/environments/stage.yaml (dev.yaml is the same without approval and with tier: team)
+# samples/environments/stage.yaml; dev.yaml: type dev, no approval; shared.yaml: type shared (its descriptor is the --base of the others)
 kind: EnvironmentDefinition
 name: stage
-tier: protected               # layer defaults to environment
-offers: [container-app, database]
-approval: { ... }             # unchanged
+type: stage
+offers: [container-app, database, monitoring]
+approval: { ... }             # unchanged; required by the type
 ```
 
-`requires`, `values` and `grantable` leave the definition. `jd env up` keeps its command line (`--base`, `--region`, `--out`).
+`tier`, `requires`, `values` and `grantable` leave the definition. Offers are names only. `jd env up` keeps its command line (`--base`,
+`--region`, `--out`).
 
-| `jd env up` of | Collects (one graph, owner `@<name>`, scope `substrate`) | Must already exist |
+| `jd env up` of layer | Collects (one graph, owner `@<name>`, scope `substrate`) | Must already exist |
 |---|---|---|
-| `layer: shared` | the `scope: shared` resources reached through `uses` from the offered components and runtime, and from every policy | — |
-| `layer: environment` | the offered components' `environment` parts, and the `scope: environment` resources reached through `uses` from them, the offered runtime and every policy | every `scope: shared` resource reached the same way, present in the base descriptor; otherwise a load error before anything is created, naming the resource and the base |
+| `shared` | the `scope: shared` resources reached through `uses` from the offered components and runtime | — |
+| `environment` | the offered components' `environment` parts (of the implementation for its type), and the `scope: environment` resources reached through `uses` from them and the offered runtime | every `scope: shared` resource reached the same way, present in the base descriptor; otherwise an error before anything is created, naming the resource and the base |
 
-- **The substrate follows from the offers.** No offered component uses `cosmos-account`, so no Cosmos account. Policies apply to every
-  workload, so what they use is always collected.
-- **One scope, today's ids.** The parts of one run expand into one scope, named `substrate` (an engine constant like `@workload`). Each
-  node is evaluated with `substrate` as its current id. Ids, stacks and `name()` hashes therefore stay exactly as today:
-  `@dev/dev/substrate/apps`, `_shared.shared.substrate.cosmos`, `cosmos-shared-39d0b1`. The node names of all parts of one scope must be
-  unique across the catalog: `group`, `workspace` and `cosmos` (shared); `group`, `apps` and `database` (environment). This is a load check,
-  and a **constraint on every later component** (phase 2's messaging and secrets components included): ids and in-place evaluation rely on
-  it, so a new part picks node names no other part of its scope uses.
-- **Node-scope policies still reach substrate nodes**, as today: `template` and `tier` match them. A substrate node has no `type` and no
-  `class` (like a runtime node today), so a `type` or `class` criterion never matches it. `type`/`class` keep matching class-part nodes:
-  `type` is the component's name, `class` the class. No seed policy matches `type: env-substrate`, so nothing changes for the seed catalog.
-- At most one runtime among an environment's offers. Offers name declared components or runtimes.
+- **The substrate follows from the offers.** No offered component uses `cosmos-account`, so no Cosmos account.
+- **One owner per shared stack.** Only the shared layer deploys shared resources; an environment layer only checks its base has them.
+- **One scope, today's ids.** The parts of one run expand into one scope, `substrate` (an engine constant like `@workload`), each node
+  evaluated with `substrate` as its current id, so ids, stacks and `name()` hashes stay as today: `@dev/dev/substrate/apps`,
+  `_shared.shared.substrate.cosmos`, `cosmos-shared-39d0b1`. Node names must be unique across the parts that can share a scope: `group`,
+  `workspace`, `cosmos` (shared); `group`, `apps`, `database` (environment); a component's implementations may reuse one name. This is a load
+  check and a **constraint on every later component** (phase 2's messaging and secrets included).
+- **Node-scope policies still reach substrate nodes:** `template` and `environmentType` match them; a substrate node has no `type` or
+  `class`, so those criteria never match it. No seed policy changes behaviour.
+- At most one runtime among an environment's offers; offers name declared components or runtimes.
 
 ### The descriptor
 
-`jd env up` writes it as today, but `values` is no longer a hand-written layout. It is **every collected part's exports**, evaluated with
-the deployed outputs and keyed by part name, merged into the base's values (new keys only, as today). As today, secret outputs are
-dropped before evaluation (`includeSecrets: false`), so an export that reads one, directly or through a chained export, stays pending and
-is an error: `env up` fails and writes no descriptor (boundary 11). The substrate graph has no `exports` section: an environment run has
-no requirements.
+`jd env up` writes it as today, but `values` is **every collected part's exports**, evaluated with the deployed outputs and keyed by part
+name, merged into the base's values (new keys only). Secret outputs are dropped before evaluation as today, so an export that reads one,
+directly or chained, stays pending and is an error: `env up` fails and writes no descriptor (boundary 12).
 
 ```yaml
 kind: Environment
 name: dev
 region: southeastasia
-tier: team
-offers: [container-app, database]        # a shared layer's descriptor offers nothing, so no workload can deploy on it
+type: dev
+offers: [container-app, database, monitoring]   # a shared layer's descriptor offers nothing, so no workload can deploy on it
 values:
   shared-group:      { name: rg-shared-5d9b60, location: southeastasia }
   log-analytics:     { id: …, name: …, customerId: …, resourceGroup: rg-shared-5d9b60 }
@@ -256,158 +260,199 @@ values:
   env-group:         { name: rg-dev-…, location: southeastasia }
   apps-env:          { id: …, defaultDomain: … }
   database:          { databaseName: db-dev, databaseId: … }
-approval: { … }                          # stage only, still the last block
+approval: { … }                                  # stage only, still the last block
 ```
-
-`grantable` leaves the descriptor. The grant check now needs only the catalog (below).
 
 ### Workload resolution
 
-- A requirement `type: database` selects the component `database`, which must be among the descriptor's `offers` (new error: "environment
-  dev does not offer database"). Its `class` selects `classes.<class>` (an unknown class is an error naming the classes). No matching.
-- The runtime is the descriptor's offered runtime. If there is none, resolution fails: "environment X offers no runtime".
-- Workload parts read shared resources and their component's environment part from the descriptor. They are resolved at expansion, so
-  preview shows them as `env.*` values were shown before.
-- Workload definitions do not change: `requires[].type` names the component, and `${resource.<id>.<export>}` reads its contract.
+- A requirement `type: database` selects the component `database`, which must be among the descriptor's `offers` ("environment dev does
+  not offer database"); then the implementation for the descriptor's type (or `default`); then `classes.<class>` (an unknown class names the
+  classes). No matching.
+- The runtime is the descriptor's offered runtime, its implementation looked up the same way ("environment X offers no runtime" if none).
+- Workload parts read shared resources and their component's environment part from the descriptor, at expansion; preview shows them as
+  `env.*` values were shown before.
+- Workload definitions keep their shape: `requires[].type` names the component, `${resource.<id>.<export>}` reads its contract.
+
+### Grants: the target rule
+
+A grant's **target** may only be a node created by the workload's own requirement, or its runtime; never a shared or environment resource.
+`catalog/grants.yaml` declares, per grant template, the input naming the resource the grant is on: `kind: Grants`,
+`targets: { azure/role-assignment: scope, azure/cosmos-sql-role-assignment: scope }`.
+
+- **Load:** a `kind: grant` node exists only in a class part or the runtime; its template is listed in `targets`; its target input is set
+  and is exactly `${<node>.<output>}`, where `<node>` is a node of the same part or `runtime`: no literal, no surrounding text, no
+  `<name>.<export>`, `env.*`, `resource.*`, `role.*` or function. The grant's other fields may read what the component `uses`
+  (`accountId: ${cosmos-account.id}`). The resolver does not read templates, so the declaration lives in the catalog like the role GUIDs;
+  `TemplateLibrary.Check` already refuses a config key the template does not declare.
+- **Graph build** (after policies): the target's value is one pending reference to a node in the same scope or to the runtime node, and
+  nothing else. This catches a policy `set`/`default` on a target. `grantable` is gone from definitions and descriptors.
+
+### Policies: `require`
+
+`enforce-monitoring` becomes `match: { kind: runtime }`, `require: monitoring` (its `reason` unchanged). The narrowest form: `require` names **one** declared component, only on a workload-scope policy (`kind: runtime`, optionally
+`environmentType`). A workload with no requirement of that type (any id, any class) is an error at its `requires`, naming the policy and its
+reason. A policy cannot add nodes (`add` is gone), require a class or a count. Node-scope `set`/`default` and workload-scope
+`set`/`default` on `runtime.*` are unchanged.
 
 ### Security boundaries (D19) that move
 
 | # | Boundary | Today | After | Enforced |
 |---|---|---|---|---|
-| 1 | What a grant may target | `env.<path>` in the environment's `grantable` (`cosmos.accountId`) | `${X.e}` where X is in the part's `uses` **and** `e` is in X's `grantable` (`cosmos-account.id`): the same set for the seed catalog, narrowed by `uses` | load (catalog nodes and policy `add`); graph build (policy `set`/`default` on a grant, as today) |
-| 2 | What any node may read from the environment | any `env.*` value | only its `uses`, its own component's environment part, and `env.name/region/tier` | load |
-| 3 | Bypass through `env.*` | — | `env.<path>` other than name/region/tier is an error, so `${env.cosmos-account.id}` cannot skip 1 and 2 | evaluator |
-| 4 | A class part reading another component's environment part | possible (any `env.*`) | an error: only its own component's name is a root | load |
-| 5 | Workload input crossing into the platform | variables take only `${resource.<id>.<export>}` | unchanged; `${cosmos-account.id}` in a variable is rejected like any other `${…}` | `WorkloadRules` |
-| 6 | A workload deploy creating shared or environment resources | substrate types resolved only by `ResolveSubstrate` | a workload graph expands only class parts, the runtime and workload-scope policy `add`; never a `SharedResource` or an `environment` part | expander |
-| 7 | An environment `env up` creating shared resources | possible (any mapping) | an environment layer never collects `scope: shared` (it checks the base has them); only `layer: shared` deploys them, so each shared stack has one owner (ADR 0009 split; no race) | resolver |
-| 8 | Requirement scopes reading each other; only the runtime reads exports | — | unchanged | graph builder |
-| 9 | Owner prefix `@<name>` keeps environment and workload ids, stacks and hashes apart | — | unchanged | expander |
-| 10 | Deploying a component the environment does not offer | resolves, then fails on a missing `env.*` | refused at resolve | resolver |
-| 11 | A secret output reaching the descriptor | definition `values` evaluated with secret outputs dropped; a value that reads one is an error | part exports evaluated the same way; an export that reads a secret output (directly or chained) is an error at `env up`, no descriptor written | `DescriptorComposer` |
+| 1 | What a grant may target | `env.<path>` in the environment's `grantable` (`cosmos.accountId`), or any node | only a node of the grant's own part or the runtime, as a single reference in the input `grants.yaml` names | load (catalog parts); graph build (after policies) |
+| 2 | Who may add a grant | catalog mappings and policy `add` | class parts and the runtime only; policy `add` no longer exists | load |
+| 3 | What any node may read from the environment | any `env.*` value | only its component's `uses`, its own component's environment part, `env.name/region/type` | load |
+| 4 | Bypass through `env.*` | — | `env.<path>` other than name/region/type is an error, so `${env.cosmos-account.id}` cannot skip 1 and 3 | evaluator |
+| 5 | A class part reading another component's environment part | possible (any `env.*`) | an error: only its own component's name is a root | load |
+| 6 | Workload input crossing into the platform | variables take only `${resource.<id>.<export>}` | unchanged; `${cosmos-account.id}` in a variable is rejected like any other `${…}` | `WorkloadRules` |
+| 7 | A workload deploy creating shared or environment resources | substrate types resolved only by `ResolveSubstrate` | a workload graph expands only class parts and the runtime | expander |
+| 8 | An environment `env up` creating shared resources | possible (any mapping) | only a `layer: shared` type deploys `scope: shared`; an environment checks its base | resolver |
+| 9 | Requirement scopes reading each other; only the runtime reads exports | — | unchanged | graph builder |
+| 10 | Owner prefix `@<name>` keeps environment and workload ids apart | — | unchanged | expander |
+| 11 | Deploying a component the environment does not offer | resolves, then fails on a missing `env.*` | refused at resolve | resolver |
+| 12 | A secret output reaching the descriptor | definition `values` evaluated with secrets dropped | part exports evaluated the same way; an export reading one (directly or chained) fails `env up` | `DescriptorComposer` |
+| 13 | A gated environment written without its gate | schema: `tier: protected` requires `approval` | the type's `approval: true` requires the block | env up, resolve |
 
-Every row is a required test in the slice that moves it. Rows 1–4, 6, 7 and 11 each need a negative test for the forbidden path (row 11:
-S21c, a test-catalog part whose export reads a secret output, directly and through a chained export).
+Every row is a required test in the slice that moves it, and every forbidden path a negative test. Required negative tests for rows 1–2:
+a grant targeting a used shared resource (`scope: ${cosmos-account.id}`); a target through a chained export (an export of a used resource
+that chains to another part's node, `${cosmos-account.resourceGroup}`-style); a target reading its own component's environment part
+(`${database.databaseId}`); a literal target and a target with text around the reference; a grant template not in `grants.yaml`; a grant
+node in a shared resource or environment part; a policy with `add` (refused at load); a policy `set` on a grant's target to a shared value
+(refused at graph build). Row 12: a part whose export reads a secret output, directly and chained. Row 13: a `stage` definition and
+descriptor without `approval`.
 
 ### How the later phases stay open (roadmap rule 4)
 
 | Later idea | What phase 1 leaves open | What phase 1 does not do |
 |---|---|---|
-| Phase 2 components (messaging, secrets) | each is a component file plus any shared resources, no C#. Constraint: its parts' node names stay unique per scope across the catalog (load check, section 3) | no `jd catalog new` |
-| N1/N2 workloads as components (phase 3) | One shape with named `exports` and `uses`, per-scope parts and a reserved runtime. A workload can later declare a contract with the same `exports` and use the runtime as its compute part | no contract version, no workload `kind` change |
-| N5 offers | `grantable` is declared by the **provider**, per export: the seed of "access by offer". Phase 3 can replace it with offered access levels without moving the check | no access levels, no consumer lists |
-| N4 bind/attach (phases 4–5) | requirement → part lookup lives in one place (the expander); "create" is today's only mode. Bind resolves against deployed exports instead of instantiating a class part | no `mode` field |
-| N6 deployed-exports registry | the descriptor's `values` are already "deployed exports keyed `<name>.<export>`", read by one root syntax. A registry can add workload entries with the same key form | no registry, no workload entries |
-| Name lookup | `requires[].type` resolves a name in the catalog namespace; phase 4 can extend the lookup to workload names (a collision rule is phase 4's) | — |
+| Phase 2 components (messaging, secrets) | each is a component file plus any shared resources and a `grants.yaml` line for a new grant template, no C#; node names unique per scope | no `jd catalog new` |
+| N1/N2 workloads as components (phase 3) | one shape: named `exports`, `uses`, per-scope parts, per-type implementations, a reserved runtime | no contract version, no workload `kind` change |
+| N5 offers | the grant target rule is one check, in the loader and the graph builder: "own nodes only". Offers add a second allowed target, a provider's offered access level, in the same place | no access levels, no consumer lists |
+| N4 bind/attach (phases 4–5) | requirement → part lookup lives in one place (the expander); "create" is the only mode. Bind resolves against deployed exports instead of instantiating a class part, and its grant targets an offer (above) | no `mode` field |
+| N6 deployed-exports registry | the descriptor's `values` are "deployed exports keyed `<name>.<export>`", read by one root syntax | no registry, no workload entries |
+| Name lookup | `requires[].type` resolves a name in the catalog namespace; phase 4 can extend it to workload names | — |
 
 ## 4. What changes in the code
 
 | Project / file | Change |
 |---|---|
-| `schemas/catalog/` | + `component`, `sharedresource`, `runtime` schemas; `policy` + `uses`; − `resourcetype`, `mapping` |
-| `jd.resolver/catalog/Catalog.cs` | `Catalog(Version, Components, SharedResources, Runtimes, Policies, Naming, Roles)`; records `Component`, `SharedResource`, `Runtime`, `Part(Nodes, Exports)`; `Policy.Uses`; − `ResourceType`, `Mapping`, `MatchCriteria.TypeKey/ClassKey` uses in mappings (policies keep `MatchCriteria`) |
-| `jd.resolver/catalog/CatalogParser.cs` | new kinds; checks: unique names and reserved roots, `uses` exist, scope rules, no cycles, node names unique per scope, roots and exports at load, grantable at load, class exports equal the contract; the runtime checks move to `Runtime`; − mapping/type checks |
+| `schemas/catalog/` | + `component`, `sharedresource`, `runtime`, `grants`; `catalog` + `environmentTypes`; `policy` + `require`, − `add`, `tier` → `environmentType`; − `resourcetype`, `mapping` |
+| `jd.resolver/catalog/Catalog.cs` | `Catalog(Version, EnvironmentTypes, Components, SharedResources, Runtimes, GrantTargets, Policies, Naming, Roles)`; records `EnvironmentType`, `Component`, `Implementation`, `SharedResource`, `Runtime`, `Part(Nodes, Exports)`; `Policy.Require`, − `Policy.Add`; − `ResourceType`, `Mapping` |
+| `jd.resolver/catalog/CatalogParser.cs` | new kinds; checks: types and implementation keys, same classes per implementation, class exports equal the contract, unique names and reserved roots, `uses` exist, scope rules, no cycles, node names unique per scope, roots and exports, grant nodes (where, template listed, target form), `require` names a component and is workload scope; the runtime checks move to `Runtime`; − mapping/type checks |
 | `jd.resolver/matching/MappingMatcher.cs` | **deleted** |
-| `jd.resolver/expressions/ExpressionEvaluator.cs`, `ExpressionModel.cs` | no new reference kind. `<name>.<export>`: a run's part is evaluated in place from `ExpressionContext`'s new part exports, else read from the descriptor's `values`; `env.*` limited to name/region/tier; reports the part reads `<name>.<export>` (replaces the `env.` paths) |
-| `jd.resolver/expansion/ExpandedModel.cs` | `ConfigText.EnvPaths` → `PartReads` (`<name>.<export>`), read by the grant check and the preview |
-| `jd.resolver/expansion/Expander.cs` | requirement → `component.classes[class]`; runtime from offers; `ExpandEnvironment(definition, base)` collects parts by layer into scope `substrate` |
-| `jd.resolver/graph/GraphBuilder.cs` | grant check over `PartReads` against the catalog's `grantable`; edges unchanged (in-run reads are node references). `ExportValues.cs` unchanged |
-| `jd.resolver/environment/*` | definition: `layer`, `offers`; − `requires`, `values`, `grantable`. Descriptor: `offers`; − `grantable`. `DescriptorComposer`: walks the collected parts' exports instead of the definition's `values`, with the deployed node outputs as known, secrets dropped as today; − `ExportValues` there. `EnvironmentParser`: − the grantable rule. Schemas `environment*.schema.json` follow |
-| `jd.orchestrator/Orchestrator.cs` | `ContextFor` passes the run's part exports (a constructor argument; empty for workload runs); the second pass is otherwise unchanged |
-| `jd.cli/EnvCli.cs` | wiring only: the definition's new shape; hands the collected parts to the composer and the orchestrator |
+| `jd.resolver/expressions/ExpressionEvaluator.cs`, `ExpressionModel.cs` | `<name>.<export>`: a run's part evaluated in place from `ExpressionContext`'s part exports, else the descriptor's `values`; `env.*` limited to name/region/type; reports `<name>.<export>` reads (replaces the `env.` paths) |
+| `jd.resolver/expansion/ExpandedModel.cs` | `ConfigText.EnvPaths` → `PartReads`, read by the preview |
+| `jd.resolver/expansion/Expander.cs` | requirement → offered component → implementation → class part; runtime from offers; `ExpandEnvironment(definition, base)` collects parts by layer into scope `substrate` |
+| `jd.resolver/policies/PolicyApplier.cs` | − the `add` path (`WorkloadNodes`); + the `require` check; `tier` → `environmentType` |
+| `jd.resolver/graph/GraphBuilder.cs` | the grant target check replaces the `grantable` check; − policy-added workload nodes; edges unchanged. `ExportValues.cs` unchanged |
+| `jd.resolver/environment/*` | definition: `type`, `offers`; − `tier`, `requires`, `values`, `grantable`. Descriptor: `type`, `offers`; − `tier`, `grantable`. Type declared and `approval` coupling checked against the catalog. `DescriptorComposer` walks the collected parts' exports (secrets dropped as today). Schemas `environment*.schema.json` follow (the `anyOf` goes) |
+| `jd.resolver/release/ApprovalRecord.cs`, `jd.orchestrator/ReleaseRecordBuilder.cs` | records write `environment.type`; `release-record` and `approval-record` schemas take `type`, and still accept `tier` so records written before stay readable |
+| `jd.orchestrator/Orchestrator.cs` | `ContextFor` passes the run's part exports (empty for workload runs) |
+| `jd.cli/EnvCli.cs`, `Cli.cs` | wiring and messages (`type` for `tier`) |
 | `jd.cli/PreviewFormatter.cs` | `(from env.cosmos.accountId)` → `(from cosmos-account.id)`: renders `PartReads` |
-| `jd.bp.pulumi` (`TemplateLibrary.Check`) | unchanged: it checks graph nodes against templates |
-| tests | catalog fixtures (`TestCatalog`, Azure tests' test-only types and mappings) rewritten to the new kinds |
+| `jd.bp.pulumi` | unchanged |
+| tests | catalog fixtures (`TestCatalog`, the Azure tests' test-only types and mappings) rewritten to the new kinds |
 
 ## 5. Behaviour preservation (the refactor's acceptance)
 
-The same resources on Azure for the same inputs.
+The same resources on Azure for the same inputs, **except the one change the user's choice 5 makes** (monitoring, below).
 
 | Must be equal before and after | May differ |
 |---|---|
-| per node: `id`, `scope`, `name`, `template`, `kind`, `stack`, `phase`, `dependsOn`, resolved config values; resource names (`name()` hashes) | `provenance` (file paths and rule names: `Mapping: mappings/database/standard.yaml` → the component file) |
+| per node: `id`, `scope`, `name`, `template`, `kind`, `stack`, `phase`, `dependsOn`, resolved config values; resource names (`name()` hashes) | `provenance` (`Mapping: mappings/database/standard.yaml` → the component file) |
 | what the orchestrator hands the backend per stack (stack name, every config entry and its secret flag) after the second pass | substrate nodes' pending text (`${group.resourceGroupName}` → `${shared-group.name}`), and so those nodes' `hash` |
-| workload graphs' node `hash` (all their environment reads resolve at expansion) | a substrate graph's `exports` section (gone: an environment run has no requirements); the descriptor's layout (values by part, `offers`, no `grantable`) |
+| workload graphs' node `hash` (their environment reads resolve at expansion) | a substrate graph's `exports` (gone); the descriptor's layout (`type`, `offers`, values by part, no `grantable`); records' `environment.tier` → `type` |
 
-Proof, in two parts (lead decision):
-- **Primary: `DeployedConfigSnapshotTests` (new, first slice, test-only; offline, every slice).** This runs `env up` shared → dev →
-  stage and `jd deploy` of the seed workload with a fake backend whose outputs are deterministic (`<stack>/<output>`). It snapshots
-  every package (stack, config entries, secret flags). The snapshot is committed before any production change and must stay **byte-identical** through every slice.
-- **Golden graphs** (`GoldenGraphTests`, `GoldenSubstrateTests`, `seed-workload`/`shared`/`dev`/`stage-environment.graph.json`). Each slice's
-  diff may touch only the "may differ" items above; the reviewer checks it line by line. The fixture descriptors
-  (`seed-environment.yaml`, `shared-`/`stage-environment.yaml`) are rewritten to the new layout with the same values.
-- **Upgrade gate (lead-run, S21c and S21d only, after the normal Azure gate).** `EnvUpAzureTests` and the E2E test create fresh
-  environments, so they cannot show that what the old code deployed is unchanged under the new code. The normal Azure gate stays plain
-  E2E green; the upgrade gate adds, on one `PULUMI_BACKEND_URL` and one `$JD_WALK` (walkthrough set-up, `JD_REGION` fixed):
-  1. With `jd` built from **`main`'s head** and `main`'s `catalog/` and `samples/`: `jd env up` shared, then dev (`--base`); `jd release
-     create samples/walkthrough/releases/v1.manifest.yaml`; `jd release deploy` it to dev.
-  2. With `jd` built from **the slice head** and the slice's `catalog/` and `samples/`: the same two `jd env up` with `--force` (the
-     descriptors are rewritten in the new layout), then `jd release deploy` of the same `v1.set.yaml` to dev.
-  3. Pass: step 2 exits 0 and reports every node `unchanged (no changes, …)` in all three runs (runtime probe and shift `skipped`).
-  4. Teardown with the slice head's `samples/walkthrough/teardown.sh` on the step-2 descriptors; it lists nothing left. Then delete the
-     Pulumi state and `$JD_WALK`. The lead records the result in status.md.
+**Proof:**
+- **`DeployedConfigSnapshotTests`** (new, S21a's first commit, test-only, offline): `env up` shared → dev → stage and `jd deploy` of the seed
+  workload with a fake backend whose outputs are deterministic (`<stack>/<output>`); it snapshots every package (stack, config entries,
+  secret flags). Byte-identical through every slice except S21c, whose diff is exactly the monitoring change below.
+- **Golden graphs** (`GoldenGraphTests`, `GoldenSubstrateTests`): each diff touches only "may differ" items (S21c: plus monitoring).
+- **Upgrade gate** (lead-run, after the normal Azure gate, in S21c, S21e and S21f). On one `PULUMI_BACKEND_URL` and `$JD_WALK`
+  (walkthrough set-up, `JD_REGION` fixed): (1) `jd` from `main`'s head with `main`'s `catalog/` and `samples/`: `env up` shared, then dev
+  (`--base`); `jd release create samples/walkthrough/releases/v1.manifest.yaml`; `jd release deploy` to dev. (2) `jd` from the slice head with
+  its `catalog/` and `samples/`: the same two `env up` with `--force`, then `jd release create` and `release deploy` of v1 to dev. (3) Pass: step
+  2 exits 0; every `env up` node `unchanged`; every workload node `unchanged` (S21e, S21f), or exactly the S21c set below. (4) Teardown with the
+  slice's `teardown.sh`, nothing left; delete the Pulumi state and `$JD_WALK`; the lead records the result in status.md.
 
-Release records written before the change carry the old `graph.sha256` (provenance is in it). Nothing compares records across that line:
-qualification and promotion compare `set.yaml` and records, not graph hashes.
+### The monitoring change (S21c)
+
+Moving App Insights from a policy `add` (scope `@workload`) into the `monitoring` requirement's scope changes, per workload: the ids and
+stacks `@workload/appinsights` → `monitoring/appinsights` and `@workload/appinsights-access` → `monitoring/access`; the resource name
+`appi-<w>-<env>-<hash>`, because `name()` hashed the node name `appinsights` and now hashes the requirement id `monitoring`; and the
+runtime's `APPLICATIONINSIGHTS_CONNECTION_STRING`, now the workload's variable, carrying the new component's value.
+
+**Options:**
+- **(a) Recommended: one-time recreation.** The next deploy creates the new App Insights and its grant, and rolls a new runtime revision
+  (dark, probe, shift), as for any config change. jd deletes nothing that leaves a graph (no removal path yet, C16), so the old App Insights
+  and its role assignment stay, in their old stacks, untouched. **Effect:** the telemetry history stays readable in the old component; until
+  the shift the live revision keeps reporting there, after it the new revision reports to the new one, so the only gap is the minutes the
+  new Metrics Publisher grant may take to propagate. The orphans cost nothing (App Insights bills by ingestion) and go with the environment
+  resource group at teardown; a long-lived environment removes them by hand (`pulumi destroy` of the two old stacks per workload;
+  `usage.md` says how). **Upgrade gate, S21c:** per workload, exactly two creates (`monitoring/appinsights`, `monitoring/access`) and the
+  runtime updated (new revision, probe and shift run); every other node and every `env up` node `unchanged`; the old stacks untouched.
+- **(b) Keep the old ids.** Needs a component flag that puts a requirement's nodes into the workload scope `@workload` and hashes names by
+  node name: a permanent special case in the expander and the graph builder (~30 lines), and a second scope rule for everything that reads
+  ids, serving only this migration. Pulumi state surgery (`pulumi stack rename`) does not avoid it, because the hash still changes the
+  resource name. Not recommended.
+
+Old records carry the old `graph.sha256`; nothing compares graph hashes across that line. S21c's sample workloads make new sets.
 
 ## 6. Migration
 
 | What | Change |
 |---|---|
-| `catalog/types/*`, `catalog/mappings/*` | deleted; content moved to `components/database.yaml`, `runtimes/container-app.yaml`, `shared/*.yaml` (section 2) |
-| `catalog/policies/enforce-monitoring.yaml` | + `uses`; `${env.resourceGroup}` → `${env-group.name}`, `${env.logAnalytics.id}` → `${log-analytics.id}` |
-| `samples/environments/{shared,dev,stage}.yaml` | `layer`/`offers` replace `requires`/`values`/`grantable`; `approval` unchanged |
-| descriptors already written (`$JD_WALK/*.env.yaml`) | invalid in the new layout: re-run the three `jd env up --force`; every node `unchanged`, nothing changes on Azure |
-| `docs/walkthrough.md` | the `env up` commands are unchanged; `DEV_RG`/`STAGE_RG` (lines 110–111) read by indentation with `sed` (`^  resourceGroup:`), which the new layout breaks: they become a keyed read of `values.env-group.name`, as in `teardown.sh`; the catalog row in "Architecture" says components, shared resources, runtimes; a note to re-run `env up` |
-| `samples/walkthrough/teardown.sh` | lines 13–16 read `values.resourceGroup` and `values.shared.resourceGroup` by indentation (`^    resourceGroup:` for the shared group, `^  resourceGroup:` for the environment's). In the new layout both groups sit at the same depth, under different keys, so it needs a keyed read of `values.env-group.name` and `values.shared-group.name`: the `name:` line inside the `env-group:` / `shared-group:` block (the descriptor is written in block style), e.g. `sed -n '/^  env-group:$/,/^  [^ ]/s/^    name: *//p'` |
-| `samples/walkthrough/stage-policy.sh` | unchanged (`approval` stays the last block) |
-| `samples/walkthrough/policies/limit-revisions.yaml` | unchanged: a node-scope policy (`match: { template: azure/container-app }`) reading no environment value; it still matches the runtime node |
-| workload definitions, release manifests, records | unchanged |
-| docs | `resolver.md` (catalog layout and kinds, expressions, engine rules, descriptor), `provisioning.md` (Substrate), `approvals.md` §1 (the `env-substrate/standard` sentence), `usage.md`, `walkthrough.md`: each slice updates what it changes |
+| `catalog/` | `types/`, `mappings/` deleted, content moved to `components/`, `runtimes/`, `shared/`; `catalog.yaml` + `environmentTypes`; `grants.yaml` new |
+| `catalog/policies/enforce-monitoring.yaml` | `add` and `set` → `require: monitoring`; the nodes move to `components/monitoring.yaml` |
+| `samples/environments/{shared,dev,stage}.yaml` | `type` (`shared`, `dev`, `stage`) replaces `tier`; `offers` replaces `requires`/`values`/`grantable`; `approval` unchanged |
+| `samples/workloads/*`, `samples/walkthrough/workloads/*` (app, app.bad, worker.v1–v3) | + `- type: monitoring` and `APPLICATIONINSIGHTS_CONNECTION_STRING: ${resource.monitoring.connectionString}`; the "Deliberately absent: monitoring" comment goes |
+| descriptors already written (`$JD_WALK/*.env.yaml`) | invalid after S21a (`type`) and S21e (layout): re-run the three `jd env up --force`; every node `unchanged` |
+| `JD_RECORDS_DIR` | records written before stay readable (`tier` still accepted) |
+| `docs/walkthrough.md` | `DEV_RG`/`STAGE_RG` (lines 110–111) read by indentation (`^  resourceGroup:`), which the new layout breaks: a keyed read of `values.env-group.name`, as in `teardown.sh`; the preview step (lines 159–160) lists `monitoring/appinsights` and `monitoring/access`, provenance `Workload: container.variables`; the catalog row in "Architecture"; a note to re-run `env up` |
+| `samples/walkthrough/teardown.sh` | lines 13–16 read the groups by indentation; both now sit at the same depth under different keys: a keyed read of `values.env-group.name` and `values.shared-group.name` (block style), e.g. `sed -n '/^  env-group:$/,/^  [^ ]/s/^    name: *//p'` |
+| `stage-policy.sh`, `policies/limit-revisions.yaml`, release manifests | unchanged (`approval` stays the last block; the policy matches `template`) |
+| docs | `resolver.md` (kinds, layout, expressions, engine rules, descriptor, policies), `provisioning.md` (Substrate), `approvals.md` §1–2 (types; the coupling from the catalog), `usage.md` (orphaned App Insights), `walkthrough.md`: each slice updates what it changes |
 
 ## 7. Slices
 
-Each slice leaves `tools/verify.sh` green, the snapshot of section 5 byte-identical and the Azure E2E test passing; S21c and S21d also pass
-the upgrade gate (section 5). Line counts are production lines (C#, schemas), estimated.
+Each slice leaves `tools/verify.sh` green, the snapshot of section 5 byte-identical (S21c: exactly the monitoring change) and the Azure E2E
+test passing. Line counts are production lines (C#, schemas), estimated.
 
 | Slice | Content | Lines | Azure gate | Acceptance |
 |---|---|---|---|---|
-| **S21a** Components and runtimes | `DeployedConfigSnapshotTests` first, in its own commit. `Component` and `Runtime` replace `ResourceType` + `Mapping`; `MappingMatcher` deleted. During this slice only: the substrate types become two transitional components (`env-substrate`, `shared-substrate`), still required by the environment definitions, and the runtime is the catalog's only `Runtime` | ~200 | no | goldens differ only in provenance; old kinds rejected with a clear error; catalog checks moved, each with its test |
-| **S21b** Shared resources and `uses` | `SharedResource` kind; component `environment` part; `uses` on all parts and policies; every load check of section 2 (roots, exports, scope rules, cycles, node-name uniqueness, grantable). The catalog gains `shared/*.yaml` and `database.environment`, loaded and checked, consumed in S21c | ~200 | no | one negative test per load check; seed catalog loads |
-| **S21c** Environments from offers | definition `layer`/`offers`; `env up` collects parts per layer into scope `substrate`; `<name>.<export>` roots in substrate parts: in-run exports evaluated in place (context only; edges, `ExportValues` and the second pass unchanged), else the base descriptor; descriptor values from part exports (secrets dropped), `offers`. Transitional `grantable` derived from the resources. Transitional components deleted. Workload parts read the new layout through `${env.cosmos-account.id}` until S21d. Walkthrough, teardown and samples migrated | ~200 | **yes**: E2E, then the upgrade gate | substrate goldens equal per section 5; chained-export and in-run tests; boundaries 7 and 11 tested; upgrade gate: all `unchanged` |
-| **S21d** Workloads through `uses` | parts, runtime and policies read `${<name>.<export>}`; `env.*` reserved only; `EnvPaths` → `PartReads` (grant check, preview); grant check from the catalog (load + graph); descriptor `grantable` removed; offers check and runtime from offers | ~150 | **yes**: E2E, then the upgrade gate | boundaries 1–6, 8, 10 tested; workload golden hashes unchanged; upgrade gate: all `unchanged` |
+| **S21a** Environment types | `DeployedConfigSnapshotTests` first, in its own commit. `environmentTypes` in `catalog.yaml`; definition and descriptor `type` replaces `tier` (unknown type an error); `approval: true` replaces the schema `anyOf`; `env.type`; policy and mapping key `environmentType`; records write `type`, schemas still accept `tier`. Samples migrated | ~120 | **yes**: E2E | snapshot identical; boundary 13 tested; old records still read |
+| **S21b** Components and runtimes | `Component` and `Runtime` (implementations by type, `default`, classes) replace `ResourceType` + `Mapping`; `MappingMatcher` deleted. Transitional: the substrate types become components `env-substrate`, `shared-substrate`, still required by the definitions | ~200 | no | goldens differ only in provenance; old kinds rejected clearly; lookup (type, `default`, none), same-classes and contract checks, each with a negative test |
+| **S21c** Monitoring as a component | `components/monitoring.yaml` (reading today's `env.*` paths until S21f); policy `require`; policy `add` deleted; sample and walkthrough workloads require monitoring | ~80 | **yes**: E2E, then the upgrade gate expecting exactly the section 5 set | a workload without `monitoring` fails naming the policy; boundary 2's `add` part (rejected at load); golden and snapshot diffs exactly the monitoring change |
+| **S21d** Shared resources and `uses` | `SharedResource`; implementations' `environment` part; `uses` on components and runtimes; the load checks of section 2 (roots, exports, scope rules, cycles, node-name uniqueness). `shared/*.yaml` and `database`'s environment part loaded and checked, consumed in S21e | ~180 | no | one negative test per load check; seed catalog loads |
+| **S21e** Environments from offers | `offers`; the type's layer; `env up` collects parts per layer into `substrate`; in-run exports evaluated in place, else the base; descriptor values from part exports (secrets dropped), `offers`. Transitional: definitions keep `grantable: [cosmos-account.id]`, workload parts read `${env.cosmos-account.id}` until S21f. Transitional components deleted. Walkthrough, teardown, samples migrated | ~200 | **yes**: E2E, then the upgrade gate | substrate goldens equal per section 5; chained-export and in-run tests; boundaries 8 and 12 tested; upgrade gate all `unchanged` |
+| **S21f** Workloads through `uses`; grant targets | parts and the runtime read `${<name>.<export>}`; `env.*` reserved only; `EnvPaths` → `PartReads`; `grants.yaml` and the target rule (load and graph build); `grantable` deleted; offers check; runtime from offers | ~220 | **yes**: E2E, then the upgrade gate | boundaries 1, 2 (grant nodes), 3–7, 9, 11 tested, with every negative test listed in section 3; workload golden hashes unchanged; upgrade gate all `unchanged` |
 
-Total about 750 production lines added, with deletions offsetting part of it (the matcher, the type/mapping checks, the definition `values` walk).
+Total about 1,000 production lines added, offset in part by deletions (the matcher, the type/mapping checks, policy `add`, the definition
+`values` walk, the `grantable` check).
 
-## 8. Open choices
+## 8. Choices taken by the user (2026-10-18)
 
-1. **How the shared scope is deployed.** (a) **Recommended:** a `layer: shared` definition deploys it once, and environments read it as
-   `--base`, as today. Every shared stack has one owner, the region is fixed by that one run, and today's commands stay. (b) Each
-   environment's `env up` deploys the shared resources its offers use. One fewer file, but several environments then co-own the shared
-   stacks: concurrent runs race, a different `--region` would move (replace) the Cosmos account, and nothing owns the shared stacks when an
-   environment is removed. This departs from the direction's "env up collects the shared and environment parts": with (a), each layer
-   collects its own scope.
-2. **Values on an offer** (the direction's "with their values"). (a) **Recommended:** offers are names only in phase 1. Nothing varies per
-   environment today (dev and stage are identical), and the first component that needs a per-environment value adds it. (b) Now: a component's
-   `environment` part declares `settings` with defaults (`throughput: 400`), an offer may override them (`database: { throughput: 400 }`),
-   and the part reads `${settings.<name>}`. About 60 lines and one more slice.
-3. **Per-tier variants.** Mappings could match `tier`. No seed mapping does, and `approvals.md` §1 relies on that. (a) **Recommended:** drop
-   tier matching for components and runtimes. A tier difference is a different component or runtime offered by that environment, or a
-   policy (policies keep `tier`). (b) Keep tier variants inside a class part. That keeps the matcher and its tie rules.
-4. **Grantable from `uses`.** (a) **Recommended:** a grant may target `X.e` only if X is in `uses` **and** X lists `e` as `grantable`. That is
-   as strict as today. (b) Any export of a used resource, which is the direction's wording taken literally. This is weaker: a database grant
-   could then target `${database.databaseId}`, the environment's whole database, and reach every workload's container.
+1. **Shared scope:** a separate shared layer, deployed once by its own `env up` (a definition whose type has `layer: shared`) and read
+   through `--base`; one owner per shared stack. Deferred to phase 2: `env up <env>` bringing the shared layer up first when it is missing
+   or stale.
+2. **Offer values:** names only in phase 1.
+3. **Environment types instead of tier matching** (section 2): the workload definition is the same everywhere; types declared once,
+   `implementations` keyed by type with `default`, exact lookup, one contract; policies may match the type; approvals unchanged.
+4. **Grants:** no `grantable` list; a grant targets only the workload's own nodes; targets declared in `grants.yaml` (section 3).
+5. **Observability explicit:** `monitoring` is a required component; `enforce-monitoring` only requires it. Implicit resources: the
+   platform-owned list in section 2. The one-time change: section 5.
 
 ## 9. ADRs affected
 
 | ADR | Effect |
 |---|---|
-| [0003](../decisions/0003-pulumi-yaml-template-library.md) | holds: static templates, one stack per node, config-passing. Templates stay shared, not per component |
-| [0004](../decisions/0004-two-layer-definition-model.md) | refines the platform layer: "mapping" becomes the component's class part; policies unchanged (+ `uses`) |
+| [0003](../decisions/0003-pulumi-yaml-template-library.md) | holds: static templates, one stack per node, config-passing. Templates stay shared; a grant template's target input is declared in the catalog |
+| [0004](../decisions/0004-two-layer-definition-model.md) | refines the platform layer: "mapping" becomes a component's implementation (per environment type); policies lose `add` and gain `require` |
+| [0006](../decisions/0006-infra-deployed-with-app.md) | holds: App Insights stays workload-tier, now from the workload's `monitoring` requirement instead of a policy |
 | [0008](../decisions/0008-enforcement-in-landing-zone.md) | holds: platform-owned shared and environment scopes are deployed only by `env up` |
-| [0009](../decisions/0009-rbac-split-team-subscription.md) | holds and is made structural: scopes map to who deploys; a workload deploy never creates a shared resource (boundaries 6, 7) |
-| [0011](../decisions/0011-requirement-id.md) | holds: `requires[].type` now names a component; `id` and `class` unchanged |
-| [0013](../decisions/0013-container-apps-runtime.md) | refines "runtime is a declared property of the workload": the **environment offers** the runtime. The workload still names none, as in the MVP |
+| [0009](../decisions/0009-rbac-split-team-subscription.md) | holds and is made structural: scopes map to who deploys (boundaries 7, 8) |
+| [0011](../decisions/0011-requirement-id.md) | holds: `requires[].type` names a component; `id` and `class` unchanged (classes live in each implementation) |
+| [0013](../decisions/0013-container-apps-runtime.md) | refines "runtime is a declared property of the workload": the **environment offers** the runtime; the workload names none, as in the MVP |
+| [0014](../decisions/0014-hook-points.md) | wording: hooks restrictable by environment **type** (was tier) |
 
-No new ADR now. If the user takes choice 1(a) and 3(a), the component model is worth one (`Proposed — pending review`) once S21d lands,
-recording kinds, scopes and grantable-by-provider, so resolver.md stops carrying the decision.
+No new ADR now. Once S21f lands, the component model (kinds, scopes, environment types, the grant target rule) is worth one
+(`Proposed — pending review`), so resolver.md stops carrying the decision.

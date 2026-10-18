@@ -141,6 +141,11 @@ Agreed direction:
 
 Related, not decided: `kind` stays on every file; `types` merge into the component (one contract per component, many classes).
 
+Decided by the user (2026-10-18; [components.md §8](architecture/components.md#8-choices-taken-by-the-user-2026-10-18)): a separate
+shared layer read through `--base`; offers are names only; **environment types** (dev, stage, prod, declared in the catalog) replace tier
+matching, with one contract and implementations per type; **no `grantable` list**, a grant targets only the workload's own nodes (this
+replaces the "grantable from `uses`" bullet above); **monitoring is an explicit component**, policies require it and add nothing.
+
 Design: [architecture/components.md](architecture/components.md) (S21).
 
 ## Related
