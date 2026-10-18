@@ -97,7 +97,7 @@ public static class CatalogParser
         var readers = Readers(shared, components, runtimes);
         CheckNodeNames(readers, errors);
         CheckReads(readers, sharedByName, kinds, errors);
-        CheckScopeNodeNames(readers, errors);
+        CheckScopeNodeNames(readers, sharedByName.Keys, errors);
         CheckUnique(policyDocuments, errors);
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
         var environmentTypes = catalogs.FirstOrDefault() is { Valid: true } first
@@ -365,9 +365,17 @@ public static class CatalogParser
 
     // The parts of one shared or environment run expand into one scope (docs/architecture/components.md section 3), so their node
     // names are unique across the parts that can share it; a component's implementations may reuse a name, since one is selected.
-    private static void CheckScopeNodeNames(List<Reader> readers, List<LoadError> errors)
+    // A node may not take a shared resource's name either: a run looks up nodes before parts, so it would silently replace what
+    // ${<resource>.<export>} reads (components.md section 2); a name the part itself uses is refused by CheckNodeNames.
+    private static void CheckScopeNodeNames(List<Reader> readers, IEnumerable<string> sharedNames, List<LoadError> errors)
     {
-        var nodes = readers.Where(r => r.Scope is not null).SelectMany(r => r.Part.Nodes.Keys.Select(n => (Reader: r, Node: n)));
+        var nodes = readers.Where(r => r.Scope is not null).SelectMany(r => r.Part.Nodes.Keys.Select(n => (Reader: r, Node: n))).ToList();
+        var resources = sharedNames.ToHashSet();
+        foreach (var (reader, node) in nodes.Where(n => resources.Contains(n.Node) && !n.Reader.Uses.Contains(n.Node)))
+        {
+            errors.Add(new LoadError(reader.Source, $"{reader.Prefix}nodes.{node}", $"node '{node}' takes the name of shared resource '{node}', which a part of the same run reads as ${{{node}.<export>}}."));
+        }
+
         foreach (var group in nodes.GroupBy(n => (n.Reader.Scope, n.Node)))
         {
             var first = group.First().Reader;

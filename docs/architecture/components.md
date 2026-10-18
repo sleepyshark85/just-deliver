@@ -189,10 +189,10 @@ Implicit provisioning is limited to these. Workloads only read them through `use
 
 | Resource | Part | Layer | When |
 |---|---|---|---|
-| shared resource group `rg-shared-…` | `shared-group` | shared | always |
+| shared resource group `rg-shared-…` | `shared-group` | shared | when anything offered uses it (every seed shared resource and the runtime do) |
 | Log Analytics workspace `law-shared-…` | `log-analytics` | shared | when an offered component or runtime uses it |
 | Cosmos DB account `cosmos-shared-…` (free tier) | `cosmos-account` | shared | when an offered component uses it |
-| environment resource group `rg-<env>-…` | `env-group` | environment | always |
+| environment resource group `rg-<env>-…` | `env-group` | environment | when anything offered uses it (every seed shared resource and the runtime do) |
 | Container Apps environment `cae-<env>-…` | `apps-env` | environment | when the offered runtime uses it |
 | Cosmos SQL database `db-<env>` | `database`'s environment part | environment | when the environment offers `database` |
 

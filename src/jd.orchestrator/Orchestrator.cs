@@ -158,7 +158,7 @@ public sealed class Orchestrator(
             var errors = new List<LoadError>();
             // Only a node that reads an export (the runtime node) needs them, so an unrelated node never fails on another scope's export.
             var exported = node.Config.Values.Any(ReadsExport)
-                ? ExportValues.Evaluate(graph, catalog, environment, _outputs.ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, ConfigEntry>)o.Value), includeSecrets: true, node.Id, errors)
+                ? ExportValues.Evaluate(graph, catalog, environment, _outputs.ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, ConfigEntry>)o.Value), node.Id, errors)
                 : ExportValues.None;
             var filler = new ConfigFiller(new ExpressionEvaluator(ContextFor(node, exported)), node.Id, SecretOutputs(node, exported));
             var parameters = filler.Fill(node.Config);

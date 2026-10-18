@@ -92,34 +92,24 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             Fail("offers", $"an environment offers at most one runtime; it offers {string.Join(", ", runtimes)}.");
         }
 
-        // Everything the offers reach through uses; the catalog loader keeps uses acyclic and naming shared resources only.
-        var reached = new SortedSet<string>(StringComparer.Ordinal);
-        var pending = new Queue<string>(uses);
-        while (pending.TryDequeue(out var name))
-        {
-            if (reached.Add(name))
-            {
-                catalog.SharedResources[name].Uses.ToList().ForEach(pending.Enqueue);
-            }
-        }
-
         // One owner per shared stack (security boundary 8): an environment layer reads the shared resources from its base, never deploys them.
         var baseValues = baseDescriptor?.Values ?? new Dictionary<string, string>();
-        var baseName = baseDescriptor is null ? "there is no base descriptor" : $"base descriptor '{baseDescriptor.Name}' has no values for it";
-        foreach (var resource in reached.Select(r => catalog.SharedResources[r]))
+        var missingInBase = baseDescriptor is null ? "there is no base descriptor" : $"base descriptor '{baseDescriptor.Name}' has no values for it";
+        bool InBase(string part) => baseValues.Keys.Any(k => k.StartsWith(part + ".", StringComparison.Ordinal));
+        foreach (var resource in Reached(uses).Select(r => catalog.SharedResources[r]))
         {
             if (resource.Scope == layer)
             {
                 parts.Add((resource.Name, resource.Source, string.Empty, resource.Part));
             }
-            else if (layer == SharedScope.Environment && !resource.Part.Exports.Keys.All(e => baseValues.ContainsKey($"{resource.Name}.{e}")))
+            else if (layer == SharedScope.Environment && !InBase(resource.Name))
             {
-                Fail("offers", $"the offers reach shared resource '{resource.Name}', but {baseName}; an environment never deploys a shared resource, so pass as the base the descriptor of a shared layer that offers it.");
+                Fail("offers", $"the offers reach shared resource '{resource.Name}', but {missingInBase}; an environment never deploys a shared resource, so pass as the base the descriptor of a shared layer that offers it.");
             }
         }
 
         // The descriptor adds new keys only, so a part of this run cannot be one the base already has.
-        foreach (var part in parts.Where(p => baseValues.Keys.Any(k => k.StartsWith(p.Name + ".", StringComparison.Ordinal))))
+        foreach (var part in parts.Where(p => InBase(p.Name)))
         {
             Fail("offers", $"part '{part.Name}' is already in the base descriptor's values; an environment adds new parts only.");
         }
@@ -134,6 +124,22 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         }
 
         return new ExpansionResult(owner.Kind, definitionFile, owner.Name, owner.Team, null, null, requirements, new HashSet<string>(), null, errors, exports);
+    }
+
+    // Everything reached through uses; the catalog loader keeps uses acyclic and naming shared resources only.
+    private SortedSet<string> Reached(IEnumerable<string> uses)
+    {
+        var reached = new SortedSet<string>(StringComparer.Ordinal);
+        var pending = new Queue<string>(uses);
+        while (pending.TryDequeue(out var name))
+        {
+            if (reached.Add(name))
+            {
+                catalog.SharedResources[name].Uses.ToList().ForEach(pending.Enqueue);
+            }
+        }
+
+        return reached;
     }
 
     private ExpansionResult Expand(Owner owner, JArray requires, string ownerFile)

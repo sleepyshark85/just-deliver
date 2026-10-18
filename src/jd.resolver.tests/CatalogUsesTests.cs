@@ -277,6 +277,26 @@ public class CatalogUsesTests
         Assert.Equal($"node 'group' is also declared by 'res-a' (a.yaml); node names are unique across the parts of one {named} scope.", error.Message);
     }
 
+    // One evaluator holds every part of a run and looks up nodes before parts, so a node named like a shared resource would replace it.
+    [Fact]
+    public async Task An_environment_part_node_may_not_take_a_shared_resource_name()
+    {
+        var environment = "{ nodes: { env-group: { template: t/db, config: {} } }, exports: { databaseName: x } }";
+        var error = SingleError(await Parse(("a.yaml", Shared("env-group", scope: "environment")), ("c.yaml", Component(environment: environment))));
+
+        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.env-group"), (error.File, error.Location));
+        Assert.Equal("node 'env-group' takes the name of shared resource 'env-group', which a part of the same run reads as ${env-group.<export>}.", error.Message);
+    }
+
+    [Fact]
+    public async Task A_shared_resource_node_may_not_take_another_shared_resource_name()
+    {
+        var error = SingleError(await Parse(("a.yaml", Shared("res-a")), ("b.yaml", Shared("res-b", node: "res-a"))));
+
+        Assert.Equal(("b.yaml", "nodes.res-a"), (error.File, error.Location));
+        Assert.Contains("takes the name of shared resource 'res-a'", error.Message);
+    }
+
     [Fact]
     public async Task An_environment_part_shares_the_environment_scope()
     {

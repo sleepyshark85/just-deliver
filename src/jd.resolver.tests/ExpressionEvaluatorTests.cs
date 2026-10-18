@@ -23,14 +23,6 @@ public class ExpressionEvaluatorTests
         "dev",
         new Dictionary<string, string>
         {
-            ["resourceGroup"] = "rg-test",
-            ["containerAppsEnvironment.id"] = "/cae",
-            ["cosmos.accountName"] = "acct",
-            ["cosmos.databaseName"] = "db",
-            ["cosmos.accountId"] = "/acct/id",
-            ["cosmos.endpoint"] = "https://acct.example",
-            ["logAnalytics.id"] = "/law/id",
-
             // The seed catalog's workload parts read the descriptor by part name (docs/architecture/components.md section 3).
             ["env-group.name"] = "rg-test",
             ["apps-env.id"] = "/cae",
@@ -141,14 +133,14 @@ public class ExpressionEvaluatorTests
     [Fact]
     public void Text_and_several_expressions_are_joined()
     {
-        Assert.Equal("/acct/id/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001", Resolve("${env.cosmos.accountId}/sqlRoleDefinitions/${role.reader}"));
+        Assert.Equal("/acct/id/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001", Resolve("${env.cosmos-account.id}/sqlRoleDefinitions/${role.reader}"));
         Assert.Equal("shop by team-a in dev", Resolve("${workload.name} by ${workload.team} in ${env.name}"));
     }
 
     [Fact]
     public void Env_workload_and_role_namespaces_resolve()
     {
-        Assert.Equal("rg-test", Resolve("${env.resourceGroup}"));
+        Assert.Equal("rg-test", Resolve("${env.env-group.name}"));
         Assert.Equal("testregion", Resolve("${env.region}"));
         Assert.Equal("shop", Resolve("${workload.name}"));
         Assert.Equal("00000000-0000-0000-0000-000000000001", Resolve("${role.reader}"));
@@ -286,18 +278,18 @@ public class ExpressionEvaluatorTests
     [Fact]
     public void Guid_is_deterministic_and_depends_on_every_argument()
     {
-        var a = Resolve("${guid(env.cosmos.accountId, 'x')}");
+        var a = Resolve("${guid(env.cosmos-account.id, 'x')}");
 
-        Assert.Equal(a, Resolve("${guid(env.cosmos.accountId, 'x')}"));
+        Assert.Equal(a, Resolve("${guid(env.cosmos-account.id, 'x')}"));
         // Pinned: UUIDv5 of "/acct/id|x" in the documented namespace, computed independently of the C# code.
         Assert.Equal("a81fb372-e883-5703-9b28-092d973ce2a0", a);
-        Assert.NotEqual(a, Resolve("${guid(env.cosmos.accountId, 'y')}"));
+        Assert.NotEqual(a, Resolve("${guid(env.cosmos-account.id, 'y')}"));
     }
 
     [Fact]
     public void Guid_with_a_pending_argument_is_pending_and_resolves_once_known()
     {
-        var text = "${guid(env.cosmos.accountId, runtime.principalId, 'x')}";
+        var text = "${guid(env.cosmos-account.id, runtime.principalId, 'x')}";
         Assert.Equal([new Reference(ReferenceKind.Node, "runtime", "principalId")], Await(text).References);
 
         var known = new Dictionary<Reference, string> { [new(ReferenceKind.Node, "runtime", "principalId")] = "p1" };
