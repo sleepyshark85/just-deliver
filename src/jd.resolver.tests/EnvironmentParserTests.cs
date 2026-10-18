@@ -15,8 +15,6 @@ public class EnvironmentParserTests
           resourceGroup: rg-test
           cosmos: { accountName: acct, accountId: /acct/id, endpoint: "https://acct.example" }
           logAnalytics: { id: /law/id }
-        grantable:
-          - cosmos.accountId
         """;
 
     private static Task<EnvironmentLoadResult> Parse(string content) => EnvironmentParser.ParseAsync("env.yaml", content);
@@ -37,14 +35,7 @@ public class EnvironmentParserTests
         Assert.Equal("dev", env.Type);
         Assert.Equal("rg-test", env.Values["resourceGroup"]);
         Assert.Equal("https://acct.example", env.Values["cosmos.endpoint"]);
-        Assert.Equal(["cosmos.accountId"], env.Grantable);
-    }
-
-    [Fact]
-    public async Task Grantable_is_optional()
-    {
-        var env = await Load(Valid.Replace("grantable:\n  - cosmos.accountId", string.Empty));
-        Assert.Empty(env.Grantable);
+        Assert.Equal(["container-app"], env.Offers);
     }
 
     [Theory]
@@ -60,19 +51,11 @@ public class EnvironmentParserTests
     }
 
     [Fact]
-    public async Task Grantable_path_missing_from_values_is_rejected()
+    public async Task Grantable_is_no_longer_a_descriptor_field()
     {
-        var result = await Parse(Valid.Replace("- cosmos.accountId", "- cosmos.missing"));
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("grantable.0", error.Location);
-        Assert.Contains("cosmos.missing", error.Message);
-    }
-
-    [Fact]
-    public async Task Grantable_path_naming_a_group_rather_than_a_value_is_rejected()
-    {
-        var result = await Parse(Valid.Replace("- cosmos.accountId", "- cosmos"));
-        Assert.Equal("grantable.0", Assert.Single(result.Errors).Location);
+        var result = await Parse(Valid + "\ngrantable: [cosmos.accountId]\n");
+        Assert.Null(result.Descriptor);
+        Assert.Contains(result.Errors, e => e.Message.Contains("grantable", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -86,8 +69,8 @@ public class EnvironmentParserTests
     [Fact]
     public async Task Code_rule_errors_are_all_reported_together()
     {
-        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  type: x").Replace("- cosmos.accountId", "- nope"));
-        Assert.Equal(["values.type", "grantable.0"], result.Errors.Select(e => e.Location));
+        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  type: x\n  a.b: c"));
+        Assert.Equal(["values.type", "values.a.b"], result.Errors.Select(e => e.Location));
     }
 
     [Fact]
@@ -126,19 +109,10 @@ public class EnvironmentParserTests
         Assert.Equal("dev", type);
     }
 
-    [Fact]
-    public async Task Lookup_resolves_nested_values_paths()
-    {
-        var env = await Load(Valid);
-        Assert.True(env.TryGet("resourceGroup", out var group));
-        Assert.Equal("rg-test", group);
-        Assert.True(env.TryGet("cosmos.accountId", out var id));
-        Assert.Equal("/acct/id", id);
-        Assert.True(env.TryGet("logAnalytics.id", out var workspace));
-        Assert.Equal("/law/id", workspace);
-    }
-
+    // env.* reads only the top-level fields; a part's exports are read as ${<part>.<export>} (security boundary 4).
     [Theory]
+    [InlineData("resourceGroup")]
+    [InlineData("cosmos.accountId")]
     [InlineData("unknown")]
     [InlineData("cosmos.unknown")]
     [InlineData("cosmos")]

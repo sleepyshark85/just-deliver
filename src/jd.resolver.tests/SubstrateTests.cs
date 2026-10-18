@@ -39,7 +39,7 @@ public class SubstrateTests
     private static IReadOnlyList<LoadError> Errors(EnvironmentDefinition definition, EnvironmentDescriptor? baseDescriptor, Catalog catalog) =>
         Resolver.ResolveSubstrate(definition, "definition.yaml", catalog, definition.Over(Region, baseDescriptor), baseDescriptor).Errors;
 
-    private static EnvironmentDefinition Offering(string name, string type, params string[] offers) => new(name, type, offers, [], null);
+    private static EnvironmentDefinition Offering(string name, string type, params string[] offers) => new(name, type, offers, null);
 
     private static async Task<EnvironmentDescriptor> SharedDescriptorAsync() => await ComposeAsync((await PrepareAsync(await DefinitionAsync())).Composer, SharedOutputs);
 
@@ -243,7 +243,7 @@ public class SubstrateTests
         Assert.Equal("rg-dev-1", descriptor.Values["env-group.name"]);
         Assert.Equal("/apps/id", descriptor.Values["apps-env.id"]);
         Assert.Equal("rg-shared-1", descriptor.Values["shared-group.name"]);
-        Assert.Equal(["cosmos-account.id"], descriptor.Grantable);
+        Assert.Equal(["container-app", "database", "monitoring"], descriptor.Offers);
 
         // The layout serves the components and policies: the sample workload resolves on it without errors.
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
@@ -362,10 +362,14 @@ public class SubstrateTests
     [Fact]
     public async Task The_composed_descriptor_must_pass_the_descriptor_rules()
     {
-        var missing = await DefinitionAsync("dev.yaml", text => text.Replace("grantable: [cosmos-account.id]", "grantable: [cosmos-account.nope]"));
-        var (_, composer) = await PrepareAsync(missing, await SharedDescriptorAsync());
+        // A part named like a top-level field resolves, but its exports cannot be values (values.region would shadow env.region).
+        var catalog = await SeedCatalogWithAsync(
+            ("shared/region.yaml", "kind: SharedResource\nname: region\ndescription: d\nscope: environment\nnodes:\n  spot:\n    template: t/spot\n    config: { v: '${env.region}' }\nexports: { id: '${spot.id}' }\n"),
+            ("components/regional.yaml", "kind: Component\nname: regional\ndescription: d\nexports: [id]\nuses: [region]\nimplementations:\n  default:\n    classes:\n      standard:\n        nodes:\n          thing: { template: t/thing, config: { v: '${region.id}' } }\n        exports: { id: '${thing.id}' }\n"));
+        var definition = await DefinitionAsync("dev.yaml", text => text.Replace("offers: [container-app, database, monitoring]", "offers: [container-app, database, monitoring, regional]"));
+        var (_, composer) = await PrepareAsync(definition, await SharedDescriptorAsync(), catalog);
 
-        Assert.Contains((await composer.ComposeAsync(null)).Errors, e => e.Location == "grantable.0");
+        Assert.Contains((await composer.ComposeAsync(null)).Errors, e => e.Location == "values.region");
     }
 
     [Fact]

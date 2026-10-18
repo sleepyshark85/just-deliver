@@ -41,23 +41,12 @@ public static class EnvironmentParser
 
         var values = new Dictionary<string, string>();
         Flatten(valuesNode, string.Empty, values, source, errors);
-        var grantable = body["grantable"] is JArray array ? array.Select(t => (string?)t ?? string.Empty).ToList() : [];
-        for (var i = 0; i < grantable.Count; i++)
-        {
-            if (values.ContainsKey(grantable[i]))
-            {
-                continue;
-            }
-
-            errors.Add(new LoadError(source, $"grantable.{i}", $"'{grantable[i]}' is not a value in 'values'; grantable paths must point at a value."));
-        }
-
         var name = (string)body["name"]!;
         var approval = body["approval"] is { } block ? ApprovalPolicy.FromJson(block) : null;
         errors.AddRange(approval is null ? [] : CheckApproval(approval, name, source));
         return errors.Count > 0
             ? new EnvironmentLoadResult(null, errors)
-            : new EnvironmentLoadResult(new EnvironmentDescriptor(name, (string)body["region"]!, (string)body["type"]!, values, grantable, approval), errors);
+            : new EnvironmentLoadResult(new EnvironmentDescriptor(name, (string)body["region"]!, (string)body["type"]!, values, ((JArray)body["offers"]!).Select(t => (string)t!).ToList(), approval), errors);
     }
 
     // What the schema cannot say: the policy must refer to another environment and be satisfiable.

@@ -14,7 +14,7 @@ namespace jd.resolver.tests;
 public class RuntimeVariablesTests
 {
     private static readonly EnvironmentDescriptor Env =
-        new("dev", "region", "dev", new Dictionary<string, string> { ["host"] = "h1" }, [], null);
+        new("dev", "region", "dev", new Dictionary<string, string> { ["host"] = "region" }, ["sqldb", "container-app"], null);
 
     private const string RuntimeFile = """
         kind: Runtime
@@ -40,7 +40,7 @@ public class RuntimeVariablesTests
             template: t/n
             config: { k: 1{{extraConfig}} }
         exports:
-          endpoint: ${env.host}
+          endpoint: ${env.region}
           dyn: ${n.out}
           rt: ${runtime.principalId}
         """);
@@ -55,6 +55,7 @@ public class RuntimeVariablesTests
                 runtimeFile,
             }
             .Concat(policies ?? [])
+            .Append(TestCatalog.GrantsFile)
             .Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
@@ -104,7 +105,7 @@ public class RuntimeVariablesTests
         Assert.Empty(graph.Errors);
         var runtime = Runtime(graph);
         var variables = Variables(runtime);
-        Assert.Equal("h1", Value(variables.Properties["STATIC"]));
+        Assert.Equal("region", Value(variables.Properties["STATIC"]));
         Assert.IsType<Pending>(Assert.IsType<ConfigText>(variables.Properties["DYN"]).Result);
         Assert.IsType<Pending>(Assert.IsType<ConfigText>(variables.Properties["MIXED"]).Result);
         Assert.Equal(["shop/dev/sqldb/n"], runtime.DependsOn);
@@ -142,9 +143,10 @@ public class RuntimeVariablesTests
         Assert.Contains("env.nope", error.Message);
     }
 
-    // A runtime with a second node, 'granter' or 'sidecar', whose config is the given body.
+    // A runtime with a second node, 'granter' (a grant on the runtime) or 'sidecar', whose config is the given body.
     private static string RuntimeWith(string node, string kind, string body) =>
-        TestCatalog.Runtime($"nodes:\n  runtime:\n    template: t/runtime\n    config: {{ k: 1 }}\n  {node}:\n    kind: {kind}\n    template: t/x\n    config: {{ {body} }}\n");
+        TestCatalog.Runtime($"nodes:\n  runtime:\n    template: t/runtime\n    config: {{ k: 1 }}\n  {node}:\n    kind: {kind}\n"
+            + (kind == "grant" ? $"    template: t/g\n    config: {{ scope: '${{runtime.id}}', {body} }}\n" : $"    template: t/x\n    config: {{ {body} }}\n"));
 
     private static string RuntimeConfig(string body) =>
         TestCatalog.Runtime($"nodes:\n  runtime:\n    template: t/runtime\n    config: {{ {body} }}\n");
@@ -185,8 +187,8 @@ public class RuntimeVariablesTests
         var files = new[]
         {
             "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
-            TestCatalog.Component("sqldb", "[endpoint, dyn, lit, quoted, apostrophes, fine]", "nodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.host, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n"
-                + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.host} isn't\"\n"),
+            TestCatalog.Component("sqldb", "[endpoint, dyn, lit, quoted, apostrophes, fine]", "nodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.region, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n"
+                + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.region} isn't\"\n"),
         };
 
         var loaded = await CatalogParser.ParseAsync(files.Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
@@ -209,7 +211,7 @@ public class RuntimeVariablesTests
             [new ResolvedRequirement("db", "sqldb", "standard", "m.yaml", new Dictionary<string, EvalResult> { ["endpoint"] = export }, [])],
             [runtime], [], new Dictionary<string, IReadOnlyDictionary<string, string>>());
 
-        var graph = new GraphBuilder(Env).Build(policy);
+        var graph = new GraphBuilder(Env, new Dictionary<string, string>()).Build(policy);
 
         var error = Assert.Single(graph.Errors);
         Assert.Equal(("m.yaml", "exports.endpoint"), (error.File, error.Location));
@@ -321,10 +323,10 @@ public class RuntimeVariablesTests
     [Fact]
     public async Task A_policy_value_under_the_variables_may_be_a_string_expression()
     {
-        var graph = await ResolveAsync("    A: a\n", [WorkloadPolicy("pol", "set: { runtime.variables.NEW: \"${env.host}-x\" }\ndefault: { runtime.variables.OTHER: plain }\n")]);
+        var graph = await ResolveAsync("    A: a\n", [WorkloadPolicy("pol", "set: { runtime.variables.NEW: \"${env.region}-x\" }\ndefault: { runtime.variables.OTHER: plain }\n")]);
 
         Assert.Empty(graph.Errors);
-        Assert.Equal(["h1-x", "plain"], [Value(Variables(Runtime(graph)).Properties["NEW"]), Value(Variables(Runtime(graph)).Properties["OTHER"])]);
+        Assert.Equal(["region-x", "plain"], [Value(Variables(Runtime(graph)).Properties["NEW"]), Value(Variables(Runtime(graph)).Properties["OTHER"])]);
     }
 
     [Fact]

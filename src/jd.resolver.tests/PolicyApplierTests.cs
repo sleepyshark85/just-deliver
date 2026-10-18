@@ -26,7 +26,7 @@ public class PolicyApplierTests
         $"kind: Policy\nname: {name}\nreason: because\nmatch: {match}\n{body}";
 
     private static EnvironmentDescriptor Env(string type = "dev") =>
-        new("dev", "region", type, new Dictionary<string, string> { ["host"] = "h1" }, [], null);
+        new("dev", "region", type, new Dictionary<string, string> { ["host"] = "region" }, ["sqldb", "container-app"], null);
 
     private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string type = "dev", bool expectExpansionErrors = false)
     {
@@ -66,14 +66,14 @@ public class PolicyApplierTests
     {
         var result = await ApplyAsync(
         [
-            Policy("a-default", "{ template: t/n }", "default: { size: 5, fresh: '${env.host}', won: lost }\n"),
+            Policy("a-default", "{ template: t/n }", "default: { size: 5, fresh: '${env.region}', won: lost }\n"),
             Policy("b-set", "{ template: t/n }", "set: { won: strict }\n"),
         ]);
 
         var node = Node(result, "n");
         Assert.Equal(400, Number(node.Config["size"]));
         Assert.Equal(new Provenance(ComponentFile, ComponentFile, Layer.Implementation), node.Provenance["size"]);
-        Assert.Equal("h1", Text(node.Config["fresh"]));
+        Assert.Equal("region", Text(node.Config["fresh"]));
         Assert.Equal(new Provenance("f4.yaml", "a-default", Layer.PolicyDefault), node.Provenance["fresh"]);
         Assert.Equal("strict", Text(node.Config["won"]));
         Assert.Equal(Layer.PolicySet, node.Provenance["won"].Layer);
@@ -180,7 +180,7 @@ public class PolicyApplierTests
         Assert.False(Node(team, "n").Config.ContainsKey("failover"));
     }
 
-    private const string RuntimeFields = "set: { runtime.connection: '${env.host}' }\ndefault: { runtime.other: x }\n";
+    private const string RuntimeFields = "set: { runtime.connection: '${env.region}' }\ndefault: { runtime.other: x }\n";
 
     [Fact]
     public async Task The_runtime_nodes_come_from_the_runtime_mapping_with_its_probe_and_get_node_scope_policies()
@@ -371,7 +371,7 @@ public class PolicyApplierTests
                 ["cosmos-account.endpoint"] = "https://acct",
                 ["log-analytics.id"] = "/law",
             },
-            [],
+            ["container-app", "database", "monitoring"],
             null);
         var expansion = new Expander(catalog, environment).Expand(workload, "workload.yaml");
         Assert.Empty(expansion.Errors);

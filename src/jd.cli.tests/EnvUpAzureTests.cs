@@ -334,7 +334,7 @@ public sealed class EnvUpAzureTests : IDisposable
         var loadedDev = (await EnvironmentFile.LoadAsync(devDescriptor)).Descriptor;
         Assert.NotNull(loadedDev);
         Assert.Equal(account, loadedDev.Values["cosmos-account.name"]);
-        Assert.Equal(["cosmos-account.id"], loadedDev.Grantable);
+        Assert.Equal(["container-app", "database", "monitoring"], loadedDev.Offers);
         var database = loadedDev.Values["database.databaseName"];
         Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", database, "--query", "resource.throughput"));
 

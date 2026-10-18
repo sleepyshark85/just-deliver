@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/environment.schema.json",
   "title": "just-deliver environment descriptor",
-  "description": "What an environment (its substrate) publishes so the resolver can resolve ${env.<path>} references. name, region and type are addressable as env.name, env.region and env.type; every other env.<dot.path> resolves inside values. grantable lists the values paths workloads may grant on (security boundary). Checked against the catalog, not here: the type is declared, and a type with `approval: true` carries the `approval` block.",
+  "description": "What an environment publishes to the workloads deployed on it. name, region and type are addressable as env.name, env.region and env.type (the only env.* paths); a deployed part's export is read as ${<part>.<export>} from values. Checked against the catalog, not here: the type is declared, and a type with `approval: true` carries the `approval` block.",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "name", "region", "type", "offers", "values"],
@@ -39,12 +39,6 @@
         },
         "separateFromDeployer": { "description": "An approver may not be a principal that deployed the label on `qualifiedOn`. Required: a default would be a silent weakening.", "type": "boolean" }
       }
-    },
-    "grantable": {
-      "description": "Dot paths under values that workloads may grant on. Each must exist in values.",
-      "type": "array",
-      "uniqueItems": true,
-      "items": { "type": "string", "minLength": 1 }
     }
   },
   "definitions": {

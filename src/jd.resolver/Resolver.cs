@@ -27,5 +27,5 @@ public static class Resolver
         Build(new Expander(catalog, environment).ExpandEnvironment(definition, definitionFile, baseDescriptor), catalog, environment);
 
     private static ResolvedGraph Build(ExpansionResult expansion, Catalog catalog, EnvironmentDescriptor environment) =>
-        new GraphBuilder(environment).Build(new PolicyApplier(catalog, environment).Apply(expansion));
+        new GraphBuilder(environment, catalog.GrantTargets).Build(new PolicyApplier(catalog, environment).Apply(expansion));
 }

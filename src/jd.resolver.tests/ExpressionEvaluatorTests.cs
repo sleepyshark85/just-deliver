@@ -78,16 +78,16 @@ public class ExpressionEvaluatorTests
     }
 
     [Fact]
-    public void A_read_of_a_part_deployed_before_is_the_descriptor_value_and_is_recorded_like_an_env_read()
+    public void A_read_of_a_part_deployed_before_is_the_descriptor_value_and_is_recorded_as_a_part_read()
     {
         var errors = new List<LoadError>();
-        var envPaths = new HashSet<string>();
+        var partReads = new HashSet<string>();
 
-        var result = new ExpressionEvaluator(Context()).Evaluate("${cosmos-account.id}", "file.yaml", "x", errors, envPaths);
+        var result = new ExpressionEvaluator(Context()).Evaluate("${cosmos-account.id}", "file.yaml", "x", errors, partReads);
         var (missing, missingErrors) = Run("${cosmos-account.nope}");
 
         Assert.Equal(new Resolved("/acct/id"), result);
-        Assert.Equal(["cosmos-account.id"], envPaths);
+        Assert.Equal(["cosmos-account.id"], partReads);
         Assert.Null(missing);
         Assert.Contains("environment 'dev' has no value 'cosmos-account.nope'", Assert.Single(missingErrors).Message);
     }
@@ -133,15 +133,16 @@ public class ExpressionEvaluatorTests
     [Fact]
     public void Text_and_several_expressions_are_joined()
     {
-        Assert.Equal("/acct/id/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001", Resolve("${env.cosmos-account.id}/sqlRoleDefinitions/${role.reader}"));
+        Assert.Equal("/acct/id/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001", Resolve("${cosmos-account.id}/sqlRoleDefinitions/${role.reader}"));
         Assert.Equal("shop by team-a in dev", Resolve("${workload.name} by ${workload.team} in ${env.name}"));
     }
 
     [Fact]
     public void Env_workload_and_role_namespaces_resolve()
     {
-        Assert.Equal("rg-test", Resolve("${env.env-group.name}"));
+        Assert.Equal("rg-test", Resolve("${env-group.name}"));
         Assert.Equal("testregion", Resolve("${env.region}"));
+        Assert.Equal("dev/dev", Resolve("${env.name}/${env.type}"));
         Assert.Equal("shop", Resolve("${workload.name}"));
         Assert.Equal("00000000-0000-0000-0000-000000000001", Resolve("${role.reader}"));
     }
@@ -202,9 +203,12 @@ public class ExpressionEvaluatorTests
     }
 
     [Theory]
-    [InlineData("${env.nope}", "'env.nope' is not a value of environment 'dev'")]
-    [InlineData("${env.cosmos}", "'env.cosmos' is not a value")]
-    [InlineData("${env}", "'env' is not a value")]
+    [InlineData("${env.nope}", "'env.nope' is not an environment field; env.* reads only env.name, env.region, env.type")]
+    [InlineData("${env.cosmos}", "'env.cosmos' is not an environment field")]
+    [InlineData("${env}", "'env' is not an environment field")]
+    [InlineData("${env.region.x}", "'env.region.x' is not an environment field")]
+    [InlineData("${env.cosmos-account.id}", "'env.cosmos-account.id' is not an environment field")] // boundary 4: no way around uses
+    [InlineData("${guid(env.cosmos-account.id)}", "'env.cosmos-account.id' is not an environment field")]
     [InlineData("${role.nope}", "'role.nope' is not a role in the catalog")]
     [InlineData("${workload.region}", "not a workload field")]
     [InlineData("${nope.output}", "unknown node 'nope'")]
@@ -278,18 +282,18 @@ public class ExpressionEvaluatorTests
     [Fact]
     public void Guid_is_deterministic_and_depends_on_every_argument()
     {
-        var a = Resolve("${guid(env.cosmos-account.id, 'x')}");
+        var a = Resolve("${guid(cosmos-account.id, 'x')}");
 
-        Assert.Equal(a, Resolve("${guid(env.cosmos-account.id, 'x')}"));
+        Assert.Equal(a, Resolve("${guid(cosmos-account.id, 'x')}"));
         // Pinned: UUIDv5 of "/acct/id|x" in the documented namespace, computed independently of the C# code.
         Assert.Equal("a81fb372-e883-5703-9b28-092d973ce2a0", a);
-        Assert.NotEqual(a, Resolve("${guid(env.cosmos-account.id, 'y')}"));
+        Assert.NotEqual(a, Resolve("${guid(cosmos-account.id, 'y')}"));
     }
 
     [Fact]
     public void Guid_with_a_pending_argument_is_pending_and_resolves_once_known()
     {
-        var text = "${guid(env.cosmos-account.id, runtime.principalId, 'x')}";
+        var text = "${guid(cosmos-account.id, runtime.principalId, 'x')}";
         Assert.Equal([new Reference(ReferenceKind.Node, "runtime", "principalId")], Await(text).References);
 
         var known = new Dictionary<Reference, string> { [new(ReferenceKind.Node, "runtime", "principalId")] = "p1" };

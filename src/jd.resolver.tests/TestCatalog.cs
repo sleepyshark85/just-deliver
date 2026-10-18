@@ -18,6 +18,9 @@ internal static class TestCatalog
     /// <summary>The runtime every workload needs: one node named runtime. Append it after the other files so their indexes stay.</summary>
     public static readonly string RuntimeFile = Runtime("nodes:\n  runtime:\n    template: t/runtime\n    config: { k: 1 }\n");
 
+    /// <summary>The grant targets of the test templates: t/g grants on its <c>scope</c> input.</summary>
+    public const string GrantsFile = "kind: Grants\ntargets: { t/g: scope }\n";
+
     /// <summary>Where a component's part sits in its file, for <see cref="Component"/>'s defaults: errors in its nodes and exports are reported under it.</summary>
     public const string PartPath = "implementations.default.classes.standard";
 

@@ -5,4 +5,3 @@ kind: EnvironmentDefinition
 name: dev
 type: dev
 offers: [container-app, database, monitoring]
-grantable: [cosmos-account.id]    # transitional until grant targets replace it (docs/architecture/components.md section 7, S21f)

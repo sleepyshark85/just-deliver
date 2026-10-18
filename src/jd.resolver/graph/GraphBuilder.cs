@@ -13,10 +13,10 @@ namespace jd.resolver.graph;
 
 /// <summary>
 /// Turns a <see cref="PolicyResult"/> into the <see cref="ResolvedGraph"/>: node ids and stacks, edges from pending
-/// references, topological order, phases, hashes and the static grant check. Pure and deterministic.
-/// Rules: docs/architecture/resolver.md (Output: ResolvedGraph).
+/// references, topological order, phases, hashes and the grant target check. Pure and deterministic.
+/// Rules: docs/architecture/resolver.md (Output: ResolvedGraph). <paramref name="grantTargets"/>: the catalog's grant template to target input.
 /// </summary>
-public sealed class GraphBuilder(EnvironmentDescriptor environment)
+public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDictionary<string, string> grantTargets)
 {
     /// <summary>Scope of the runtime's nodes; requirement ids cannot contain '@'.</summary>
     public const string WorkloadScope = "@workload";
@@ -67,13 +67,18 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
     // with '@'), so this is one-to-one and stacks are unique by construction.
     private static string Stack(string id) => id.Replace('/', '.').Replace('@', '_');
 
-    // Finds a node's dependencies from its pending references and applies the security check to its environment reads.
+    // Finds a node's dependencies from its pending references and, for a grant, checks its target.
     // runtimeId is the workload's runtime node, or null for an environment definition, which has none.
     private Draft Analyse(
         string scope, ResolvedNode node, string id, Dictionary<(string Scope, string Name), string> ids,
         Dictionary<string, IReadOnlyDictionary<string, EvalResult>> exports, string? runtimeId, List<LoadError> errors)
     {
         var dependsOn = new SortedSet<string>(StringComparer.Ordinal);
+        if (node.Kind == NodeKind.Grant)
+        {
+            CheckGrantTarget(node, id, errors);
+        }
+
         foreach (var (field, text) in Texts(new ConfigObject(node.Config), string.Empty))
         {
             // A workload variable is reported against the workload's definition, where its author wrote it.
@@ -82,19 +87,10 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
             var location = origin?.Layer == Layer.Workload && field.IndexOf('.') is var dot and > 0 ? origin.Rule + field[dot..] : field;
             void Fail(string message) => errors.Add(new LoadError(origin?.Source ?? id, location, $"node '{id}': {message}"));
 
-            if (node.Kind == NodeKind.Grant)
-            {
-                // A grant node may use only the environment values the environment lists as grantable (D19).
-                foreach (var path in text.EnvPaths.Order(StringComparer.Ordinal).Where(p => !environment.Grantable.Contains(p)))
-                {
-                    Fail($"grant field '{field}' uses env.{path}, which environment '{environment.Name}' does not list as grantable.");
-                }
-            }
-
             foreach (var reference in (text.Result as Pending)?.References ?? (IEnumerable<Reference>)[])
             {
-                // Only the runtime node reads requirements' exports (workload variables). Elsewhere an export could carry environment values
-                // past the grantable check, or one requirement could read another (D19).
+                // Only the runtime node reads requirements' exports (workload variables). Elsewhere one requirement could read another, or a
+                // grant reach past its target check through an export (D19).
                 if (reference.Kind == ReferenceKind.Resource && !(scope == WorkloadScope && node.Name == ExpressionEvaluator.RuntimeNode && node.Kind != NodeKind.Grant))
                 {
                     Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}; only the runtime node may read a requirement's export.");
@@ -153,6 +149,26 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
         }
 
         return new Draft(id, scope, Stack(id), node, dependsOn.ToList());
+    }
+
+    // After policies, a grant's target is still one pending reference to a node of its own scope or the runtime, and nothing else: the
+    // evaluator makes a node reference only to a node in the scope it was given or the runtime, and a deployed part's export is a value,
+    // so a policy that sets the target to a shared resource is refused here (security boundary 1). The loader checked the catalog's form.
+    private void CheckGrantTarget(ResolvedNode node, string id, List<LoadError> errors)
+    {
+        if (!grantTargets.TryGetValue(node.Template, out var input))
+        {
+            errors.Add(new LoadError(id, "template", $"node '{id}': '{node.Template}' is not a grant template in the catalog's grant targets."));
+            return;
+        }
+
+        if (!(node.Config.GetValueOrDefault(input) is ConfigText { Result: Pending pending }
+            && ExpressionEvaluator.SingleReference(pending.Original) is { } single
+            && pending.References.SetEquals([new Reference(ReferenceKind.Node, single.Node, single.Output)])))
+        {
+            var origin = node.Provenance.GetValueOrDefault(input);
+            errors.Add(new LoadError(origin?.Source ?? id, input, $"node '{id}': {CatalogParser.GrantTargetRule(input)}"));
+        }
     }
 
     // Every config string with its provenance key: the dotted path, an array being one leaf.

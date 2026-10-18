@@ -37,12 +37,6 @@
         },
         "separateFromDeployer": { "description": "An approver may not be a principal that deployed the label on `qualifiedOn`. Required: a default would be a silent weakening.", "type": "boolean" }
       }
-    },
-    "grantable": {
-      "description": "Dot paths under the composed values (base included) that workloads may grant on; added to the base descriptor's. Transitional until grant targets replace it (docs/architecture/components.md section 7, S21f).",
-      "type": "array",
-      "uniqueItems": true,
-      "items": { "type": "string", "minLength": 1 }
     }
   }
 }

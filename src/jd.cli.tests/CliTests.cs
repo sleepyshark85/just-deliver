@@ -113,7 +113,9 @@ public sealed class CliTests : IDisposable
         }
 
         // A component field read from the environment: the value, where it came from, and the component file.
-        Assert.Contains("  workspaceResourceId = /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev (from env.log-analytics.id)   [Implementation: components/monitoring.yaml]", stdout);
+        Assert.Contains("  workspaceResourceId = /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.OperationalInsights/workspaces/law-dev (from log-analytics.id)   [Implementation: components/monitoring.yaml]", stdout);
+        // A read of a shared resource through the component's uses (the account the container is created in).
+        Assert.Contains("  accountId = /subscriptions/s/resourceGroups/rg-dev/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-dev (from cosmos-account.id)   [Implementation: components/database.yaml]", stdout);
         // A mapping field: its provenance names the file once.
         Assert.Contains("  partitionKeyPath = /id   [Implementation: components/database.yaml]", stdout);
         Assert.Contains("= pending: ", stdout);

@@ -1,0 +1,6 @@
+kind: Grants
+# Per grant template, the input naming the resource the grant is on (docs/architecture/components.md section 3). A grant's target may only
+# be a node of the grant's own part or the runtime, written as exactly ${<node>.<output>}: never a shared or environment resource.
+targets:
+  azure/role-assignment: scope
+  azure/cosmos-sql-role-assignment: scope

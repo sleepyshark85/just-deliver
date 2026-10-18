@@ -15,7 +15,7 @@ namespace jd.orchestrator.tests;
 // Real resolver, fake backend: the graph is what the resolver makes of a tiny catalog, the backend records what it is asked.
 public partial class OrchestratorTests
 {
-    private static readonly EnvironmentDescriptor Env = new("dev", "region-1", "dev", new Dictionary<string, string>(), [], null);
+    private static readonly EnvironmentDescriptor Env = new("dev", "region-1", "dev", new Dictionary<string, string>(), ["thing", "container-app"], null);
 
     // group -> app (references group outputs); rt waits on the runtime through app.
     private const string Part = """

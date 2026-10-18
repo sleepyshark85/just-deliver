@@ -40,7 +40,7 @@ public static class PreviewFormatter
     private static string Render(ConfigValue value) => value switch
     {
         ConfigText { Result: Pending pending } => $"pending: {pending.Original}",
-        ConfigText { Result: Resolved resolved, EnvPaths.Count: > 0 } text => $"{resolved.Value} (from {string.Join(", ", text.EnvPaths.Order(StringComparer.Ordinal).Select(p => "env." + p))})",
+        ConfigText { Result: Resolved resolved, PartReads.Count: > 0 } text => $"{resolved.Value} (from {string.Join(", ", text.PartReads.Order(StringComparer.Ordinal))})",
         ConfigText { Result: Resolved resolved } => resolved.Value,
         _ => ConfigJson.ToToken(value).ToString(Formatting.None),
     };
