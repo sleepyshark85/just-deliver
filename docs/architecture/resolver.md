@@ -45,6 +45,7 @@ catalog/
   components/database.yaml                   # contract teams bind to + implementations (environment type → class → nodes)
   runtimes/container-app.yaml                # the workload's runtime, per environment type
   components/monitoring.yaml                 # Application Insights per workload, required by the policy below
+  shared/cosmos-account.yaml                 # a platform-owned shared resource, read by the parts that `use` it (loaded and checked; deployed from S21e)
   policies/enforce-monitoring.yaml           # IT Ops layer
   templates/azure/cosmos-account/Pulumi.yaml # mechanics only
   naming.yaml                                # name rules per resource kind
@@ -54,7 +55,7 @@ catalog/
 The directory layout is organisational only. The loader takes every `*.yaml` under the catalog root
 (except `templates/`, which holds Pulumi YAML) as **one YAML document per file** (no `---`
 multi-document files) and finds out what it is from the required top-level `kind`: `Catalog`,
-`Component`, `Runtime`, `Policy`, `Naming` or `Roles`. An unknown or missing `kind` is an error; the retired kinds `ResourceType` and
+`Component`, `Runtime`, `SharedResource`, `Policy`, `Naming` or `Roles`. An unknown or missing `kind` is an error; the retired kinds `ResourceType` and
 `Mapping` are rejected with a message saying what replaced them.
 
 The catalog is versioned as one unit; a deployment records the catalog version next to the
@@ -70,8 +71,9 @@ loader; the expression evaluator interprets them later.
 | Kind | Required fields | Cardinality |
 |---|---|---|
 | `Catalog` | `version` | exactly one |
-| `Component` | `name`, `description`, `exports`, `implementations` | `name` unique among components and runtimes. `implementations` is keyed by a declared environment type or `default` (an undeclared key would never be selected, so it is rejected); each implementation has `classes`, and every implementation declares the same classes. Each class has `nodes` and `exports`, whose keys equal the component's `exports` exactly. `runtime` is reserved: no class declares a node of that name. |
-| `Runtime` | `name`, `description`, `implementations` | `name` unique among components and runtimes; keys as for a component. Each implementation has a `probe`, a `release` and `nodes` with a node named `runtime` ([below](#runtime)); no `exports`. Only a runtime has a `probe` (`path` starting with `/`, `expectedStatus` 100-599, `timeoutSeconds` and `intervalSeconds` at least 1 with the interval not above the timeout) or a `release`. The `runtime` node's config must not set the two inputs `release` names, since the release flow sets them. |
+| `Component` | `name`, `description`, `exports`, `implementations` | `name` unique among shared resources, components and runtimes, and not a reserved root (`env`, `role`, `workload`, `resource`, `runtime`). `implementations` is keyed by a declared environment type or `default` (an undeclared key would never be selected, so it is rejected); each implementation has `classes`, and every implementation declares the same classes. Each class has `nodes` and `exports`, whose keys equal the component's `exports` exactly; an implementation may also have an `environment` part (`nodes`, `exports`), deployed once per environment. `runtime` is reserved: no class declares a node of that name. Optional `uses`: see `SharedResource`. |
+| `Runtime` | `name`, `description`, `implementations` | `name` as for a component; optional `uses`; keys as for a component. Each implementation has a `probe`, a `release` and `nodes` with a node named `runtime` ([below](#runtime)); no `exports`. Only a runtime has a `probe` (`path` starting with `/`, `expectedStatus` 100-599, `timeoutSeconds` and `intervalSeconds` at least 1 with the interval not above the timeout) or a `release`. The `runtime` node's config must not set the two inputs `release` names, since the release flow sets them. |
+| `SharedResource` | `name`, `description`, `scope` (`shared` \| `environment`), `nodes`, `exports` | `name` as for a component. `uses` (here and on components and runtimes) lists shared resources only: a `shared` one uses only `shared` ones, no cycles. Every root a part reads is its own node, a reserved root, a name in its `uses` or (a class part) its own component, and `<name>.<export>` is a declared export; no node takes a name its part reads as a root; node names are unique across the parts of one shared or environment scope ([components.md](components.md) §2–3). Loaded and checked; deployed from S21e |
 | `Policy` | `name`, `reason`, `match`, and at least one of `set` / `default` / `require` | `name` unique. `require` names a declared component, only on a workload-scope policy. `add` is retired: a policy with it is rejected with a message saying `require` replaces it |
 | `Naming` | `rules` (resource kind → `pattern`, `maxLength`, `allowed`) | files merge; a rule is defined once; `allowed` must be a valid regex character class that accepts every hex digit `0-9a-f` |
 | `Roles` | `roles` (name → role-definition GUID) | files merge; a role is defined once |
