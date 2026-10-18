@@ -390,7 +390,7 @@ stacks `@workload/appinsights` → `monitoring/appinsights` and `@workload/appin
 runtime's `APPLICATIONINSIGHTS_CONNECTION_STRING`, now the workload's variable, carrying the new component's value.
 
 **Options:**
-- **(a) Recommended: one-time recreation.** The next deploy creates the new App Insights and its grant, and rolls a new runtime revision
+- **(a) Chosen (user, 2026-10-18; the one exception to principle 13): one-time recreation.** The next deploy creates the new App Insights and its grant, and rolls a new runtime revision
   (dark, probe, shift), as for any config change. jd deletes nothing that leaves a graph (no removal path yet, C16), so the old App Insights
   and its role assignment stay, in their old stacks, untouched. **Effect:** the telemetry history stays readable in the old component; until
   the shift the live revision keeps reporting there, after it the new revision reports to the new one, so the only gap is the minutes the
@@ -449,7 +449,7 @@ Total about 1,000 production lines added, offset in part by deletions (the match
    `implementations` keyed by type with `default`, exact lookup, one contract; policies may match the type; approvals unchanged.
 4. **Grants:** no `grantable` list; a grant targets only the workload's own nodes; targets declared in `grants.yaml` (section 3).
 5. **Observability explicit:** `monitoring` is a required component; `enforce-monitoring` only requires it. Implicit resources: the
-   platform-owned list in section 2. The one-time change: section 5.
+   platform-owned list in section 2. The one-time change: section 5, option (a), accepted as the one exception to principle 13.
 
 ## 9. ADRs affected
 
