@@ -157,7 +157,7 @@ public sealed partial class ReleaseDeployCliTests
     public async Task A_failed_run_writes_a_failed_record_naming_the_failing_node_and_the_workloads_not_started()
     {
         var set = await CreateSetAsync();
-        var backend = new RecordingBackend { FailOn = $"{Worker}.dev._workload.appinsights" };
+        var backend = new RecordingBackend { FailOn = $"{Worker}.dev.database.container" };
 
         var (code, _, _) = await RunAsync(backend, Deploy(set));
 
@@ -165,7 +165,7 @@ public sealed partial class ReleaseDeployCliTests
         var record = Read(Assert.Single(RecordFiles));
         Assert.Equal("failed", (string?)record["outcome"]);
         Assert.Equal(Worker, (string?)record["failure"]!["workload"]);
-        Assert.Equal($"{Worker}/dev/@workload/appinsights", (string?)record["failure"]!["node"]);
+        Assert.Equal($"{Worker}/dev/database/container", (string?)record["failure"]!["node"]);
         Assert.Equal([App], record["notStarted"]!.Select(n => (string?)n));
         var worker = record["workloads"]![0]!;
         var app = record["workloads"]![1]!;

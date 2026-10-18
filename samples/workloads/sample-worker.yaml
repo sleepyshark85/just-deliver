@@ -11,6 +11,7 @@ container:
   image: ghcr.io/sleepyshark85/just-deliver-sample-app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9
   variables:
     LOG_LEVEL: info
+    APPLICATIONINSIGHTS_CONNECTION_STRING: ${resource.monitoring.connectionString}
     COSMOS_ENDPOINT: ${resource.database.endpoint}
     COSMOS_DATABASE: ${resource.database.database}
     COSMOS_CONTAINER: ${resource.database.container}
@@ -20,3 +21,4 @@ container:
 
 requires:
   - type: database
+  - type: monitoring

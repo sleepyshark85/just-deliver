@@ -39,7 +39,7 @@ public class CatalogParserTests
             ("catalog.yaml", CatalogFile),
             ("components/a.yaml", ComponentFile("alpha-db")),
             ("runtimes/r.yaml", TestCatalog.RuntimeFile),
-            ("policies/p.yaml", PolicyFile("p-one") + "add:\n  extra:\n    kind: grant\n    template: t/x\n    config: { k: v }\n"),
+            ("policies/p.yaml", PolicyFile("p-one") + "require: alpha-db\n"),
             ("naming.yaml", "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{hash}\"\n    maxLength: 20\n    allowed: \"[a-z0-9]\"\n"),
             ("roles.yaml", "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n"));
 
@@ -59,7 +59,7 @@ public class CatalogParserTests
         Assert.Equal(("container-app", "runtimes/r.yaml", TestCatalog.Probe, TestCatalog.Release), (runtime.Name, runtime.Source, implementation.Probe, implementation.Release));
         Assert.Equal("t/runtime", implementation.Nodes["runtime"].Template);
         var policy = Assert.Single(catalog.Policies);
-        Assert.Equal(NodeKind.Grant, policy.Add["extra"].Kind);
+        Assert.Equal("alpha-db", policy.Require);
         Assert.True(policy.Set.ContainsKey("runtime.b"));
         Assert.Equal(20, catalog.Naming["thing"].MaxLength);
         Assert.Equal("00000000-0000-0000-0000-000000000001", catalog.Roles["reader"]);
@@ -226,8 +226,7 @@ public class CatalogParserTests
     [InlineData("{ kind: grant }", "set: { a: 1 }", "match.kind")]
     [InlineData("{ runtime: container-app }", "set: { a: 1 }", "match.runtime")]
     [InlineData("{ kind: runtime, type: sqldb }", "set: { runtime.a: 1 }", "match")]
-    [InlineData("{ kind: runtime, template: t/x }", "add:\n  n:\n    template: t/x\n    config: {}", "match")]
-    [InlineData("{ template: t/x }", "add:\n  n:\n    template: t/x\n    config: {}", "add")]
+    [InlineData("{ kind: runtime, template: t/x }", "set: { runtime.a: 1 }", "match")]
     [InlineData("{ kind: runtime }", "set: { size: 1 }", "set.size")]
     [InlineData("{ kind: runtime }", "default: { size: 1 }", "default.size")]
     public async Task A_policy_that_fits_neither_scope_is_an_error(string match, string body, string location)
@@ -240,10 +239,10 @@ public class CatalogParserTests
 
     [Theory]
     [InlineData("{ template: t/x, environmentType: dev }", "set: { a.b: 1 }\ndefault: { c: 2 }")]
-    [InlineData("{ kind: runtime, runtime: container-app, environmentType: dev }", "set: { runtime.a: 1 }\ndefault: { runtime.b: 2 }\nadd:\n  n:\n    template: t/x\n    config: {}")]
+    [InlineData("{ kind: runtime, runtime: container-app, environmentType: dev }", "set: { runtime.a: 1 }\ndefault: { runtime.b: 2 }\nrequire: alpha-db")]
     public async Task A_policy_in_either_scope_loads(string match, string body)
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {match}\n{body}\n"));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", ComponentFile("alpha-db")), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {match}\n{body}\n"));
 
         Assert.Empty(result.Errors);
     }
@@ -276,19 +275,16 @@ public class CatalogParserTests
     [InlineData("1a")]
     [InlineData("a.b")]
     [InlineData("a@b")]
-    public async Task Node_names_in_components_runtimes_and_policy_adds_must_be_lowercase_kebab(string name)
+    public async Task Node_names_in_components_and_runtimes_must_be_lowercase_kebab(string name)
     {
         var component = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", TestCatalog.Component("alpha-db", "[]", $"nodes:\n  \"{name}\":\n    template: t/x\n    config: {{}}\n")));
         var runtime = await Parse(("catalog.yaml", CatalogFile), ("r.yaml", TestCatalog.Runtime($"nodes:\n  runtime:\n    template: t/x\n    config: {{}}\n  \"{name}\":\n    template: t/x\n    config: {{}}\n")));
-        var policy = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {{ kind: runtime }}\nadd:\n  \"{name}\":\n    template: t/x\n    config: {{}}\n"));
 
         var componentError = Assert.Single(component.Errors);
         Assert.Equal(("c.yaml", $"{TestCatalog.PartPath}.nodes.{name}"), (componentError.File, componentError.Location));
         Assert.Contains("not a valid node name", componentError.Message);
         var runtimeError = Assert.Single(runtime.Errors);
         Assert.Equal(("r.yaml", $"implementations.default.nodes.{name}"), (runtimeError.File, runtimeError.Location));
-        var policyError = Assert.Single(policy.Errors);
-        Assert.Equal(("p.yaml", $"add.{name}"), (policyError.File, policyError.Location));
     }
 
     [Fact]
@@ -380,13 +376,50 @@ public class CatalogParserTests
         Assert.Contains($"#/implementations.default.release.{name}", Assert.Single(blank.Errors).Message);
     }
 
+    // A policy requires, it never adds (docs/architecture/components.md section 3): an earlier policy's `add` gets one error saying what
+    // replaces it, not a schema violation, and the policy does not load.
     [Fact]
-    public async Task A_policy_cannot_add_a_node_named_runtime()
+    public async Task A_policy_with_add_is_an_error_saying_require_replaces_it()
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { kind: runtime }\nadd:\n  runtime:\n    template: t/x\n    config: {}\n"));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { kind: runtime }\nadd:\n  extra:\n    template: t/x\n    config: {}\n"));
+
+        Assert.Null(result.Catalog);
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("p.yaml", "add"), (error.File, error.Location));
+        Assert.Contains("can no longer add nodes", error.Message);
+        Assert.Contains("'require: <component>'", error.Message);
+    }
+
+    [Fact]
+    public async Task A_policy_requiring_a_name_that_is_not_a_component_is_an_error()
+    {
+        var undeclared = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", ComponentFile("alpha-db")), ("p.yaml", PolicyFile("pol-a") + "require: beta-db\n"));
+        var runtime = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", ComponentFile("alpha-db")), ("r.yaml", TestCatalog.RuntimeFile), ("p.yaml", PolicyFile("pol-a") + "require: container-app\n"));
+
+        var error = Assert.Single(undeclared.Errors);
+        Assert.Equal(("p.yaml", "require"), (error.File, error.Location));
+        Assert.Equal("'beta-db' is not a component in the catalog (components: alpha-db).", error.Message);
+        Assert.Equal(("p.yaml", "require"), (Assert.Single(runtime.Errors).File, Assert.Single(runtime.Errors).Location));
+    }
+
+    [Fact]
+    public async Task A_policy_requiring_a_component_whose_file_is_invalid_reports_only_the_component()
+    {
+        var invalid = ComponentFile("alpha-db").Replace("description: d\n", string.Empty, StringComparison.Ordinal);
+
+        var result = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", invalid), ("p.yaml", PolicyFile("pol-a") + "require: alpha-db\n"));
+
+        Assert.Equal("c.yaml", Assert.Single(result.Errors).File);
+    }
+
+    [Fact]
+    public async Task A_node_scope_policy_cannot_require_a_component()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", ComponentFile("alpha-db")), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { template: t/x }\nrequire: alpha-db\n"));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("p.yaml", "add.runtime"), (error.File, error.Location));
+        Assert.Equal(("p.yaml", "require"), (error.File, error.Location));
+        Assert.Contains("a node-scope policy cannot require a component", error.Message);
     }
 
     [Fact]

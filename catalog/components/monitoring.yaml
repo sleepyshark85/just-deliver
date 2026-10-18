@@ -1,0 +1,27 @@
+kind: Component
+name: monitoring
+description: Application Insights for the workload, reporting to the environment's Log Analytics workspace; the workload maps `connectionString` to its own variable.
+exports: [connectionString]                          # the contract
+implementations:
+  default:                                           # every environment type without its own key
+    classes:
+      standard:
+        # Reads the environment's resource group and workspace from the descriptor (env.*) until S21f (docs/architecture/components.md section 7).
+        nodes:
+          appinsights:
+            template: azure/application-insights
+            config:
+              resourceGroupName: ${env.resourceGroup}
+              location: ${env.region}
+              workspaceResourceId: ${env.logAnalytics.id}
+              appInsightsName: ${name('appi')}
+          access:
+            kind: grant                                   # surfaced in the approval diff
+            template: azure/role-assignment
+            config:
+              scope: ${appinsights.appInsightsId}
+              principalId: ${runtime.principalId}         # this reference alone orders it after the revision step
+              roleGuid: ${role.monitoring-metrics-publisher}
+              roleAssignmentId: ${guid(appinsights.appInsightsId, runtime.principalId, 'metrics-publisher')}
+        exports:
+          connectionString: ${appinsights.connectionString}

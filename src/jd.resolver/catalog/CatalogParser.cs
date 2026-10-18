@@ -28,6 +28,9 @@ public static class CatalogParser
         ["Mapping"] = $"a {ComponentKind}'s implementations (per environment type, then class) replace a type's mappings, and a {RuntimeKind} file the runtime mapping",
     };
 
+    // A policy field of earlier catalogs: a policy requires, it never adds (docs/architecture/components.md section 3).
+    private const string RemovedPolicyAdd = "add";
+
     private static readonly YamlSchemaValidator Validator = new();
 
     private static readonly Regex NodeNamePattern = new("^[a-z]([a-z0-9-]*[a-z0-9])?$", RegexOptions.CultureInvariant);
@@ -77,9 +80,10 @@ public static class CatalogParser
             : null;
         CheckEnvironmentTypes(components, runtimes, policies, environmentTypes, errors);
         CheckPolicyScopes(policies, errors);
+        CheckPolicyRequires(policies, componentDocuments, errors);
         CheckPolicyPaths(policies, errors);
-        CheckNodeNames(components, runtimes, policies, errors);
-        CheckRuntimeNode(components, policies, errors);
+        CheckNodeNames(components, runtimes, errors);
+        CheckRuntimeNode(components, errors);
         CheckReleases(runtimes, errors);
         CheckSameClasses(components, errors);
         CheckExportsContract(components, errors);
@@ -134,6 +138,14 @@ public static class CatalogParser
             errors.Add(new LoadError(source.Path, "kind", ReplacedKinds.TryGetValue(kind, out var replacement)
                 ? $"kind '{kind}' is no longer supported: {replacement}."
                 : $"unknown kind '{kind}'; expected one of {string.Join(", ", Kinds)}."));
+            return new Document(source.Path, kind, body, false);
+        }
+
+        if (kind == PolicyKind && body.ContainsKey(RemovedPolicyAdd))
+        {
+            // One clear error instead of the schema's "not allowed"; the rest of the file is not checked until it is migrated.
+            errors.Add(new LoadError(source.Path, RemovedPolicyAdd,
+                "a policy can no longer add nodes: a workload declares what it gets in its 'requires'; use 'require: <component>' to make every workload the policy matches require one."));
             return new Document(source.Path, kind, body, false);
         }
 
@@ -215,11 +227,10 @@ public static class CatalogParser
 
     // Node names become parts of graph node ids and backend stack names, so they are lowercase kebab. Enforced here, not in the
     // schema: the schema validator ignores the propertyNames keyword.
-    private static void CheckNodeNames(List<Component> components, List<Runtime> runtimes, List<Policy> policies, List<LoadError> errors)
+    private static void CheckNodeNames(List<Component> components, List<Runtime> runtimes, List<LoadError> errors)
     {
         var named = components.SelectMany(c => ClassParts(c).Select(p => (c.Source, Field: $"{p.Path}.nodes", Names: p.Part.Nodes.Keys)))
-            .Concat(runtimes.SelectMany(r => r.Implementations.Select(i => (r.Source, Field: $"implementations.{i.Key}.nodes", Names: i.Value.Nodes.Keys))))
-            .Concat(policies.Select(p => (p.Source, Field: "add", Names: p.Add.Keys)));
+            .Concat(runtimes.SelectMany(r => r.Implementations.Select(i => (r.Source, Field: $"implementations.{i.Key}.nodes", Names: i.Value.Nodes.Keys))));
         foreach (var (source, field, names) in named)
         {
             foreach (var name in names.Where(n => !NodeNamePattern.IsMatch(n)))
@@ -231,7 +242,7 @@ public static class CatalogParser
 
     // The node named 'runtime' is the workload's runtime: only a Runtime declares it (its schema requires it), since every
     // ${runtime.<output>} points to it.
-    private static void CheckRuntimeNode(List<Component> components, List<Policy> policies, List<LoadError> errors)
+    private static void CheckRuntimeNode(List<Component> components, List<LoadError> errors)
     {
         const string reserved = ExpressionEvaluator.RuntimeNode;
         foreach (var component in components)
@@ -240,11 +251,6 @@ public static class CatalogParser
             {
                 errors.Add(new LoadError(component.Source, $"{path}.nodes.{reserved}", $"'{reserved}' is the runtime node, declared only by a {RuntimeKind}."));
             }
-        }
-
-        foreach (var policy in policies.Where(p => p.Add.ContainsKey(reserved)))
-        {
-            errors.Add(new LoadError(policy.Source, $"add.{reserved}", $"'{reserved}' is the runtime node, declared only by a {RuntimeKind}."));
         }
     }
 
@@ -268,9 +274,9 @@ public static class CatalogParser
                     Fail("match.runtime", $"'runtime' needs 'kind: {MatchCriteria.RuntimeKind}'; node-scope policies match type, class, environmentType and template.");
                 }
 
-                if (policy.Add.Count > 0)
+                if (policy.Require is not null)
                 {
-                    Fail("add", $"a node-scope policy cannot add nodes; use 'kind: {MatchCriteria.RuntimeKind}' to add nodes once per workload.");
+                    Fail("require", $"a node-scope policy cannot require a component; use 'kind: {MatchCriteria.RuntimeKind}' to make every workload require it.");
                 }
             }
             else
@@ -289,6 +295,17 @@ public static class CatalogParser
                     }
                 }
             }
+        }
+    }
+
+    // A required component must exist, or no workload could satisfy the policy. A runtime is never required: every workload gets it.
+    // Component files that failed their schema still count, so their mistake is not reported a second time here.
+    private static void CheckPolicyRequires(List<Policy> policies, List<Document> componentDocuments, List<LoadError> errors)
+    {
+        var declared = componentDocuments.Select(NameOf).OfType<string>().ToHashSet();
+        foreach (var policy in policies.Where(p => p.Require is not null && !declared.Contains(p.Require)))
+        {
+            errors.Add(new LoadError(policy.Source, "require", $"'{policy.Require}' is not a component in the catalog (components: {string.Join(", ", declared.Order(StringComparer.Ordinal))})."));
         }
     }
 
@@ -438,7 +455,7 @@ public static class CatalogParser
         ToMatch(d.Body["match"]),
         Map(d.Body["set"]),
         Map(d.Body["default"]),
-        ToNodes(d.Body["add"]));
+        (string?)d.Body["require"]);
 
     private static NamingRule ToNamingRule(JToken rule) => new(Text(rule["pattern"]), (int?)rule["maxLength"] ?? 0, Text(rule["allowed"]));
 

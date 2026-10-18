@@ -32,8 +32,8 @@ public sealed record ExpandedRequirement(
     IReadOnlyList<ExpandedNode> Nodes,
     IReadOnlyDictionary<string, EvalResult> Exports);
 
-/// <summary>The workload's runtime nodes expanded from the runtime in <see cref="Source"/>, with its probe and release block. <see cref="WorkloadFile"/> is where the workload's variables, which the runtime puts in its config, were written.</summary>
-public sealed record ExpandedRuntime(string Source, IReadOnlyList<ExpandedNode> Nodes, Probe? Probe, RuntimeRelease? Release, string WorkloadFile);
+/// <summary>The workload's runtime nodes expanded from the runtime in <see cref="Source"/>, with its probe and release block.</summary>
+public sealed record ExpandedRuntime(string Source, IReadOnlyList<ExpandedNode> Nodes, Probe? Probe, RuntimeRelease? Release);
 
 /// <summary>Who the requirements belong to: a workload (it has a runtime), or an environment definition (substrate, no runtime).</summary>
 public enum OwnerKind
@@ -43,19 +43,23 @@ public enum OwnerKind
 }
 
 /// <param name="Owner">Whether the requirements are a workload's or an environment definition's.</param>
+/// <param name="OwnerFile">The workload's (or definition's) file, where its requirements and variables were written; errors about them name it.</param>
 /// <param name="WorkloadName">The workload's <c>metadata.name</c>, or <c>@</c> and the environment's name; carried on for policy evaluation.</param>
 /// <param name="WorkloadTeam">The workload's <c>metadata.team</c>.</param>
 /// <param name="WorkloadImage">The workload's <c>container.image</c>; null for an environment definition.</param>
 /// <param name="WorkloadPort">The first port of the workload's <c>container.ports</c>, if any.</param>
 /// <param name="Requirements">Requirements that expanded cleanly; a requirement with any error is left out.</param>
+/// <param name="DeclaredTypes">The <c>type</c> of every entry in the owner's <c>requires</c>, including those that failed to expand.</param>
 /// <param name="Runtime">The runtime nodes of a workload; null for an environment definition, and when the runtime failed to expand.</param>
 /// <param name="Errors">Everything that kept a requirement from expanding.</param>
 public sealed record ExpansionResult(
     OwnerKind Owner,
+    string OwnerFile,
     string WorkloadName,
     string WorkloadTeam,
     string? WorkloadImage,
     int? WorkloadPort,
     IReadOnlyList<ExpandedRequirement> Requirements,
+    IReadOnlySet<string> DeclaredTypes,
     ExpandedRuntime? Runtime,
     IReadOnlyList<LoadError> Errors);

@@ -101,7 +101,7 @@ endpoints) only exist after earlier steps run, so references resolve in phases �
 | Container runtime and compute size | Platform: Container Apps by default ([0013](../decisions/0013-container-apps-runtime.md)) |
 | Health checks, resource limits, scaling rules | Global policy |
 | Encryption, tags, network rules, security policy | Global IT Ops policies; hard guardrails in the landing zone ([0008](../decisions/0008-enforcement-in-landing-zone.md)) |
-| Monitoring (Log Analytics, App Insights) | `enforce-monitoring` policy — attached to every workload, never requested |
+| Monitoring (App Insights) | Requested as `- type: monitoring` and mapped to `APPLICATIONINSIGHTS_CONNECTION_STRING` by the workload; the `enforce-monitoring` policy requires it of every workload ([components.md](components.md) §3) |
 | Identity and grants | Platform: system-assigned identity per app and job ([0012](../decisions/0012-system-assigned-identity.md)) |
 | Resource names | Generated from workload name + id + type (C14 open) |
 | Approvals / sign-off | Release process, defined separately so sign-off rules change without teams editing definitions |

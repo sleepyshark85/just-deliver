@@ -85,8 +85,8 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
         Assert.Equal(14, walk.Count);
         foreach (var (name, first) in new[] { (Worker, 0), (App, 7) })
         {
-            Assert.Equal([$"deploy {name}.dev._workload.appinsights", $"deploy {name}.dev.database.container", $"deploy {name}.dev._workload.runtime"], walk.Skip(first).Take(3));
-            Assert.Equal([$"deploy {name}.dev._workload.appinsights-access", $"deploy {name}.dev.database.access"], walk.Skip(first + 3).Take(2).Order(StringComparer.Ordinal));
+            Assert.Equal([$"deploy {name}.dev.database.container", $"deploy {name}.dev.monitoring.appinsights", $"deploy {name}.dev._workload.runtime"], walk.Skip(first).Take(3));
+            Assert.Equal([$"deploy {name}.dev.database.access", $"deploy {name}.dev.monitoring.access"], walk.Skip(first + 3).Take(2).Order(StringComparer.Ordinal));
             Assert.Equal("probe out-latestRevisionFqdn/health", walk[first + 5]);
             Assert.Equal($"deploy {name}.dev._workload.runtime", walk[first + 6]); // the shift
         }
@@ -118,14 +118,14 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     public async Task A_failure_in_the_first_workload_stops_the_run_and_lists_the_workloads_not_started()
     {
         var set = await CreateSetAsync();
-        var backend = new RecordingBackend { FailOn = $"{Worker}.dev._workload.appinsights" };
+        var backend = new RecordingBackend { FailOn = $"{Worker}.dev.database.container" };
 
         var (code, stdout, stderr) = await RunAsync(backend, Deploy(set));
 
         Assert.Equal(1, code);
         Assert.Single(backend.Calls);
         Assert.DoesNotContain($"workload {App}", stdout);
-        Assert.Contains($"jd: stopped at {Worker}, node {Worker}/dev/@workload/appinsights: provider exploded", stderr);
+        Assert.Contains($"jd: stopped at {Worker}, node {Worker}/dev/database/container: provider exploded", stderr);
         Assert.Contains($"release 1.0.0 on dev: 0 deployed, 0 unchanged, 1 failed, 1 not started ({App}).", stdout);
     }
 

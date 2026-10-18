@@ -17,7 +17,7 @@ failure and caches no failure: after any error the Cosmos client is dropped and 
 ## Configuration
 
 Environment variables only. The workload definition ([sample-app.yaml](../workloads/sample-app.yaml)) supplies the first
-three from the `database` exports; the platform's `enforce-monitoring` policy supplies the last.
+three from the `database` exports and the last from the `monitoring` export, which the platform's `enforce-monitoring` policy requires.
 
 | Variable | Meaning |
 |---|---|

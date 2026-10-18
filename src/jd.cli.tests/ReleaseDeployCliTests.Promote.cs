@@ -113,10 +113,10 @@ public sealed partial class ReleaseDeployCliTests
     {
         var stage = await ApprovedAsync();
 
-        var (code, _, stderr) = await PromoteAsync(stage, new RecordingBackend { FailOn = $"{Worker}.stage._workload.appinsights" });
+        var (code, _, stderr) = await PromoteAsync(stage, new RecordingBackend { FailOn = $"{Worker}.stage.database.container" });
 
         Assert.Equal(1, code);
-        Assert.Contains($"jd: stopped at {Worker}, node {Worker}/stage/@workload/appinsights", stderr);
+        Assert.Contains($"jd: stopped at {Worker}, node {Worker}/stage/database/container", stderr);
         Assert.Equal(DevSetBytes, File.ReadAllText(Path.Combine(StageDirectory, "set.yaml")));
         var record = Read(Assert.Single(StageFiles("*-deploy.json")));
         Assert.Equal("failed", (string?)record["outcome"]);

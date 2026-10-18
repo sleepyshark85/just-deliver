@@ -50,7 +50,7 @@ public sealed partial class ReleaseDeployCliTests
     public async Task A_failed_workload_runs_no_iq_and_the_record_says_failed_and_notRun()
     {
         var set = await CreateSetAsync();
-        var backend = new RecordingBackend { FailOn = $"{Worker}.dev._workload.appinsights" };
+        var backend = new RecordingBackend { FailOn = $"{Worker}.dev.database.container" };
 
         var (code, stdout, _) = await RunAsync(backend, Deploy(set));
 

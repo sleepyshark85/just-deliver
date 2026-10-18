@@ -18,7 +18,7 @@ namespace jd.resolver.graph;
 /// </summary>
 public sealed class GraphBuilder(EnvironmentDescriptor environment)
 {
-    /// <summary>Scope of nodes added by workload-scope policies; requirement ids cannot contain '@'.</summary>
+    /// <summary>Scope of the runtime's nodes; requirement ids cannot contain '@'.</summary>
     public const string WorkloadScope = "@workload";
 
     private sealed record Draft(string Id, string Scope, string Stack, ResolvedNode Node, List<string> DependsOn);
@@ -40,7 +40,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment)
 
         var exports = policy.Requirements.OrderBy(r => r.Id, StringComparer.Ordinal).ToDictionary(r => r.Id, r => r.Exports);
         var entries = policy.Requirements.SelectMany(r => r.Nodes.Select(n => (Scope: r.Id, Node: n)))
-            .Concat(policy.RuntimeNodes.Concat(policy.WorkloadNodes).Select(n => (Scope: WorkloadScope, Node: n)))
+            .Concat(policy.RuntimeNodes.Select(n => (Scope: WorkloadScope, Node: n)))
             .Select(e => (e.Scope, e.Node, Id: $"{policy.WorkloadName}/{environment.Name}/{e.Scope}/{e.Node.Name}"))
             .ToList();
 
