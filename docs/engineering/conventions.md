@@ -123,6 +123,11 @@ These hold across slices; a change to one changes its design note or ADR first.
   account) are a short named list, and workloads are never granted on them. A grant targets only what the workload's
   own requirements created. Prefer exact lookups to matching rules. A design that adds an implicit resource, grant,
   default or match needs the user's go-ahead.
+- **Simplification over complication** (the user's principle). Remove a concept before adding one; prefer an exact
+  lookup to a matching rule, one mechanism to two, deleting code to adding it. A design note names the simpler
+  alternative it rejected and why.
+- **Cohesion, contracts and ownership** ([context.md](../context.md#design-principles) 8–11): one component in one
+  place; consumers bind to contracts; a workload definition is the same in every environment; one owner per resource.
 - **Data drives the platform.** Templates, mappings, policies and the environment descriptor carry every resource
   fact; the code knows formats and names *from the data* (a mapping's `release:` block names the outputs the release
   flow reads).
