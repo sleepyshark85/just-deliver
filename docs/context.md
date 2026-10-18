@@ -103,6 +103,8 @@ D          -> Full automation, Ops handles approvals and exceptions only
 
 ### North star: workloads as components (the user's vision, not designed yet)
 
+Broken down into concrete ideas and phases in [roadmap.md](plans/roadmap.md).
+
 Applications always run on compute, so an application and its compute are one unit: a **workload**, like the `runtime` node today.
 There are two layers of components: **base components** from the cloud provider (or containers), provided by the catalog's mappings
 (database, service bus, …), and **custom components**, which are our workloads. Eventually, with many workloads, a workload uses another

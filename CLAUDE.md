@@ -3,6 +3,7 @@
 Internal Developer Platform for Azure. Start every session with [docs/README.md](docs/README.md), then:
 
 - [Work status](docs/plans/status.md) — **where we are; read first, update last**
+- [Roadmap](docs/plans/roadmap.md) — the north star and its phases; **every slice serves a phase goal**
 - [MVP plan](docs/plans/mvp.md) — scope and slices S01–S18
 - [Conventions](docs/engineering/conventions.md) (how we work, the code quality bar), [engineering standards](docs/engineering/standards.md)
   and [review checklist](docs/engineering/review-checklist.md) — binding for all code
@@ -23,8 +24,8 @@ How the team works together (independence, rounds, short reports, context cost):
 ## Lead workflow
 
 1. **Session start:** read `docs/plans/status.md`. Resume the slice in progress, or take the next `todo` slice.
-2. **Brief:** expand the slice from `mvp.md` into a brief — goal, acceptance criteria, files in scope,
-   out of scope, ADRs/docs that apply. Mark the slice `in-progress` in status.md.
+2. **Brief:** expand the slice (from `mvp.md` or the phase's design note) into a brief — **the phase and phase goal it serves
+   ([roadmap](docs/plans/roadmap.md))**, goal, acceptance criteria, files in scope, out of scope, ADRs/docs that apply. Mark the slice `in-progress` in status.md.
 3. **Develop:** dispatch `developer` with the brief. If the slice is Azure-facing, run the Azure gate once, after the
    hand-back and before the review; other slices have no Azure gate
    ([conventions](docs/engineering/conventions.md#how-we-work)).
