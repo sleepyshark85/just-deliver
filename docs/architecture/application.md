@@ -1,6 +1,6 @@
 # A thin CLI over an application layer
 
-> Status: design note for S25, **phase 1.5**, next to S24 ([documents.md](documents.md)); pending the user's review. The user (2026-10-19):
+> Status: design note for S25, **phase 1.5**, next to S24 ([documents.md](documents.md)); **approved by the user 2026-10-19** with every recommendation of section 11 ("go for it"): S25 runs now, before S24a2. The user (2026-10-19):
 > *"keep in mind that the CLI is just a starting app. The northstar for this is JD will be hosted as an API. There will be CLI, web app that
 > will use the API for everything. So make sure don't leak any logic to the CLI and keep it thin"*. Serves [ADR 0001](../decisions/0001-custom-build-api-and-clients.md)
 > ("each client is a thin layer over the API"), principles 6–14 ([context.md](../context.md#design-principles)) and the non-negotiable on clean
@@ -274,6 +274,8 @@ slice would be a host project calling these use cases, plus choice 2's move.
 new `Connections` members; a per-request identity in an API is a different `Identity` factory, not a code change in any use case.
 
 ## 11. Open choices for the user
+
+**Decided** (user, 2026-10-19): every recommendation below.
 
 | # | Choice | Options | Recommendation |
 |---|---|---|---|
