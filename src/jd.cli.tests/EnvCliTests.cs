@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using jd.core.bp;
 using Xunit;
 
@@ -66,12 +67,41 @@ public sealed class EnvCliTests : IDisposable
 
         Assert.Equal((0, 0), (first.Code, second.Code));
         Assert.Equal(["_dev.dev.substrate.apps", "_dev.dev.substrate.database", "_dev.dev.substrate.group", "_dev.dev.substrate.logs", "_shared.shared.substrate.cosmos", "_shared.shared.substrate.group", "_shared.shared.substrate.workspace"], backend.Calls.Order().ToList());
-        var descriptor = (await jd.resolver.environment.EnvironmentFile.LoadAsync(dev)).Descriptor!;
+        var descriptor = (await jd.resolver.environment.EnvironmentParser.LoadAsync(dev)).Value!;
         Assert.Equal(("dev", "southeastasia"), (descriptor.Name, descriptor.Region));
         Assert.Equal("cosmos-1", descriptor.Values["cosmos-account.name"]);
         Assert.Equal("db-dev", descriptor.Values["database.databaseName"]);
         Assert.Contains($"{dev}: environment dev (southeastasia, dev) written.", second.Out);
     }
+
+    // What jd writes is pinned byte for byte (docs/architecture/documents.md section 8). Regenerate with JD_UPDATE_GOLDEN=1 and review the diff.
+    [Fact]
+    public async Task Up_of_the_sample_shared_and_dev_writes_the_committed_golden_descriptors()
+    {
+        var backend = new OutputBackend();
+        var shared = Path.Combine(_temp, "shared.env.yaml");
+        var dev = Path.Combine(_temp, "dev.env.yaml");
+
+        var first = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", shared);
+        var second = await RunAsync(backend, null, "up", Dev, "--catalog", Catalog, "--base", shared, "--out", dev);
+
+        Assert.Equal((0, 0), (first.Code, second.Code));
+        await AssertGoldenAsync(shared, "shared.env.yaml");
+        await AssertGoldenAsync(dev, "dev.env.yaml");
+    }
+
+    private static async Task AssertGoldenAsync(string written, string golden)
+    {
+        var actual = await File.ReadAllTextAsync(written);
+        if (System.Environment.GetEnvironmentVariable("JD_UPDATE_GOLDEN") == "1")
+        {
+            await File.WriteAllTextAsync(GoldenSource(golden), actual);
+        }
+
+        Assert.Equal(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", golden)), actual);
+    }
+
+    private static string GoldenSource(string name, [CallerFilePath] string testFile = "") => Path.Combine(Path.GetDirectoryName(testFile)!, "golden", name);
 
     [Fact]
     public async Task Up_of_the_protected_stage_writes_its_policy_into_the_descriptor_and_a_protected_definition_without_one_deploys_nothing()
@@ -92,7 +122,7 @@ public sealed class EnvCliTests : IDisposable
         Assert.Equal((1, 0), (refused.Code, up.Code));
         Assert.Equal(0, refusedCalls);
         Assert.Contains($"{open}: approval: environment type 'stage' requires an 'approval' block", refused.Err);
-        var descriptor = (await jd.resolver.environment.EnvironmentFile.LoadAsync(stage)).Descriptor!;
+        var descriptor = (await jd.resolver.environment.EnvironmentParser.LoadAsync(stage)).Value!;
         Assert.Equal(("stage", "stage"), (descriptor.Name, descriptor.Type));
         Assert.Equal(("dev", 1, true), (descriptor.Approval!.QualifiedOn, descriptor.Approval.Required, descriptor.Approval.SeparateFromDeployer));
         Assert.Equal(["00000000-0000-0000-0000-000000000000"], descriptor.Approval.Approvers);

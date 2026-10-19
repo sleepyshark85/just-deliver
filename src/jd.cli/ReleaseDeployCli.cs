@@ -91,8 +91,8 @@ internal static class ReleaseDeployCli
             ? await ReleaseSetFile.ParseAsync(options.Set, await records!.ReadAsync(promoted.QualifiedOn, promoted.Label, ReleaseRecordFile.SetFileName, cancellationToken), cancellationToken)
             : await ReleaseSetFile.LoadAsync(options.Set, cancellationToken);
         var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog, cancellationToken);
-        var environmentResult = await EnvironmentFile.LoadAsync(options.Environment, cancellationToken);
-        if (setResult.Set is not { } set || catalogResult.Catalog is not { } catalog || environmentResult.Descriptor is not { } environment)
+        var environmentResult = await EnvironmentParser.LoadAsync(options.Environment, cancellationToken);
+        if (setResult.Set is not { } set || catalogResult.Value is not { } catalog || environmentResult.Value is not { } environment)
         {
             Cli.Print(setResult.Errors.Concat(Cli.CatalogErrors(catalogResult, options.Catalog)).Concat(environmentResult.Errors), stderr);
             return Invalid;
@@ -110,7 +110,7 @@ internal static class ReleaseDeployCli
         }
 
         // The promotion judged the hash of the kept set; the bytes read now are the ones deployed, so they must be those.
-        if (options.Promotion is { } promotion && ReleaseRecordFile.Sha256(setResult.Bytes.Span) != promotion.SetSha256)
+        if (options.Promotion is { } promotion && ReleaseHash.Of(setResult.Bytes.Span) != promotion.SetSha256)
         {
             stderr.WriteLine($"jd: promote: the kept set '{options.Set}' changed since it was checked (expected sha256 {promotion.SetSha256}).");
             return Invalid;

@@ -61,7 +61,7 @@ public class RuntimeVariablesTests
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml(
             $"metadata: {{ name: shop, team: crew }}\ncontainer:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n{variables}requires:\n  - type: sqldb\n");
-        return Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, Env);
+        return Resolver.Resolve(workload, "workload.yaml", loaded.Value!, Env);
     }
 
     private static string WorkloadPolicy(string name, string body) =>

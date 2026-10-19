@@ -52,23 +52,23 @@ internal static class EnvCli
     {
         var definitionResult = await EnvironmentDefinitionFile.LoadAsync(options.Definition, cancellationToken);
         var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog, cancellationToken);
-        var baseResult = options.Base is null ? null : await EnvironmentFile.LoadAsync(options.Base, cancellationToken);
-        if (definitionResult.Definition is not { } definition || catalogResult.Catalog is not { } catalog || (baseResult is not null && baseResult.Descriptor is null))
+        var baseResult = options.Base is null ? null : await EnvironmentParser.LoadAsync(options.Base, cancellationToken);
+        if (definitionResult.Value is not { } definition || catalogResult.Value is not { } catalog || (baseResult is not null && baseResult.Value is null))
         {
             Cli.Print(definitionResult.Errors.Concat(Cli.CatalogErrors(catalogResult, options.Catalog)).Concat(baseResult?.Errors ?? []), stderr);
             return Invalid;
         }
 
         // The definition's type, and the base's, must be the catalog's; a gated type's environment cannot be written without its block.
-        var environment = definition.Over(baseResult?.Descriptor);
+        var environment = definition.Over(baseResult?.Value);
         var definitionRefused = Cli.RefuseType(catalog, environment, options.Definition, stderr);
-        var baseRefused = options.Base is { } basePath && baseResult?.Descriptor is { } baseDescriptor && Cli.RefuseType(catalog, baseDescriptor, basePath, stderr);
+        var baseRefused = options.Base is { } basePath && baseResult?.Value is { } baseDescriptor && Cli.RefuseType(catalog, baseDescriptor, basePath, stderr);
         if (definitionRefused || baseRefused)
         {
             return Invalid;
         }
 
-        var graph = Resolver.ResolveSubstrate(definition, options.Definition, catalog, environment, baseResult?.Descriptor);
+        var graph = Resolver.ResolveSubstrate(definition, options.Definition, catalog, environment, baseResult?.Value);
         var composer = new DescriptorComposer(definition, options.Definition, catalog, environment, graph);
 
         // Everything that can be known before anything is created is checked first: the graph, and the descriptor with its values still pending.

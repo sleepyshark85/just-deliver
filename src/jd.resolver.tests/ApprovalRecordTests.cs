@@ -177,6 +177,17 @@ public sealed class ApprovalRecordTests : IDisposable
         Assert.Equal($"{name}: {reason}", Assert.Single(reading.Ignored));
     }
 
+    [Fact]
+    public async Task An_approval_file_of_another_kind_is_ignored_naming_its_kind()
+    {
+        var name = await WriteApprovalAsync("object-a", 1, record => record["kind"] = "ReleaseRecord");
+
+        var reading = await ApprovalRecord.ReadAsync(new LocalRecordStore(_records), Stage, "1.0.0", Set);
+
+        Assert.Empty(reading.Approvers);
+        Assert.Equal($"{name}: is not a valid approval record: {name}: kind: unknown kind 'ReleaseRecord'; expected one of ApprovalRecord.", Assert.Single(reading.Ignored));
+    }
+
     [Theory]
     [InlineData("extra")]
     [InlineData("identity")]

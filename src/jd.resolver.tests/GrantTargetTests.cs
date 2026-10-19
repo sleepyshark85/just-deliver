@@ -30,16 +30,16 @@ public class GrantTargetTests
         TestCatalog.RuntimeHeader.Replace("implementations:\n", "uses: [cosmos-account]\nimplementations:\n", StringComparison.Ordinal)
         + TestCatalog.RuntimeImplementation($"nodes:\n  runtime: {{ template: t/rt, config: {{}} }}\n{extraNodes}");
 
-    private static Task<CatalogLoadResult> Parse(string component, string runtime = "", string sharedGroup = SharedGroup) =>
+    private static Task<LoadResult<Catalog>> Parse(string component, string runtime = "", string sharedGroup = SharedGroup) =>
         CatalogParser.ParseAsync(new[]
         {
             ("catalog.yaml", CatalogFile), ("grants.yaml", TestCatalog.GrantsFile), ("shared/a.yaml", sharedGroup), ("shared/b.yaml", CosmosAccount),
             ("c.yaml", component), ("r.yaml", runtime.Length > 0 ? runtime : Runtime()),
         }.Select(f => new CatalogSource(f.Item1, f.Item2)));
 
-    private static LoadError SingleError(CatalogLoadResult result)
+    private static LoadError SingleError(LoadResult<Catalog> result)
     {
-        Assert.Null(result.Catalog);
+        Assert.Null(result.Value);
         return Assert.Single(result.Errors);
     }
 
@@ -52,7 +52,7 @@ public class GrantTargetTests
         var result = await Parse(Component(Grant(target)));
 
         Assert.Empty(result.Errors);
-        Assert.Equal("scope", result.Catalog!.GrantTargets["t/g"]);
+        Assert.Equal("scope", result.Value!.GrantTargets["t/g"]);
     }
 
     [Theory]

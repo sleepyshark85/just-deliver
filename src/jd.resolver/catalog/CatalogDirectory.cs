@@ -6,11 +6,12 @@ public static class CatalogDirectory
     /// <summary>Templates are Pulumi YAML, not catalog documents; they are not loaded here. Part of the catalog layout.</summary>
     public const string TemplatesDirectory = "templates";
 
-    public static async Task<CatalogLoadResult> LoadAsync(string root, CancellationToken cancellationToken = default)
+    /// <summary>Loads every catalog file under <paramref name="root"/>, the templates aside.</summary>
+    public static async Task<LoadResult<Catalog>> LoadAsync(string root, CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(root))
         {
-            return new CatalogLoadResult(null, [new LoadError(root, string.Empty, "catalog directory not found.")]);
+            return new LoadResult<Catalog>(null, [new LoadError(root, string.Empty, "catalog directory not found.")]);
         }
 
         var sources = new List<CatalogSource>();

@@ -21,9 +21,9 @@ public class GoldenSubstrateTests
 
     private static async Task CheckAsync(string sample, string? baseDescriptor)
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
-        var definition = (await EnvironmentDefinitionFile.LoadAsync(Path.Combine(AppContext.BaseDirectory, "samples", "environments", sample + ".yaml"))).Definition!;
-        var baseEnvironment = baseDescriptor is null ? null : (await EnvironmentFile.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", baseDescriptor))).Descriptor;
+        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
+        var definition = (await EnvironmentDefinitionFile.LoadAsync(Path.Combine(AppContext.BaseDirectory, "samples", "environments", sample + ".yaml"))).Value!;
+        var baseEnvironment = baseDescriptor is null ? null : (await EnvironmentParser.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", baseDescriptor))).Value;
 
         var graph = Resolver.ResolveSubstrate(definition, sample + ".yaml", catalog, (definition with { Region = "region-1" }).Over(baseEnvironment), baseEnvironment);
 

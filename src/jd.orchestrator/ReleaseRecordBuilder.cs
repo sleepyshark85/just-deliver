@@ -1,7 +1,7 @@
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using jd.core.identity;
+using jd.resolver;
 using jd.resolver.environment;
 using jd.resolver.graph;
 using jd.resolver.release;
@@ -78,7 +78,7 @@ public static class ReleaseRecordBuilder
         string activity, ReleaseSet set, string setSha256, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, DeployerIdentity identity,
         DateTimeOffset startedAt, DateTimeOffset finishedAt, Func<string, JObject> workload) => new()
         {
-            ["kind"] = "ReleaseRecord",
+            [DocumentLoader.KindField] = ReleaseRecordFile.Kind,
             ["activity"] = activity,
             ["startedAt"] = Time(startedAt),
             ["finishedAt"] = Time(finishedAt),
@@ -106,7 +106,7 @@ public static class ReleaseRecordBuilder
             ["image"] = workload.Image,
             ["graph"] = new JObject
             {
-                ["sha256"] = Hash(GraphJson.Serialize(graph)),
+                ["sha256"] = ReleaseHash.Of(Encoding.UTF8.GetBytes(GraphJson.Serialize(graph))),
                 ["nodes"] = new JArray(graph.Nodes.Select(n => new JObject
                 {
                     ["id"] = n.Id,
@@ -184,6 +184,4 @@ public static class ReleaseRecordBuilder
     // The enums' names in camel case: the record's spelling of every state.
     private static string Name<T>(T value)
         where T : Enum => $"{char.ToLowerInvariant(value.ToString()[0])}{value.ToString().AsSpan(1)}";
-
-    private static string Hash(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 }

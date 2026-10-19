@@ -11,7 +11,7 @@ public class SeedCatalogTests
         var result = await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"));
 
         Assert.Empty(result.Errors);
-        Assert.NotNull(result.Catalog);
+        Assert.NotNull(result.Value);
     }
 
     // The shared resources and database's environment part (docs/architecture/components.md section 2) are loaded and checked, and
@@ -20,7 +20,7 @@ public class SeedCatalogTests
     [Fact]
     public async Task Seed_catalog_declares_the_shared_resources_and_database_environment_part()
     {
-        var catalog = Assert.IsType<Catalog>((await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog);
+        var catalog = Assert.IsType<Catalog>((await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value);
 
         Assert.Equal(
             [("apps-env", SharedScope.Environment, "env-group,log-analytics"), ("cosmos-account", SharedScope.Shared, "shared-group"), ("env-group", SharedScope.Environment, ""),

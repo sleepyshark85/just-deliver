@@ -199,6 +199,24 @@ public partial class OrchestratorTests
     }
 
     [Fact]
+    public async Task An_approval_record_at_a_release_record_path_is_a_reason_naming_its_kind()
+    {
+        using var ledger = await Ledger.CreateAsync();
+        var deploy = await ledger.DeployAsync(1, PassingIq);
+        File.WriteAllText(deploy, $$"""
+            { "kind": "ApprovalRecord", "approvedAt": "2026-10-17T08:01:00Z", "environment": { "name": "stage", "type": "stage" },
+              "release": { "label": "1.0.0", "setSha256": "{{new string('0', 64)}}" }, "qualifiedOn": "dev",
+              "identity": { "tenantId": "tenant-1", "clientId": "client-1", "objectId": "object-1" }, "meaning": "placed by hand" }
+            """);
+
+        var result = await ledger.ReadAsync();
+
+        Assert.False(result.Qualified);
+        Assert.Equal($"{Name(deploy)}: is not a valid release record: {Name(deploy)}: kind: unknown kind 'ApprovalRecord'; expected one of ReleaseRecord.", OneReason(result));
+        Assert.Empty(result.Deployers); // the file did not count as a deploy
+    }
+
+    [Fact]
     public async Task An_empty_file_a_file_that_is_not_json_and_a_file_that_cannot_be_read_are_reasons_not_crashes()
     {
         using var ledger = await Ledger.CreateAsync();

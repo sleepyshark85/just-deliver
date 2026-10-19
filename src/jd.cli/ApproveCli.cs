@@ -45,8 +45,8 @@ internal static class ApproveCli
             return UsageError;
         }
 
-        var loaded = await EnvironmentFile.LoadAsync(options.Environment, cancellationToken);
-        if (loaded.Descriptor is not { } target)
+        var loaded = await EnvironmentParser.LoadAsync(options.Environment, cancellationToken);
+        if (loaded.Value is not { } target)
         {
             Cli.Print(loaded.Errors, stderr);
             return Invalid;

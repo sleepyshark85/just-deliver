@@ -15,8 +15,8 @@ public class GoldenGraphTests
     [Fact]
     public async Task The_seed_workload_resolves_to_the_committed_graph()
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
-        var environment = (await EnvironmentFile.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", "seed-environment.yaml"))).Descriptor!;
+        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
+        var environment = (await EnvironmentParser.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", "seed-environment.yaml"))).Value!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
 
         var graph = Resolver.Resolve(workload, "workload.yaml", catalog, environment);
