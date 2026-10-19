@@ -13,7 +13,7 @@ public class CatalogParserTests
     private static string PolicyFile(string name) =>
         $"kind: Policy\nname: {name}\nreason: because\nmatch: {{ kind: runtime }}\nset: {{ runtime.b: 1 }}\n";
 
-    private static Task<CatalogLoadResult> Parse(params (string Path, string Content)[] files) =>
+    private static Task<LoadResult<Catalog>> Parse(params (string Path, string Content)[] files) =>
         CatalogParser.ParseAsync(files.Select(f => new CatalogSource(f.Path, f.Content)));
 
     // The environment types (docs/architecture/components.md section 2): declared in the Catalog file, named like requirement types, `default`
@@ -28,7 +28,7 @@ public class CatalogParserTests
     {
         var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: \"1\"\n" + declaration));
 
-        Assert.Null(result.Catalog);
+        Assert.Null(result.Value);
         Assert.Contains(error, Assert.Single(result.Errors).ToString());
     }
 
@@ -44,7 +44,7 @@ public class CatalogParserTests
             ("roles.yaml", "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n"));
 
         Assert.Empty(result.Errors);
-        var catalog = Assert.IsType<Catalog>(result.Catalog);
+        var catalog = Assert.IsType<Catalog>(result.Value);
         Assert.Equal("1", catalog.Version);
         Assert.Equal([("dev", false), ("stage", true)], catalog.EnvironmentTypes.Select(t => (t.Key, t.Value.Approval)).OrderBy(t => t.Key, StringComparer.Ordinal));
         var component = Assert.Single(catalog.Components).Value;
@@ -74,7 +74,7 @@ public class CatalogParserTests
         Assert.Equal("odd.yaml", error.File);
         Assert.Equal("kind", error.Location);
         Assert.Contains("unknown kind 'Widget'", error.Message);
-        Assert.Null(result.Catalog);
+        Assert.Null(result.Value);
     }
 
     [Theory]
@@ -87,7 +87,7 @@ public class CatalogParserTests
         var error = Assert.Single(result.Errors);
         Assert.Equal(("old.yaml", "kind"), (error.File, error.Location));
         Assert.Equal($"kind '{kind}' is no longer supported: {replacement}.", error.Message);
-        Assert.Null(result.Catalog);
+        Assert.Null(result.Value);
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class CatalogParserTests
         var error = Assert.Single(result.Errors);
         Assert.Equal(("components/a.yaml", $"implementations.{key}.classes.standard.exports"), (error.File, error.Location));
         Assert.Equal($"must export exactly the contract of component 'alpha-db' (endpoint); {problem}.", error.Message);
-        Assert.Null(result.Catalog);
+        Assert.Null(result.Value);
     }
 
     [Theory]
@@ -396,7 +396,7 @@ public class CatalogParserTests
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { kind: runtime }\nadd:\n  extra:\n    template: t/x\n    config: {}\n"));
 
-        Assert.Null(result.Catalog);
+        Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
         Assert.Equal(("p.yaml", "add"), (error.File, error.Location));
         Assert.Contains("can no longer add nodes", error.Message);

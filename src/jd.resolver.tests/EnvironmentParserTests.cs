@@ -17,13 +17,13 @@ public class EnvironmentParserTests
           logAnalytics: { id: /law/id }
         """;
 
-    private static Task<EnvironmentLoadResult> Parse(string content) => EnvironmentParser.ParseAsync("env.yaml", content);
+    private static Task<LoadResult<EnvironmentDescriptor>> Parse(string content) => EnvironmentParser.ParseAsync("env.yaml", content);
 
     private static async Task<EnvironmentDescriptor> Load(string content)
     {
         var result = await Parse(content);
         Assert.Empty(result.Errors);
-        return Assert.IsType<EnvironmentDescriptor>(result.Descriptor);
+        return Assert.IsType<EnvironmentDescriptor>(result.Value);
     }
 
     [Fact]
@@ -47,14 +47,14 @@ public class EnvironmentParserTests
         var result = await Parse(Valid.Replace("  resourceGroup: rg-test", $"  resourceGroup: rg-test\n  {key}: x"));
         var error = Assert.Single(result.Errors);
         Assert.Equal($"values.{key}", error.Location);
-        Assert.Null(result.Descriptor);
+        Assert.Null(result.Value);
     }
 
     [Fact]
     public async Task Grantable_is_no_longer_a_descriptor_field()
     {
         var result = await Parse(Valid + "\ngrantable: [cosmos.accountId]\n");
-        Assert.Null(result.Descriptor);
+        Assert.Null(result.Value);
         Assert.Contains(result.Errors, e => e.Message.Contains("grantable", StringComparison.Ordinal));
     }
 
@@ -62,7 +62,7 @@ public class EnvironmentParserTests
     public async Task Bad_type_is_rejected_with_its_location()
     {
         var result = await Parse(Valid.Replace("type: dev", "type: Gold"));
-        Assert.Null(result.Descriptor);
+        Assert.Null(result.Value);
         Assert.Contains(result.Errors, e => e.Location == "type" && e.File == "env.yaml");
     }
 
@@ -80,7 +80,7 @@ public class EnvironmentParserTests
         var error = Assert.Single(result.Errors);
         Assert.Equal("values.cosmos.accountId", error.Location);
         Assert.Contains("'.'", error.Message);
-        Assert.Null(result.Descriptor);
+        Assert.Null(result.Value);
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public class EnvironmentParserTests
     [Fact]
     public async Task Missing_file_is_reported()
     {
-        var result = await EnvironmentFile.LoadAsync(Path.Combine(Path.GetTempPath(), "jd-no-such-env.yaml"));
+        var result = await EnvironmentParser.LoadAsync(Path.Combine(Path.GetTempPath(), "jd-no-such-env.yaml"));
         Assert.Contains("not found", Assert.Single(result.Errors).Message);
     }
 }

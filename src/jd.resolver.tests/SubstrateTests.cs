@@ -19,7 +19,7 @@ public class SubstrateTests
 
     private static string Sample(string name) => Path.Combine(AppContext.BaseDirectory, "samples", "environments", name);
 
-    private static async Task<Catalog> CatalogAsync() => (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
+    private static async Task<Catalog> CatalogAsync() => (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
 
     private static async Task<EnvironmentDefinition> DefinitionAsync(string file = "shared.yaml", Func<string, string>? edit = null)
     {
@@ -33,7 +33,7 @@ public class SubstrateTests
 
         var result = await EnvironmentDefinitionFile.LoadAsync(path);
         Assert.Empty(result.Errors);
-        return result.Definition!;
+        return result.Value!;
     }
 
     private static IReadOnlyList<LoadError> Errors(EnvironmentDefinition definition, EnvironmentDescriptor? baseDescriptor, Catalog catalog) =>
@@ -57,7 +57,7 @@ public class SubstrateTests
         var loaded = await CatalogDirectory.LoadAsync(root);
         Directory.Delete(root, recursive: true);
         Assert.Empty(loaded.Errors);
-        return loaded.Catalog!;
+        return loaded.Value!;
     }
 
     private static string GoldenSource(string name, [CallerFilePath] string testFile = "") => Path.Combine(Path.GetDirectoryName(testFile)!, "golden", name);
@@ -97,7 +97,7 @@ public class SubstrateTests
         Assert.Empty(composed.Errors);
         var parsed = await EnvironmentParser.ParseAsync("composed.yaml", composed.Yaml!);
         Assert.Empty(parsed.Errors);
-        return parsed.Descriptor!;
+        return parsed.Value!;
     }
 
     [Fact]
@@ -281,7 +281,7 @@ public class SubstrateTests
         }
 
         Assert.Equal(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", "stage-environment.yaml")), composed.Yaml);
-        var descriptor = (await EnvironmentParser.ParseAsync("stage.env.yaml", composed.Yaml!)).Descriptor!;
+        var descriptor = (await EnvironmentParser.ParseAsync("stage.env.yaml", composed.Yaml!)).Value!;
         Assert.Equal(("stage", "stage"), (descriptor.Name, descriptor.Type));
         Assert.Equal(("dev", 1, true), (descriptor.Approval!.QualifiedOn, descriptor.Approval.Required, descriptor.Approval.SeparateFromDeployer));
         Assert.Equal(["00000000-0000-0000-0000-000000000000"], descriptor.Approval.Approvers);
@@ -355,8 +355,8 @@ public class SubstrateTests
         var environment = definition.Over(null);
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: dev, team: crew }\nrequires:\n  - type: thing\n    id: substrate\n    class: substrate\n");
 
-        var substrate = Resolver.ResolveSubstrate(definition, "definition.yaml", loaded.Catalog!, environment, null).Nodes.Single();
-        var workloadNode = Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, environment).Nodes.Single();
+        var substrate = Resolver.ResolveSubstrate(definition, "definition.yaml", loaded.Value!, environment, null).Nodes.Single();
+        var workloadNode = Resolver.Resolve(workload, "workload.yaml", loaded.Value!, environment).Nodes.Single();
 
         Assert.Equal(("@dev/dev/substrate/group", "_dev.dev.substrate.group"), (substrate.Id, substrate.Stack));
         Assert.Equal(("dev/dev/substrate/group", "dev.dev.substrate.group"), (workloadNode.Id, workloadNode.Stack));
@@ -388,7 +388,7 @@ public class SubstrateTests
 
             Assert.Equal("region-9", (await ComposeAsync(dev, DevOutputs)).Region);
             var loaded = await EnvironmentDefinitionFile.LoadAsync(path);
-            Assert.Null(loaded.Definition);
+            Assert.Null(loaded.Value);
             Assert.Contains(loaded.Errors, e => e.File == path && e.Message.Contains("region", StringComparison.Ordinal));
         }
         finally
@@ -421,7 +421,7 @@ public class SubstrateTests
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
 
-        var graph = Resolver.ResolveSubstrate(Offering("dev", "dev", "user"), "definition.yaml", loaded.Catalog!, Offering("dev", "dev", "user").Over(null), null);
+        var graph = Resolver.ResolveSubstrate(Offering("dev", "dev", "user"), "definition.yaml", loaded.Value!, Offering("dev", "dev", "user").Over(null), null);
         var (layer, _) = await PrepareAsync(await DefinitionAsync());
 
         var error = Assert.Single(graph.Errors);

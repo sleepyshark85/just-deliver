@@ -135,7 +135,7 @@ public static class Cli
     private static async Task<int> RunCommandAsync(Options options, IBackEndProvider? backend, IRevisionProbe? probe, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var loaded = await WorkloadFile.LoadAsync(options.Workload, cancellationToken);
-        if (loaded.Workload is not { } workload)
+        if (loaded.Value is not { } workload)
         {
             Print(loaded.Errors, stderr);
             return Invalid;
@@ -148,8 +148,8 @@ public static class Cli
         }
 
         var catalogResult = await CatalogDirectory.LoadAsync(resolve.Catalog, cancellationToken);
-        var environmentResult = await EnvironmentFile.LoadAsync(resolve.Environment, cancellationToken);
-        if (catalogResult.Catalog is not { } catalog || environmentResult.Descriptor is not { } environment)
+        var environmentResult = await EnvironmentParser.LoadAsync(resolve.Environment, cancellationToken);
+        if (catalogResult.Value is not { } catalog || environmentResult.Value is not { } environment)
         {
             Print(CatalogErrors(catalogResult, resolve.Catalog).Concat(environmentResult.Errors), stderr);
             return Invalid;
@@ -213,7 +213,7 @@ public static class Cli
 
     // Catalog errors name files relative to the catalog root; the person needs the path they can open.
     // An error about the catalog as a whole names no real file and is left as it is.
-    internal static IEnumerable<LoadError> CatalogErrors(CatalogLoadResult result, string catalogDirectory) =>
+    internal static IEnumerable<LoadError> CatalogErrors(LoadResult<Catalog> result, string catalogDirectory) =>
         result.Errors.Select(e => Path.Combine(catalogDirectory, e.File) is var full && File.Exists(full) ? e with { File = full } : e);
 
     // Templates live in the catalog's templates directory; the graphs must fit them before anything is created.

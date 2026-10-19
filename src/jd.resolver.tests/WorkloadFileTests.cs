@@ -1,4 +1,5 @@
 using jd.resolver.workload;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace jd.resolver.tests;
@@ -11,7 +12,7 @@ public sealed class WorkloadFileTests : IDisposable
 
     public void Dispose() => Directory.Delete(_temp, recursive: true);
 
-    private async Task<WorkloadLoadResult> LoadAsync(string content)
+    private async Task<LoadResult<JObject>> LoadAsync(string content)
     {
         var path = Path.Combine(_temp, "workload.yaml");
         await File.WriteAllTextAsync(path, content);
@@ -24,7 +25,7 @@ public sealed class WorkloadFileTests : IDisposable
         var result = await WorkloadFile.LoadAsync(Sample);
 
         Assert.Empty(result.Errors);
-        Assert.Equal("just-deliver-sample-app", (string?)result.Workload?["metadata"]?["name"]);
+        Assert.Equal("just-deliver-sample-app", (string?)result.Value?["metadata"]?["name"]);
     }
 
     [Fact]
@@ -48,7 +49,7 @@ public sealed class WorkloadFileTests : IDisposable
     {
         var result = await LoadAsync((await File.ReadAllTextAsync(Sample)).Replace("port: 8080", "port: not-a-number"));
 
-        Assert.Null(result.Workload);
+        Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
         Assert.StartsWith("container.ports", error.Location);
         Assert.DoesNotContain('\n', error.ToString());
@@ -59,7 +60,7 @@ public sealed class WorkloadFileTests : IDisposable
     {
         var result = await LoadAsync((await File.ReadAllTextAsync(Sample)) + "  - type: database\n");
 
-        Assert.Null(result.Workload);
+        Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
         Assert.Equal("requires[0], requires[2]", error.Location);
         Assert.StartsWith("the id 'database' is used more than once", error.Message);

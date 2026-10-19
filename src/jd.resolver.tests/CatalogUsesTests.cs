@@ -27,12 +27,12 @@ public class CatalogUsesTests
         TestCatalog.RuntimeHeader.Replace("implementations:\n", $"uses: {uses}\nimplementations:\n", StringComparison.Ordinal)
         + TestCatalog.RuntimeImplementation($"nodes:\n  runtime:\n    template: t/rt\n    config: {config}\n");
 
-    private static Task<CatalogLoadResult> Parse(params (string Path, string Content)[] files) =>
+    private static Task<LoadResult<Catalog>> Parse(params (string Path, string Content)[] files) =>
         CatalogParser.ParseAsync(files.Prepend(("catalog.yaml", CatalogFile)).Select(f => new CatalogSource(f.Item1, f.Item2)));
 
-    private static LoadError SingleError(CatalogLoadResult result)
+    private static LoadError SingleError(LoadResult<Catalog> result)
     {
-        Assert.Null(result.Catalog);
+        Assert.Null(result.Value);
         return Assert.Single(result.Errors);
     }
 
@@ -47,7 +47,7 @@ public class CatalogUsesTests
             ("r.yaml", Runtime("[shared-group]", "{ group: '${shared-group.name}' }")));
 
         Assert.Empty(result.Errors);
-        var catalog = Assert.IsType<Catalog>(result.Catalog);
+        var catalog = Assert.IsType<Catalog>(result.Value);
         var account = catalog.SharedResources["cosmos-account"];
         Assert.Equal(("shared/b.yaml", SharedScope.Shared), (account.Source, account.Scope));
         Assert.Equal(["shared-group"], account.Uses);

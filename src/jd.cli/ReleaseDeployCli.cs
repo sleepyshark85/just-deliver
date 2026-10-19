@@ -91,8 +91,8 @@ internal static class ReleaseDeployCli
             ? await ReleaseSetFile.ParseAsync(options.Set, await records!.ReadAsync(promoted.QualifiedOn, promoted.Label, ReleaseRecordFile.SetFileName, cancellationToken), cancellationToken)
             : await ReleaseSetFile.LoadAsync(options.Set, cancellationToken);
         var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog, cancellationToken);
-        var environmentResult = await EnvironmentFile.LoadAsync(options.Environment, cancellationToken);
-        if (setResult.Set is not { } set || catalogResult.Catalog is not { } catalog || environmentResult.Descriptor is not { } environment)
+        var environmentResult = await EnvironmentParser.LoadAsync(options.Environment, cancellationToken);
+        if (setResult.Set is not { } set || catalogResult.Value is not { } catalog || environmentResult.Value is not { } environment)
         {
             Cli.Print(setResult.Errors.Concat(Cli.CatalogErrors(catalogResult, options.Catalog)).Concat(environmentResult.Errors), stderr);
             return Invalid;

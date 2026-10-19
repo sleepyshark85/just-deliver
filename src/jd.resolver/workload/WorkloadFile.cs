@@ -3,45 +3,28 @@ using Newtonsoft.Json.Linq;
 
 namespace jd.resolver.workload;
 
-/// <summary><see cref="Workload"/> is set exactly when <see cref="Errors"/> is empty.</summary>
-public sealed record WorkloadLoadResult(JObject? Workload, IReadOnlyList<LoadError> Errors);
-
 /// <summary>
 /// Reads a workload definition and validates it against the embedded workload schema and rules. The resolver relies on
 /// a validated workload (node and stack names are unique by construction only then), so callers load through here.
 /// </summary>
 public static class WorkloadFile
 {
-    private static readonly YamlSchemaValidator Validator = new();
+    // Bridge: the kind read here until the workload is bound from its schema (S24c2).
+    private const string Kind = "Workload";
 
-    public static async Task<WorkloadLoadResult> LoadAsync(string path, CancellationToken cancellationToken = default)
-    {
-        if (!File.Exists(path))
-        {
-            return new WorkloadLoadResult(null, [new LoadError(path, string.Empty, "workload definition not found.")]);
-        }
-
-        return await ParseAsync(path, await File.ReadAllTextAsync(path, cancellationToken), cancellationToken);
-    }
+    /// <summary>Loads the definition at <paramref name="path"/>; the value is set exactly when there are no errors.</summary>
+    public static async Task<LoadResult<JObject>> LoadAsync(string path, CancellationToken cancellationToken = default) =>
+        Checked(await DocumentLoader.LoadFileAsync(path, "workload definition", [Kind], cancellationToken));
 
     /// <summary>Validates workload text; <paramref name="path"/> only names the source in errors. Pure: the release set validates the definitions it embeds through here.</summary>
-    public static async Task<WorkloadLoadResult> ParseAsync(string path, string text, CancellationToken cancellationToken = default)
-    {
-        JToken parsed;
-        try
-        {
-            parsed = YamlSchemaValidator.ParseYaml(text);
-        }
-        catch (Exception ex)
-        {
-            return new WorkloadLoadResult(null, [new LoadError(path, string.Empty, $"not valid YAML: {YamlSchemaValidator.DescribeYamlError(ex, text)}")]);
-        }
+    public static async Task<LoadResult<JObject>> ParseAsync(string path, string text, CancellationToken cancellationToken = default) =>
+        Checked(await DocumentLoader.LoadAsync(path, text, [Kind], cancellationToken));
 
-        var result = await Validator.ValidateTokenAsync(await WorkloadSchema.ReadAsync(cancellationToken), parsed);
-        if (!result.IsValid || parsed is not JObject workload)
+    private static LoadResult<JObject> Checked(LoadResult<Document> loaded)
+    {
+        if (loaded.Value is not { Source: var path, Body: var workload })
         {
-            // The schema's root "type": "object" means a schema-valid document is an object, so this branch always carries errors.
-            return new WorkloadLoadResult(null, result.Errors.Select(e => LoadError.FromSchema(path, e)).ToList());
+            return new LoadResult<JObject>(null, loaded.Errors);
         }
 
         // Rule errors read "<location>: <message>".
@@ -50,6 +33,6 @@ public static class WorkloadFile
             var split = e.IndexOf(": ", StringComparison.Ordinal);
             return split < 0 ? new LoadError(path, string.Empty, e) : new LoadError(path, e[..split], e[(split + 2)..]);
         }).ToList();
-        return new WorkloadLoadResult(ruleErrors.Count == 0 ? workload : null, ruleErrors);
+        return new LoadResult<JObject>(ruleErrors.Count == 0 ? workload : null, ruleErrors);
     }
 }

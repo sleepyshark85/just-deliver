@@ -21,23 +21,22 @@ internal sealed record WorkloadSource(string File, string Location, string Sha25
 /// </summary>
 public static class ReleaseBuilder
 {
+    // Bridge: the kind read here until the release documents are bound from their schemas (S24f).
+    private const string ManifestKind = "ReleaseManifest";
+
     // A tag can be moved to another image after the release is cut; only a digest pins the content.
     private static readonly Regex PinnedByDigest = new("@sha256:[0-9a-f]{64}$", RegexOptions.CultureInvariant);
 
     // Strict, so a byte sequence that is not UTF-8 is an error and not a silent replacement character.
     private static readonly UTF8Encoding StrictUtf8 = new(false, throwOnInvalidBytes: true);
 
+    /// <summary>Builds the set the manifest at <paramref name="manifestPath"/> describes, from the definitions it names.</summary>
     public static async Task<ReleaseSetResult> BuildAsync(string manifestPath, DateTimeOffset createdAt, CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(manifestPath))
+        var loaded = await DocumentLoader.LoadFileAsync(manifestPath, "release manifest", [ManifestKind], cancellationToken);
+        if (loaded.Value is not { Body: var manifest })
         {
-            return new ReleaseSetResult(null, [new LoadError(manifestPath, string.Empty, "release manifest not found.")]);
-        }
-
-        var (manifest, parseErrors) = await ReleaseDocument.ParseAsync(manifestPath, await File.ReadAllTextAsync(manifestPath, cancellationToken), ReleaseDocument.ManifestSchema, cancellationToken);
-        if (manifest is null)
-        {
-            return new ReleaseSetResult(null, parseErrors);
+            return new ReleaseSetResult(null, loaded.Errors);
         }
 
         // A manifest path has a file name and so a directory; the schema guarantees the shapes read below.
@@ -88,7 +87,7 @@ public static class ReleaseBuilder
         {
             // The YAML parser does not take a byte order mark; the SHA-256 was taken over the bytes with it.
             var loaded = await WorkloadFile.ParseAsync(source.File, source.Definition.TrimStart('\uFEFF'), cancellationToken);
-            if (loaded.Workload is not { } workload)
+            if (loaded.Value is not { } workload)
             {
                 errors.AddRange(loaded.Errors.Select(e => source.Location.Length == 0 ? e : e with { Location = e.Location.Length == 0 ? source.Location : $"{source.Location}.{e.Location}" }));
                 continue;

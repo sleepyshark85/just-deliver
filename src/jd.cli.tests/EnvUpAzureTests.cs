@@ -324,7 +324,7 @@ public sealed class EnvUpAzureTests : IDisposable
 
         var (sharedCode, sharedOutput) = await UpAsync(backend, shared, "--out", sharedDescriptor);
         Assert.True(sharedCode == 0, sharedOutput);
-        var loadedShared = (await EnvironmentFile.LoadAsync(sharedDescriptor)).Descriptor;
+        var loadedShared = (await EnvironmentParser.LoadAsync(sharedDescriptor)).Value;
         Assert.NotNull(loadedShared);
         var account = loadedShared.Values["cosmos-account.name"];
         var sharedGroup = loadedShared.Values["shared-group.name"];
@@ -335,7 +335,7 @@ public sealed class EnvUpAzureTests : IDisposable
 
         var (devCode, devOutput) = await UpAsync(backend, dev, "--base", sharedDescriptor, "--out", devDescriptor);
         Assert.True(devCode == 0, devOutput);
-        var loadedDev = (await EnvironmentFile.LoadAsync(devDescriptor)).Descriptor;
+        var loadedDev = (await EnvironmentParser.LoadAsync(devDescriptor)).Value;
         Assert.NotNull(loadedDev);
         Assert.Equal(account, loadedDev.Values["cosmos-account.name"]);
         Assert.Equal(["container-app", "database", "monitoring"], loadedDev.Offers);
@@ -356,7 +356,7 @@ public sealed class EnvUpAzureTests : IDisposable
         var stageDescriptor = Path.Combine(_root, "stage.env.yaml");
         var (stageCode, stageOutput) = await UpAsync(backend, stage, "--base", sharedDescriptor, "--out", stageDescriptor);
         Assert.True(stageCode == 0, stageOutput);
-        var loadedStage = (await EnvironmentFile.LoadAsync(stageDescriptor)).Descriptor;
+        var loadedStage = (await EnvironmentParser.LoadAsync(stageDescriptor)).Value;
         Assert.NotNull(loadedStage);
         Assert.Equal(("stage", "dev", 1, true), (loadedStage.Type, loadedStage.Approval?.QualifiedOn, loadedStage.Approval?.Required, loadedStage.Approval?.SeparateFromDeployer));
         Assert.Equal(["00000000-0000-0000-0000-000000000000"], loadedStage.Approval!.Approvers);

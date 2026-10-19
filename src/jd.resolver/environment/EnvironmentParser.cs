@@ -1,34 +1,28 @@
-using jd.definitionvalidator;
 using Newtonsoft.Json.Linq;
 
 namespace jd.resolver.environment;
 
 /// <summary>
-/// Builds an <see cref="EnvironmentDescriptor"/> from descriptor text. Pure: reading the file is
-/// <see cref="EnvironmentFile"/>'s job. Every problem is collected, so a descriptor can be fixed in one pass.
+/// Builds an <see cref="EnvironmentDescriptor"/> from a descriptor file or text. Every problem is collected, so a descriptor can be fixed in one pass.
 /// </summary>
 public static class EnvironmentParser
 {
-    private const string SchemaName = "schemas/environment.schema.json";
+    // Bridge: the kind read here until the environment is bound from its schema (S24c1).
+    private const string Kind = "Environment";
 
-    private static readonly YamlSchemaValidator Validator = new();
+    /// <summary>Loads the descriptor at <paramref name="path"/>; the value is set exactly when there are no errors.</summary>
+    public static async Task<LoadResult<EnvironmentDescriptor>> LoadAsync(string path, CancellationToken cancellationToken = default) =>
+        Build(await DocumentLoader.LoadFileAsync(path, "environment descriptor", [Kind], cancellationToken));
 
-    public static async Task<EnvironmentLoadResult> ParseAsync(string source, string content, CancellationToken cancellationToken = default)
+    /// <summary>Builds a descriptor from its text; <paramref name="source"/> names it in errors.</summary>
+    public static async Task<LoadResult<EnvironmentDescriptor>> ParseAsync(string source, string content, CancellationToken cancellationToken = default) =>
+        Build(await DocumentLoader.LoadAsync(source, content, [Kind], cancellationToken));
+
+    private static LoadResult<EnvironmentDescriptor> Build(LoadResult<Document> loaded)
     {
-        JToken parsed;
-        try
+        if (loaded.Value is not { Source: var source, Body: var body })
         {
-            parsed = YamlSchemaValidator.ParseYaml(content);
-        }
-        catch (Exception ex)
-        {
-            return new EnvironmentLoadResult(null, [new LoadError(source, string.Empty, $"not valid YAML: {YamlSchemaValidator.DescribeYamlError(ex, content)}")]);
-        }
-
-        var result = await Validator.ValidateTokenAsync(await EmbeddedSchema.ReadAsync(SchemaName, cancellationToken), parsed);
-        if (!result.IsValid || parsed is not JObject body)
-        {
-            return new EnvironmentLoadResult(null, result.Errors.Select(e => LoadError.FromSchema(source, e)).ToList());
+            return new LoadResult<EnvironmentDescriptor>(null, loaded.Errors);
         }
 
         // The schema guarantees these exist and have these shapes.
@@ -45,8 +39,9 @@ public static class EnvironmentParser
         var approval = body["approval"] is { } block ? ApprovalPolicy.FromJson(block) : null;
         errors.AddRange(approval is null ? [] : CheckApproval(approval, name, source));
         return errors.Count > 0
-            ? new EnvironmentLoadResult(null, errors)
-            : new EnvironmentLoadResult(new EnvironmentDescriptor(name, (string)body["region"]!, (string)body["type"]!, values, EnvironmentDefinitionFile.Strings(body["offers"]), approval), errors);
+            ? new LoadResult<EnvironmentDescriptor>(null, errors)
+            : new LoadResult<EnvironmentDescriptor>(
+                new EnvironmentDescriptor(name, (string)body["region"]!, (string)body["type"]!, values, body["offers"]!.ToObject<List<string>>()!, approval), errors);
     }
 
     // What the schema cannot say: the policy must refer to another environment and be satisfiable.

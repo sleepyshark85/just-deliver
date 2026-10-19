@@ -9,6 +9,9 @@ namespace jd.resolver.release;
 /// <summary>Writes a <see cref="ReleaseSet"/> once and reads it back, re-verifying every embedded definition against its recorded hash.</summary>
 public static class ReleaseSetFile
 {
+    // Bridge: the kind written and read here until the release documents are bound from their schemas (S24f).
+    private const string Kind = "ReleaseSet";
+
     private static readonly ISerializer Serializer = new SerializerBuilder()
         .WithQuotingNecessaryStrings()
         .WithEventEmitter(next => new MultilineEmitter(next))
@@ -35,7 +38,7 @@ public static class ReleaseSetFile
     {
         var document = new Dictionary<string, object>
         {
-            ["kind"] = "ReleaseSet",
+            [DocumentLoader.KindField] = Kind,
             ["label"] = set.Label,
             ["createdAt"] = set.CreatedAt.ToString(ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture),
             ["workloads"] = set.Workloads.Select(w => new Dictionary<string, object>
@@ -66,10 +69,10 @@ public static class ReleaseSetFile
     public static async Task<ReleaseSetResult> ParseAsync(string path, byte[] bytes, CancellationToken cancellationToken = default)
     {
         using var reader = new StreamReader(new MemoryStream(bytes), detectEncodingFromByteOrderMarks: true);
-        var (body, parseErrors) = await ReleaseDocument.ParseAsync(path, await reader.ReadToEndAsync(cancellationToken), ReleaseDocument.SetSchema, cancellationToken);
-        if (body is null)
+        var loaded = await DocumentLoader.LoadAsync(path, await reader.ReadToEndAsync(cancellationToken), [Kind], cancellationToken);
+        if (loaded.Value is not { Body: var body })
         {
-            return new ReleaseSetResult(null, parseErrors);
+            return new ReleaseSetResult(null, loaded.Errors);
         }
 
         // The schema guarantees the shapes read here.

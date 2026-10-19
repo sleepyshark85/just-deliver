@@ -303,7 +303,7 @@ public class ExpressionEvaluatorTests
     [Fact]
     public async Task Seed_catalog_and_workload_strings_evaluate()
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog;
+        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value;
         Assert.NotNull(catalog);
         var workload = YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
@@ -333,7 +333,7 @@ public class ExpressionEvaluatorTests
     public async Task Seed_container_names_stay_distinct_when_workload_and_id_run_together()
     {
         // All workloads of an environment share one Cosmos database, so a clash would let one workload's grant reach another's container (D19).
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
+        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
         var context = (string workload, string id) => Context(workload: workload, id: id, naming: catalog.Naming);
 
         var first = Resolve("${name('cosmos-container')}", context("shop-orders", "store"));

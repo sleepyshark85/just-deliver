@@ -37,7 +37,7 @@ public class ExpanderTests
         var files = BaseFiles.Concat(components).Append(TestCatalog.RuntimeFile).Append(TestCatalog.GrantsFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
         var result = await CatalogParser.ParseAsync(files);
         Assert.Empty(result.Errors);
-        return result.Catalog!;
+        return result.Value!;
     }
 
     private static JObject Workload(string requires) =>
@@ -127,7 +127,7 @@ public class ExpanderTests
     {
         var result = await CatalogParser.ParseAsync(BaseFiles.Concat(files).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
         Assert.Empty(result.Errors);
-        return result.Catalog!;
+        return result.Value!;
     }
 
     [Fact]
@@ -285,7 +285,7 @@ public class ExpanderTests
     [Fact]
     public async Task Seed_catalog_and_sample_workload_expand_without_errors()
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
+        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var environment = new EnvironmentDescriptor(
             "dev",

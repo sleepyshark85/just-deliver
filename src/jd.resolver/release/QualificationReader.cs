@@ -22,6 +22,10 @@ public sealed record Qualification(string? SetSha256, IReadOnlyList<string> Reas
 /// </summary>
 public static class QualificationReader
 {
+    // Bridge: the kind read here until the release documents are bound from their schemas (S24f).
+    private const string RecordKind = "ReleaseRecord";
+
+    // Body passed the release-record schema (LoadAsync), so every field the schema requires is there: the reads with '!' below rely on it.
     private sealed record Entry(string Name, string Activity, JObject Body);
 
     private sealed record Expected(string Environment, string Label, string SetSha256);
@@ -96,7 +100,7 @@ public static class QualificationReader
             return (null, $"cannot be read: {ex.Message}");
         }
 
-        var errors = await ReleaseDocument.ValidateAsync(name, body, ReleaseDocument.RecordSchema, cancellationToken);
+        var errors = (await DocumentLoader.LoadAsync(name, body, [RecordKind], cancellationToken)).Errors;
         var problem = errors.Count > 0
             ? $"is not a valid release record: {string.Join("; ", errors)}"
             : Misplaced(body, time, activity, expected);

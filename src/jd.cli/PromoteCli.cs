@@ -39,8 +39,8 @@ internal static class PromoteCli
             return UsageError;
         }
 
-        var loaded = await EnvironmentFile.LoadAsync(to, cancellationToken);
-        if (loaded.Descriptor is not { } target)
+        var loaded = await EnvironmentParser.LoadAsync(to, cancellationToken);
+        if (loaded.Value is not { } target)
         {
             Cli.Print(loaded.Errors, stderr);
             return Invalid;

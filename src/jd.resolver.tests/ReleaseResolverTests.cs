@@ -22,7 +22,7 @@ public sealed class ReleaseResolverTests
         };
         var loaded = await CatalogParser.ParseAsync(files.Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
         Assert.Empty(loaded.Errors);
-        return loaded.Catalog!;
+        return loaded.Value!;
     }
 
     private static string Definition(string name, string requirement) => $"""

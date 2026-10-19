@@ -15,6 +15,9 @@ namespace jd.resolver.release;
 /// </summary>
 public static class ApprovalRecord
 {
+    // Bridge: the kind written and read here until the release documents are bound from their schemas (S24f).
+    private const string Kind = "ApprovalRecord";
+
     // The record's fields, in file order, camelCase as the schema spells them: Build writes it and ReadAsync reads it (after the schema has vouched for it), so the keys are named once.
     private sealed record Stored(string Kind, string ApprovedAt, StoredEnvironment Environment, StoredRelease Release, string QualifiedOn, StoredIdentity Identity, string Meaning);
 
@@ -35,7 +38,7 @@ public static class ApprovalRecord
     public static string Build(EnvironmentDescriptor target, string label, string setSha256, DeployerIdentity identity, string meaning, DateTimeOffset approvedAt) =>
         JsonConvert.SerializeObject(
             new Stored(
-                "ApprovalRecord",
+                Kind,
                 approvedAt.UtcDateTime.ToString(ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture),
                 new StoredEnvironment(target.Name, target.Type),
                 new StoredRelease(label, setSha256),
@@ -104,7 +107,7 @@ public static class ApprovalRecord
             return (null, $"cannot be read: {ex.Message}");
         }
 
-        var errors = await ReleaseDocument.ValidateAsync(name, body, ReleaseDocument.ApprovalSchema, cancellationToken);
+        var errors = (await DocumentLoader.LoadAsync(name, body, [Kind], cancellationToken)).Errors;
         if (errors.Count > 0)
         {
             return (null, $"is not a valid approval record: {string.Join("; ", errors)}");
