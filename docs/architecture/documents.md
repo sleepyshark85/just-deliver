@@ -1,11 +1,12 @@
 # The code knows no file structure
 
-> Status: design note for S24, **proposed phase 1.5** (between phase 1 and S22/phase 2; [roadmap](../plans/roadmap.md) change proposed in
-> [section 9](#9-slices-and-exit-criteria)). Serves the non-negotiable "nothing hard-coded", principles 6–14 ([context.md](../context.md#design-principles)),
+> Status: design note for S24, **phase 1.5**, approved by the user 2026-10-19 with every recommendation of
+> [section 10](#10-open-choices-for-the-user) ("agreed with your S24 suggestions"); [roadmap](../plans/roadmap.md) updated. S22 merged
+> first, as it was already in review. Serves the non-negotiable "nothing hard-coded", principles 6–14 ([context.md](../context.md#design-principles)),
 > N1 (one shape) and N10 (cheap for the platform team), and makes phase 2's "added as components only, no C# change" structural. The user
 > (2026-10-19): *"in general, the code shouldn't know the structure of any yaml file"*; *"check the whole solution for hard-code like that"*;
 > *"applying the quality bar along the refactoring"*. The meaning of the S21 model (kinds, scopes, offers, grants) does not change; only where
-> that meaning lives does. The user's open choices: [section 10](#10-open-choices-for-the-user).
+> that meaning lives does.
 
 ## 1. Problem
 
@@ -338,10 +339,10 @@ names of section 2 that equal a property (`kind` `CatalogParser.cs:157`, `releas
 choice 2 (b) the three evidence writers. **It proves only that no bare field literal remains**: a role named after a path (`"probe.path"`)
 passes it, so the reviewer judges role names against Appendix B, and prose in messages is the reviewer's too (section 6).
 
-**Phase 1.5 exit criteria** (proposed): (1) the literal guard passes with only section 2's exceptions allowed; (2) the same Azure resources
+**Phase 1.5 exit criteria:** (1) the literal guard passes with only section 2's exceptions allowed; (2) the same Azure resources
 and the same written documents for the same inputs: snapshot and the written-file goldens byte-identical through every slice, the graph
 goldens except S24e's lines and the record goldens except S24e's `graph.sha256` lines; (3) every D19 boundary keeps its tests, and binding completeness has its own; (4) E2E green at the end.
-**Roadmap change proposed:** insert phase 1.5 "The code knows no file structure" (serves N1, N10) before S22 and phase 2; phase 2's exit
+**Roadmap change (user, 2026-10-19):** phase 1.5 "The code knows no file structure" (serves N1, N10) before phase 2; phase 2's exit
 "added as components only, no C# change" gains "and no schema change outside the component's own kinds".
 
 **Later phases stay open:** phase 2's messaging and secrets are data (component files, a `grants.yaml` line); N2 contract versions are a field
@@ -349,6 +350,8 @@ bound to a contract version role; N5 offers and N4 bind add roles to the closed 
 from another store.
 
 ## 10. Open choices for the user
+
+**Decided** (user, 2026-10-19): every recommendation below; choice 2 is (b), so S24h1–2 are not built.
 
 | # | Choice | Options | Recommendation |
 |---|---|---|---|
