@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using jd.core.bp;
 using Xunit;
 
@@ -72,6 +73,35 @@ public sealed class EnvCliTests : IDisposable
         Assert.Equal("db-dev", descriptor.Values["database.databaseName"]);
         Assert.Contains($"{dev}: environment dev (southeastasia, dev) written.", second.Out);
     }
+
+    // What jd writes is pinned byte for byte (docs/architecture/documents.md section 8). Regenerate with JD_UPDATE_GOLDEN=1 and review the diff.
+    [Fact]
+    public async Task Up_of_the_sample_shared_and_dev_writes_the_committed_golden_descriptors()
+    {
+        var backend = new OutputBackend();
+        var shared = Path.Combine(_temp, "shared.env.yaml");
+        var dev = Path.Combine(_temp, "dev.env.yaml");
+
+        var first = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", shared);
+        var second = await RunAsync(backend, null, "up", Dev, "--catalog", Catalog, "--base", shared, "--out", dev);
+
+        Assert.Equal((0, 0), (first.Code, second.Code));
+        await AssertGoldenAsync(shared, "shared.env.yaml");
+        await AssertGoldenAsync(dev, "dev.env.yaml");
+    }
+
+    private static async Task AssertGoldenAsync(string written, string golden)
+    {
+        var actual = await File.ReadAllTextAsync(written);
+        if (System.Environment.GetEnvironmentVariable("JD_UPDATE_GOLDEN") == "1")
+        {
+            await File.WriteAllTextAsync(GoldenSource(golden), actual);
+        }
+
+        Assert.Equal(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", golden)), actual);
+    }
+
+    private static string GoldenSource(string name, [CallerFilePath] string testFile = "") => Path.Combine(Path.GetDirectoryName(testFile)!, "golden", name);
 
     [Fact]
     public async Task Up_of_the_protected_stage_writes_its_policy_into_the_descriptor_and_a_protected_definition_without_one_deploys_nothing()
