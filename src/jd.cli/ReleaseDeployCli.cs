@@ -110,7 +110,7 @@ internal static class ReleaseDeployCli
         }
 
         // The promotion judged the hash of the kept set; the bytes read now are the ones deployed, so they must be those.
-        if (options.Promotion is { } promotion && ReleaseRecordFile.Sha256(setResult.Bytes.Span) != promotion.SetSha256)
+        if (options.Promotion is { } promotion && ReleaseHash.Of(setResult.Bytes.Span) != promotion.SetSha256)
         {
             stderr.WriteLine($"jd: promote: the kept set '{options.Set}' changed since it was checked (expected sha256 {promotion.SetSha256}).");
             return Invalid;

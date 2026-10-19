@@ -8,7 +8,7 @@ namespace jd.resolver.environment;
 public static class EnvironmentParser
 {
     // Bridge: the kind read here until the environment is bound from its schema (S24c1).
-    private const string Kind = "Environment";
+    internal const string Kind = "Environment";
 
     /// <summary>Loads the descriptor at <paramref name="path"/>; the value is set exactly when there are no errors.</summary>
     public static async Task<LoadResult<EnvironmentDescriptor>> LoadAsync(string path, CancellationToken cancellationToken = default) =>

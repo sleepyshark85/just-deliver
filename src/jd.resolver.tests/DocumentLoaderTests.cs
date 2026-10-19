@@ -102,7 +102,7 @@ public sealed class DocumentLoaderTests : IDisposable
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
-        Assert.Equal("dev.yaml", error.File);
+        Assert.Equal(("dev.yaml", "region"), (error.File, error.Location));
         Assert.StartsWith("schema violation: PropertyRequired", error.Message, StringComparison.Ordinal);
     }
 
@@ -177,6 +177,42 @@ public sealed class DocumentLoaderTests : IDisposable
         Assert.Null(result.Set);
         var error = Assert.Single(result.Errors);
         Assert.Equal(("kind", "unknown kind 'ReleaseSet'; expected one of ReleaseManifest."), (error.Location, error.Message));
+    }
+
+    [Fact]
+    public async Task A_definition_file_given_as_a_descriptor_file_is_refused()
+    {
+        var definition = Write("dev.env.yaml", "kind: EnvironmentDefinition\nname: dev\nregion: r1\ntype: dev\noffers: []\n");
+
+        var result = await EnvironmentParser.LoadAsync(definition);
+
+        Assert.Null(result.Value);
+        var error = Assert.Single(result.Errors);
+        Assert.Equal((definition, "kind", "unknown kind 'EnvironmentDefinition'; expected one of Environment."), (error.File, error.Location, error.Message));
+    }
+
+    [Fact]
+    public async Task A_descriptor_file_given_as_a_workload_file_is_refused()
+    {
+        var descriptor = Write("dev.yaml", Descriptor);
+
+        var result = await WorkloadFile.LoadAsync(descriptor);
+
+        Assert.Null(result.Value);
+        var error = Assert.Single(result.Errors);
+        Assert.Equal((descriptor, "kind", "unknown kind 'Environment'; expected one of Workload."), (error.File, error.Location, error.Message));
+    }
+
+    // Deep but valid YAML is judged by its schema; the JSON reader's own depth limit (64) once escaped the loader as an exception.
+    [Fact]
+    public async Task A_document_nested_deeper_than_64_levels_is_validated_by_its_schema()
+    {
+        var result = await EnvironmentParser.ParseAsync("e.yaml", Descriptor + "x: " + new string('[', 80) + new string(']', 80) + "\n");
+
+        Assert.Null(result.Value);
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("e.yaml", "x"), (error.File, error.Location));
+        Assert.StartsWith("schema violation: NoAdditionalPropertiesAllowed", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

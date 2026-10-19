@@ -66,7 +66,7 @@ public static class ReleaseBuilder
             }
 
             var dependsOn = entries[i]!["dependsOn"]?.Select(t => (string)t!).ToList() ?? [];
-            sources.Add(new WorkloadSource(path, string.Empty, ReleaseDocument.Sha256(bytes), text, dependsOn));
+            sources.Add(new WorkloadSource(path, string.Empty, ReleaseHash.Of(bytes), text, dependsOn));
         }
 
         return errors.Count > 0

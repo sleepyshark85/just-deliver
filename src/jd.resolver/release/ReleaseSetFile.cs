@@ -54,6 +54,7 @@ public static class ReleaseSetFile
         await writer.WriteAsync(Serializer.Serialize(document).AsMemory(), cancellationToken);
     }
 
+    /// <summary>Reads the set at <paramref name="path"/>, as <see cref="ParseAsync"/> reads its bytes; the set is set exactly when there are no errors.</summary>
     public static async Task<ReleaseSetResult> LoadAsync(string path, CancellationToken cancellationToken = default)
     {
         if (!File.Exists(path))
@@ -89,7 +90,7 @@ public static class ReleaseSetFile
         {
             var definition = (string)item["definition"]!;
             var recorded = (string)item["definitionSha256"]!;
-            var actual = ReleaseDocument.Sha256(Encoding.UTF8.GetBytes(definition));
+            var actual = ReleaseHash.Of(Encoding.UTF8.GetBytes(definition));
             if (actual != recorded)
             {
                 errors.Add(new LoadError(path, $"workloads[{i}].definition", $"does not match definitionSha256 (recorded {recorded}, content hashes to {actual}); the release set was modified."));

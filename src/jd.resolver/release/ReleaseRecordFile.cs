@@ -11,6 +11,10 @@ namespace jd.resolver.release;
 /// </summary>
 public static class ReleaseRecordFile
 {
+    /// <summary>The kind of a release record, read by <see cref="QualificationReader"/> and written by the orchestrator.</summary>
+    // Bridge: the kind read and written until the release documents are bound from their schemas (S24f).
+    public const string Kind = "ReleaseRecord";
+
     /// <summary>The name of the set kept beside a label's records.</summary>
     public const string SetFileName = "set.yaml";
 
@@ -51,10 +55,10 @@ public static class ReleaseRecordFile
     public static async Task<(string Sha256, string? Problem)> KeepSetAsync(
         IRecordStore records, string environment, string label, ReadOnlyMemory<byte> setBytes, CancellationToken cancellationToken = default)
     {
-        var sha256 = ReleaseDocument.Sha256(setBytes.Span);
+        var sha256 = ReleaseHash.Of(setBytes.Span);
         if ((await records.ListAsync(environment, label, cancellationToken)).Contains(SetFileName))
         {
-            var kept = ReleaseDocument.Sha256(await records.ReadAsync(environment, label, SetFileName, cancellationToken));
+            var kept = ReleaseHash.Of(await records.ReadAsync(environment, label, SetFileName, cancellationToken));
             return (sha256, kept == sha256
                 ? null
                 : $"the kept {SetFileName} holds a different release set for label {label} on {environment} (sha256 {kept}, this one {sha256}); a label names one set, so use a new label.");
@@ -106,7 +110,4 @@ public static class ReleaseRecordFile
         segment.Length == 0 || segment.Contains("..", StringComparison.Ordinal) || segment.AsSpan().IndexOfAny('/', '\\') >= 0
             ? $"'{segment}' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'."
             : null;
-
-    /// <summary>The hash a record names for a set: the lowercase hex SHA-256 of its bytes.</summary>
-    public static string Sha256(ReadOnlySpan<byte> setBytes) => ReleaseDocument.Sha256(setBytes);
 }
