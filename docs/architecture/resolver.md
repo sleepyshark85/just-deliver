@@ -190,11 +190,11 @@ a node's `template` is `<provider>/<name>`.
   reads (`jd.bp.pulumi`); the contract check fails every template it can no longer read.
 - Where a template needs part of an ARM id (resource group, account name, subscription), it takes the id as its
   input and splits it (`fn::split`) instead of asking for the parts, so there is one source and no Azure call.
-- A secret read inside a template (the Log Analytics shared key) is wrapped in `fn::secret`, because the provider
-  schema does not mark it secret and it would otherwise sit in state in clear text.
+- A secret read inside a template is wrapped in `fn::secret` when the provider schema does not mark it secret, because it would
+  otherwise sit in state in clear text. No seed template reads one (the Log Analytics shared key went with S22).
 
 The seed library: substrate `resource-group`, `log-analytics` (daily cap), `container-apps-environment`
-(Consumption only), `cosmos-account` (with a throughput hard cap), `cosmos-sql-database` (shared throughput); workload `cosmos-sql-container`,
+(Consumption only, logs through Azure Monitor), `diagnostic-setting` (a resource's logs to a workspace by its resource id), `cosmos-account` (with a throughput hard cap), `cosmos-sql-database` (shared throughput); workload `cosmos-sql-container`,
 `cosmos-sql-role-assignment`, `application-insights`, `role-assignment`, and the runtime template `container-app` (a Container App
 revision on Consumption with a system-assigned identity, `Multiple` active revisions and ingress on `targetPort`; size, replicas,
 image, variables, the revision suffix, the traffic and the number of inactive revisions kept are inputs, so the release flow can deploy a dark

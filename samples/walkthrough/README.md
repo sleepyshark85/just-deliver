@@ -16,6 +16,6 @@ previews every workload and every release here offline.
 | `releases/bad.manifest.yaml` | Label `1.3.0-bad`: the bad app + worker v2 | 4 |
 | `policies/limit-revisions.yaml` | A policy to copy into a **copy** of the catalog (never into `catalog/`) | 5 |
 | `stage-policy.sh` | Writes a copy of the stage descriptor with another approval block (required, separation, approvers) | 7, 8 |
-| `teardown.sh` | Deletes the environment groups in parallel, then the shared group, then lists what is left | 11 |
+| `teardown.sh` | Deletes the groups' diagnostic settings (`tools/azure/delete-diagnostic-settings.sh`), the environment groups in parallel, then the shared group, then lists what is left | 11 |
 
 Scenario 1 uses `samples/workloads/sample-app.yaml` itself; the environments are `samples/environments/*.yaml`.

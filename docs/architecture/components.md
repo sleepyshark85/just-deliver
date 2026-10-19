@@ -176,7 +176,7 @@ A workload asks for it (`requires: [{ type: monitoring }]`) and maps the export 
 | `log-analytics` | shared | `shared-group` | `workspace` | `id`, `name`, `customerId`, `resourceGroup` |
 | `cosmos-account` | shared | `shared-group` | `cosmos` | `id`, `name`, `endpoint`, `resourceGroup` |
 | `env-group` | environment | — | `group` (resource-group) | `name`, `location` |
-| `apps-env` | environment | `env-group`, `log-analytics` | `apps` | `id`, `defaultDomain` |
+| `apps-env` | environment | `env-group`, `log-analytics` | `apps`; `logs` (diagnostic-setting: the environment's logs to the workspace, by its resource id) | `id`, `defaultDomain` |
 
 E.g. `catalog/shared/cosmos-account.yaml`: `kind: SharedResource`, `scope: shared`, `uses: [shared-group]`, today's `cosmos` node with
 `${shared-group.name}`/`.location` for the group, and `exports: { id: ${cosmos.accountId}, name: …, endpoint: …, resourceGroup:
@@ -193,7 +193,7 @@ Implicit provisioning is limited to these. Workloads only read them through `use
 | Log Analytics workspace `law-shared-…` | `log-analytics` | shared | when an offered component or runtime uses it |
 | Cosmos DB account `cosmos-shared-…` (free tier) | `cosmos-account` | shared | when an offered component uses it |
 | environment resource group `rg-<env>-…` | `env-group` | environment | when anything offered uses it (every seed shared resource and the runtime do) |
-| Container Apps environment `cae-<env>-…` | `apps-env` | environment | when the offered runtime uses it |
+| Container Apps environment `cae-<env>-…` and its diagnostic setting to the workspace | `apps-env` | environment | when the offered runtime uses it |
 | Cosmos SQL database `db-<env>` | `database`'s environment part | environment | when the environment offers `database` |
 
 Per workload, the only implicit node is its compute, the **runtime** (a Container App), which is the workload's own. Everything else a

@@ -14,7 +14,8 @@ namespace jd.cli.tests;
 /// <summary>
 /// Real resources, free tier only: the sample <c>shared</c> and <c>dev</c> definitions (renamed with a random suffix, so names cannot
 /// collide) brought up with <c>jd env up</c> on a local file state. Checks the descriptors, the free-tier Cosmos account and its
-/// RU/s cap and the workspace's daily cap through <c>az</c>, and that running each again changes nothing. The <c>stage</c> definition
+/// RU/s cap, the workspace's daily cap and that each Container Apps environment logs through a diagnostic setting to the workspace (no
+/// workspace key) through <c>az</c>, and that running each again changes nothing. The <c>stage</c> definition
 /// (type <c>stage</c>, with its approval policy) is brought up on the same account: its own database of 400 RU/s, the account limit still
 /// 1000, a descriptor that carries the policy, and a re-run that changes nothing. Then the sample release set is
 /// deployed on <c>dev</c> (<c>jd release create</c>, <c>jd release deploy</c>): the workloads get distinct containers in the dev database
@@ -62,6 +63,8 @@ public sealed class EnvUpAzureTests : IDisposable
     // The groups are named after their environment, so the suffix finds them even when a deploy failed before writing a descriptor.
     // A failed teardown fails the test: a resource group left behind must never go unnoticed. The environment groups are deleted in
     // parallel (each takes about 27 minutes), the shared group last: the Container Apps environment of every other group logs to its workspace.
+    // Every group's diagnostic settings go first: a group delete leaves them behind, and a resource created again under the same id
+    // collides with them.
     private List<string> TestGroups()
     {
         var list = _az.Run("group", "list", "--subscription", _az.Subscription, "--query", $"[?tags.project=='just-deliver-mvp' && contains(name, '{_suffix}')].name", "-o", "tsv");
@@ -73,6 +76,11 @@ public sealed class EnvUpAzureTests : IDisposable
     private void DeleteResourceGroups()
     {
         var groups = TestGroups();
+        foreach (var group in groups)
+        {
+            _az.DeleteDiagnosticSettings(group);
+        }
+
         var environments = groups.Where(g => !g.Contains(SharedName, StringComparison.Ordinal)).ToList();
         foreach (var group in environments)
         {
@@ -217,6 +225,16 @@ public sealed class EnvUpAzureTests : IDisposable
         return result.Code == 0 ? result.Output.Trim() : throw new InvalidOperationException($"az resource show {resourceId} failed: {result.Error}");
     }
 
+    // No workspace key: the Container Apps environment sends its logs through Azure Monitor, and its one diagnostic setting sends them to the
+    // shared workspace by its resource id.
+    private void AssertLogsGoToTheWorkspace(string environmentId, string workspaceId)
+    {
+        Assert.Equal("azure-monitor", Show(environmentId, "properties.appLogsConfiguration.destination"));
+        var settings = _az.Run("monitor", "diagnostic-settings", "list", "--resource", environmentId, "--query", "[].workspaceId", "-o", "tsv");
+        Assert.True(settings.Code == 0, $"az monitor diagnostic-settings list {environmentId} failed: {settings.Error}");
+        Assert.Equal(workspaceId, settings.Output.Trim(), ignoreCase: true);
+    }
+
     // The value of an environment variable of the Container App's container (its Azure resource id).
     private string AppEnv(string appId, string name) => Show(appId, $"properties.template.containers[0].env[?name=='{name}'].value | [0]");
 
@@ -323,13 +341,14 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal(["container-app", "database", "monitoring"], loadedDev.Offers);
         var database = loadedDev.Values["database.databaseName"];
         Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", database, "--query", "resource.throughput"));
+        AssertLogsGoToTheWorkspace(loadedDev.Values["apps-env.id"], loadedShared.Values["log-analytics.id"]);
 
         var (againSharedCode, againShared) = await UpAsync(backend, shared, "--out", sharedDescriptor);
         Assert.True(againSharedCode == 0, againShared);
         AssertNothingChanged(againShared, 3);
         var (againDevCode, againDev) = await UpAsync(backend, dev, "--base", sharedDescriptor, "--out", devDescriptor);
         Assert.True(againDevCode == 0, againDev);
-        AssertNothingChanged(againDev, 3);
+        AssertNothingChanged(againDev, 4);
 
         // stage: dev's layout with an approval policy, on the same account. Its own database holds 400 RU/s, so the two use 800 of the free 1,000
         // and the account limit stays; the descriptor says protected and carries the policy; running it again changes nothing.
@@ -347,9 +366,10 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", stageDatabase, "--query", "resource.throughput"));
         Assert.Equal("400", Az("cosmosdb", "sql", "database", "throughput", "show", "--account-name", account, "--resource-group", sharedGroup, "--name", database, "--query", "resource.throughput"));
         Assert.Equal("1000", Az("cosmosdb", "show", "--name", account, "--resource-group", sharedGroup, "--query", "capacity.totalThroughputLimit"));
+        AssertLogsGoToTheWorkspace(loadedStage.Values["apps-env.id"], loadedShared.Values["log-analytics.id"]);
         var (againStageCode, againStage) = await UpAsync(backend, stage, "--base", sharedDescriptor, "--out", stageDescriptor);
         Assert.True(againStageCode == 0, againStage);
-        AssertNothingChanged(againStage, 3);
+        AssertNothingChanged(againStage, 4);
 
         // The sample release set on dev: two workloads, one container each in the dev database, each runtime a real Container App released through dark revision, grants and probe.
         var releaseSet = Path.Combine(_root, "release.yaml");

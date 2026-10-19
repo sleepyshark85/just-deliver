@@ -86,7 +86,7 @@ jd env up samples/environments/dev.yaml    --catalog catalog --base shared.env.y
 
 - Two layers, because Azure allows one free-tier Cosmos account per subscription: `shared` (once per subscription: resource
   group, capped Log Analytics workspace, the Cosmos account) and one definition per environment on top (`dev`, later `stage`:
-  resource group, Container Apps environment bound to the shared workspace, a 400 RU/s database in the shared account).
+  resource group, Container Apps environment whose diagnostic setting sends its logs to the shared workspace, a 400 RU/s database in the shared account).
   What a layer deploys follows from its `offers`: the shared resources (`catalog/shared/`) and components' `environment` parts the
   offered components and runtime reach through `uses`. Everything about them (SKUs, caps, throughput, names, tags) is catalog data:
   `catalog/shared/*.yaml`, `catalog/components/database.yaml`, `catalog/naming.yaml`.
@@ -331,9 +331,13 @@ ls ~/.local/share/jd/records/stage/1.0.0   # set.yaml (dev's bytes), …-approve
 
 `jd` has no destroy command. Delete the resource groups with `az`, in the order the Azure test uses: the environment groups first (their
 Container Apps environments log to the shared workspace), then the shared group. The names are in the descriptors: `resourceGroup` in
-`dev.env.yaml` and `stage.env.yaml`, `shared.resourceGroup` in `shared.env.yaml`.
+`dev.env.yaml` and `stage.env.yaml`, `shared.resourceGroup` in `shared.env.yaml`. First delete the diagnostic settings of every resource
+in the three groups: a group delete leaves them behind, and the next `env up` recreates the resources under the same ids (the names come
+from `naming.yaml`) and fails on the old setting. `tools/azure/delete-diagnostic-settings.sh` does that for every resource in the groups
+it is given and stops on any error other than a resource type without diagnostic settings.
 
 ```
+tools/azure/delete-diagnostic-settings.sh <dev resourceGroup> <stage resourceGroup> <shared resourceGroup>
 az group delete --name <dev resourceGroup>   --yes --no-wait
 az group delete --name <stage resourceGroup> --yes --no-wait
 az group wait   --name <dev resourceGroup>   --deleted
