@@ -7,14 +7,17 @@ using YamlDotNet.Serialization;
 
 namespace jd.definitionvalidator;
 
+/// <summary>
+/// Validates a YAML document against a JSON schema, then runs optional rules for what the schema cannot express.
+/// </summary>
 public class YamlSchemaValidator
 {
-    // Without type inference every scalar deserialises as a string, so `port: 8080`
-    // arrives as "8080" and any `integer`/`boolean` constraint in the schema fails.
-    // Quoted scalars still stay strings.
     private const string MultipleDocumentsMessage = "contains several YAML documents; use one YAML document per file";
 
     private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder()
+        // Without type inference every scalar deserialises as a string, so `port: 8080`
+        // arrives as "8080" and any `integer`/`boolean` constraint in the schema fails.
+        // Quoted scalars still stay strings.
         .WithAttemptingUnquotedStringTypeDeserialization()
         // A repeated key would otherwise silently keep the last value.
         .WithDuplicateKeyChecking()
@@ -178,17 +181,23 @@ public class YamlSchemaValidator
     }
 }
 
+/// <summary>The outcome of a validation: whether the document is valid and, if not, each error.</summary>
 public class ValidationResult
 {
+    /// <summary>True when the document passed the schema and the rules.</summary>
     public bool IsValid { get; }
+
+    /// <summary>One entry per error; empty when the document is valid.</summary>
     public string[] Errors { get; }
 
+    /// <summary>Creates a result from the verdict and its errors.</summary>
     public ValidationResult(bool isValid, string[] errors)
     {
         IsValid = isValid;
         Errors = errors;
     }
 
+    /// <summary>A person-readable verdict, listing each error when the document is invalid.</summary>
     public override string ToString()
     {
         if (IsValid)
