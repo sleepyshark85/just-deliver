@@ -100,7 +100,7 @@ internal sealed class AzureCli : IDisposable
                 var delete = Run("monitor", "diagnostic-settings", "delete", "--resource", id, "--name", name);
                 if (delete.Code != 0)
                 {
-                    throw new InvalidOperationException($"Could not delete diagnostic setting {name} of {id}: {delete.Error}");
+                    throw new InvalidOperationException($"Could not delete diagnostic setting {name} of {id}; run tools/azure/cleanup.sh --yes --all. {delete.Error}");
                 }
             }
         }
@@ -109,7 +109,7 @@ internal sealed class AzureCli : IDisposable
     // The lines of a tsv answer, or a failure naming what could not be done.
     private static string[] Lines((int Code, string Output, string Error) result, string what) => result.Code == 0
         ? result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        : throw new InvalidOperationException($"Could not {what}: {result.Error}");
+        : throw new InvalidOperationException($"Could not {what}; run tools/azure/cleanup.sh --yes --all. {result.Error}");
 
     private (int Code, string Output, string Error) Start(IEnumerable<string> arguments)
     {

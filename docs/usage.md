@@ -333,17 +333,11 @@ ls ~/.local/share/jd/records/stage/1.0.0   # set.yaml (dev's bytes), …-approve
 Container Apps environments log to the shared workspace), then the shared group. The names are in the descriptors: `resourceGroup` in
 `dev.env.yaml` and `stage.env.yaml`, `shared.resourceGroup` in `shared.env.yaml`. First delete the diagnostic settings of every resource
 in the three groups: a group delete leaves them behind, and the next `env up` recreates the resources under the same ids (the names come
-from `naming.yaml`) and fails on the old setting. A resource type without diagnostic settings answers `ResourceTypeNotSupported`; that is
-expected. `tools/azure/delete-diagnostic-settings.sh <group>...` does the same and stops on any other error.
+from `naming.yaml`) and fails on the old setting. `tools/azure/delete-diagnostic-settings.sh` does that for every resource in the groups
+it is given and stops on any error other than a resource type without diagnostic settings.
 
 ```
-for group in <dev resourceGroup> <stage resourceGroup> <shared resourceGroup>; do
-  for id in $(az resource list --resource-group "$group" --query "[].id" -o tsv); do
-    for name in $(az monitor diagnostic-settings list --resource "$id" --query "[].name" -o tsv); do
-      az monitor diagnostic-settings delete --resource "$id" --name "$name"
-    done
-  done
-done
+tools/azure/delete-diagnostic-settings.sh <dev resourceGroup> <stage resourceGroup> <shared resourceGroup>
 az group delete --name <dev resourceGroup>   --yes --no-wait
 az group delete --name <stage resourceGroup> --yes --no-wait
 az group wait   --name <dev resourceGroup>   --deleted
