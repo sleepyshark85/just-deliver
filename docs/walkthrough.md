@@ -106,7 +106,8 @@ RECORDS="${JD_DATA_DIR:-$HOME/.local/share/jd}/records"             # where the 
 Signed in as a service principal instead (`az login --service-principal …`)? Pulumi's CLI authentication does not cover one: export
 `ARM_TENANT_ID`, `ARM_CLIENT_ID` and `ARM_CLIENT_SECRET` (all three; jd refuses a partial set) and `ARM_SUBSCRIPTION_ID` for Pulumi.
 
-Environments (exit 0 each; one node line per substrate node, then the descriptor path):
+Environments (exit 0 each; one node line per substrate node, then the descriptor path; shared has `group`, `workspace` and `cosmos`, dev and
+stage each `group`, `apps`, `logs` (the environment's diagnostic setting) and `database`):
 
 ```bash
 jd env up samples/environments/shared.yaml --catalog catalog --out "$JD_WALK/shared.env.yaml"
@@ -418,8 +419,8 @@ Expected, exit 1 each: ``jd: deploy: environment 'stage' is gated by an approval
 samples/walkthrough/teardown.sh "$JD_WALK/dev.env.yaml" "$JD_WALK/stage.env.yaml"
 ```
 
-Deletes the `dev` and `stage` groups in parallel, waits, then deletes the shared group (the workspace and the Cosmos account) and lists what is left.
-Expected: `deleting …` lines, then **nothing** from the final `az group list --query "[?tags.project=='just-deliver-mvp'].name"`. Then remove the Pulumi
+Deletes the diagnostic settings of every resource in the three groups, then the `dev` and `stage` groups in parallel, waits, then deletes the shared group (the workspace and the Cosmos account) and lists what is left.
+Expected: `deleted diagnostic setting …` lines (one per environment), `deleting …` lines, then **nothing** from the final `az group list --query "[?tags.project=='just-deliver-mvp'].name"`. Then remove the Pulumi
 state, `<data>/state` and `<data>/state.key` (its stacks describe deleted resources), `$JD_WALK` and `AZURE_CONFIG_DIR`. Keep `<data>/records` if
 the evidence is wanted; nothing in it is a secret. If anything was left: `tools/azure/cleanup.sh --yes --all`.
 
@@ -437,5 +438,7 @@ the evidence is wanted; nothing in it is a secret. If anything was left: `tools/
 - **Durations** (approximate, from [status.md](plans/status.md)): the full Azure gate, which runs these scenarios among other tests, took 1 h 13 m to 1 h 21 m, much of it
   teardown; `shared` and `dev` up plus their teardown took 49 min in the S12 gate, about 20 of them deleting the Cosmos account; each environment
   group takes about 27 min to delete (in parallel); the bad release's probe waits 5 min. Single deploys were not timed apart.
+- **Diagnostic settings outlive their group:** `az group delete` leaves them, and the next `env up` fails at `logs` with "cannot create already
+  existing resource" (the ids repeat); `teardown.sh` and `tools/azure/cleanup.sh` delete them first, so tear down with those.
 - **Second identity:** not needed: scenarios 7 and 8 run with the deployer and policy copies. A second principal is needed only to approve under the
   strict shipped policy (scenario 7's note). `jd approve` and `jd promote` call Entra for the principal even when they refuse.

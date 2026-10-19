@@ -25,6 +25,7 @@ public sealed class EnvCliTests : IDisposable
             ["workspace"] = new() { ["workspaceId"] = "/ws/id", ["workspaceName"] = "law-1", ["workspaceCustomerId"] = "cust-1" },
             ["cosmos"] = new() { ["accountId"] = "/cosmos/id", ["accountName"] = "cosmos-1", ["documentEndpoint"] = "https://cosmos-1/" },
             ["apps"] = new() { ["environmentId"] = "/apps/id", ["defaultDomain"] = "dev.example.io" },
+            ["logs"] = new() { ["settingId"] = "/apps/id/diagnostic" },
             ["database"] = new() { ["databaseId"] = "/db/id", ["databaseName"] = "db-dev" },
         };
 
@@ -64,7 +65,7 @@ public sealed class EnvCliTests : IDisposable
         var second = await RunAsync(backend, null, "up", Dev, "--catalog", Catalog, "--base", shared, "--out", dev);
 
         Assert.Equal((0, 0), (first.Code, second.Code));
-        Assert.Equal(["_dev.dev.substrate.apps", "_dev.dev.substrate.database", "_dev.dev.substrate.group", "_shared.shared.substrate.cosmos", "_shared.shared.substrate.group", "_shared.shared.substrate.workspace"], backend.Calls.Order().ToList());
+        Assert.Equal(["_dev.dev.substrate.apps", "_dev.dev.substrate.database", "_dev.dev.substrate.group", "_dev.dev.substrate.logs", "_shared.shared.substrate.cosmos", "_shared.shared.substrate.group", "_shared.shared.substrate.workspace"], backend.Calls.Order().ToList());
         var descriptor = (await jd.resolver.environment.EnvironmentFile.LoadAsync(dev)).Descriptor!;
         Assert.Equal(("dev", "southeastasia"), (descriptor.Name, descriptor.Region));
         Assert.Equal("cosmos-1", descriptor.Values["cosmos-account.name"]);
@@ -95,7 +96,7 @@ public sealed class EnvCliTests : IDisposable
         Assert.Equal(("stage", "stage"), (descriptor.Name, descriptor.Type));
         Assert.Equal(("dev", 1, true), (descriptor.Approval!.QualifiedOn, descriptor.Approval.Required, descriptor.Approval.SeparateFromDeployer));
         Assert.Equal(["00000000-0000-0000-0000-000000000000"], descriptor.Approval.Approvers);
-        Assert.Equal(["_stage.stage.substrate.apps", "_stage.stage.substrate.database", "_stage.stage.substrate.group"], backend.Calls.Order().ToList());
+        Assert.Equal(["_stage.stage.substrate.apps", "_stage.stage.substrate.database", "_stage.stage.substrate.group", "_stage.stage.substrate.logs"], backend.Calls.Order().ToList());
     }
 
     // The catalog declares the types (docs/architecture/components.md section 2): the definition's and the base's are checked before anything is created.

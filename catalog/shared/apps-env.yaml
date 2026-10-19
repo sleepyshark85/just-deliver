@@ -1,6 +1,6 @@
 kind: SharedResource
 name: apps-env
-description: The environment's Container Apps environment, which the runtime deploys every workload into; it logs to the shared workspace.
+description: The environment's Container Apps environment, which the runtime deploys every workload into; its logs go to the shared workspace through a diagnostic setting.
 scope: environment
 uses: [env-group, log-analytics]
 nodes:
@@ -10,9 +10,13 @@ nodes:
       resourceGroupName: ${env-group.name}
       location: ${env-group.location}
       environmentName: ${name('cae')}
-      workspaceResourceGroupName: ${log-analytics.resourceGroup}
-      workspaceName: ${log-analytics.name}
-      workspaceCustomerId: ${log-analytics.customerId}
+  logs:
+    template: azure/diagnostic-setting
+    config:
+      resourceId: ${apps.environmentId}
+      workspaceResourceId: ${log-analytics.id}         # the workspace's resource id: Azure RBAC, no workspace key
+      settingName: to-shared-workspace                 # unique per environment, the setting's parent
+      categoryGroup: allLogs                           # sends every log category of the managed environment
 exports:
   id: ${apps.environmentId}
   defaultDomain: ${apps.defaultDomain}

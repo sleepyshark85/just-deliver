@@ -7,7 +7,8 @@ namespace jd.cli.tests;
 /// <summary>
 /// What the Azure tests that deploy a test-only catalog into one resource group share: a temporary working directory, the sandbox
 /// <c>az</c> session, a Pulumi backend on a local file state, a writer for the catalog files, the <c>jd deploy</c> call and a teardown
-/// that deletes the group and fails the test if it cannot. A subclass names the group through <see cref="Tag"/>.
+/// that deletes the group (the diagnostic settings of its resources first, which a group delete leaves behind) and fails the test if
+/// it cannot. A subclass names the group through <see cref="Tag"/>.
 /// </summary>
 public abstract class ProbeAzureTest : IDisposable
 {
@@ -55,6 +56,7 @@ public abstract class ProbeAzureTest : IDisposable
             throw new InvalidOperationException($"Could not check resource group {ResourceGroup}: {exists.Error}");
         }
 
+        Az.DeleteDiagnosticSettings(ResourceGroup);
         var delete = Az.Run("group", "delete", "--name", ResourceGroup, "--subscription", Az.Subscription, "--yes");
         if (delete.Code != 0)
         {
