@@ -75,7 +75,7 @@ case checks its plain values first, before it loads any document: the label and 
 | `deploy` | `Deploy` | `Workload`, `Environment`, `Catalog`, `Preview: bool` | `Run: RunReport?` |
 | `env up` | `EnvUp` | `Definition`, `Catalog`, `Base: SourceDocument?` | `Run`, `Environment`, `Descriptor: ReadOnlyMemory<byte>?` |
 | `release create` | `CreateRelease` | `Manifest`, `Definitions: DocumentReader` | `Set: ReleaseSet?`, `Document: ReadOnlyMemory<byte>?` (the set file's bytes) |
-| `release show` | `ShowRelease` | `Set` | `Set`, `CreatedAt: string` (*not in the brief's list; it validates the set, so it is a use case too*) |
+| `release show` | `ShowRelease` | `Set` | `Set`, `CreatedAt: string` (the document's own value, not presentation; *not in the brief's list; it validates the set, so it is a use case too*) |
 | `release deploy` | `DeployRelease` | `Set`, `Environment`, `Catalog`, `Preview` | `Environment`, `Set`, `Runs: IReadOnlyList<WorkloadRun>`, `NotStarted`, `Iq: IqResult?`, `Record: string?` |
 | `release qualify` | `QualifyRelease` | `Set`, `Environment`, `Catalog` | `Environment`, `Set`, `Iq`, `Record` |
 | `approve` | `Approve` | `Label`, `Environment`, `Meaning` | `Environment`, `Approver`, `Counted`, `Record` |
@@ -86,7 +86,7 @@ case checks its plain values first, before it loads any document: the label and 
 
 - `Environment: EnvironmentDescriptor?`: the loaded environment (the target, for approve and promote). Its name, region, type and policy
   (`QualifiedOn`, `Required`) are what the output prints (`ReleaseDeployCli.cs:219,281`, `ApproveCli.cs:81,127`, `PromoteCli.cs:81`, `EnvCli.cs:101`).
-- `CreatedAt` of `release show` is the set's time as the set document holds it: the use case applies `ReleaseRecordFile.DocumentTimeFormat`,
+- `CreatedAt` of `release show` is the document's own value, not presentation: the set's time as the set document holds it. The use case applies `ReleaseRecordFile.DocumentTimeFormat`,
   as `ReleaseSetFile.cs:43` does on write, so jd.cli names no format (`ReleaseCli.cs:125` today).
 - `Errors: IReadOnlyList<LoadError>`: located errors, unchanged (section 7).
 - `Problem: Problem?`: an unlocated refusal. `Problem` is a closed set of records, one per refusal, each holding the values its message
@@ -124,7 +124,7 @@ other jd.cli type. **Inner assemblies:** `jd.core`, `jd.definitionvalidator`, `j
 | # | Rule the reviewer checks | Enforced by |
 |---|---|---|
 | R1 | Command code reaches the inner assemblies only through: a use case's `RunAsync`; the constructors of input types; the property getters of result, progress and problem types and of the data types they hold (all computed from the use cases' signatures, not listed); and `GraphJson.Serialize` (the JSON form of a result, documents.md choice 2 b). It reads no member of `Connections` or of a port: it may only hold a `Connections` and pass it on | `ThinCliTests` (jd.cli.tests, in `tools/verify.sh`'s test step): decodes every method body of `jd.dll` with `System.Reflection.Metadata` (BCL), attributes each call, `newobj` and field access to its declaring type, and fails on a reference outside the allowed set, naming type and member. A by-type allowlist of today's references shrinks each slice and is empty at S25f2, as S24's literal guard does |
-| R2 | Ports (the interfaces `Connections` exposes) are named, implemented and called only in the composition types, which reach the inner assemblies only through ports, the types in the ports' signatures (`Probe`, `ProbeResult`, `ResolvedGraph`, `LoadError`; computed) and `Connections`. Only their files name an adapter (`jd.azure`, `jd.bp.`) or the DI container | the same test for the first sentence; `tools/verify.sh`, "Architecture boundaries": `grep -l -E 'jd\.azure|jd\.bp\.|Microsoft\.Extensions\.DependencyInjection'` over `src/jd.cli/*.cs` must list only the composition files, in the style of the inner-layer `grep` |
+| R2 | Ports (the interfaces `Connections` exposes) are named, implemented and called only in the composition types, which reach the inner assemblies only through ports, the types in the ports' signatures (`Probe`, `ProbeResult`, `ResolvedGraph`, `LoadError`; computed) and `Connections`. Only their files name an adapter (`jd.azure`, `jd.bp.`) or the DI container | the same test for the first sentence; `tools/verify.sh`, "Architecture boundaries": `grep -rl -E 'jd\.azure|jd\.bp\.|Microsoft\.Extensions\.DependencyInjection'` over `src/jd.cli` (`--include=*.cs`) must list only the composition files, in the style of the inner-layer `grep` |
 | R3 | The inner assemblies touch no file, directory, environment variable, current directory or console | the same IL scan over the four inner assemblies: fails on any member of `File`, `Directory`, `FileInfo`, `DirectoryInfo`, `FileSystemInfo`, `FileStream`, a `StreamReader`/`StreamWriter` constructor taking a path, `Path.GetFullPath`, `Environment.GetEnvironmentVariable(s)`/`GetFolderPath`/`CurrentDirectory`, `Console`. A `using static` compiles to the same references, so it is seen. Today it finds the path loaders S25 replaces (`DocumentLoader.cs:24,29`, `CatalogDirectory.cs:12-26`, `ReleaseBuilder.cs:43-56`, `ReleaseSetFile.cs:52-66`), `LocalRecordStore` and `YamlSchemaValidator.cs:122-138`: its allowlist empties at S25g |
 
 R1 is a test rather than a `grep` because the names a CLI may use (`NodeReport`, `ResolvedGraph`) and may not (`Orchestrator`, `Resolver`)
@@ -160,7 +160,7 @@ The CLI reads; the use cases take and return documents; nothing inside reads a p
 | File | Today | After S25 |
 |---|---|---|
 | workload, descriptor, definition, base, set (inputs) | `*.LoadAsync(path)` over `DocumentLoader.LoadFileAsync` (`DocumentLoader.cs:22-30`), `ReleaseSetFile.LoadAsync` | CLI reads bytes → `SourceDocument`; the loaders take documents (`DocumentLoader.LoadAsync(source, text)` over `Text()`); each path form is deleted in the slice that moves its last caller (section 10) |
-| catalog directory | `CatalogDirectory.LoadAsync(root)`, `TemplateLibrary.LoadAsync(root/templates)` | CLI reads every `*.yaml` into a `SourceCatalog`; the catalog loader and `PulumiTemplates` each take their part (section 3); `CatalogDirectory` deleted in S25e1, `TemplateLibrary.LoadAsync` in S24e |
+| catalog directory | `CatalogDirectory.LoadAsync(root)`, `TemplateLibrary.LoadAsync(root/templates)` | CLI reads every `*.yaml` into a `SourceCatalog`; the catalog loader and `PulumiTemplates` each take their part (section 3); `CatalogDirectory` and `TemplateLibrary.LoadAsync` deleted in S25e1 |
 | manifest + the definitions it names | `ReleaseBuilder.BuildAsync(path)` opens them | `CreateRelease(Manifest, DocumentReader)`: the builder awaits the reader for each `definition`; the CLI never reads the manifest's fields |
 | release set written (`release create --out`) | `ReleaseSetFile.WriteAsync(set, path)` | result `Document` (bytes); CLI writes with `CreateNew` |
 | descriptor written (`env up --out`) | composed text, written by `EnvCli` | result `Descriptor` (bytes); CLI writes, `--force` its choice |
@@ -208,10 +208,13 @@ refusal before identity; identity before `set.yaml` before the backend factory i
 refusal; `MeaningInvalid` and `LabelInvalid` are `InvalidInput`, before any document is parsed; progress order (`Promoting` before the first
 `WorkloadStarted`).
 
-**Azure gate**: the snapshot does not change in any slice, and no S25 slice edits direct-Azure code: `TemplateLibrary.cs`,
-`HttpRevisionProbe.cs`, `ReleaseFlow.cs`, `Qualifier.cs` and `src/jd.azure` are not edited. `TemplateLibrary.LoadAsync` loses its last caller in
-S25e1 and is deleted in S24e, which edits direct-Azure code and runs the gate anyway (one gate saved). Under choice 1 (b), S24e runs before
-S25, so S25e1 deletes it and runs the gate.
+**Azure gate** (lead ruling, 2026-10-19): the snapshot does not change in any slice. Editing an offline test under `src/backend-providers`
+does not change what reaches Azure, so it triggers no gate; deleting production code there does. S25e1 and S25f2 each edit
+`jd.bp.pulumi.tests/TemplateLibraryTests.cs` (`:40` loses `CatalogDirectory.LoadAsync` in S25e1, `:41` loses `EnvironmentParser.LoadAsync(path)` in
+S25f2): offline, no gate for the edit. `TemplateLibrary.LoadAsync` loses its last caller in S25e1, which deletes it with its path-form tests
+(`TemplateLibraryTests.cs:44,53,67,83,215`) and fixes that file's broad `catch (Exception)`; this is production code in
+`src/backend-providers`, so **S25e1 runs the gate**, once. No other S25 slice edits production code in `src/backend-providers` or
+`src/jd.azure` (`HttpRevisionProbe.cs`, `ReleaseFlow.cs` and `Qualifier.cs` are not edited). S24e finds the method gone; documents.md §9 is unchanged.
 
 ## 9. Simplicity guard
 
@@ -239,7 +242,7 @@ Each slice: `tools/verify.sh` green; CLI tests byte-identical (section 8); snaps
 (conventions, Appendix A's row for the slice fixed in it). Field-structure knowledge in touched resolver files is S24's scope by its slices,
 not S25 debt. Each path form is deleted in the slice that moves its last caller. A step that a later slice's command still uses moves once,
 into the use-case layer, and that command calls it through R1's allowlist until its own slice. Lines are production lines (C#, `verify.sh`),
-estimated, added / removed; cap ~250 changed. No slice runs the Azure gate (section 8).
+estimated, added / removed; cap ~250 changed. Only S25e1 runs the Azure gate (section 8).
 
 | Slice | Content | Lines | Acceptance |
 |---|---|---|---|
@@ -248,16 +251,16 @@ estimated, added / removed; cap ~250 changed. No slice runs the Azure gate (sect
 | **S25b2** Workload commands | `Preview`, `Deploy`; `ITemplates`, `PulumiTemplates`; CLI reads a catalog into a `SourceCatalog`, `CatalogParser` takes it (`CatalogSource` removed); `WorkloadFile.LoadAsync` deleted; the type and gate checks as use-case steps | ~+135 / −95 | risk a's tests; edge 3 pinned; gate and type refusals as use-case tests |
 | **S25c** Env up | `EnvUp`; `EnvCli` parse/read/write/format only, on the one scanner; `EnvironmentDefinitionFile.LoadAsync` and `Cli.ProvisionAsync` deleted | ~+90 / −95 | descriptor golden identical; `--force` and existing `--out` still CLI |
 | **S25d** Release create and show | `CreateRelease` (`DocumentReader`), `ShowRelease`; `ReleaseBuilder.BuildAsync` and `ReleaseSetFile.WriteAsync` take and return documents; `Time` replaces `DateTimeOffset.UtcNow`; `ReleaseCli` on the one scanner | ~+95 / −85 | release-set golden identical; a missing definition names the resolved path as today; risk b's set test |
-| **S25e1** Release run start | the shared start of `release deploy` and `qualify` (load, type and gate checks, resolve, templates, recording, connections built together) as one use-case step that `ReleaseDeployCli` calls; `ReleaseSetFile.LoadAsync` and `CatalogDirectory` deleted (`TemplatesDirectory` to `CatalogParser`) | ~+110 / −110 | order tests (section 8); kept-set re-hash; risk c's use-case test |
+| **S25e1** Release run start | the shared start of `release deploy` and `qualify` (load, type and gate checks, resolve, templates, recording, connections built together) as one use-case step that `ReleaseDeployCli` calls; `ReleaseSetFile.LoadAsync` and `CatalogDirectory` deleted (`TemplatesDirectory` to `CatalogParser`); `TemplateLibrary.LoadAsync` deleted with its path-form tests (`TemplateLibraryTests.cs:44,53,67,83` read the `Pulumi.yaml` files themselves and call `Parse`; `:215`, the missing-directory message, goes: risk a's CLI test covers it), `:40` off `CatalogDirectory.LoadAsync`; the `catch (Exception)` narrowed to what `ParseYaml` throws | ~+112 / −132 (244, under the cap; if it measures over 250, the `TemplateLibrary` deletion splits off as its own slice) | order tests (section 8); kept-set re-hash; risk c's use-case test; **Azure gate** (production code deleted in `src/backend-providers`) |
 | **S25e2** Release deploy and qualify | `DeployRelease`, `QualifyRelease` on S25e1's step (walk, IQ, record); `ReleaseDeployCli` parse/read/format only; its `PromoteAsync` hands the kept set to `DeployRelease` | ~+95 / −115 | `RecordNotWritten`; qualify never calls `DeployAsync` (test) |
 | **S25f1** Approve | `Approve` (label and meaning as `InvalidInput`, before the environment is parsed); `ApproveCli` parse/read/format only | ~+75 / −70 | every approvals.md §7 approve test kept; nothing written on refusal; edge 1 listed |
-| **S25f2** Promote | `Promote` (the kept set named `KeptSetName`, then `DeployRelease`'s walk; `Promotion` leaves the argv options); `EnvironmentParser.LoadAsync` and `DocumentLoader.LoadFileAsync` deleted; the I/O catch once, at the dispatch | ~+80 / −100 | every §7 promote test kept; `Promoting` before the walk; edge 2's test; R1 allowlist empty |
+| **S25f2** Promote | `Promote` (the kept set named `KeptSetName`, then `DeployRelease`'s walk; `Promotion` leaves the argv options); `EnvironmentParser.LoadAsync` and `DocumentLoader.LoadFileAsync` deleted (`TemplateLibraryTests.cs:41` reads the file itself: an offline test edit, no gate); the I/O catch once, at the dispatch | ~+80 / −100 | every §7 promote test kept; `Promoting` before the walk; edge 2's test; R1 allowlist empty |
 | **S25g** Close | R3 allowlist empty: `YamlSchemaValidator.ValidateAsync(paths)` deleted (tests only); standards §3 (jd.orchestrator: "use cases and the walk"; jd.cli: "parsing, file I/O, formatting, composition"), conventions "wiring only in jd.cli", components/provisioning pointers | ~+5 / −20, docs | R1, R2, R3 pass with no exception |
 
 **Order:** after S24a1 (merged) and **before S24a2** (recommended, choice 1): S24c1, S24c2, S24e and S24f each edit lines S25 moves out of the
-CLI, so S25 first means they edit use cases once instead of CLI code twice. At the latest before S24f, as agreed. Total about **+895 / −815
-over 10 slices**, no Azure gate of its own (S24e deletes `TemplateLibrary.LoadAsync` under its gate) plus phase 1.5's exit gate.
-**S24e gains** that deletion and `TemplateLibrary.cs`'s debt (Appendix A), proposed here for documents.md §9.
+CLI, so S25 first means they edit use cases once instead of CLI code twice. At the latest before S24f, as agreed. Total about **+897 / −837
+over 10 slices**, one Azure gate (S25e1, which deletes `TemplateLibrary.LoadAsync`) plus phase 1.5's exit gate.
+S24e finds that method gone; documents.md §9 stays as approved.
 
 **Exit criteria (added to phase 1.5's):** (1) R1, R2 and R3 pass with empty allowlists; (2) every user action is one use case whose input
 holds no path or argv and whose result holds no formatted text; (3) CLI output, exit codes, the snapshot and all goldens byte-identical
@@ -274,7 +277,7 @@ new `Connections` members; a per-request identity in an API is a different `Iden
 
 | # | Choice | Options | Recommendation |
 |---|---|---|---|
-| 1 | When S25 runs | (a) now, after S24a1, before S24a2; (b) after S24e, before S24f | **(a)**: four S24 slices then edit use cases, not CLI code that S25 moves again; and S24e takes the one gate |
+| 1 | When S25 runs | (a) now, after S24a1, before S24a2; (b) after S24e, before S24f | **(a)**: four S24 slices then edit use cases, not CLI code that S25 moves again; and S25e1 takes the one gate (it deletes `TemplateLibrary.LoadAsync`; S24e finds it gone) |
 | 2 | Where the composition builder lives | (a) jd.cli now, moved to a host project when the API arrives; (b) a `jd.host` project now | **(a)**: one host today (standards §2); the move is one file |
 | 3 | Refusals as data | (a) one record per refusal, the client words it; (b) an enum plus a detail string; (c) message strings from the use case | **(a)**: each refusal carries its own values; an API should not parse prose, and CLI command names stay in the CLI |
 | 4 | Use-case project | (a) `jd.orchestrator/usecases`; (b) new `jd.application` | **(a)**: standards §3 already calls `jd.orchestrator` the application layer |
@@ -294,9 +297,9 @@ new `Connections` members; a per-request identity in an API is a different `Iden
 | S25d | `ReleaseBuilder.cs` | file reads in the resolver (`:36`, `:43-56`): the slice's subject; field reads are S24f's; none else |
 | S25d | `ReleaseSetFile.cs` | `ParseAsync`'s `path` names a source, not a path (`:70`) (naming: it takes a `SourceDocument`); the write's file I/O (`:52-53`) is the slice's subject; field structure S24f's |
 | S25e1 | `ReleaseDeployCli.cs` | `DeployAsync` 117 lines doing load, checks, recording, walk, IQ and record (`:84-201`) (one thing per method: start in S25e1, walk in S25e2) |
+| S25e1 | `TemplateLibrary.cs` | `LoadAsync` (`:34-53`) loses its last caller: deleted, with its path-form tests; the broad `catch (Exception)` (`:76`) (catch what you handle) |
 | S25f1 | `ApproveCli.cs` | `MeaningMaxLength` copying the schema's limit (`:22-23`) (named once, in the use case beside a pointer to the schema); `ApproveAsync` 63 lines with a nested-ternary refusal chain (`:67-130`, `:91-93`) (structure) |
 | S25f2 | `ReleaseDeployCli.cs`, `PromoteCli.cs` | `Promotion` set by `init` on an argv options record to reuse the walk (`ReleaseDeployCli.cs:25-29,55-59`) (structure); the I/O catch copied four times (`Cli.cs:135`, `EnvCli.cs:43`, `ReleaseCli.cs:74`, `ReleaseDeployCli.cs:77`) (duplication: three leave with their files in S25c, S25d, S25e2; the last becomes the dispatch's) |
 | S25f2 | `EnvironmentParser.cs`, `DocumentLoader.cs` | none beyond the path forms (`EnvironmentParser.cs:14-15`, `DocumentLoader.cs:21-30`) |
 | S25g | `YamlSchemaValidator.cs` | `ValidateAsync(schemaFilePath, yamlFilePath)` used only by tests (`:122-138`) (unneeded code: deleted, its tests read the files) |
-| S24e | `TemplateLibrary.cs` | not touched by S25; `LoadAsync` (`:34-53`) deleted in S24e, which fixes its debt: the broad `catch (Exception)` (`:76`) (catch what you handle) |
 | S24e | `HttpRevisionProbe.cs` | public where internal suffices: not edited by S25, so no gate (S24e edits it for `probe.scheme`) |
