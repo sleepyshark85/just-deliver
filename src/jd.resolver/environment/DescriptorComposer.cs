@@ -56,7 +56,7 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
         var offers = catalog.EnvironmentTypes[environment.Type].Layer == SharedScope.Shared ? [] : definition.Offers;
         var document = new JObject
         {
-            ["kind"] = "Environment",
+            [DocumentLoader.KindField] = EnvironmentParser.Kind,
             ["name"] = environment.Name,
             ["region"] = environment.Region,
             ["type"] = environment.Type,

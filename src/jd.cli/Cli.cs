@@ -70,10 +70,18 @@ public static class Cli
 
     private sealed record DeployOptions(string Workload, string Environment, string Catalog, bool DryRun) : ResolveOptions(Workload, Environment, Catalog);
 
-    // backend is the one deploy uses; when null, the Pulumi backend on the state in jd's data directory.
-    // environmentVariable reads them (null: the process environment). probe checks a new revision is healthy (null: an HTTP GET).
-    // identity names the deploying principal (null: the Azure CLI sign-in or the ARM_* variables); time stamps the release record (null: the system clock);
-    // liveRevisions reads what runs (null: Azure, with the same variables). All six are test seams.
+    /// <summary>Runs the command in <paramref name="args"/>, writing results to <paramref name="stdout"/> and problems to <paramref name="stderr"/>; returns the exit code.</summary>
+    /// <remarks>The last six parameters are test seams; each null means the real one.</remarks>
+    /// <param name="args">The command line, without the program name.</param>
+    /// <param name="stdout">Where results are written.</param>
+    /// <param name="stderr">Where problems and usage are written.</param>
+    /// <param name="cancellationToken">Cancels the run.</param>
+    /// <param name="backend">The backend a deploy uses (null: the Pulumi backend on the state in jd's data directory).</param>
+    /// <param name="environmentVariable">Reads the environment variables (null: the process environment).</param>
+    /// <param name="probe">Checks a new revision is healthy (null: an HTTP GET).</param>
+    /// <param name="identity">Names the deploying principal (null: the Azure CLI sign-in or the ARM_* variables).</param>
+    /// <param name="time">Stamps the release record (null: the system clock).</param>
+    /// <param name="liveRevisions">Reads what runs (null: Azure, with the same variables).</param>
     public static async Task<int> RunAsync(
         string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, IBackEndProvider? backend = null, Func<string, string?>? environmentVariable = null,
         IRevisionProbe? probe = null, IDeployerIdentity? identity = null, TimeProvider? time = null, ILiveRevisions? liveRevisions = null)
@@ -135,7 +143,7 @@ public static class Cli
     private static async Task<int> RunCommandAsync(Options options, IBackEndProvider? backend, IRevisionProbe? probe, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var loaded = await WorkloadFile.LoadAsync(options.Workload, cancellationToken);
-        if (loaded.Workload is not { } workload)
+        if (loaded.Value is not { } workload)
         {
             Print(loaded.Errors, stderr);
             return Invalid;
@@ -148,8 +156,8 @@ public static class Cli
         }
 
         var catalogResult = await CatalogDirectory.LoadAsync(resolve.Catalog, cancellationToken);
-        var environmentResult = await EnvironmentFile.LoadAsync(resolve.Environment, cancellationToken);
-        if (catalogResult.Catalog is not { } catalog || environmentResult.Descriptor is not { } environment)
+        var environmentResult = await EnvironmentParser.LoadAsync(resolve.Environment, cancellationToken);
+        if (catalogResult.Value is not { } catalog || environmentResult.Value is not { } environment)
         {
             Print(CatalogErrors(catalogResult, resolve.Catalog).Concat(environmentResult.Errors), stderr);
             return Invalid;
@@ -213,7 +221,7 @@ public static class Cli
 
     // Catalog errors name files relative to the catalog root; the person needs the path they can open.
     // An error about the catalog as a whole names no real file and is left as it is.
-    internal static IEnumerable<LoadError> CatalogErrors(CatalogLoadResult result, string catalogDirectory) =>
+    internal static IEnumerable<LoadError> CatalogErrors(LoadResult<Catalog> result, string catalogDirectory) =>
         result.Errors.Select(e => Path.Combine(catalogDirectory, e.File) is var full && File.Exists(full) ? e with { File = full } : e);
 
     // Templates live in the catalog's templates directory; the graphs must fit them before anything is created.

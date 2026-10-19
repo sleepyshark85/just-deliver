@@ -40,8 +40,8 @@ public class GraphBuilderTests
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
-        var applied = new PolicyApplier(loaded.Catalog!, Env).Apply(new Expander(loaded.Catalog!, Env).Expand(workload, "workload.yaml"));
-        return new GraphBuilder(Env, loaded.Catalog!.GrantTargets).Build(applied);
+        var applied = new PolicyApplier(loaded.Value!, Env).Apply(new Expander(loaded.Value!, Env).Expand(workload, "workload.yaml"));
+        return new GraphBuilder(Env, loaded.Value!.GrantTargets).Build(applied);
     }
 
     private static GraphNode Node(ResolvedGraph graph, string scope, string name) => graph.Nodes.Single(n => n.Id == Id(scope, name));

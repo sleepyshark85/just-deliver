@@ -1,6 +1,3 @@
-using jd.definitionvalidator;
-using Newtonsoft.Json.Linq;
-
 namespace jd.resolver.environment;
 
 /// <summary>
@@ -14,47 +11,26 @@ public sealed record EnvironmentDefinition(string Name, string Region, string Ty
         new(Name, Region, Type, baseDescriptor?.Values ?? new Dictionary<string, string>(), Offers, Approval);
 }
 
-/// <summary><see cref="Definition"/> is set exactly when <see cref="Errors"/> is empty.</summary>
-public sealed record EnvironmentDefinitionLoadResult(EnvironmentDefinition? Definition, IReadOnlyList<LoadError> Errors);
-
 /// <summary>Reads an environment definition and validates it against its schema; the catalog's rules are checked when it is resolved.</summary>
 public static class EnvironmentDefinitionFile
 {
-    private const string SchemaName = "schemas/environment-definition.schema.json";
+    // Bridge: the kind read here until the environment is bound from its schema (S24c1).
+    private const string Kind = "EnvironmentDefinition";
 
-    private static readonly YamlSchemaValidator Validator = new();
-
-    public static async Task<EnvironmentDefinitionLoadResult> LoadAsync(string path, CancellationToken cancellationToken = default)
+    /// <summary>Loads the definition at <paramref name="path"/>; the value is set exactly when there are no errors.</summary>
+    public static async Task<LoadResult<EnvironmentDefinition>> LoadAsync(string path, CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(path))
+        var loaded = await DocumentLoader.LoadFileAsync(path, "environment definition", [Kind], cancellationToken);
+        if (loaded.Value is not { Body: var body })
         {
-            return new EnvironmentDefinitionLoadResult(null, [new LoadError(path, string.Empty, "environment definition not found.")]);
-        }
-
-        var text = await File.ReadAllTextAsync(path, cancellationToken);
-        JToken parsed;
-        try
-        {
-            parsed = YamlSchemaValidator.ParseYaml(text);
-        }
-        catch (Exception ex)
-        {
-            return new EnvironmentDefinitionLoadResult(null, [new LoadError(path, string.Empty, $"not valid YAML: {YamlSchemaValidator.DescribeYamlError(ex, text)}")]);
-        }
-
-        var result = await Validator.ValidateTokenAsync(await EmbeddedSchema.ReadAsync(SchemaName, cancellationToken), parsed);
-        if (!result.IsValid || parsed is not JObject body)
-        {
-            return new EnvironmentDefinitionLoadResult(null, result.Errors.Select(e => LoadError.FromSchema(path, e)).ToList());
+            return new LoadResult<EnvironmentDefinition>(null, loaded.Errors);
         }
 
         // The schema guarantees these exist and have these shapes.
-        return new EnvironmentDefinitionLoadResult(
+        return new LoadResult<EnvironmentDefinition>(
             new EnvironmentDefinition(
-                (string)body["name"]!, (string)body["region"]!, (string)body["type"]!, Strings(body["offers"]),
+                (string)body["name"]!, (string)body["region"]!, (string)body["type"]!, body["offers"]!.ToObject<List<string>>()!,
                 body["approval"] is { } approval ? ApprovalPolicy.FromJson(approval) : null),
             []);
     }
-
-    internal static List<string> Strings(JToken? token) => token is JArray array ? array.Select(t => (string)t!).ToList() : [];
 }

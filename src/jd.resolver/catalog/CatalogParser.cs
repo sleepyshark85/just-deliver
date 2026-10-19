@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using jd.definitionvalidator;
 using jd.resolver.environment;
 using jd.resolver.expressions;
 using Newtonsoft.Json.Linq;
@@ -13,6 +12,7 @@ namespace jd.resolver.catalog;
 /// </summary>
 public static class CatalogParser
 {
+    // Bridge: the kinds the catalog dispatches on, until the binder reads catalog documents by their schemas (S24b1, S24b3).
     private const string CatalogKind = "Catalog";
     private const string ComponentKind = "Component";
     private const string RuntimeKind = "Runtime";
@@ -34,13 +34,7 @@ public static class CatalogParser
     // A policy field of earlier catalogs: a policy requires, it never adds (docs/architecture/components.md section 3).
     private const string RemovedPolicyAdd = "add";
 
-    private static readonly YamlSchemaValidator Validator = new();
-
     private static readonly Regex NodeNamePattern = new("^[a-z]([a-z0-9-]*[a-z0-9])?$", RegexOptions.CultureInvariant);
-
-    // Valid is false when the file failed its schema. Such a file still counts toward the cross-file checks
-    // that only need its kind or name, so one mistake is not reported a second time as a missing or undeclared item.
-    private sealed record Document(string Source, string Kind, JObject Body, bool Valid);
 
     // One part, with what its config and exports may read besides its own nodes and the reserved roots: the shared resources in Uses and,
     // for a class part, its own component (OwnComponent) and that implementation's environment part. Prefix locates the part in its file;
@@ -51,21 +45,27 @@ public static class CatalogParser
         public bool IsRuntime => Scope is null && OwnComponent is null;
     }
 
-    public static async Task<CatalogLoadResult> ParseAsync(IEnumerable<CatalogSource> sources, CancellationToken cancellationToken = default)
+    /// <summary>Builds the catalog from its files; the value is set exactly when no file has an error.</summary>
+    public static async Task<LoadResult<Catalog>> ParseAsync(IEnumerable<CatalogSource> sources, CancellationToken cancellationToken = default)
     {
         var errors = new List<LoadError>();
         var documents = new List<Document>();
+        // A document that failed its schema is not in here, but still counts toward the cross-file checks that only need its kind or name,
+        // so one mistake is not reported a second time as a missing or undeclared item.
+        var valid = new HashSet<Document>();
         var unreadable = 0;
         foreach (var source in sources.OrderBy(s => s.Path, StringComparer.Ordinal))
         {
-            var document = await ReadDocumentAsync(source, errors, cancellationToken);
-            if (document is null)
+            if (await ReadDocumentAsync(source, errors, cancellationToken) is not (var document, var isValid))
             {
                 unreadable++;
+                continue;
             }
-            else
+
+            documents.Add(document);
+            if (isValid)
             {
-                documents.Add(document);
+                valid.Add(document);
             }
         }
 
@@ -74,15 +74,15 @@ public static class CatalogParser
         var runtimeDocuments = OfKind(documents, RuntimeKind);
         var sharedDocuments = OfKind(documents, SharedResourceKind);
         var policyDocuments = OfKind(documents, PolicyKind);
-        var components = componentDocuments.Where(d => d.Valid).Select(ToComponent).ToList();
-        var runtimes = runtimeDocuments.Where(d => d.Valid).Select(ToRuntime).ToList();
-        var shared = sharedDocuments.Where(d => d.Valid).Select(ToSharedResource).ToList();
-        var policies = policyDocuments.Where(d => d.Valid).Select(ToPolicy).ToList();
-        var namingDocuments = OfKind(documents, NamingKind).Where(d => d.Valid).ToList();
+        var components = componentDocuments.Where(valid.Contains).Select(ToComponent).ToList();
+        var runtimes = runtimeDocuments.Where(valid.Contains).Select(ToRuntime).ToList();
+        var shared = sharedDocuments.Where(valid.Contains).Select(ToSharedResource).ToList();
+        var policies = policyDocuments.Where(valid.Contains).Select(ToPolicy).ToList();
+        var namingDocuments = OfKind(documents, NamingKind).Where(valid.Contains).ToList();
         var naming = Merge(namingDocuments, "rules", ToNamingRule, errors);
         CheckNamingAllowed(namingDocuments, errors);
-        var roles = Merge(OfKind(documents, RolesKind).Where(d => d.Valid), "roles", role => (string?)role ?? string.Empty, errors);
-        var grantTargets = Merge(OfKind(documents, GrantsKind).Where(d => d.Valid), "targets", Text, errors);
+        var roles = Merge(OfKind(documents, RolesKind).Where(valid.Contains), "roles", role => (string?)role ?? string.Empty, errors);
+        var grantTargets = Merge(OfKind(documents, GrantsKind).Where(valid.Contains), "targets", Text, errors);
 
         // A file whose kind could not be read might have been the missing Catalog, so do not claim it is missing.
         CheckSingleCatalog(catalogs, unreadable == 0, errors);
@@ -104,7 +104,7 @@ public static class CatalogParser
         CheckGrants(readers, grantTargets, errors);
         CheckUnique(policyDocuments, errors);
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
-        var environmentTypes = catalogs.FirstOrDefault() is { Valid: true } first
+        var environmentTypes = catalogs.FirstOrDefault() is { } first && valid.Contains(first)
             ? Map(first.Body["environmentTypes"]).ToDictionary(e => e.Key, e => new EnvironmentType((bool?)e.Value["approval"] ?? false, Enum.Parse<SharedScope>(Text(e.Value["layer"]), ignoreCase: true)))
             : null;
         CheckEnvironmentTypes(components, runtimes, policies, environmentTypes, errors);
@@ -118,7 +118,7 @@ public static class CatalogParser
         // No errors means exactly one valid Catalog file, so its environment types were read.
         if (errors.Count > 0 || environmentTypes is null)
         {
-            return new CatalogLoadResult(null, errors);
+            return new LoadResult<Catalog>(null, errors);
         }
 
         var version = (string?)catalogs[0].Body["version"] ?? string.Empty;
@@ -132,56 +132,37 @@ public static class CatalogParser
             policies,
             naming,
             roles);
-        return new CatalogLoadResult(catalog, errors);
+        return new LoadResult<Catalog>(catalog, errors);
     }
 
-    private static async Task<Document?> ReadDocumentAsync(CatalogSource source, List<LoadError> errors, CancellationToken cancellationToken)
+    // The document and whether it passed its schema; null when the file has no readable kind.
+    private static async Task<(Document Document, bool Valid)?> ReadDocumentAsync(CatalogSource source, List<LoadError> errors, CancellationToken cancellationToken)
     {
-        JToken parsed;
-        try
+        var parsed = DocumentLoader.Parse(source.Path, source.Content, Kinds);
+        errors.AddRange(parsed.Errors);
+        if (parsed.Value is not { } document)
         {
-            parsed = YamlSchemaValidator.ParseYaml(source.Content);
-        }
-        catch (Exception ex)
-        {
-            errors.Add(new LoadError(source.Path, string.Empty, $"not valid YAML: {YamlSchemaValidator.DescribeYamlError(ex, source.Content)}"));
             return null;
         }
 
-        if (parsed is not JObject body)
+        if (ReplacedKinds.TryGetValue(document.Kind, out var replacement))
         {
-            errors.Add(new LoadError(source.Path, string.Empty, "must be one YAML mapping with a 'kind' key."));
-            return null;
+            errors.Add(new LoadError(source.Path, DocumentLoader.KindField, $"kind '{document.Kind}' is no longer supported: {replacement}."));
+            return (document, false);
         }
 
-        if (body["kind"] is not { Type: JTokenType.String } kindToken)
-        {
-            errors.Add(new LoadError(source.Path, "kind", $"required; one of {string.Join(", ", Kinds)}."));
-            return null;
-        }
-
-        var kind = (string?)kindToken ?? string.Empty;
-        if (!Kinds.Contains(kind))
-        {
-            // Readable, just not ours: it is not a missing Catalog, and no kind-specific check applies to it.
-            errors.Add(new LoadError(source.Path, "kind", ReplacedKinds.TryGetValue(kind, out var replacement)
-                ? $"kind '{kind}' is no longer supported: {replacement}."
-                : $"unknown kind '{kind}'; expected one of {string.Join(", ", Kinds)}."));
-            return new Document(source.Path, kind, body, false);
-        }
-
-        if (kind == PolicyKind && body.ContainsKey(RemovedPolicyAdd))
+        if (document.Kind == PolicyKind && document.Body.ContainsKey(RemovedPolicyAdd))
         {
             // One clear error instead of the schema's "not allowed"; the rest of the file is not checked until it is migrated.
             errors.Add(new LoadError(source.Path, RemovedPolicyAdd,
                 "a policy can no longer add nodes: a workload declares what it gets in its 'requires'; use 'require: <component>' to make every workload the policy matches require one."));
-            return new Document(source.Path, kind, body, false);
+            return (document, false);
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        var result = await Validator.ValidateTokenAsync(await EmbeddedSchema.ReadAsync($"schemas/catalog/{kind.ToLowerInvariant()}.schema.json", cancellationToken), body);
-        errors.AddRange(result.Errors.Select(e => LoadError.FromSchema(source.Path, e)));
-        return new Document(source.Path, kind, body, result.IsValid);
+        // An unknown kind is refused here: readable, so not a missing Catalog, and no kind-specific check applies to it.
+        var schemaErrors = await DocumentLoader.ValidateAsync(document, Kinds, cancellationToken);
+        errors.AddRange(schemaErrors);
+        return (document, schemaErrors.Count == 0);
     }
 
     private static List<Document> OfKind(List<Document> documents, string kind) => documents.Where(d => d.Kind == kind).ToList();
@@ -197,7 +178,7 @@ public static class CatalogParser
 
         foreach (var extra in catalogs.Skip(1))
         {
-            errors.Add(new LoadError(extra.Source, "kind", $"a second {CatalogKind} file; exactly one is allowed (first: {catalogs[0].Source})."));
+            errors.Add(new LoadError(extra.Source, DocumentLoader.KindField, $"a second {CatalogKind} file; exactly one is allowed (first: {catalogs[0].Source})."));
         }
     }
 

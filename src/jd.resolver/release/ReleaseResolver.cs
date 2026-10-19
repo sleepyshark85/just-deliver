@@ -23,7 +23,7 @@ public static class ReleaseResolver
             // The YAML parser does not take the byte order mark that the set's hash covers (as in ReleaseBuilder.ComposeAsync).
             var definition = set.Workloads.Single(w => w.Name == name).Definition.TrimStart('\uFEFF');
             var loaded = await WorkloadFile.ParseAsync(source, definition, cancellationToken);
-            if (loaded.Workload is not { } workload)
+            if (loaded.Value is not { } workload)
             {
                 errors.AddRange(loaded.Errors);
                 continue;

@@ -13,6 +13,7 @@ namespace jd.resolver.release;
 /// <param name="Deployers">The distinct object ids of the principals that ran a <c>deploy</c> of the label, failed attempts included, from the records that passed the consistency checks.</param>
 public sealed record Qualification(string? SetSha256, IReadOnlyList<string> Reasons, IReadOnlyList<string> Deployers)
 {
+    /// <summary>Whether the records show the label qualified: there is no reason it is not.</summary>
     public bool Qualified => Reasons.Count == 0;
 }
 
@@ -22,6 +23,7 @@ public sealed record Qualification(string? SetSha256, IReadOnlyList<string> Reas
 /// </summary>
 public static class QualificationReader
 {
+    // Body passed the release-record schema (LoadAsync), so every field the schema requires is there: the reads with '!' below rely on it.
     private sealed record Entry(string Name, string Activity, JObject Body);
 
     private sealed record Expected(string Environment, string Label, string SetSha256);
@@ -43,7 +45,7 @@ public static class QualificationReader
                 return new Qualification(null, [$"unknown label: there is no {ReleaseRecordFile.SetFileName} for label {label} on {environment}."], []);
             }
 
-            setSha256 = ReleaseDocument.Sha256(await records.ReadAsync(environment, label, ReleaseRecordFile.SetFileName, cancellationToken));
+            setSha256 = ReleaseHash.Of(await records.ReadAsync(environment, label, ReleaseRecordFile.SetFileName, cancellationToken));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -96,7 +98,7 @@ public static class QualificationReader
             return (null, $"cannot be read: {ex.Message}");
         }
 
-        var errors = await ReleaseDocument.ValidateAsync(name, body, ReleaseDocument.RecordSchema, cancellationToken);
+        var errors = (await DocumentLoader.LoadAsync(name, body, [ReleaseRecordFile.Kind], cancellationToken)).Errors;
         var problem = errors.Count > 0
             ? $"is not a valid release record: {string.Join("; ", errors)}"
             : Misplaced(body, time, activity, expected);

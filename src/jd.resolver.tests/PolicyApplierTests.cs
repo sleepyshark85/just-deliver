@@ -34,9 +34,9 @@ public class PolicyApplierTests
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
-        var expansion = new Expander(loaded.Catalog!, Env(type)).Expand(workload, "workload.yaml");
+        var expansion = new Expander(loaded.Value!, Env(type)).Expand(workload, "workload.yaml");
         Assert.Equal(expectExpansionErrors, expansion.Errors.Count > 0);
-        return new PolicyApplier(loaded.Catalog!, Env(type)).Apply(expansion);
+        return new PolicyApplier(loaded.Value!, Env(type)).Apply(expansion);
     }
 
     private static ResolvedNode Node(PolicyResult result, string name, int requirement = 0) =>
@@ -317,7 +317,7 @@ public class PolicyApplierTests
     {
         var files = BaseFiles.Concat([Policy("pol", "{ template: t/n }", "set: { nested.deep: 1 }\ndefault: { list: [1] }\n")])
             .Select((content, i) => new CatalogSource($"f{i}.yaml", content));
-        var catalog = (await CatalogParser.ParseAsync(files)).Catalog!;
+        var catalog = (await CatalogParser.ParseAsync(files)).Value!;
         var before = JsonConvert.SerializeObject(catalog);
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\nrequires:\n  - type: sqldb\n");
         var expansion = new Expander(catalog, Env()).Expand(workload, "workload.yaml");
@@ -355,7 +355,7 @@ public class PolicyApplierTests
     [Fact]
     public async Task Seed_catalog_and_sample_workload_resolve_with_monitoring_as_a_requirement()
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Catalog!;
+        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var environment = new EnvironmentDescriptor(
             "dev",

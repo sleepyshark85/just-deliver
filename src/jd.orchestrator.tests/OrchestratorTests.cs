@@ -77,9 +77,9 @@ public partial class OrchestratorTests
         var loaded = await CatalogParser.ParseAsync(files);
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: {workloadName}, team: crew }}\n{container}requires:\n{requires}");
-        var graph = Resolver.Resolve(workload, "workload.yaml", loaded.Catalog!, Env);
+        var graph = Resolver.Resolve(workload, "workload.yaml", loaded.Value!, Env);
         Assert.Empty(graph.Errors);
-        return (graph, loaded.Catalog!);
+        return (graph, loaded.Value!);
     }
 
     private static async Task<RunReport> DeployRawAsync(FakeBackend backend, string requires = DefaultRequires, Action<NodeReport>? progress = null, string part = Part)
