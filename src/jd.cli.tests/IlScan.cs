@@ -9,16 +9,19 @@ namespace jd.cli.tests;
 // as reflection's Type.FullName spells a definition).
 internal sealed record TypeName(string Assembly, string FullName);
 
-// A member a method body reaches by a call, newobj, ldftn or field access: the top-level type and the source member whose body it is, and the
-// member reached (its declaring type, its name and, for a method, its parameter types).
-internal sealed record MemberUse(string Type, string Member, TypeName Target, string TargetMember, IReadOnlyList<string> Parameters);
+// A member a method body reaches by a call, newobj, ldftn or field access: the top-level type whose code it is, where it is written (the source
+// member, qualified by its type: "jd.cli.ApproveCli+Request..ctor"), and the member reached (its declaring type, its name and, for a method, its
+// parameter types).
+internal sealed record MemberUse(string Type, string Where, TypeName Target, string TargetMember, IReadOnlyList<string> Parameters);
 
 // A type that a type of the scanned assembly names: in an interface it implements, a field, a method signature or local, a type operand, or as the
-// declaring type of a member it reaches. Generic arguments count, so Func<IRecordStore> names IRecordStore.
-internal sealed record TypeMention(string Type, string Member, TypeName Named);
+// declaring type or in the signature of a member it reaches. Generic arguments count, so Func<IRecordStore> names IRecordStore. Type and Where as
+// for a MemberUse.
+internal sealed record TypeMention(string Type, string Where, TypeName Named);
 
-// Decodes every method body of an assembly with System.Reflection.Metadata (docs/architecture/application.md section 4). Compiler-generated types
-// (lambdas, async state machines) are attributed to the top-level type and the source member they came from, so a finding names code as written.
+// Decodes every method body of an assembly with System.Reflection.Metadata (docs/architecture/application.md section 4). The members of
+// compiler-generated types (closures, async state machines) are attributed to the type and the source member they were written in, so a finding
+// names code as written.
 internal sealed class IlScan
 {
     private const string InterfacesMember = "(its interfaces)";
@@ -40,24 +43,34 @@ internal sealed class IlScan
         {
             var type = reader.GetTypeDefinition(handle);
             var owner = names.TopLevel(handle);
-            void Mention(string member, Sig sig) => mentions.AddRange(sig.All.Select(named => new TypeMention(owner, member, named)));
-            foreach (var implementation in type.GetInterfaceImplementations())
+            var typeName = reader.GetString(type.Name);
+            var written = names.Written(handle);
+            string? Where(string name) => SourceMember(typeName, name) is { } source ? $"{written}.{source}" : null;
+            void Mention(string where, Sig sig) => mentions.AddRange(sig.All.Select(named => new TypeMention(owner, where, named)));
+            if (Where(InterfacesMember) is { } implementing)
             {
-                Mention(InterfacesMember, names.Decode(reader.GetInterfaceImplementation(implementation).Interface));
+                foreach (var implementation in type.GetInterfaceImplementations())
+                {
+                    Mention(implementing, names.Decode(reader.GetInterfaceImplementation(implementation).Interface));
+                }
             }
 
-            // A closure's fields hold what its source member captured, and that member named each when it got it, so a closure with no source name is skipped.
+            // A closure's fields hold what the member it was written in captured, and that member named each when it got it.
             foreach (var field in type.GetFields().Select(reader.GetFieldDefinition))
             {
-                if (SourceMember(reader, type, reader.GetString(field.Name)) is { } fieldMember)
+                if (Where(reader.GetString(field.Name)) is { } where)
                 {
-                    Mention(fieldMember, field.DecodeSignature(names, null));
+                    Mention(where, field.DecodeSignature(names, null));
                 }
             }
 
             foreach (var method in type.GetMethods().Select(reader.GetMethodDefinition))
             {
-                var member = SourceMember(reader, type, reader.GetString(method.Name)) ?? reader.GetString(method.Name);
+                if (Where(reader.GetString(method.Name)) is not { } member)
+                {
+                    continue; // a closure's constructor: it only stores what its member captured
+                }
+
                 var signature = method.DecodeSignature(names, null);
                 foreach (var part in signature.ParameterTypes.Prepend(signature.ReturnType))
                 {
@@ -108,36 +121,20 @@ internal sealed class IlScan
         return new IlScan(uses, mentions);
     }
 
-    // The source member of a member, or of a compiler-generated member or type: "<RunAsync>b__0_0" and "<RunAsync>d__3" came from RunAsync. Null for
-    // a member of a closure, whose type ("<>c__DisplayClass3_0") names no source member.
-    private static string? SourceMember(MetadataReader reader, TypeDefinition type, string name)
+    // The source member that the member `name` of a type named `typeName` was written in. A member of an ordinary type is itself, or, for a lambda
+    // or local function ("<RunAsync>b__0_0", "<RunAsync>g__Local|0_1"), the member it is in. Every member of a state machine ("<RunAsync>d__3",
+    // its fields the locals hoisted across an await) was written in RunAsync. A closure ("<>c", "<>c__DisplayClass3_0") names no member: its
+    // lambdas name theirs, and its fields and constructor were written in none (null).
+    private static string? SourceMember(string typeName, string name) =>
+        typeName.StartsWith('<') ? Generated(typeName) ?? (name.StartsWith('<') ? Generated(name) : null) : Generated(name) ?? name;
+
+    // "<Name>…" and "<<Name>…>…" name the source member Name; "<>c" names none.
+    private static string? Generated(string name)
     {
-        if (Generated(name) is { } source)
-        {
-            return source;
-        }
-
-        for (var current = type; ; current = reader.GetTypeDefinition(current.GetDeclaringType()))
-        {
-            if (Generated(reader.GetString(current.Name)) is { } fromType)
-            {
-                return fromType;
-            }
-
-            if (reader.GetString(current.Name).StartsWith('<'))
-            {
-                return null;
-            }
-
-            if (current.GetDeclaringType().IsNil)
-            {
-                return name;
-            }
-        }
+        var start = name.Length - name.TrimStart('<').Length;
+        var end = name.IndexOf('>', StringComparison.Ordinal);
+        return start > 0 && end > start ? name[start..end] : null;
     }
-
-    // "<Name>..." names its source member Name; "<>c" and any other name name none.
-    private static string? Generated(string name) => name.StartsWith('<') && name.IndexOf('>', StringComparison.Ordinal) is > 1 and var end ? name[1..end] : null;
 
     private static ILOpCode ReadOpCode(ref BlobReader il)
     {
@@ -190,6 +187,13 @@ internal sealed class IlScan
         {
             var declaring = reader.GetTypeDefinition(handle).GetDeclaringType();
             return declaring.IsNil ? Of(handle).FullName : TopLevel(declaring);
+        }
+
+        // The type the code of a type was written in: the type, or for a compiler-generated one nested in another ("<…"), that one's.
+        public string Written(TypeDefinitionHandle handle)
+        {
+            var type = reader.GetTypeDefinition(handle);
+            return reader.GetString(type.Name).StartsWith('<') && !type.GetDeclaringType().IsNil ? Written(type.GetDeclaringType()) : Of(handle).FullName;
         }
 
         // The member a token names, or null when it names a type.

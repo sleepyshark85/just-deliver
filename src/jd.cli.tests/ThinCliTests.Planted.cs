@@ -29,15 +29,32 @@ namespace jd.cli.tests
         [Fact]
         public void R1_names_the_command_and_member_that_run_a_rule_or_read_the_connections()
         {
-            var findings = R1(Planted, Only(typeof(planted.Command)), UseCaseSurface([typeof(planted.UseCase)])).Select(f => f.Message).ToList();
+            var findings = R1(Planted, Only(typeof(planted.Command)), UseCaseSurface([typeof(planted.UseCase)])).ToList();
 
             Assert.Equal(
                 [
-                    "jd.cli.tests.planted.Command.Resolves reaches jd.resolver.Resolver.Resolve",
-                    "jd.cli.tests.planted.Command.ReadsTheRecords reaches jd.orchestrator.usecases.Connections.get_Records",
+                    "jd.cli.tests.planted.Command+Nested.Resolves reaches jd.resolver.Resolver.Resolve",
                     "jd.cli.tests.planted.Command.CallsAPortInALambda reaches jd.core.records.IRecordStore.ListAsync",
+                    "jd.cli.tests.planted.Command.HoldsAPortAcrossAnAwait reaches jd.core.records.IRecordStore.ListAsync",
+                    "jd.cli.tests.planted.Command.HoldsAPortAcrossAnAwait reaches jd.orchestrator.usecases.Connections.get_Records",
+                    "jd.cli.tests.planted.Command.HoldsAPortInAnAsyncLocalFunction reaches jd.core.records.IRecordStore.ListAsync",
+                    "jd.cli.tests.planted.Command.HoldsAPortInAnAsyncLocalFunction reaches jd.orchestrator.usecases.Connections.get_Records",
+                    "jd.cli.tests.planted.Command.ReadsTheRecords reaches jd.orchestrator.usecases.Connections.get_Records",
+                    "jd.cli.tests.planted.Command.Resolves reaches jd.resolver.Resolver.Resolve",
+                    "jd.cli.tests.planted.Command.ResolvesInALocalFunction reaches jd.resolver.Resolver.Resolve",
                 ],
-                findings);
+                findings.Select(f => f.Message).Order(StringComparer.Ordinal));
+            Assert.Equal("jd.cli.tests.planted.Command -> jd.resolver.Resolver.Resolve", findings.Single(f => f.Message.StartsWith("jd.cli.tests.planted.Command+Nested.", StringComparison.Ordinal)).Key); // a nested type's key is its top-level type's
+        }
+
+        [Fact]
+        public void A_breach_is_each_unlisted_finding_and_each_stale_entry_in_full()
+        {
+            var findings = new[] { new Finding("A -> B.c", "A.Run reaches B.c"), new Finding("A -> B.d", "A.Run reaches B.d"), new Finding("A -> B.d", "A.Other reaches B.d") };
+
+            Assert.Equal(["A.Other reaches B.d", "A.Run reaches B.d", "stale allowlist entry: A -> B.e"], Breaches(findings, ["A -> B.c", "A -> B.e"]));
+            Assert.Empty(Breaches(findings, ["A -> B.c", "A -> B.d"]));
+            Assert.Equal("A.Other reaches B.d\nA.Run reaches B.d\nstale allowlist entry: A -> B.e", Assert.ThrowsAny<Exception>(() => AssertOnly(findings, ["A -> B.c", "A -> B.e"])).Message);
         }
 
         [Fact]
@@ -64,15 +81,18 @@ namespace jd.cli.tests
         [Fact]
         public void R2_names_the_type_and_member_that_name_a_port_outside_the_composition_and_the_composition_that_bypasses_one()
         {
-            var findings = R2(Planted, Only(typeof(planted.Command), typeof(planted.Store), typeof(planted.Composition)), Only(typeof(planted.Composition))).Select(f => f.Message).Distinct().ToList();
+            var findings = R2(Planted, Only(typeof(planted.Command), typeof(planted.Store), typeof(planted.Composition)), Only(typeof(planted.Composition))).Select(f => f.Message).Distinct().Order(StringComparer.Ordinal).ToList();
 
             Assert.Equal(
                 [
-                    "jd.cli.tests.planted.Command.ReadsTheRecords names the port jd.core.records.IRecordStore",
+                    "jd.cli.tests.planted.Command+Nested.Holds names the port jd.core.records.IRecordStore",
                     "jd.cli.tests.planted.Command.CallsAPortInALambda names the port jd.core.records.IRecordStore",
+                    "jd.cli.tests.planted.Command.HoldsAPortAcrossAnAwait names the port jd.core.records.IRecordStore",
+                    "jd.cli.tests.planted.Command.HoldsAPortInAnAsyncLocalFunction names the port jd.core.records.IRecordStore",
+                    "jd.cli.tests.planted.Command.ReadsTheRecords names the port jd.core.records.IRecordStore",
                     "jd.cli.tests.planted.Command.TakesAPortFromACall names the port jd.core.records.IRecordStore",
-                    "jd.cli.tests.planted.Store.(its interfaces) names the port jd.core.records.IRecordStore",
                     "jd.cli.tests.planted.Composition.Connect reaches jd.resolver.Resolver.Resolve, which is not a port",
+                    "jd.cli.tests.planted.Store.(its interfaces) names the port jd.core.records.IRecordStore",
                 ],
                 findings);
         }
@@ -80,25 +100,25 @@ namespace jd.cli.tests
         [Fact]
         public void R3_names_the_type_and_member_that_touch_a_file_the_environment_or_the_console_and_nothing_else()
         {
-            var findings = R3(Planted, Only(typeof(planted.Inner))).Select(f => f.Message).ToList();
+            var findings = R3(Planted, Only(typeof(planted.Inner))).Select(f => f.Message).Order(StringComparer.Ordinal).ToList();
 
             Assert.Equal(
                 [
-                    "jd.cli.tests.planted.Inner.Touches reaches System.IO.StreamReader..ctor",
                     "jd.cli.tests.planted.Inner.Touches reaches System.Console.WriteLine",
-                    "jd.cli.tests.planted.Inner.Touches reaches System.IO.File.Exists",
                     "jd.cli.tests.planted.Inner.Touches reaches System.Environment.GetEnvironmentVariable",
+                    "jd.cli.tests.planted.Inner.Touches reaches System.IO.File.Exists",
                     "jd.cli.tests.planted.Inner.Touches reaches System.IO.Path.GetFullPath",
-                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.FileInfo..ctor",
-                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.DirectoryInfo..ctor",
-                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.FileSystemInfo.get_Exists",
-                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.FileStream..ctor",
-                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.StreamWriter..ctor",
+                    "jd.cli.tests.planted.Inner.Touches reaches System.IO.StreamReader..ctor",
+                    "jd.cli.tests.planted.Inner.TouchesAsync reaches System.IO.Directory.Exists",
                     "jd.cli.tests.planted.Inner.TouchesMore reaches System.Environment.GetEnvironmentVariables",
                     "jd.cli.tests.planted.Inner.TouchesMore reaches System.Environment.GetFolderPath",
                     "jd.cli.tests.planted.Inner.TouchesMore reaches System.Environment.get_CurrentDirectory",
                     "jd.cli.tests.planted.Inner.TouchesMore reaches System.Environment.set_CurrentDirectory",
-                    "jd.cli.tests.planted.Inner.TouchesAsync reaches System.IO.Directory.Exists",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.DirectoryInfo..ctor",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.FileInfo..ctor",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.FileStream..ctor",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.FileSystemInfo.get_Exists",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.StreamWriter..ctor",
                 ],
                 findings);
         }
@@ -134,6 +154,39 @@ namespace jd.cli.tests.planted
         public static Func<Task> CallsAPortInALambda(IRecordStore records) => () => records.ListAsync("dev", "1.0.0", CancellationToken.None);
 
         public static void TakesAPortFromACall(Connections connections) => _ = Composition.Records(connections);
+
+        public static async Task HoldsAPortAcrossAnAwait(Connections connections)
+        {
+            var store = connections.Records(); // hoisted into a field of the state machine
+            await Task.Yield();
+            await store.ListAsync("dev", "1.0.0", CancellationToken.None);
+        }
+
+        public static object ResolvesInALocalFunction()
+        {
+            return Resolve();
+
+            static object Resolve() => Resolver.Resolve(null!, null!, null!, null!);
+        }
+
+        public static Task HoldsAPortInAnAsyncLocalFunction(Connections connections)
+        {
+            return HoldAsync(connections);
+
+            static async Task HoldAsync(Connections connections)
+            {
+                var store = connections.Records();
+                await Task.Yield();
+                await store.ListAsync("dev", "1.0.0", CancellationToken.None);
+            }
+        }
+
+        internal static class Nested
+        {
+            public static object Resolves() => Resolver.Resolve(null!, null!, null!, null!);
+
+            public static void Holds(IRecordStore records) => _ = records;
+        }
     }
 
     internal sealed class Store : IRecordStore

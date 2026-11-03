@@ -18,21 +18,23 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal(["Records", "Time", "Identity", "Backend", "Probe", "LiveRevisions"], Invoked);
     }
 
+    // Stands for the set the test creates.
+    private const string TheSet = "<set>";
+
+    public static TheoryData<string[]> CommandsThatDeployNothing => new()
+    {
+        { ["preview", Path.Combine(Samples, "workloads", "sample-app.yaml"), "--env", Environment, "--catalog", Catalog] },
+        { ["validate", Path.Combine(Samples, "workloads", "sample-app.yaml")] },
+        { ["release", "show", TheSet] },
+    };
+
     [Theory]
-    [InlineData("preview")]
-    [InlineData("validate")]
-    [InlineData("release show")]
-    public async Task A_command_that_deploys_nothing_builds_no_connection(string command)
+    [MemberData(nameof(CommandsThatDeployNothing))]
+    public async Task A_command_that_deploys_nothing_builds_no_connection(string[] command)
     {
         var set = await CreateSetAsync();
-        string[] args = command switch
-        {
-            "preview" => ["preview", Path.Combine(Samples, "workloads", "sample-app.yaml"), "--env", Environment, "--catalog", Catalog],
-            "validate" => ["validate", Path.Combine(Samples, "workloads", "sample-app.yaml")],
-            _ => ["release", "show", set],
-        };
 
-        var (code, _, stderr) = await RunAsync(new RecordingBackend(), args);
+        var (code, _, stderr) = await RunAsync(new RecordingBackend(), [.. command.Select(arg => arg == TheSet ? set : arg)]);
 
         Assert.True(code == 0, stderr);
         Assert.Empty(Invoked);

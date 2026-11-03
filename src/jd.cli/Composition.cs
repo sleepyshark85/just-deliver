@@ -13,8 +13,8 @@ namespace jd.cli;
 /// </summary>
 internal static class Composition
 {
-    internal const string PulumiHomeVariable = "PULUMI_HOME";
-    internal const string ScratchDirectoryVariable = "JD_SCRATCH_DIR";
+    private const string PulumiHomeVariable = "PULUMI_HOME";
+    private const string ScratchDirectoryVariable = "JD_SCRATCH_DIR";
 
     /// <summary>The connections over <paramref name="environmentVariable"/>; nothing is built until a factory is invoked.</summary>
     public static Connections Connect(Func<string, string?> environmentVariable) => new(

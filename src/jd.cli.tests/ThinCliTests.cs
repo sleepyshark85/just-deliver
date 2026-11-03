@@ -34,7 +34,7 @@ public sealed partial class ThinCliTests
     // R1: command code reaches the inner assemblies only through the use cases' surface; it reads no member of Connections or of a port.
     internal static IEnumerable<Finding> R1(IlScan scan, Func<string, bool> isCommand, ISet<(string Type, string Member)> surface) =>
         scan.Uses.Where(use => isCommand(use.Type) && IsInner(use.Target) && !surface.Contains((use.Target.FullName, use.TargetMember)))
-            .Select(use => new Finding($"{use.Type} -> {use.Target.FullName}.{use.TargetMember}", $"{use.Type}.{use.Member} reaches {use.Target.FullName}.{use.TargetMember}"));
+            .Select(use => new Finding($"{use.Type} -> {use.Target.FullName}.{use.TargetMember}", $"{use.Where} reaches {use.Target.FullName}.{use.TargetMember}"));
 
     // What R1 lets command code reach, computed from the use cases' signatures: each RunAsync, the constructors of its input (and nothing else of it), the
     // property getters of every other type its signature holds (result, progress, problem and the data types in them, and the records derived from them),
@@ -79,6 +79,7 @@ public sealed partial class ThinCliTests
         foreach (var run in useCases.SelectMany(u => u.GetMethods(BindingFlags.Public | BindingFlags.Static)).Where(m => m.Name == RunAsync))
         {
             surface.Add((Definition(run.DeclaringType!), run.Name));
+            // Only the input's own constructor: S25b1 widens this to the types an input holds (SourceDocument).
             var input = run.GetParameters()[0].ParameterType;
             surface.Add((Definition(input), ConstructorInfo.ConstructorName));
             foreach (var type in run.GetParameters().Skip(1).Select(p => p.ParameterType).Append(run.ReturnType))
@@ -115,17 +116,17 @@ public sealed partial class ThinCliTests
     {
         var ports = Ports();
         var named = scan.Mentions.Where(m => inScope(m.Type) && !isComposition(m.Type) && ports.Contains(m.Named.FullName))
-            .Select(m => new Finding($"{m.Type} names {m.Named.FullName}", $"{m.Type}.{m.Member} names the port {m.Named.FullName}"));
+            .Select(m => new Finding($"{m.Type} names {m.Named.FullName}", $"{m.Where} names the port {m.Named.FullName}"));
         var through = ports.Concat(PortSignatureTypes()).Append(Definition(typeof(Connections))).ToHashSet();
         var reached = scan.Uses.Where(use => inScope(use.Type) && isComposition(use.Type) && IsInner(use.Target) && !through.Contains(use.Target.FullName))
-            .Select(use => new Finding($"{use.Type} -> {use.Target.FullName}.{use.TargetMember}", $"{use.Type}.{use.Member} reaches {use.Target.FullName}.{use.TargetMember}, which is not a port"));
+            .Select(use => new Finding($"{use.Type} -> {use.Target.FullName}.{use.TargetMember}", $"{use.Where} reaches {use.Target.FullName}.{use.TargetMember}, which is not a port"));
         return named.Concat(reached);
     }
 
     // R3: the inner assemblies touch no file, directory, environment variable, current directory or console.
     internal static IEnumerable<Finding> R3(IlScan scan, Func<string, bool> inScope) =>
         scan.Uses.Where(use => inScope(use.Type) && TouchesTheMachine(use))
-            .Select(use => new Finding($"{use.Type} -> {use.Target.FullName}.{use.TargetMember}", $"{use.Type}.{use.Member} reaches {use.Target.FullName}.{use.TargetMember}"));
+            .Select(use => new Finding($"{use.Type} -> {use.Target.FullName}.{use.TargetMember}", $"{use.Where} reaches {use.Target.FullName}.{use.TargetMember}"));
 
     private static bool TouchesTheMachine(MemberUse use) => use.Target.FullName switch
     {
@@ -139,12 +140,23 @@ public sealed partial class ThinCliTests
     private static IEnumerable<Finding> InnerFindings() =>
         InnerAssemblies.SelectMany(assembly => R3(Scan(assembly), _ => true));
 
-    // Every finding is on the allowlist, and every entry still names a finding.
-    private static void AssertOnly(IEnumerable<Finding> findings, IReadOnlyCollection<string> allowlist)
+    // Each finding not on the allowlist, and each entry that names no finding, as a line of its own, in full.
+    internal static IEnumerable<string> Breaches(IEnumerable<Finding> findings, IReadOnlyCollection<string> allowlist)
     {
         var found = findings.ToList();
-        Assert.Empty(found.Where(f => !allowlist.Contains(f.Key)).Select(f => f.Message).Distinct().Order(StringComparer.Ordinal));
-        Assert.Empty(allowlist.Except(found.Select(f => f.Key)).Order(StringComparer.Ordinal));
+        var unlisted = found.Where(f => !allowlist.Contains(f.Key)).Select(f => f.Message).Distinct().Order(StringComparer.Ordinal);
+        var stale = allowlist.Except(found.Select(f => f.Key)).Order(StringComparer.Ordinal).Select(entry => $"stale allowlist entry: {entry}");
+        return unlisted.Concat(stale);
+    }
+
+    // Assert.Empty would cut each line and list five; this prints them all.
+    private static void AssertOnly(IEnumerable<Finding> findings, IReadOnlyCollection<string> allowlist)
+    {
+        var breaches = Breaches(findings, allowlist).ToList();
+        if (breaches.Count > 0)
+        {
+            Assert.Fail(string.Join('\n', breaches));
+        }
     }
 
     private static IEnumerable<string> Keys(Dictionary<string, string[]> allowlist, string separator) =>
