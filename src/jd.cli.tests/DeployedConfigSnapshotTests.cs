@@ -65,7 +65,15 @@ public sealed class DeployedConfigSnapshotTests : IDisposable
     private async Task Run(SnapshotBackend backend, params string[] args)
     {
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, new StringWriter(), stderr, CancellationToken.None, backend, name => name == "JD_DATA_DIR" ? _data : null, backend, _identity, _clock, _live);
+        var connections = Composition.Connect(name => name == "JD_DATA_DIR" ? _data : null) with
+        {
+            Backend = () => backend,
+            Probe = () => backend,
+            Identity = () => _identity,
+            Time = () => _clock,
+            LiveRevisions = () => _live,
+        };
+        var code = await Cli.RunAsync(args, new StringWriter(), stderr, CancellationToken.None, connections);
         Assert.True(code == 0, $"jd {string.Join(' ', args)}: exit {code}: {stderr}");
     }
 

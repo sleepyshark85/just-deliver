@@ -51,7 +51,7 @@ public sealed class EnvCliTests : IDisposable
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(["env", .. args], stdout, stderr, CancellationToken.None, backend, name => variables?.GetValueOrDefault(name));
+        var code = await Cli.RunAsync(["env", .. args], stdout, stderr, CancellationToken.None, Composition.Connect(name => variables?.GetValueOrDefault(name)) with { Backend = () => backend });
         return (code, stdout.ToString(), stderr.ToString());
     }
 

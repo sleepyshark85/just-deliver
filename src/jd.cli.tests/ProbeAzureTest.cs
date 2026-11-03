@@ -146,13 +146,15 @@ public abstract class ProbeAzureTest : IDisposable
     }
 
     /// <summary>The real Pulumi backend on jd's state in a data directory under <see cref="Root"/>.</summary>
-    protected IBackEndProvider CreateBackend() => Cli.CreatePulumiBackend(AzureCli.Variables(Root));
+    protected IBackEndProvider CreateBackend() => Composition.Connect(AzureCli.Variables(Root)).Backend();
 
     protected static async Task<(int Code, string Output)> DeployAsync(IBackEndProvider backend, string workload, string environment, string catalog)
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(["deploy", workload, "--env", environment, "--catalog", catalog], stdout, stderr, CancellationToken.None, backend, probe: new PassingProbe());
+        var probe = new PassingProbe();
+        var connections = Composition.Connect(System.Environment.GetEnvironmentVariable) with { Backend = () => backend, Probe = () => probe };
+        var code = await Cli.RunAsync(["deploy", workload, "--env", environment, "--catalog", catalog], stdout, stderr, CancellationToken.None, connections);
         return (code, stdout + stderr.ToString());
     }
 }

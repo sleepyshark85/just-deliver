@@ -1,7 +1,4 @@
-using jd.core.bp;
-using jd.core.identity;
-using jd.core.revisions;
-using jd.orchestrator;
+using jd.orchestrator.usecases;
 using jd.resolver.environment;
 using jd.resolver.release;
 
@@ -21,9 +18,7 @@ internal static class PromoteCli
     private const string CatalogOption = "--catalog";
 
     // args are the arguments after "promote".
-    public static async Task<int> RunAsync(
-        string[] args, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions,
-        TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
     {
         var (label, values, problem) = Arguments.ScanLabel(args, ToOption, CatalogOption);
         if (label is null || !values.TryGetValue(ToOption, out var to) || !values.TryGetValue(CatalogOption, out var catalog))
@@ -53,12 +48,12 @@ internal static class PromoteCli
         }
 
         // A bad credential stops here, before any record is read.
-        if (await Cli.GetIdentityAsync(identity, environmentVariable, stderr, cancellationToken) is not { } principal)
+        if (await Cli.GetIdentityAsync(connections, stderr, cancellationToken) is not { } principal)
         {
             return Invalid;
         }
 
-        var records = Cli.Records(environmentVariable);
+        var records = connections.Records();
 
         // Nothing below this check runs unless the label is qualified and approved; the walk reads the kept bytes and refuses them unless they hash to the checked set.
         var decision = await PromotionCheck.CheckAsync(records, target, label, cancellationToken);
@@ -80,6 +75,6 @@ internal static class PromoteCli
 
         stdout.WriteLine($"promoting {label} from {policy.QualifiedOn} (set sha256 {setSha256})");
         return await ReleaseDeployCli.PromoteAsync(
-            to, catalog, new ReleaseDeployCli.Promotion(principal, policy.QualifiedOn, label, setSha256), stdout, stderr, backend, probe, liveRevisions, time, environmentVariable, cancellationToken);
+            to, catalog, new ReleaseDeployCli.Promotion(principal, policy.QualifiedOn, label, setSha256), stdout, stderr, connections, cancellationToken);
     }
 }

@@ -22,7 +22,8 @@ public sealed class CliTests : IDisposable
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, probe: backend);
+        var connections = backend is null ? null : Composition.Connect(System.Environment.GetEnvironmentVariable) with { Backend = () => backend, Probe = () => backend };
+        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, connections);
         return (code, stdout.ToString(), stderr.ToString());
     }
 
@@ -403,7 +404,7 @@ public sealed class CliTests : IDisposable
         };
         var options = new PulumiBackendOptions();
 
-        Cli.PulumiSettings(name => variables.GetValueOrDefault(name))(options);
+        Composition.PulumiSettings(name => variables.GetValueOrDefault(name))(options);
 
         Assert.Equal(
             ("file://" + Path.Combine(data, "state"), Path.Combine(data, "state.key"), "/pulumi-home", "/scratch"),

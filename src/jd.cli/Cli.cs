@@ -1,23 +1,18 @@
-using Azure.Core;
-using jd.azure;
 using jd.bp.pulumi;
-using jd.core.bp;
 using jd.core.identity;
-using jd.core.records;
-using jd.core.revisions;
 using jd.orchestrator;
+using jd.orchestrator.usecases;
 using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.graph;
 using jd.resolver.workload;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace jd.cli;
 
 /// <summary>
-/// The composition root: parses arguments, wires the validator, the resolver, the orchestrator and the Pulumi backend, prints
-/// results and returns the exit code (0 success, 1 validation, resolution or deployment errors, 2 usage errors). Holds no resolution logic.
+/// The command line: parses arguments, runs the validator, the resolver and the orchestrator over the <see cref="Connections"/> of
+/// <see cref="Composition"/>, prints results and returns the exit code (0 success, 1 validation, resolution or deployment errors, 2 usage errors). Holds no resolution logic.
 /// </summary>
 public static class Cli
 {
@@ -71,22 +66,14 @@ public static class Cli
     private sealed record DeployOptions(string Workload, string Environment, string Catalog, bool DryRun) : ResolveOptions(Workload, Environment, Catalog);
 
     /// <summary>Runs the command in <paramref name="args"/>, writing results to <paramref name="stdout"/> and problems to <paramref name="stderr"/>; returns the exit code.</summary>
-    /// <remarks>The last six parameters are test seams; each null means the real one.</remarks>
     /// <param name="args">The command line, without the program name.</param>
     /// <param name="stdout">Where results are written.</param>
     /// <param name="stderr">Where problems and usage are written.</param>
     /// <param name="cancellationToken">Cancels the run.</param>
-    /// <param name="backend">The backend a deploy uses (null: the Pulumi backend on the state in jd's data directory).</param>
-    /// <param name="environmentVariable">Reads the environment variables (null: the process environment).</param>
-    /// <param name="probe">Checks a new revision is healthy (null: an HTTP GET).</param>
-    /// <param name="identity">Names the deploying principal (null: the Azure CLI sign-in or the ARM_* variables).</param>
-    /// <param name="time">Stamps the release record (null: the system clock).</param>
-    /// <param name="liveRevisions">Reads what runs (null: Azure, with the same variables).</param>
-    public static async Task<int> RunAsync(
-        string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, IBackEndProvider? backend = null, Func<string, string?>? environmentVariable = null,
-        IRevisionProbe? probe = null, IDeployerIdentity? identity = null, TimeProvider? time = null, ILiveRevisions? liveRevisions = null)
+    /// <param name="connections">What the run reaches outside jd through; a test seam (null: <see cref="Composition.Connect"/> over the process environment).</param>
+    public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, Connections? connections = null)
     {
-        environmentVariable ??= System.Environment.GetEnvironmentVariable;
+        connections ??= Composition.Connect(System.Environment.GetEnvironmentVariable);
         if (args.Contains("--help") || args.Contains("-h"))
         {
             stdout.Write(Usage);
@@ -95,22 +82,22 @@ public static class Cli
 
         if (args.FirstOrDefault() == "release")
         {
-            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, backend, probe, identity, liveRevisions, time ?? TimeProvider.System, environmentVariable, cancellationToken);
+            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken);
         }
 
         if (args.FirstOrDefault() == "approve")
         {
-            return await ApproveCli.RunAsync(args[1..], stdout, stderr, identity, time ?? TimeProvider.System, environmentVariable, cancellationToken);
+            return await ApproveCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken);
         }
 
         if (args.FirstOrDefault() == "promote")
         {
-            return await PromoteCli.RunAsync(args[1..], stdout, stderr, backend, probe, identity, liveRevisions, time ?? TimeProvider.System, environmentVariable, cancellationToken);
+            return await PromoteCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken);
         }
 
         if (args.FirstOrDefault() == "env")
         {
-            return await EnvCli.RunAsync(args[1..], stdout, stderr, backend, environmentVariable, cancellationToken);
+            return await EnvCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken);
         }
 
         var (options, problem) = Parse(args);
@@ -130,7 +117,7 @@ public static class Cli
 
         try
         {
-            return await RunCommandAsync(options, backend, probe, environmentVariable, stdout, stderr, cancellationToken);
+            return await RunCommandAsync(options, connections, stdout, stderr, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -140,7 +127,7 @@ public static class Cli
         }
     }
 
-    private static async Task<int> RunCommandAsync(Options options, IBackEndProvider? backend, IRevisionProbe? probe, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    private static async Task<int> RunCommandAsync(Options options, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var loaded = await WorkloadFile.LoadAsync(options.Workload, cancellationToken);
         if (loaded.Value is not { } workload)
@@ -182,17 +169,12 @@ public static class Cli
 
         if (resolve is DeployOptions deploy)
         {
-            return await DeployAsync(deploy, graph, catalog, environment, backend, probe, environmentVariable, stdout, stderr, cancellationToken);
+            return (await ProvisionAsync(deploy.Catalog, graph, catalog, environment, connections, deploy.DryRun, stdout, stderr, cancellationToken)).Code;
         }
 
         stdout.Write(resolve is PreviewOptions { Json: true } ? GraphJson.Serialize(graph) : PreviewFormatter.Format(graph));
         return Success;
     }
-
-    private static async Task<int> DeployAsync(
-        DeployOptions options, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend, IRevisionProbe? probe,
-        Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken) =>
-        (await ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, options.DryRun, stdout, stderr, probe, cancellationToken)).Code;
 
     // An environment whose descriptor carries an approval policy takes deploys only through `jd promote` (docs/architecture/approvals.md section 2). The check reads
     // the block, not the type. Run before the identity, the records or the backend is touched; a preview creates nothing, so callers do not ask it.
@@ -239,24 +221,16 @@ public static class Cli
         return null;
     }
 
-    // The probe judges the revision's own answer, so a redirect is a failed probe, not a hop to some other host.
-    private static IRevisionProbe HttpProbe() => new HttpRevisionProbe(HttpRevisionProbe.CreateClient());
-
-    // The one place the default probe (an HTTP GET) is chosen; a substrate never uses it.
-    internal static Orchestrator CreateOrchestrator(
-        TemplateLibrary templates, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend, Func<string, string?> environmentVariable, IRevisionProbe? probe) =>
-        new(backend ?? CreatePulumiBackend(environmentVariable), templates, catalog, environment, probe ?? HttpProbe());
-
     internal static async Task<(int Code, RunReport? Run)> ProvisionAsync(
-        string catalogDirectory, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, IBackEndProvider? backend,
-        Func<string, string?> environmentVariable, bool dryRun, TextWriter stdout, TextWriter stderr, IRevisionProbe? probe, CancellationToken cancellationToken)
+        string catalogDirectory, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, Connections connections, bool dryRun, TextWriter stdout, TextWriter stderr,
+        CancellationToken cancellationToken)
     {
         if (await CheckTemplatesAsync(catalogDirectory, [graph], stderr, cancellationToken) is not { } templates)
         {
             return (Invalid, null);
         }
 
-        var orchestrator = CreateOrchestrator(templates, catalog, environment, backend, environmentVariable, probe);
+        var orchestrator = new Orchestrator(connections.Backend(), templates, catalog, environment, connections.Probe());
         void Show(NodeReport report) => stdout.Write(DeployFormatter.Format(report));
         var run = dryRun
             ? await orchestrator.PreviewAsync(graph, Show, cancellationToken)
@@ -270,52 +244,18 @@ public static class Cli
         return (Success, run);
     }
 
-    // The release, qualification and approval records, in jd's data directory.
-    internal static IRecordStore Records(Func<string, string?> environmentVariable) => DataDirectory.Resolve(environmentVariable).Records;
-
-    // The principal the run authenticates with: the ARM_* service principal Pulumi uses too, or the Azure CLI sign-in. Throws InvalidOperationException naming the unset ones of a partial ARM_* set.
-    internal static IDeployerIdentity CreateDeployerIdentity(Func<string, string?> environmentVariable) => new ArmDeployerIdentity(ArmCredential(environmentVariable));
-
     // The principal the run authenticates as; null, with the reason on stderr, when the credential is missing, malformed or refused.
-    internal static async Task<DeployerIdentity?> GetIdentityAsync(
-        IDeployerIdentity? identity, Func<string, string?> environmentVariable, TextWriter stderr, CancellationToken cancellationToken)
+    internal static async Task<DeployerIdentity?> GetIdentityAsync(Connections connections, TextWriter stderr, CancellationToken cancellationToken)
     {
         try
         {
-            return await (identity ?? CreateDeployerIdentity(environmentVariable)).GetAsync(cancellationToken);
+            return await connections.Identity().GetAsync(cancellationToken);
         }
         catch (InvalidOperationException ex)
         {
             stderr.WriteLine($"jd: {ex.Message}");
             return null;
         }
-    }
-
-    // The live revisions are read with the same credential as the identity, so the principal named in a record is the one that observed.
-    internal static ILiveRevisions CreateLiveRevisions(Func<string, string?> environmentVariable) => new ArmLiveRevisions(ArmCredential(environmentVariable));
-
-    private static TokenCredential ArmCredential(Func<string, string?> environmentVariable) =>
-        new ArmCredentials(environmentVariable(ArmCredentials.TenantVariable), environmentVariable(ArmCredentials.ClientVariable), environmentVariable(ArmCredentials.SecretVariable)).ToCredential();
-
-    internal static IBackEndProvider CreatePulumiBackend(Func<string, string?> environmentVariable)
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.RegisterPulumiBackend(PulumiSettings(environmentVariable));
-        return services.BuildServiceProvider().GetRequiredService<IBackEndProvider>();
-    }
-
-    // The Pulumi backend on the state in jd's data directory (created on first use) and its key, with the optional Pulumi home and scratch directory.
-    internal static Action<PulumiBackendOptions> PulumiSettings(Func<string, string?> environmentVariable)
-    {
-        var (state, key) = DataDirectory.Resolve(environmentVariable).PrepareState();
-        return options =>
-        {
-            options.BackendUrl = "file://" + state;
-            options.ConfigPassPhraseFile = key;
-            options.PulumiHome = environmentVariable("PULUMI_HOME");
-            options.ScratchDirectory = environmentVariable("JD_SCRATCH_DIR") ?? options.ScratchDirectory;
-        };
     }
 
     internal static void Print(IEnumerable<LoadError> errors, TextWriter writer)

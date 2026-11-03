@@ -1,9 +1,8 @@
 using System.Globalization;
-using jd.core.bp;
 using jd.core.identity;
 using jd.core.records;
-using jd.core.revisions;
 using jd.orchestrator;
+using jd.orchestrator.usecases;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.graph;
@@ -35,9 +34,7 @@ internal static class ReleaseDeployCli
     private sealed record Recording(IRecordStore Records, DeployerIdentity Identity, string SetSha256);
 
     // args are the arguments after "release deploy" or "release qualify" (qualify).
-    public static async Task<int> RunAsync(
-        string[] args, bool qualify, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions,
-        TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(string[] args, bool qualify, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
     {
         var (options, problem) = Parse(args, qualify);
         if (options is null)
@@ -47,20 +44,17 @@ internal static class ReleaseDeployCli
             return UsageError;
         }
 
-        return await RunCheckedAsync(options, backend, probe, identity, liveRevisions, time, environmentVariable, stdout, stderr, cancellationToken);
+        return await RunCheckedAsync(options, connections, stdout, stderr, cancellationToken);
     }
 
     // The walk of `jd promote` on the target, below the gate that refuses a direct deploy: the target, the catalog, and what promote settled. The kept
     // set is named in messages as the records name it.
     public static Task<int> PromoteAsync(
-        string environment, string catalog, Promotion promotion, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe,
-        ILiveRevisions? liveRevisions, TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken) =>
+        string environment, string catalog, Promotion promotion, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken) =>
         RunCheckedAsync(
-            new Options(ReleaseRecordFile.KeptSetName(promotion.QualifiedOn, promotion.Label), environment, catalog, false, false) { Promotion = promotion }, backend, probe, null, liveRevisions, time, environmentVariable, stdout, stderr, cancellationToken);
+            new Options(ReleaseRecordFile.KeptSetName(promotion.QualifiedOn, promotion.Label), environment, catalog, false, false) { Promotion = promotion }, connections, stdout, stderr, cancellationToken);
 
-    private static async Task<int> RunCheckedAsync(
-        Options options, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions, TimeProvider time,
-        Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    private static async Task<int> RunCheckedAsync(Options options, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         // A promotion's set is the kept one it read, and its target and catalog were checked by promote.
         if (options.Promotion is null && Arguments.Unreadable(options.Set, options.Environment, options.Catalog) is { } problem)
@@ -72,7 +66,7 @@ internal static class ReleaseDeployCli
         try
         {
             // A preview deploys nothing, so it records nothing; a qualification records the check.
-            return await DeployAsync(options, options.DryRun ? null : Cli.Records(environmentVariable), backend, probe, identity, liveRevisions, time, environmentVariable, stdout, stderr, cancellationToken);
+            return await DeployAsync(options, options.DryRun ? null : connections.Records(), connections, stdout, stderr, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -81,10 +75,9 @@ internal static class ReleaseDeployCli
         }
     }
 
-    private static async Task<int> DeployAsync(
-        Options options, IRecordStore? records, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions, TimeProvider time,
-        Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    private static async Task<int> DeployAsync(Options options, IRecordStore? records, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
+        var time = connections.Time();
         var started = time.GetUtcNow();
         // A promotion is never a preview, so it has the records.
         var setResult = options.Promotion is { } promoted
@@ -133,7 +126,7 @@ internal static class ReleaseDeployCli
         Recording? recording = null;
         if (records is not null)
         {
-            recording = await StartRecordingAsync(records, options.Promotion?.Principal, identity, environmentVariable, setResult.Bytes, set.Label, environment.Name, stderr, cancellationToken);
+            recording = await StartRecordingAsync(records, options.Promotion?.Principal, connections, setResult.Bytes, set.Label, environment.Name, stderr, cancellationToken);
             if (recording is null)
             {
                 return Invalid;
@@ -146,9 +139,9 @@ internal static class ReleaseDeployCli
         Qualifier? qualifier = null;
         try
         {
-            var provider = backend ?? Cli.CreatePulumiBackend(environmentVariable);
-            orchestrator = Cli.CreateOrchestrator(templates, catalog, environment, provider, environmentVariable, probe);
-            qualifier = recording is null ? null : new Qualifier(orchestrator, provider, templates, liveRevisions ?? Cli.CreateLiveRevisions(environmentVariable), time);
+            var backend = connections.Backend();
+            orchestrator = new Orchestrator(backend, templates, catalog, environment, connections.Probe());
+            qualifier = recording is null ? null : new Qualifier(orchestrator, backend, templates, connections.LiveRevisions(), time);
         }
         catch (InvalidOperationException ex)
         {
@@ -225,10 +218,10 @@ internal static class ReleaseDeployCli
 
     // Null, with the reason on stderr, when the run must not start: the principal (known already, for a promotion) cannot be named, the label cannot name a directory, or it holds another set.
     private static async Task<Recording?> StartRecordingAsync(
-        IRecordStore records, DeployerIdentity? known, IDeployerIdentity? identity, Func<string, string?> environmentVariable, ReadOnlyMemory<byte> setBytes, string label, string environmentName,
-        TextWriter stderr, CancellationToken cancellationToken)
+        IRecordStore records, DeployerIdentity? known, Connections connections, ReadOnlyMemory<byte> setBytes, string label, string environmentName, TextWriter stderr,
+        CancellationToken cancellationToken)
     {
-        if ((known ?? await Cli.GetIdentityAsync(identity, environmentVariable, stderr, cancellationToken)) is not { } principal)
+        if ((known ?? await Cli.GetIdentityAsync(connections, stderr, cancellationToken)) is not { } principal)
         {
             return null;
         }
