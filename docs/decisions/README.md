@@ -2,8 +2,10 @@
 
 One file per decision, ADR style: Context → Decision → Consequences → Related.
 
-**Every record here is `Proposed — pending review`.** They capture conclusions reached during
-investigation so the reasoning is not lost, but none is accepted until reviewed. On review, change the
+**Records are `Proposed — pending review` unless their status says otherwise.** They capture conclusions reached during
+investigation so the reasoning is not lost, but none is accepted until reviewed. Accepted (user, 2026-11-03): 0001, 0003 — the
+user asked the lead to accept those already decided; the rest are partly built, partly contradicted by later decisions, or not
+built yet. On review, change the
 status to `Accepted`, `Rejected`, or `Superseded by NNNN`; never edit an accepted record's decision —
 supersede it with a new one.
 
