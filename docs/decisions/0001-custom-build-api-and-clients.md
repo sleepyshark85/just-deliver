@@ -1,6 +1,6 @@
 # 0001. Custom build: backend API with multiple clients
 
-- **Status:** Proposed — pending review
+- **Status:** Accepted (user, 2026-11-03)
 - **Origin:** investigation notes (decisions and approach; IDP vs traditional DevOps)
 
 ## Context

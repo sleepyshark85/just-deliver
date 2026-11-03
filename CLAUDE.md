@@ -7,7 +7,7 @@ Internal Developer Platform for Azure. Start every session with [docs/README.md]
 - [MVP plan](docs/plans/mvp.md) — scope and slices S01–S18
 - [Conventions](docs/engineering/conventions.md) (how we work, the code quality bar), [engineering standards](docs/engineering/standards.md)
   and [review checklist](docs/engineering/review-checklist.md) — binding for all code
-- [Decisions](docs/decisions/README.md) — ADRs; all **Proposed — pending review**; only the user changes their status
+- [Decisions](docs/decisions/README.md) — ADRs; **Proposed — pending review** unless marked Accepted; only the user changes their status
 - [Open questions](docs/open-questions.md), [architecture](docs/architecture/)
 
 ## Team

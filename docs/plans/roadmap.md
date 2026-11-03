@@ -43,7 +43,8 @@ Each phase ends in something usable and leaves the previous phases' guarantees i
 | **5 — Lifecycle at scale** | Many workloads stay safe to change | N4 (attach), N7, N8, N9 | Impact analysis (`jd who-uses`); removal blocked while consumers exist; contract deprecation; the attach pattern (topic subscription); a component directory for teams |
 
 Not on this track: the platform as a hosted service (API, UI; ADR 0001), the audit store (F39), the B/C → D transition stages, secrets
-injection and multi-subscription landing zones. Each must still name the north-star idea or the organisation goal ([context.md](../context.md)
+injection and multi-subscription landing zones. Later (user, 2026-11-03): one consistent deployment, recorded alike through
+`jd deploy` and `jd release deploy`; rollback (E31, E32). Each must still name the north-star idea or the organisation goal ([context.md](../context.md)
 § "Goals") it serves. The user decides where they go relative to these phases.
 
 ## Rules for work

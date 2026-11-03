@@ -206,6 +206,7 @@ Residual open point: Key Vault secret-reference refresh without a new revision (
 - **Open:** infra provisioned by a deployment that then failed at the app step — left in place (consistent with forward-only) or cleaned up?
 - **Open:** how the UI communicates that a rollback restored the app but not the infrastructure deployed alongside it.
 - **Revert (S16c):** going back to an earlier config redeploys it as a new revision (a new suffix, probed and shifted like any other), because Azure rejects a template change whose suffix names an existing revision. The traffic-switch rollback to a retained revision stays open.
+- **User (2026-11-03):** rollback belongs to a later phase; until then an IQ failure exits 1 and leaves the deployment live.
 - **Known limitation (S16):** the release flow never deactivates old revisions. In multiple-revision mode a 0%-traffic revision stays active (scaled to zero, no cost) and deactivation is an API action Pulumi YAML cannot express, so rollback targets any retained revision but the active set only shrinks through `maxInactiveRevisions` once revisions become inactive. See [provisioning.md](architecture/provisioning.md).
 
 ### E33. Database migrations — see [ADR 0015](decisions/0015-database-migrations.md)

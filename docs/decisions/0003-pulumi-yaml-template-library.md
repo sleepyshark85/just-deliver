@@ -1,6 +1,6 @@
 # 0003. Static Pulumi YAML template library with orchestrator-generated config
 
-- **Status:** Proposed — pending review
+- **Status:** Accepted (user, 2026-11-03)
 - **Origin:** investigation notes (Pulumi notes)
 
 ## Context
