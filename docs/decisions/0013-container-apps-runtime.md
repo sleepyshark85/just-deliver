@@ -1,6 +1,6 @@
 # 0013. Azure Container Apps as the (single) workload runtime
 
-- **Status:** Proposed — pending review
+- **Status:** Proposed — pending review; its first decision (the workload declares the runtime) is superseded by [0018](0018-environment-offers-runtime.md)
 - **Origin:** open-questions E27
 
 ## Context

@@ -5,7 +5,7 @@ One file per decision, ADR style: Context → Decision → Consequences → Rela
 **Records are `Proposed — pending review` unless their status says otherwise.** They capture conclusions reached during
 investigation so the reasoning is not lost, but none is accepted until reviewed. Accepted (user, 2026-11-03): 0001, 0003 — the
 user asked the lead to accept those already decided; the rest are partly built, partly contradicted by later decisions, or not
-built yet. On review, change the
+built yet. 0017 and 0018 record user decisions of 2026-10-18 (S21) that supersede 0004 and part of 0013. On review, change the
 status to `Accepted`, `Rejected`, or `Superseded by NNNN`; never edit an accepted record's decision —
 supersede it with a new one.
 
@@ -27,5 +27,7 @@ supersede it with a new one.
 | [0014](0014-hook-points.md) | preDeploy / verify / postDeploy hook points | E28 |
 | [0015](0015-database-migrations.md) | Database migrations | E33 |
 | [0016](0016-portal-deep-links.md) | Portal deep-link permissions | G43 |
+| [0017](0017-catalog-layer-policies-require.md) | Team definitions over a platform catalog; policies require, never add (supersedes 0004) | S21 |
+| [0018](0018-environment-offers-runtime.md) | The environment offers the runtime (supersedes 0013's first decision) | S21 |
 
 Origin IDs refer to [open-questions.md](../open-questions.md).

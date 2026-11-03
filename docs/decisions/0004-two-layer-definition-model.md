@@ -1,6 +1,6 @@
 # 0004. Two-layer definition model: team definitions plus IT Ops global policy
 
-- **Status:** Proposed — pending review
+- **Status:** Superseded by [0017](0017-catalog-layer-policies-require.md) (user decisions 2026-10-18; recorded 2026-11-03)
 - **Origin:** investigation notes (decisions and approach; provisioning design)
 
 ## Context
