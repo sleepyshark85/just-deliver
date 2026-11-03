@@ -1,6 +1,7 @@
 using System.Globalization;
 using jd.core.identity;
 using jd.core.records;
+using jd.orchestrator.usecases;
 using jd.resolver.environment;
 using jd.resolver.release;
 
@@ -29,7 +30,7 @@ internal static class ApproveCli
 
     // args are the arguments after "approve".
     public static async Task<int> RunAsync(
-        string[] args, TextWriter stdout, TextWriter stderr, IDeployerIdentity? identity, TimeProvider time, Func<string, string?> environmentVariable, CancellationToken cancellationToken)
+        string[] args, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
     {
         var (options, problem) = Parse(args);
         if (options is null)
@@ -59,8 +60,8 @@ internal static class ApproveCli
         }
 
         // A bad credential stops here, before any record is read.
-        return await Cli.GetIdentityAsync(identity, environmentVariable, stderr, cancellationToken) is { } principal
-            ? await ApproveAsync(new Request(options, target, policy, Cli.Records(environmentVariable)), principal, time, stdout, stderr, cancellationToken)
+        return await Cli.GetIdentityAsync(connections, stderr, cancellationToken) is { } principal
+            ? await ApproveAsync(new Request(options, target, policy, connections.Records()), principal, connections.Time(), stdout, stderr, cancellationToken)
             : Invalid;
     }
 

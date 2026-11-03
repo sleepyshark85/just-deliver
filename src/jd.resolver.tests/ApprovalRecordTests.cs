@@ -10,8 +10,8 @@ using Xunit;
 namespace jd.resolver.tests;
 
 // The approval record of docs/architecture/approvals.md section 4: its schema and committed golden, that nothing typed can change a field,
-// and the reader of approval files (section 5, step 3): files written by the real builder and forged by editing them, as someone with the records directory could. Regenerate the golden with JD_UPDATE_GOLDEN=1 and review the diff.
-public sealed class ApprovalRecordTests : IDisposable
+// and the reader of approval files (section 5, step 3): files written by the real builder and forged by editing them, as someone with the records could. Regenerate the golden with JD_UPDATE_GOLDEN=1 and review the diff.
+public sealed class ApprovalRecordTests
 {
     private const string Alice = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
     private const string Set = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -21,9 +21,7 @@ public sealed class ApprovalRecordTests : IDisposable
     private static readonly DeployerIdentity Principal = new("tenant-1", "client-1", Alice);
     private static readonly EnvironmentDescriptor Stage = new("stage", "region-1", "stage", new Dictionary<string, string>(), [], new ApprovalPolicy("dev", 1, [Alice], true));
 
-    private readonly string _records = Directory.CreateTempSubdirectory("jd-approval-tests").FullName;
-
-    public void Dispose() => Directory.Delete(_records, recursive: true);
+    private readonly MemoryRecordStore _records = new();
 
     private static string Record(string meaning = "Reviewed the test evidence; ready for stage.") => ApprovalRecord.Build(Stage, "1.0.0", Set, Principal, meaning, At);
 
@@ -109,7 +107,7 @@ public sealed class ApprovalRecordTests : IDisposable
         var ungated = Stage with { Approval = null };
 
         Assert.Throws<ArgumentException>(() => ApprovalRecord.Build(ungated, "1.0.0", Set, Principal, "m", At));
-        await Assert.ThrowsAsync<ArgumentException>(() => ApprovalRecord.ReadAsync(new LocalRecordStore(_records), ungated, "1.0.0", Set));
+        await Assert.ThrowsAsync<ArgumentException>(() => ApprovalRecord.ReadAsync(_records, ungated, "1.0.0", Set));
     }
 
     // An approval written by the real builder at the given second into <environment>/<label>, then edited by forge; returns the file name.
@@ -118,7 +116,7 @@ public sealed class ApprovalRecordTests : IDisposable
         var at = At.AddSeconds(second);
         var record = Parse(ApprovalRecord.Build(Stage, "1.0.0", Set, new DeployerIdentity("tenant-1", "client-1", objectId), "ready", at));
         forge?.Invoke(record);
-        return Path.GetFileName(await ReleaseRecordFile.WriteAsync(new LocalRecordStore(_records), environment, label, at, ReleaseRecordFile.ApproveActivity, record.ToString(Formatting.Indented)));
+        return Path.GetFileName(await ReleaseRecordFile.WriteAsync(_records, environment, label, at, ReleaseRecordFile.ApproveActivity, record.ToString(Formatting.Indented)));
     }
 
     // Records written before environment types carry a tier; they stay valid and count (components.md section 6).
@@ -127,7 +125,7 @@ public sealed class ApprovalRecordTests : IDisposable
     {
         await WriteApprovalAsync("object-a", 1, record => record["environment"] = new JObject { ["name"] = "stage", ["tier"] = "protected" });
 
-        var reading = await ApprovalRecord.ReadAsync(new LocalRecordStore(_records), Stage, "1.0.0", Set);
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 
         Assert.Equal(["object-a"], reading.Approvers);
         Assert.Empty(reading.Ignored);
@@ -136,7 +134,7 @@ public sealed class ApprovalRecordTests : IDisposable
     [Fact]
     public async Task The_approvers_are_the_distinct_principals_of_valid_approvals_of_this_set_and_nothing_else_is_reported_as_ignored()
     {
-        var none = await ApprovalRecord.ReadAsync(new LocalRecordStore(_records), Stage, "1.0.0", Set); // no directory yet
+        var none = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set); // no directory yet
         Assert.Empty(none.Approvers);
         Assert.Empty(none.Ignored);
         await WriteApprovalAsync("object-a", 1);
@@ -144,9 +142,9 @@ public sealed class ApprovalRecordTests : IDisposable
         await WriteApprovalAsync("object-b", 3);
         await WriteApprovalAsync("object-g", 4, label: "2.0.0"); // another label's directory
         await WriteApprovalAsync("object-h", 5, environment: "other"); // another environment's directory
-        await File.WriteAllTextAsync(Path.Combine(_records, "stage", "1.0.0", "20261017T030410000Z-deploy.json"), "not an approval file");
+        _records.Put("stage/1.0.0/20261017T030410000Z-deploy.json", "not an approval file");
 
-        var reading = await ApprovalRecord.ReadAsync(new LocalRecordStore(_records), Stage, "1.0.0", Set);
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 
         Assert.Equal(["object-a", "object-b"], reading.Approvers.Select(a => a.ToLowerInvariant()).Order(StringComparer.Ordinal));
         Assert.Equal(2, reading.Approvers.Count);
@@ -171,7 +169,7 @@ public sealed class ApprovalRecordTests : IDisposable
             }
         });
 
-        var reading = await ApprovalRecord.ReadAsync(new LocalRecordStore(_records), Stage, "1.0.0", Set);
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 
         Assert.Empty(reading.Approvers);
         Assert.Equal($"{name}: {reason}", Assert.Single(reading.Ignored));
@@ -182,7 +180,7 @@ public sealed class ApprovalRecordTests : IDisposable
     {
         var name = await WriteApprovalAsync("object-a", 1, record => record["kind"] = "ReleaseRecord");
 
-        var reading = await ApprovalRecord.ReadAsync(new LocalRecordStore(_records), Stage, "1.0.0", Set);
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 
         Assert.Empty(reading.Approvers);
         Assert.Equal($"{name}: is not a valid approval record: {name}: kind: unknown kind 'ReleaseRecord'; expected one of ApprovalRecord.", Assert.Single(reading.Ignored));
@@ -206,7 +204,7 @@ public sealed class ApprovalRecordTests : IDisposable
             }
         });
 
-        var reading = await ApprovalRecord.ReadAsync(new LocalRecordStore(_records), Stage, "1.0.0", Set);
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 
         Assert.Empty(reading.Approvers);
         Assert.StartsWith($"{name}: is not a valid approval record: ", Assert.Single(reading.Ignored), StringComparison.Ordinal);
@@ -220,10 +218,9 @@ public sealed class ApprovalRecordTests : IDisposable
     public async Task A_file_that_is_not_a_json_object_is_ignored_and_reported_not_a_crash(string content)
     {
         await WriteApprovalAsync("object-a", 1);
-        var directory = Path.Combine(_records, "stage", "1.0.0");
-        await File.WriteAllTextAsync(Path.Combine(directory, "20261017T030459000Z-approve.json"), content);
+        _records.Put("stage/1.0.0/20261017T030459000Z-approve.json", content);
 
-        var reading = await ApprovalRecord.ReadAsync(new LocalRecordStore(_records), Stage, "1.0.0", Set);
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 
         Assert.Equal(["object-a"], reading.Approvers);
         Assert.StartsWith("20261017T030459000Z-approve.json: cannot be read: ", Assert.Single(reading.Ignored), StringComparison.Ordinal);
@@ -237,54 +234,41 @@ public sealed class ApprovalRecordTests : IDisposable
     public async Task An_approval_file_not_named_with_a_time_is_ignored_and_reported_even_if_its_content_is_valid(string fileName)
     {
         var valid = await WriteApprovalAsync("object-b", 2);
-        var directory = Path.Combine(_records, "stage", "1.0.0");
-        File.Move(Path.Combine(directory, valid), Path.Combine(directory, fileName));
+        _records.Files.Remove($"stage/1.0.0/{valid}", out var content);
+        _records.Files[$"stage/1.0.0/{fileName}"] = content!;
 
-        var reading = await ApprovalRecord.ReadAsync(new LocalRecordStore(_records), Stage, "1.0.0", Set);
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 
         Assert.Empty(reading.Approvers);
         Assert.StartsWith($"{fileName}: is not named <time>-approve.json", Assert.Single(reading.Ignored), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task An_approval_without_read_permission_is_ignored_and_reported_not_a_crash()
+    [Theory]
+    [InlineData(MemoryRecordStore.ReadFault.AccessDenied)]
+    [InlineData(MemoryRecordStore.ReadFault.IoError)]
+    public async Task An_approval_that_cannot_be_read_is_ignored_and_reported_not_a_crash(MemoryRecordStore.ReadFault fault)
     {
         await WriteApprovalAsync("object-a", 1);
-        var noAccess = Path.Combine(_records, "stage", "1.0.0", await WriteApprovalAsync("object-b", 2));
-        if (OperatingSystem.IsWindows() || System.Environment.IsPrivilegedProcess)
-        {
-            return; // file modes do not stop a privileged process, and Windows has none
-        }
+        var noAccess = $"stage/1.0.0/{await WriteApprovalAsync("object-b", 2)}";
+        _records.Refuse(noAccess, fault);
 
-        File.SetUnixFileMode(noAccess, UnixFileMode.None);
-
-        var reading = await ApprovalRecord.ReadAsync(new LocalRecordStore(_records), Stage, "1.0.0", Set);
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 
         Assert.Equal(["object-a"], reading.Approvers);
         Assert.StartsWith($"{Path.GetFileName(noAccess)}: cannot be read: ", Assert.Single(reading.Ignored), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task A_label_directory_that_cannot_be_listed_is_reported_not_a_crash()
+    [Theory]
+    [InlineData(MemoryRecordStore.ReadFault.AccessDenied)]
+    [InlineData(MemoryRecordStore.ReadFault.IoError)]
+    public async Task A_label_directory_that_cannot_be_listed_is_reported_not_a_crash(MemoryRecordStore.ReadFault fault)
     {
         await WriteApprovalAsync("object-a", 1);
-        var directory = Path.Combine(_records, "stage", "1.0.0");
-        if (OperatingSystem.IsWindows() || System.Environment.IsPrivilegedProcess)
-        {
-            return;
-        }
+        _records.Refuse("stage/1.0.0", fault);
 
-        File.SetUnixFileMode(directory, UnixFileMode.UserExecute);
-        try
-        {
-            var reading = await ApprovalRecord.ReadAsync(new LocalRecordStore(_records), Stage, "1.0.0", Set);
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 
-            Assert.Empty(reading.Approvers);
-            Assert.StartsWith("the records of label 1.0.0 on stage cannot be read: ", Assert.Single(reading.Ignored), StringComparison.Ordinal);
-        }
-        finally
-        {
-            File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
+        Assert.Empty(reading.Approvers);
+        Assert.StartsWith("the records of label 1.0.0 on stage cannot be read: ", Assert.Single(reading.Ignored), StringComparison.Ordinal);
     }
 }

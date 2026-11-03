@@ -1,9 +1,6 @@
 using System.Globalization;
 using System.Text;
-using jd.core.bp;
-using jd.core.identity;
-using jd.core.revisions;
-using jd.orchestrator;
+using jd.orchestrator.usecases;
 using jd.resolver.release;
 
 namespace jd.cli;
@@ -16,13 +13,11 @@ internal static class ReleaseCli
     private const int UsageError = 2;
 
     // args are the arguments after "release".
-    public static async Task<int> RunAsync(
-        string[] args, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, IRevisionProbe? probe, IDeployerIdentity? identity, ILiveRevisions? liveRevisions, TimeProvider time, Func<string, string?> environmentVariable,
-        CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
     {
         if (args.FirstOrDefault() is "deploy" or "qualify")
         {
-            return await ReleaseDeployCli.RunAsync(args[1..], args[0] == "qualify", stdout, stderr, backend, probe, identity, liveRevisions, time, environmentVariable, cancellationToken);
+            return await ReleaseDeployCli.RunAsync(args[1..], args[0] == "qualify", stdout, stderr, connections, cancellationToken);
         }
 
         var (command, input, output, problem) = Parse(args);

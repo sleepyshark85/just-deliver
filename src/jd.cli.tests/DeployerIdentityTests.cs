@@ -9,7 +9,7 @@ public sealed class DeployerIdentityTests
     {
         var variables = new Dictionary<string, string> { ["ARM_CLIENT_SECRET"] = "the-secret" };
 
-        var error = Assert.Throws<InvalidOperationException>(() => Cli.CreateDeployerIdentity(name => variables.GetValueOrDefault(name)));
+        var error = Assert.Throws<InvalidOperationException>(() => Composition.Connect(name => variables.GetValueOrDefault(name)).Identity());
 
         Assert.Contains("ARM_TENANT_ID, ARM_CLIENT_ID", error.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("ARM_CLIENT_SECRET", error.Message, StringComparison.Ordinal);
@@ -30,7 +30,7 @@ public sealed class DeployerIdentityAzureTests
         // Login refuses unless started by tools/verify.sh --azure and checks the ARM_* variables are set.
         using var az = AzureCli.Login();
 
-        var identity = await Cli.CreateDeployerIdentity(System.Environment.GetEnvironmentVariable).GetAsync(CancellationToken.None);
+        var identity = await Composition.Connect(System.Environment.GetEnvironmentVariable).Identity().GetAsync(CancellationToken.None);
 
         Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), identity.ClientId);
         Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_TENANT_ID"), identity.TenantId);

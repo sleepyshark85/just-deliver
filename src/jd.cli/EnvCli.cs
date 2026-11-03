@@ -1,4 +1,4 @@
-using jd.core.bp;
+using jd.orchestrator.usecases;
 using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
@@ -19,7 +19,7 @@ internal static class EnvCli
 
     // args are the arguments after "env".
     public static async Task<int> RunAsync(
-        string[] args, TextWriter stdout, TextWriter stderr, IBackEndProvider? backend, Func<string, string?> environmentVariable, CancellationToken cancellationToken)
+        string[] args, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
     {
         var (options, problem) = Parse(args);
         if (options is null)
@@ -38,7 +38,7 @@ internal static class EnvCli
 
         try
         {
-            return await UpAsync(options, backend, environmentVariable, stdout, stderr, cancellationToken);
+            return await UpAsync(options, connections, stdout, stderr, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -48,7 +48,7 @@ internal static class EnvCli
     }
 
     private static async Task<int> UpAsync(
-        Options options, IBackEndProvider? backend, Func<string, string?> environmentVariable, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        Options options, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var definitionResult = await EnvironmentDefinitionFile.LoadAsync(options.Definition, cancellationToken);
         var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog, cancellationToken);
@@ -79,7 +79,7 @@ internal static class EnvCli
             return Invalid;
         }
 
-        var (code, run) = await Cli.ProvisionAsync(options.Catalog, graph, catalog, environment, backend, environmentVariable, dryRun: false, stdout, stderr, probe: null, cancellationToken);
+        var (code, run) = await Cli.ProvisionAsync(options.Catalog, graph, catalog, environment, connections, dryRun: false, stdout, stderr, cancellationToken);
         if (run is null || code != Success)
         {
             return code;

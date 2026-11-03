@@ -1,5 +1,6 @@
 using jd.core.identity;
 using jd.core.revisions;
+using jd.orchestrator.usecases;
 using Xunit;
 
 namespace jd.cli.tests;
@@ -41,12 +42,42 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
 
     public void Dispose() => Directory.Delete(_temp, recursive: true);
 
-    private async Task<(int Code, string Out, string Err)> RunAsync(RecordingBackend? backend, params string[] args)
+    private Task<(int Code, string Out, string Err)> RunAsync(RecordingBackend? backend, params string[] args) => RunWithAsync(Connections(backend), args);
+
+    // The run over the given connections; Invoked names each factory as the run invokes it.
+    private async Task<(int Code, string Out, string Err)> RunWithAsync(Connections connections, params string[] args)
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, backend, name => _variables.GetValueOrDefault(name), backend, _port, _clock, _reader);
+        var code = await Cli.RunAsync(args, stdout, stderr, CancellationToken.None, Watched(connections));
         return (code, stdout.ToString(), stderr.ToString());
+    }
+
+    // The composition root's connections over the run's variables and the clock, with the backend (also the probe), the identity and the reader given;
+    // a null one is the root's own.
+    private Connections Connections(RecordingBackend? backend)
+    {
+        var connections = Composition.Connect(name => _variables.GetValueOrDefault(name)) with { Time = () => _clock };
+        connections = backend is null ? connections : connections with { Backend = () => backend, Probe = () => backend };
+        connections = _port is not { } port ? connections : connections with { Identity = () => port };
+        return _reader is not { } reader ? connections : connections with { LiveRevisions = () => reader };
+    }
+
+    // The factories each run invoked, in order.
+    private List<string> Invoked { get; } = [];
+
+    private Connections Watched(Connections connections) => new(
+        () => Invoke(nameof(connections.Records), connections.Records),
+        () => Invoke(nameof(connections.Identity), connections.Identity),
+        () => Invoke(nameof(connections.LiveRevisions), connections.LiveRevisions),
+        () => Invoke(nameof(connections.Backend), connections.Backend),
+        () => Invoke(nameof(connections.Probe), connections.Probe),
+        () => Invoke(nameof(connections.Time), connections.Time));
+
+    private T Invoke<T>(string factory, Func<T> build)
+    {
+        Invoked.Add(factory);
+        return build();
     }
 
     // The sample set, built from copies of the sample files so a test can change a definition first.

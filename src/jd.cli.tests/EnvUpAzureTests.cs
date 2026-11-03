@@ -137,7 +137,8 @@ public sealed class EnvUpAzureTests : IDisposable
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(["env", "up", .. args, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog"), "--force"], stdout, stderr, CancellationToken.None, backend, AzureCli.Variables(_root));
+        var code = await Cli.RunAsync(
+            ["env", "up", .. args, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog"), "--force"], stdout, stderr, CancellationToken.None, Composition.Connect(AzureCli.Variables(_root)) with { Backend = () => backend });
         return (code, stdout + stderr.ToString());
     }
 
@@ -156,7 +157,7 @@ public sealed class EnvUpAzureTests : IDisposable
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(["release", .. args], stdout, stderr, CancellationToken.None, backend, AzureCli.Variables(_root));
+        var code = await Cli.RunAsync(["release", .. args], stdout, stderr, CancellationToken.None, Composition.Connect(AzureCli.Variables(_root)) with { Backend = () => backend });
         return (code, stdout + stderr.ToString());
     }
 
@@ -203,7 +204,7 @@ public sealed class EnvUpAzureTests : IDisposable
         var stderr = new StringWriter();
         var code = await Cli.RunAsync(
             ["approve", label, "--env", stageDescriptor, "--meaning", "Azure test: reviewed the evidence."], stdout, stderr, CancellationToken.None,
-            environmentVariable: AzureCli.Variables(_root));
+            Composition.Connect(AzureCli.Variables(_root)));
         return (code, stdout + stderr.ToString());
     }
 
@@ -213,8 +214,8 @@ public sealed class EnvUpAzureTests : IDisposable
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var code = await Cli.RunAsync(
-            ["promote", label, "--to", stageDescriptor, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog")], stdout, stderr, CancellationToken.None, backend,
-            AzureCli.Variables(_root));
+            ["promote", label, "--to", stageDescriptor, "--catalog", Path.Combine(AppContext.BaseDirectory, "catalog")], stdout, stderr, CancellationToken.None,
+            Composition.Connect(AzureCli.Variables(_root)) with { Backend = () => backend });
         return (code, stdout + stderr.ToString());
     }
 
@@ -316,7 +317,7 @@ public sealed class EnvUpAzureTests : IDisposable
     [Fact]
     public async Task Shared_then_dev_are_provisioned_and_a_release_set_deploys_onto_dev_within_the_free_tier_and_reruns_change_nothing()
     {
-        var backend = Cli.CreatePulumiBackend(AzureCli.Variables(_root));
+        var backend = Composition.Connect(AzureCli.Variables(_root)).Backend();
         var shared = Definition("shared", SharedName);
         var dev = Definition("dev", DevName);
         var sharedDescriptor = Path.Combine(_root, "shared.env.yaml");
