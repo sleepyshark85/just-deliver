@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using jd.core.records;
-using jd.resolver.release;
 
 namespace jd.cli;
 

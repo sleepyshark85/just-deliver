@@ -19,6 +19,11 @@
     <Content Include="golden/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- The record store fake, shared with the resolver's tests. -->
+  <ItemGroup>
+    <Compile Include="../jd.resolver.tests/MemoryRecordStore.cs" Link="MemoryRecordStore.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../jd.orchestrator/jd.orchestrator.csproj" />
   </ItemGroup>

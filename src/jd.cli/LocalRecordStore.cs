@@ -1,12 +1,12 @@
 using jd.core.records;
 
-namespace jd.resolver.release;
+namespace jd.cli;
 
 /// <summary>
 /// The records on the local disk: <c>&lt;root&gt;/&lt;environment&gt;/&lt;label&gt;/&lt;name&gt;</c>, folders created on the first write. A file is created with
 /// <see cref="FileMode.CreateNew"/> and never opened for write again.
 /// </summary>
-public sealed class LocalRecordStore(string root) : IRecordStore
+internal sealed class LocalRecordStore(string root) : IRecordStore
 {
     /// <inheritdoc/>
     public async Task<string> CreateAsync(string environment, string label, string name, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
@@ -35,5 +35,5 @@ public sealed class LocalRecordStore(string root) : IRecordStore
     private string LabelDirectory(string environment, string label) => Path.Combine(root, Segment(environment), Segment(label));
 
     private static string Segment(string segment) =>
-        ReleaseRecordFile.SegmentProblem(segment) is { } problem ? throw new ArgumentException(problem) : segment;
+        IRecordStore.SegmentProblem(segment) is { } problem ? throw new ArgumentException(problem) : segment;
 }
