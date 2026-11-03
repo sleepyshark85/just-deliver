@@ -5,13 +5,22 @@ namespace jd.resolver.tests;
 
 // A test fake of the record store: files in a dictionary keyed <environment>/<label>/<name>, which a test edits, copies or renames as someone
 // with the records could. It keeps the port's contract: every name is one segment (IRecordStore.SegmentProblem, the guard LocalRecordStore uses),
-// an existing name is refused as FileMode.CreateNew refuses it, and a missing one is not found. A key in Unreadable (a file, or
-// <environment>/<label> for its listing) cannot be read, as a file or directory without read permission. Linked into jd.orchestrator.tests.
-internal sealed class MemoryRecordStore : IRecordStore
+// an existing name is refused as FileMode.CreateNew refuses it, and a missing one is not found. A key given to Refuse (a file, or
+// <environment>/<label> for its listing) cannot be read: as a file or directory without read permission (UnauthorizedAccessException) or
+// with a failing disk or share (IOException), the two exceptions the port documents. Linked into jd.orchestrator.tests.
+public sealed class MemoryRecordStore : IRecordStore
 {
+    public enum ReadFault
+    {
+        AccessDenied,
+        IoError,
+    }
+
     public Dictionary<string, byte[]> Files { get; } = new(StringComparer.Ordinal);
 
-    public HashSet<string> Unreadable { get; } = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ReadFault> _faults = new(StringComparer.Ordinal);
+
+    public void Refuse(string key, ReadFault fault) => _faults[key] = fault;
 
     public static string Key(string environment, string label, string name) => $"{environment}/{label}/{name}";
 
@@ -42,9 +51,11 @@ internal sealed class MemoryRecordStore : IRecordStore
 
     private void RefuseUnreadable(string key)
     {
-        if (Unreadable.Contains(key))
+        if (_faults.TryGetValue(key, out var fault))
         {
-            throw new UnauthorizedAccessException($"Access to the path '{key}' is denied.");
+            throw fault == ReadFault.AccessDenied
+                ? new UnauthorizedAccessException($"Access to the path '{key}' is denied.")
+                : new IOException($"The read of '{key}' failed.");
         }
     }
 

@@ -36,8 +36,9 @@ public sealed partial class ThinCliTests
         scan.Uses.Where(use => isCommand(use.Type) && IsInner(use.Target) && !surface.Contains((use.Target.FullName, use.TargetMember)))
             .Select(use => new Finding($"{use.Type} -> {use.Target.FullName}.{use.TargetMember}", $"{use.Type}.{use.Member} reaches {use.Target.FullName}.{use.TargetMember}"));
 
-    // What R1 lets command code reach, computed from the use cases' signatures: each RunAsync, the constructors of its input, the property getters of every
-    // type its signature holds (result, progress, problem and the data types in them, and the records derived from them), and GraphJson.Serialize.
+    // What R1 lets command code reach, computed from the use cases' signatures: each RunAsync, the constructors of its input (and nothing else of it), the
+    // property getters of every other type its signature holds (result, progress, problem and the data types in them, and the records derived from them),
+    // and GraphJson.Serialize.
     internal static ISet<(string Type, string Member)> UseCaseSurface(IEnumerable<Type> useCases)
     {
         var surface = new HashSet<(string, string)> { (typeof(GraphJson).FullName!, nameof(GraphJson.Serialize)) };
@@ -78,8 +79,9 @@ public sealed partial class ThinCliTests
         foreach (var run in useCases.SelectMany(u => u.GetMethods(BindingFlags.Public | BindingFlags.Static)).Where(m => m.Name == RunAsync))
         {
             surface.Add((Definition(run.DeclaringType!), run.Name));
-            surface.Add((Definition(run.GetParameters()[0].ParameterType), ConstructorInfo.ConstructorName));
-            foreach (var type in run.GetParameters().Select(p => p.ParameterType).Append(run.ReturnType))
+            var input = run.GetParameters()[0].ParameterType;
+            surface.Add((Definition(input), ConstructorInfo.ConstructorName));
+            foreach (var type in run.GetParameters().Skip(1).Select(p => p.ParameterType).Append(run.ReturnType))
             {
                 Hold(type);
             }

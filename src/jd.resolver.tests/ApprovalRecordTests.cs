@@ -243,12 +243,14 @@ public sealed class ApprovalRecordTests
         Assert.StartsWith($"{fileName}: is not named <time>-approve.json", Assert.Single(reading.Ignored), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task An_approval_without_read_permission_is_ignored_and_reported_not_a_crash()
+    [Theory]
+    [InlineData(MemoryRecordStore.ReadFault.AccessDenied)]
+    [InlineData(MemoryRecordStore.ReadFault.IoError)]
+    public async Task An_approval_that_cannot_be_read_is_ignored_and_reported_not_a_crash(MemoryRecordStore.ReadFault fault)
     {
         await WriteApprovalAsync("object-a", 1);
         var noAccess = $"stage/1.0.0/{await WriteApprovalAsync("object-b", 2)}";
-        _records.Unreadable.Add(noAccess);
+        _records.Refuse(noAccess, fault);
 
         var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 
@@ -256,11 +258,13 @@ public sealed class ApprovalRecordTests
         Assert.StartsWith($"{Path.GetFileName(noAccess)}: cannot be read: ", Assert.Single(reading.Ignored), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task A_label_directory_that_cannot_be_listed_is_reported_not_a_crash()
+    [Theory]
+    [InlineData(MemoryRecordStore.ReadFault.AccessDenied)]
+    [InlineData(MemoryRecordStore.ReadFault.IoError)]
+    public async Task A_label_directory_that_cannot_be_listed_is_reported_not_a_crash(MemoryRecordStore.ReadFault fault)
     {
         await WriteApprovalAsync("object-a", 1);
-        _records.Unreadable.Add("stage/1.0.0");
+        _records.Refuse("stage/1.0.0", fault);
 
         var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
 

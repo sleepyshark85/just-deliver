@@ -214,7 +214,7 @@ public partial class OrchestratorTests
         ledger.Records.Put(Ledger.Key("20261017T080200000Z-deploy.json"), string.Empty);
         ledger.Records.Put(Ledger.Key("20261017T080300000Z-qualify.json"), "[1, 2]");
         ledger.Records.Put(Ledger.Key("20261017T080400000Z-deploy.json"), "{}");
-        ledger.Records.Unreadable.Add(Ledger.Key("20261017T080400000Z-deploy.json"));
+        ledger.Records.Refuse(Ledger.Key("20261017T080400000Z-deploy.json"), MemoryRecordStore.ReadFault.AccessDenied);
 
         var result = await ledger.ReadAsync();
 
@@ -223,27 +223,31 @@ public partial class OrchestratorTests
         Assert.All(result.Reasons, r => Assert.Contains(": cannot be read: ", r, StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task A_record_without_read_permission_is_a_reason_not_a_crash()
+    [Theory]
+    [InlineData(MemoryRecordStore.ReadFault.AccessDenied)]
+    [InlineData(MemoryRecordStore.ReadFault.IoError)]
+    public async Task A_record_that_cannot_be_read_is_a_reason_not_a_crash(MemoryRecordStore.ReadFault fault)
     {
         var ledger = await Ledger.CreateAsync();
         await ledger.DeployAsync(1, PassingIq);
         var noAccess = Ledger.Key("20261017T080200000Z-deploy.json");
         ledger.Records.Put(noAccess, "{}");
-        ledger.Records.Unreadable.Add(noAccess);
+        ledger.Records.Refuse(noAccess, fault);
 
         var result = await ledger.ReadAsync();
 
         Assert.StartsWith($"{Name(noAccess)}: cannot be read: ", OneReason(result), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task A_set_yaml_that_cannot_be_read_is_a_reason_and_an_unknown_set()
+    [Theory]
+    [InlineData(MemoryRecordStore.ReadFault.AccessDenied)]
+    [InlineData(MemoryRecordStore.ReadFault.IoError)]
+    public async Task A_set_yaml_that_cannot_be_read_is_a_reason_and_an_unknown_set(MemoryRecordStore.ReadFault fault)
     {
         var ledger = await Ledger.CreateAsync();
         await ledger.DeployAsync(1, PassingIq);
         var setPath = Ledger.Key("set.yaml");
-        ledger.Records.Unreadable.Add(setPath);
+        ledger.Records.Refuse(setPath, fault);
 
         var result = await ledger.ReadAsync();
 
@@ -252,12 +256,14 @@ public partial class OrchestratorTests
         Assert.Contains(setPath, OneReason(result), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task A_label_directory_that_cannot_be_listed_is_a_reason_and_an_unknown_set()
+    [Theory]
+    [InlineData(MemoryRecordStore.ReadFault.AccessDenied)]
+    [InlineData(MemoryRecordStore.ReadFault.IoError)]
+    public async Task A_label_directory_that_cannot_be_listed_is_a_reason_and_an_unknown_set(MemoryRecordStore.ReadFault fault)
     {
         var ledger = await Ledger.CreateAsync();
         await ledger.DeployAsync(1, PassingIq);
-        ledger.Records.Unreadable.Add("dev/1.0.0"); // set.yaml is still readable, the names of the label are not
+        ledger.Records.Refuse("dev/1.0.0", fault); // set.yaml is still readable, the names of the label are not
 
         var result = await ledger.ReadAsync();
 

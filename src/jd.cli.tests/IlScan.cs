@@ -96,7 +96,6 @@ internal sealed class IlScan
                         {
                             Mention(member, part);
                         }
-
                     }
                     else
                     {

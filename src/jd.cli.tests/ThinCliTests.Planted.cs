@@ -54,7 +54,6 @@ namespace jd.cli.tests
                     ("jd.resolver.graph.GraphJson", "Serialize"),
                     ("jd.cli.tests.planted.UseCase", "RunAsync"),
                     ("jd.cli.tests.planted.Input", ".ctor"),
-                    ("jd.cli.tests.planted.Input", "get_Name"),
                     ("jd.cli.tests.planted.Result", "get_Problems"),
                     ("jd.cli.tests.planted.Problem", "get_Message"),
                     ("jd.cli.tests.planted.MissingFile", "get_Path"),
@@ -90,6 +89,15 @@ namespace jd.cli.tests
                     "jd.cli.tests.planted.Inner.Touches reaches System.IO.File.Exists",
                     "jd.cli.tests.planted.Inner.Touches reaches System.Environment.GetEnvironmentVariable",
                     "jd.cli.tests.planted.Inner.Touches reaches System.IO.Path.GetFullPath",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.FileInfo..ctor",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.DirectoryInfo..ctor",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.FileSystemInfo.get_Exists",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.FileStream..ctor",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.IO.StreamWriter..ctor",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.Environment.GetEnvironmentVariables",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.Environment.GetFolderPath",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.Environment.get_CurrentDirectory",
+                    "jd.cli.tests.planted.Inner.TouchesMore reaches System.Environment.set_CurrentDirectory",
                     "jd.cli.tests.planted.Inner.TouchesAsync reaches System.IO.Directory.Exists",
                 ],
                 findings);
@@ -161,6 +169,20 @@ namespace jd.cli.tests.planted
         {
             await Task.Yield();
             _ = Directory.Exists("x");
+        }
+
+        // One reference to each remaining arm of R3, and the StreamWriter overload on a stream, which is not one.
+        public static void TouchesMore(Stream stream)
+        {
+            FileSystemInfo info = new FileInfo("x");
+            _ = new DirectoryInfo("x");
+            _ = info.Exists;
+            _ = new FileStream("x", FileMode.Open);
+            _ = new StreamWriter("x");
+            _ = new StreamWriter(stream);
+            _ = Environment.GetEnvironmentVariables();
+            _ = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            Environment.CurrentDirectory = Environment.CurrentDirectory;
         }
     }
 }

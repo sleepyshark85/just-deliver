@@ -53,16 +53,17 @@ public sealed partial class ReleaseDeployCliTests
     }
 
     [Theory]
-    [InlineData("release deploy")]
-    [InlineData("deploy")]
-    public async Task A_gated_refusal_builds_no_identity_backend_probe_or_reader(string command)
+    [InlineData("release deploy", new[] { "Records", "Time" })]
+    [InlineData("deploy", new string[0])]
+    public async Task A_gated_refusal_builds_no_identity_backend_probe_or_reader(string command, string[] expectedFactories)
     {
         var set = await CreateSetAsync();
 
-        var (code, _, _) = await RunAsync(new RecordingBackend(), Command(command, set, await GatedEnvironmentAsync()));
+        var (code, _, stderr) = await RunAsync(new RecordingBackend(), Command(command, set, await GatedEnvironmentAsync()));
 
         Assert.Equal(1, code);
-        Assert.Equal(command == "deploy" ? [] : ["Records", "Time"], Invoked);
+        Assert.Contains("is gated by an approval policy", stderr, StringComparison.Ordinal);
+        Assert.Equal(expectedFactories, Invoked);
     }
 
     [Fact]
@@ -107,6 +108,8 @@ public sealed partial class ReleaseDeployCliTests
         var refused = await ApproveAsync(await StageAsync());
 
         Assert.Equal((1, 1), (ungated.Code, refused.Code));
+        Assert.Contains("environment 'dev' has no approval policy, so there is nothing to approve.", ungated.Err, StringComparison.Ordinal);
+        Assert.Equal("jd: the credential was refused.\n", refused.Err);
         Assert.Empty(ungatedInvoked);
         Assert.Equal(["Identity"], Invoked);
     }

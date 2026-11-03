@@ -20,21 +20,36 @@ public sealed class LocalRecordStoreTests : IDisposable
     [InlineData("", "1.0.0", "x")]
     [InlineData("dev", "", "x")]
     [InlineData("dev", "1.0.0", "")]
-    public async Task A_name_that_is_not_one_segment_is_refused_by_create_list_and_read_and_nothing_is_written(string environment, string label, string name)
+    public async Task A_name_that_is_not_one_segment_is_refused_by_create_and_read_and_nothing_is_written(string environment, string label, string name)
     {
         var store = new LocalRecordStore(Path.Combine(_temp, "records"));
         await File.WriteAllTextAsync(Path.Combine(_temp, "x"), "outside");
 
         var created = await Assert.ThrowsAsync<ArgumentException>(() => store.CreateAsync(environment, label, name, new byte[] { 1 }, CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentException>(() => store.ReadAsync(environment, label, name, CancellationToken.None));
-        if (name == "x")
-        {
-            await Assert.ThrowsAsync<ArgumentException>(() => store.ListAsync(environment, label, CancellationToken.None));
-        }
 
         Assert.EndsWith("cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.", created.Message, StringComparison.Ordinal);
         Assert.Equal(new[] { Path.Combine(_temp, "x") }, Directory.GetFileSystemEntries(_temp, "*", SearchOption.AllDirectories));
         Assert.Equal("outside", await File.ReadAllTextAsync(Path.Combine(_temp, "x")));
+    }
+
+    [Theory]
+    [InlineData("..", "1.0.0")]
+    [InlineData("dev", "..")]
+    [InlineData("../dev", "1.0.0")]
+    [InlineData("dev", "1.0.0/../../x")]
+    [InlineData("a\\b", "1.0.0")]
+    [InlineData("", "1.0.0")]
+    [InlineData("dev", "")]
+    public async Task A_directory_name_that_is_not_one_segment_is_refused_by_list_and_nothing_is_written(string environment, string label)
+    {
+        var store = new LocalRecordStore(Path.Combine(_temp, "records"));
+        await File.WriteAllTextAsync(Path.Combine(_temp, "x"), "outside");
+
+        var listed = await Assert.ThrowsAsync<ArgumentException>(() => store.ListAsync(environment, label, CancellationToken.None));
+
+        Assert.EndsWith("cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.", listed.Message, StringComparison.Ordinal);
+        Assert.Equal(new[] { Path.Combine(_temp, "x") }, Directory.GetFileSystemEntries(_temp, "*", SearchOption.AllDirectories));
     }
 
     [Fact]
