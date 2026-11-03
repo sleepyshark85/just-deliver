@@ -464,5 +464,6 @@ Total about 1,000 production lines added, offset in part by deletions (the match
 | [0013](../decisions/0013-container-apps-runtime.md) | refines "runtime is a declared property of the workload": the **environment offers** the runtime; the workload names none, as in the MVP |
 | [0014](../decisions/0014-hook-points.md) | wording: hooks restrictable by environment **type** (was tier) |
 
-No new ADR now. Once S21f lands, the component model (kinds, scopes, environment types, the grant target rule) is worth one
+0004 is superseded by [0017](../decisions/0017-catalog-layer-policies-require.md) and 0013's first decision by
+[0018](../decisions/0018-environment-offers-runtime.md) (recorded 2026-11-03). Before that: no new ADR now. Once S21f lands, the component model (kinds, scopes, environment types, the grant target rule) is worth one
 (`Proposed — pending review`), so resolver.md stops carrying the decision.
