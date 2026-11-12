@@ -1,3 +1,4 @@
+using System.Text;
 using jd.definitionvalidator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
@@ -56,8 +57,8 @@ public class RuntimeVariablesTests
             }
             .Concat(policies ?? [])
             .Append(TestCatalog.GrantsFile)
-            .Select((content, i) => new CatalogSource($"f{i}.yaml", content));
-        var loaded = await CatalogParser.ParseAsync(files);
+            .Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml(
             $"metadata: {{ name: shop, team: crew }}\ncontainer:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n{variables}requires:\n  - type: sqldb\n");
@@ -191,7 +192,7 @@ public class RuntimeVariablesTests
                 + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.region} isn't\"\n"),
         };
 
-        var loaded = await CatalogParser.ParseAsync(files.Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
+        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)))]));
 
         Assert.Equal(
             new[] { "apostrophes", "dyn", "endpoint", "quoted" }.Select(e => ("f1.yaml", $"{TestCatalog.PartPath}.exports.{e}")),

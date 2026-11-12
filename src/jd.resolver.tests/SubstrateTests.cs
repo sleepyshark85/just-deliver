@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text;
 using jd.core.bp;
 using jd.definitionvalidator;
 using jd.resolver.catalog;
@@ -348,8 +349,8 @@ public class SubstrateTests
             "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment } }\n",
             "kind: Naming\nrules:\n  rg:\n    pattern: \"rg-{env}-{hash}\"\n    maxLength: 90\n    allowed: \"[a-z0-9-]\"\n",
             "kind: Component\nname: thing\ndescription: d\nexports: [out]\nimplementations:\n  default:\n    environment:\n      nodes:\n        group:\n          template: t/group\n          config:\n            groupName: ${name('rg')}\n      exports: {}\n    classes:\n      substrate:\n        nodes:\n          group:\n            template: t/group\n            config:\n              groupName: ${name('rg')}\n        exports:\n          out: ${group.groupName}\n",
-        }.Select((content, i) => new CatalogSource($"f{i}.yaml", content));
-        var loaded = await CatalogParser.ParseAsync(files);
+        }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
         var definition = Offering("dev", "dev", "thing");
         var environment = definition.Over(null);
@@ -417,8 +418,8 @@ public class SubstrateTests
             "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment } }\n",
             "kind: SharedResource\nname: thing\ndescription: d\nscope: environment\nnodes:\n  a:\n    template: t/a\n    config: { who: '${runtime.principalId}' }\nexports: {}\n",
             TestCatalog.Component("user", "[out]", "nodes:\n  b:\n    template: t/b\n    config: { k: 1 }\nexports:\n  out: x\n").Replace("exports: [out]\n", "exports: [out]\nuses: [thing]\n"),
-        }.Select((content, i) => new CatalogSource($"f{i}.yaml", content));
-        var loaded = await CatalogParser.ParseAsync(files);
+        }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
 
         var graph = Resolver.ResolveSubstrate(Offering("dev", "dev", "user"), "definition.yaml", loaded.Value!, Offering("dev", "dev", "user").Over(null), null);

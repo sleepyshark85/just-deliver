@@ -1,3 +1,4 @@
+using System.Text;
 using jd.resolver.catalog;
 using Xunit;
 
@@ -31,11 +32,11 @@ public class GrantTargetTests
         + TestCatalog.RuntimeImplementation($"nodes:\n  runtime: {{ template: t/rt, config: {{}} }}\n{extraNodes}");
 
     private static Task<LoadResult<Catalog>> Parse(string component, string runtime = "", string sharedGroup = SharedGroup) =>
-        CatalogParser.ParseAsync(new[]
+        CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. new[]
         {
             ("catalog.yaml", CatalogFile), ("grants.yaml", TestCatalog.GrantsFile), ("shared/a.yaml", sharedGroup), ("shared/b.yaml", CosmosAccount),
             ("c.yaml", component), ("r.yaml", runtime.Length > 0 ? runtime : Runtime()),
-        }.Select(f => new CatalogSource(f.Item1, f.Item2)));
+        }.Select(f => new SourceDocument(f.Item1, Encoding.UTF8.GetBytes(f.Item2)))]));
 
     private static LoadError SingleError(LoadResult<Catalog> result)
     {

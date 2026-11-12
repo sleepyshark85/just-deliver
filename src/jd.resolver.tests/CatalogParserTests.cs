@@ -1,3 +1,4 @@
+using System.Text;
 using jd.resolver.catalog;
 using Xunit;
 
@@ -14,7 +15,7 @@ public class CatalogParserTests
         $"kind: Policy\nname: {name}\nreason: because\nmatch: {{ kind: runtime }}\nset: {{ runtime.b: 1 }}\n";
 
     private static Task<LoadResult<Catalog>> Parse(params (string Path, string Content)[] files) =>
-        CatalogParser.ParseAsync(files.Select(f => new CatalogSource(f.Path, f.Content)));
+        CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files.Select(f => new SourceDocument(f.Path, Encoding.UTF8.GetBytes(f.Content)))]));
 
     // The environment types (docs/architecture/components.md section 2): declared in the Catalog file, named like requirement types, `default`
     // excluded (the implementations' fallback key).

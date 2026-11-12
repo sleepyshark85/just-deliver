@@ -434,6 +434,39 @@ public sealed class CliTests : IDisposable
         Assert.Single(stderr.Split('\n'), line => line == $"{Path.Combine(catalog, "templates")}: template directory not found.");
     }
 
+    // Edge 3 of docs/architecture/application.md section 8 (S25b2): an empty templates directory holds no template documents, so it reads as a
+    // missing one; before, it gave only each node's "not in the template library".
+    [Fact]
+    public async Task Deploy_reports_an_empty_template_directory_as_not_found()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        Directory.Delete(Path.Combine(catalog, "templates"), recursive: true);
+        Directory.CreateDirectory(Path.Combine(catalog, "templates"));
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Empty(backend.Calls);
+        Assert.Single(stderr.Split('\n'), line => line == $"{Path.Combine(catalog, "templates")}: template directory not found.");
+    }
+
+    [Fact]
+    public async Task Deploy_reads_only_the_template_files_of_the_template_directory()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        await File.WriteAllTextAsync(Path.Combine(catalog, "templates", "azure", "notes.yaml"), "not: [a template\n");
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(0, code);
+        Assert.Empty(stderr);
+        Assert.NotEmpty(backend.Calls);
+    }
+
     [Fact]
     public void The_pulumi_backend_keeps_its_state_in_the_data_directory_with_its_key_whatever_the_removed_variables_say()
     {

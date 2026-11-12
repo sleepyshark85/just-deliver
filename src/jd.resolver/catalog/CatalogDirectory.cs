@@ -1,11 +1,8 @@
 namespace jd.resolver.catalog;
 
-/// <summary>Reads a catalog directory from disk and hands its files to <see cref="CatalogParser"/>.</summary>
+/// <summary>Reads a catalog directory from disk and hands its documents to <see cref="CatalogParser"/>.</summary>
 public static class CatalogDirectory
 {
-    /// <summary>Templates are Pulumi YAML, not catalog documents; they are not loaded here. Part of the catalog layout.</summary>
-    public const string TemplatesDirectory = "templates";
-
     /// <summary>Loads every catalog file under <paramref name="root"/>, the templates aside.</summary>
     public static async Task<LoadResult<Catalog>> LoadAsync(string root, CancellationToken cancellationToken = default)
     {
@@ -14,18 +11,13 @@ public static class CatalogDirectory
             return new LoadResult<Catalog>(null, [new LoadError(root, string.Empty, "catalog directory not found.")]);
         }
 
-        var sources = new List<CatalogSource>();
+        var documents = new List<SourceDocument>();
         foreach (var file in Directory.EnumerateFiles(root, "*.yaml", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/');
-            if (relative.StartsWith(TemplatesDirectory + "/", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            sources.Add(new CatalogSource(relative, await File.ReadAllTextAsync(file, cancellationToken)));
+            documents.Add(new SourceDocument(relative, await File.ReadAllBytesAsync(file, cancellationToken)));
         }
 
-        return await CatalogParser.ParseAsync(sources, cancellationToken);
+        return await CatalogParser.ParseAsync(new SourceCatalog(root, documents), cancellationToken);
     }
 }

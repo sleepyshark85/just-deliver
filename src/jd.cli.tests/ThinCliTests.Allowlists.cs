@@ -35,59 +35,33 @@ public sealed partial class ThinCliTests
         [
             "jd.resolver.release.ReleaseRecordFile.LabelProblem",
         ],
+        ["jd.cli.CatalogFiles"] =
+        [
+            "jd.resolver.LoadError.<Clone>$",
+            "jd.resolver.LoadError.set_File",
+        ],
         ["jd.cli.Cli"] =
         [
             "jd.core.identity.IDeployerIdentity.GetAsync",
-            "jd.orchestrator.NodeReport.get_Message",
-            "jd.orchestrator.NodeReport.get_NodeId",
             "jd.orchestrator.Orchestrator..ctor",
             "jd.orchestrator.Orchestrator.DeployAsync",
-            "jd.orchestrator.Orchestrator.PreviewAsync",
-            "jd.orchestrator.RunReport.get_Nodes",
-            "jd.orchestrator.RunReport.get_Succeeded",
+            "jd.orchestrator.usecases.Checks.Templates",
             "jd.orchestrator.usecases.Connections.get_Backend",
             "jd.orchestrator.usecases.Connections.get_Identity",
             "jd.orchestrator.usecases.Connections.get_Probe",
-            "jd.resolver.LoadError.<Clone>$",
-            "jd.resolver.LoadError.set_File",
-            "jd.resolver.LoadResult`1.get_Errors",
-            "jd.resolver.LoadResult`1.get_Value",
-            "jd.resolver.Resolver.Resolve",
-            "jd.resolver.catalog.CatalogDirectory.LoadAsync",
-            "jd.resolver.environment.EnvironmentDescriptor.get_Approval",
-            "jd.resolver.environment.EnvironmentDescriptor.get_Name",
-            "jd.resolver.environment.EnvironmentDescriptor.get_Type",
-            "jd.resolver.environment.EnvironmentParser.LoadAsync",
-            "jd.resolver.environment.EnvironmentTypeCheck.Check",
-            "jd.resolver.graph.ResolvedGraph.get_Errors",
-            "jd.resolver.workload.WorkloadFile.LoadAsync",
         ],
         ["jd.cli.DeployFormatter"] =
         [
             "jd.core.bp.DeploymentResult.ChangedOperations",
             "jd.core.bp.DeploymentResult.IsChange",
-            "jd.core.bp.ResourceChange.get_Operation",
-            "jd.core.bp.ResourceChange.get_Type",
-            "jd.orchestrator.NodeReport.get_Changes",
-            "jd.orchestrator.NodeReport.get_Elapsed",
-            "jd.orchestrator.NodeReport.get_Message",
-            "jd.orchestrator.NodeReport.get_NodeId",
-            "jd.orchestrator.NodeReport.get_Outcome",
-            "jd.orchestrator.NodeReport.get_Steps",
-            "jd.orchestrator.NodeReport.get_Summary",
-            "jd.orchestrator.StepReport.get_Detail",
-            "jd.orchestrator.StepReport.get_Outcome",
-            "jd.orchestrator.StepReport.get_Step",
         ],
         ["jd.cli.EnvCli"] =
         [
-            "jd.orchestrator.NodeReport.get_NodeId",
-            "jd.orchestrator.NodeReport.get_Outputs",
-            "jd.orchestrator.RunReport.get_Nodes",
+            "jd.orchestrator.usecases.Checks.EnvironmentType",
             "jd.resolver.LoadResult`1.get_Errors",
             "jd.resolver.LoadResult`1.get_Value",
             "jd.resolver.Resolver.ResolveSubstrate",
-            "jd.resolver.catalog.CatalogDirectory.LoadAsync",
+            "jd.resolver.catalog.CatalogParser.ParseAsync",
             "jd.resolver.environment.ComposedDescriptor..ctor",
             "jd.resolver.environment.ComposedDescriptor.get_Errors",
             "jd.resolver.environment.ComposedDescriptor.get_Yaml",
@@ -99,33 +73,12 @@ public sealed partial class ThinCliTests
             "jd.resolver.environment.EnvironmentDescriptor.get_Region",
             "jd.resolver.environment.EnvironmentDescriptor.get_Type",
             "jd.resolver.environment.EnvironmentParser.LoadAsync",
-            "jd.resolver.graph.ResolvedGraph.get_Errors",
         ],
         ["jd.cli.PreviewFormatter"] =
         [
-            "jd.resolver.catalog.Probe.get_ExpectedStatus",
-            "jd.resolver.catalog.Probe.get_Path",
             "jd.resolver.expansion.ConfigLeaves.Of",
             "jd.resolver.expansion.ConfigObject..ctor",
-            "jd.resolver.expansion.ConfigText.get_PartReads",
-            "jd.resolver.expansion.ConfigText.get_Result",
-            "jd.resolver.expressions.Pending.get_Original",
-            "jd.resolver.expressions.Resolved.get_Value",
             "jd.resolver.graph.ConfigJson.ToToken",
-            "jd.resolver.graph.GraphNode.get_Config",
-            "jd.resolver.graph.GraphNode.get_DependsOn",
-            "jd.resolver.graph.GraphNode.get_Hash",
-            "jd.resolver.graph.GraphNode.get_Id",
-            "jd.resolver.graph.GraphNode.get_Kind",
-            "jd.resolver.graph.GraphNode.get_Phase",
-            "jd.resolver.graph.GraphNode.get_Probe",
-            "jd.resolver.graph.GraphNode.get_Provenance",
-            "jd.resolver.graph.GraphNode.get_Stack",
-            "jd.resolver.graph.GraphNode.get_Template",
-            "jd.resolver.graph.ResolvedGraph.get_CatalogVersion",
-            "jd.resolver.graph.ResolvedGraph.get_Environment",
-            "jd.resolver.graph.ResolvedGraph.get_Nodes",
-            "jd.resolver.graph.ResolvedGraph.get_Workload",
             "jd.resolver.policies.Provenance.Describe",
         ],
         ["jd.cli.PromoteCli"] =
@@ -168,19 +121,17 @@ public sealed partial class ThinCliTests
             "jd.orchestrator.IqCheck.get_Workload",
             "jd.orchestrator.IqResult.get_Checks",
             "jd.orchestrator.IqResult.get_Passed",
-            "jd.orchestrator.NodeReport.get_Message",
-            "jd.orchestrator.NodeReport.get_NodeId",
-            "jd.orchestrator.NodeReport.get_Outcome",
             "jd.orchestrator.Orchestrator..ctor",
             "jd.orchestrator.Orchestrator.DeployReleaseAsync",
             "jd.orchestrator.Qualifier..ctor",
             "jd.orchestrator.Qualifier.QualifyAsync",
             "jd.orchestrator.ReleaseRecordBuilder.Build",
             "jd.orchestrator.ReleaseRecordBuilder.BuildQualify",
-            "jd.orchestrator.RunReport.get_Nodes",
-            "jd.orchestrator.RunReport.get_Succeeded",
             "jd.orchestrator.WorkloadRun.get_Run",
             "jd.orchestrator.WorkloadRun.get_Workload",
+            "jd.orchestrator.usecases.Checks.EnvironmentType",
+            "jd.orchestrator.usecases.Checks.Gate",
+            "jd.orchestrator.usecases.Checks.Templates",
             "jd.orchestrator.usecases.Connections.get_Backend",
             "jd.orchestrator.usecases.Connections.get_LiveRevisions",
             "jd.orchestrator.usecases.Connections.get_Probe",
@@ -188,7 +139,7 @@ public sealed partial class ThinCliTests
             "jd.orchestrator.usecases.Connections.get_Time",
             "jd.resolver.LoadResult`1.get_Errors",
             "jd.resolver.LoadResult`1.get_Value",
-            "jd.resolver.catalog.CatalogDirectory.LoadAsync",
+            "jd.resolver.catalog.CatalogParser.ParseAsync",
             "jd.resolver.environment.EnvironmentDescriptor.get_Name",
             "jd.resolver.environment.EnvironmentParser.LoadAsync",
             "jd.resolver.release.ReleaseHash.Of",
@@ -206,7 +157,7 @@ public sealed partial class ThinCliTests
         ],
     };
 
-    // R2 today: the commands that build the orchestrator, the qualifier and the records from the factories, so name the ports they return.
+    // R2 today: the commands that build the orchestrator, the qualifier, the records and the templates from the factories, so name the ports they return.
     private static readonly Dictionary<string, string[]> R2Allowlist = new()
     {
         ["jd.cli.ApproveCli"] =
@@ -218,6 +169,7 @@ public sealed partial class ThinCliTests
             "jd.core.bp.IBackEndProvider",
             "jd.core.identity.IDeployerIdentity",
             "jd.orchestrator.IRevisionProbe",
+            "jd.orchestrator.ITemplates",
         ],
         ["jd.cli.PromoteCli"] =
         [
@@ -229,6 +181,7 @@ public sealed partial class ThinCliTests
             "jd.core.records.IRecordStore",
             "jd.core.revisions.ILiveRevisions",
             "jd.orchestrator.IRevisionProbe",
+            "jd.orchestrator.ITemplates",
         ],
     };
 
@@ -248,7 +201,7 @@ public sealed partial class ThinCliTests
         [
             "System.IO.Directory.EnumerateFiles",
             "System.IO.Directory.Exists",
-            "System.IO.File.ReadAllTextAsync",
+            "System.IO.File.ReadAllBytesAsync",
         ],
         ["jd.resolver.release.ReleaseBuilder"] =
         [

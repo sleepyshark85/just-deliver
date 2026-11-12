@@ -72,7 +72,8 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
         () => Invoke(nameof(connections.LiveRevisions), connections.LiveRevisions),
         () => Invoke(nameof(connections.Backend), connections.Backend),
         () => Invoke(nameof(connections.Probe), connections.Probe),
-        () => Invoke(nameof(connections.Time), connections.Time));
+        () => Invoke(nameof(connections.Time), connections.Time),
+        connections.Templates);
 
     private T Invoke<T>(string factory, Func<T> build)
     {

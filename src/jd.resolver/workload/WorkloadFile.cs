@@ -12,10 +12,6 @@ public static class WorkloadFile
     // Bridge: the kind read here until the workload is bound from its schema (S24c2).
     private const string Kind = "Workload";
 
-    /// <summary>Loads the definition at <paramref name="path"/>; the value is set exactly when there are no errors.</summary>
-    public static async Task<LoadResult<JObject>> LoadAsync(string path, CancellationToken cancellationToken = default) =>
-        Checked(await DocumentLoader.LoadFileAsync(path, "workload definition", [Kind], cancellationToken));
-
     /// <summary>Loads the definition <paramref name="workload"/> holds; its errors name the document as it is named. The value is set exactly when there are no errors.</summary>
     public static async Task<LoadResult<JObject>> LoadAsync(SourceDocument workload, CancellationToken cancellationToken) =>
         Checked(await DocumentLoader.LoadAsync(workload.Name, workload.Text(), [Kind], cancellationToken));
@@ -26,17 +22,12 @@ public static class WorkloadFile
 
     private static LoadResult<JObject> Checked(LoadResult<Document> loaded)
     {
-        if (loaded.Value is not { Source: var path, Body: var workload })
+        if (loaded.Value is not { Source: var source, Body: var workload })
         {
             return new LoadResult<JObject>(null, loaded.Errors);
         }
 
-        // Rule errors read "<location>: <message>".
-        var ruleErrors = WorkloadRules.Check(workload).Select(e =>
-        {
-            var split = e.IndexOf(": ", StringComparison.Ordinal);
-            return split < 0 ? new LoadError(path, string.Empty, e) : new LoadError(path, e[..split], e[(split + 2)..]);
-        }).ToList();
+        var ruleErrors = WorkloadRules.Check(workload).Select(e => new LoadError(source, e.Location, e.Message)).ToList();
         return new LoadResult<JObject>(ruleErrors.Count == 0 ? workload : null, ruleErrors);
     }
 }

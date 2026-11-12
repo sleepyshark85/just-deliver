@@ -6,8 +6,8 @@ using Newtonsoft.Json.Linq;
 namespace jd.resolver.catalog;
 
 /// <summary>
-/// Builds a <see cref="Catalog"/> from catalog files held in memory. Pure: reading the directory is
-/// <see cref="CatalogDirectory"/>'s job. Every problem in every file is collected, so a catalog can be
+/// Builds a <see cref="Catalog"/> from a <see cref="SourceCatalog"/>, whose templates are its own part (<see cref="Templates"/>). Pure: reading
+/// the files is the client's job. Every problem in every file is collected, so a catalog can be
 /// fixed in one pass.
 /// </summary>
 public static class CatalogParser
@@ -45,8 +45,18 @@ public static class CatalogParser
         public bool IsRuntime => Scope is null && OwnComponent is null;
     }
 
-    /// <summary>Builds the catalog from its files; the value is set exactly when no file has an error.</summary>
-    public static async Task<LoadResult<Catalog>> ParseAsync(IEnumerable<CatalogSource> sources, CancellationToken cancellationToken = default)
+    /// <summary>Templates are Pulumi YAML, not catalog documents: the layout keeps them in this directory of the catalog, a part of their own.</summary>
+    public const string TemplatesDirectory = "templates";
+
+    private const string TemplatesPrefix = TemplatesDirectory + "/";
+
+    /// <summary>The templates part of <paramref name="catalog"/>: its documents under <see cref="TemplatesDirectory"/>, named relative to it, under the name the catalog's name and the directory make.</summary>
+    public static SourceCatalog Templates(SourceCatalog catalog) => new(
+        Path.Combine(catalog.Name, TemplatesDirectory),
+        [.. catalog.Documents.Where(IsTemplate).Select(document => document with { Name = document.Name[TemplatesPrefix.Length..] })]);
+
+    /// <summary>Builds the catalog from its documents, the templates part aside; the value is set exactly when no document has an error.</summary>
+    public static async Task<LoadResult<Catalog>> ParseAsync(SourceCatalog source, CancellationToken cancellationToken = default)
     {
         var errors = new List<LoadError>();
         var documents = new List<Document>();
@@ -54,9 +64,9 @@ public static class CatalogParser
         // so one mistake is not reported a second time as a missing or undeclared item.
         var valid = new HashSet<Document>();
         var unreadable = 0;
-        foreach (var source in sources.OrderBy(s => s.Path, StringComparer.Ordinal))
+        foreach (var file in source.Documents.Where(document => !IsTemplate(document)).OrderBy(document => document.Name, StringComparer.Ordinal))
         {
-            if (await ReadDocumentAsync(source, errors, cancellationToken) is not (var document, var isValid))
+            if (await ReadDocumentAsync(file, errors, cancellationToken) is not (var document, var isValid))
             {
                 unreadable++;
                 continue;
@@ -136,9 +146,9 @@ public static class CatalogParser
     }
 
     // The document and whether it passed its schema; null when the file has no readable kind.
-    private static async Task<(Document Document, bool Valid)?> ReadDocumentAsync(CatalogSource source, List<LoadError> errors, CancellationToken cancellationToken)
+    private static async Task<(Document Document, bool Valid)?> ReadDocumentAsync(SourceDocument source, List<LoadError> errors, CancellationToken cancellationToken)
     {
-        var parsed = DocumentLoader.Parse(source.Path, source.Content, Kinds);
+        var parsed = DocumentLoader.Parse(source.Name, source.Text(), Kinds);
         errors.AddRange(parsed.Errors);
         if (parsed.Value is not { } document)
         {
@@ -147,14 +157,14 @@ public static class CatalogParser
 
         if (ReplacedKinds.TryGetValue(document.Kind, out var replacement))
         {
-            errors.Add(new LoadError(source.Path, DocumentLoader.KindField, $"kind '{document.Kind}' is no longer supported: {replacement}."));
+            errors.Add(new LoadError(source.Name, DocumentLoader.KindField, $"kind '{document.Kind}' is no longer supported: {replacement}."));
             return (document, false);
         }
 
         if (document.Kind == PolicyKind && document.Body.ContainsKey(RemovedPolicyAdd))
         {
             // One clear error instead of the schema's "not allowed"; the rest of the file is not checked until it is migrated.
-            errors.Add(new LoadError(source.Path, RemovedPolicyAdd,
+            errors.Add(new LoadError(source.Name, RemovedPolicyAdd,
                 "a policy can no longer add nodes: a workload declares what it gets in its 'requires'; use 'require: <component>' to make every workload the policy matches require one."));
             return (document, false);
         }
@@ -164,6 +174,8 @@ public static class CatalogParser
         errors.AddRange(schemaErrors);
         return (document, schemaErrors.Count == 0);
     }
+
+    private static bool IsTemplate(SourceDocument document) => document.Name.StartsWith(TemplatesPrefix, StringComparison.Ordinal);
 
     private static List<Document> OfKind(List<Document> documents, string kind) => documents.Where(d => d.Kind == kind).ToList();
 

@@ -14,6 +14,10 @@ public static class EnvironmentParser
     public static async Task<LoadResult<EnvironmentDescriptor>> LoadAsync(string path, CancellationToken cancellationToken = default) =>
         Build(await DocumentLoader.LoadFileAsync(path, "environment descriptor", [Kind], cancellationToken));
 
+    /// <summary>Loads the descriptor <paramref name="environment"/> holds; its errors name the document as it is named. The value is set exactly when there are no errors.</summary>
+    public static async Task<LoadResult<EnvironmentDescriptor>> LoadAsync(SourceDocument environment, CancellationToken cancellationToken) =>
+        Build(await DocumentLoader.LoadAsync(environment.Name, environment.Text(), [Kind], cancellationToken));
+
     /// <summary>Builds a descriptor from its text; <paramref name="source"/> names it in errors.</summary>
     public static async Task<LoadResult<EnvironmentDescriptor>> ParseAsync(string source, string content, CancellationToken cancellationToken = default) =>
         Build(await DocumentLoader.LoadAsync(source, content, [Kind], cancellationToken));

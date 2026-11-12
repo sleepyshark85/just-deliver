@@ -1,3 +1,4 @@
+using System.Text;
 using jd.resolver.catalog;
 using Xunit;
 
@@ -28,7 +29,7 @@ public class CatalogUsesTests
         + TestCatalog.RuntimeImplementation($"nodes:\n  runtime:\n    template: t/rt\n    config: {config}\n");
 
     private static Task<LoadResult<Catalog>> Parse(params (string Path, string Content)[] files) =>
-        CatalogParser.ParseAsync(files.Prepend(("catalog.yaml", CatalogFile)).Select(f => new CatalogSource(f.Item1, f.Item2)));
+        CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files.Prepend(("catalog.yaml", CatalogFile)).Select(f => new SourceDocument(f.Item1, Encoding.UTF8.GetBytes(f.Item2)))]));
 
     private static LoadError SingleError(LoadResult<Catalog> result)
     {
