@@ -121,7 +121,7 @@ public sealed class YamlSchemaValidator
     }
 
     /// <summary>Validates the YAML file against the schema file; a missing file is a failed result, not an exception.</summary>
-    public async Task<ValidationResult> ValidateAsync(string schemaFilePath, string yamlFilePath)
+    internal async Task<ValidationResult> ValidateAsync(string schemaFilePath, string yamlFilePath)
     {
         try
         {

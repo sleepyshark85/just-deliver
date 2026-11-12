@@ -22,7 +22,7 @@ public sealed record ConfigText(EvalResult Result, IReadOnlySet<string> PartRead
 /// </summary>
 public sealed record ConfigObject(IReadOnlyDictionary<string, ConfigValue> Properties, bool AsEntries = false) : ConfigValue;
 
-/// <summary>A sequence of values, in order.</summary>
+/// <summary>A list from the catalog, each item evaluated; item order is kept, and the graph treats its strings as one provenance leaf.</summary>
 public sealed record ConfigArray(IReadOnlyList<ConfigValue> Items) : ConfigValue;
 
 /// <summary>A catalog node with its config evaluated, named as its part names it; policies apply to it next.</summary>
