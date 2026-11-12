@@ -49,7 +49,6 @@ public sealed partial class ThinCliTests
             "jd.orchestrator.usecases.Connections.get_Identity",
             "jd.orchestrator.usecases.Connections.get_Probe",
             "jd.resolver.LoadError.<Clone>$",
-            "jd.resolver.LoadError.get_File",
             "jd.resolver.LoadError.set_File",
             "jd.resolver.LoadResult`1.get_Errors",
             "jd.resolver.LoadResult`1.get_Value",

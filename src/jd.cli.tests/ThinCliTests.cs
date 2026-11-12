@@ -36,12 +36,28 @@ public sealed partial class ThinCliTests
         scan.Uses.Where(use => isCommand(use.Type) && IsInner(use.Target) && !surface.Contains((use.Target.FullName, use.TargetMember)))
             .Select(use => new Finding($"{use.Type} -> {use.Target.FullName}.{use.TargetMember}", $"{use.Where} reaches {use.Target.FullName}.{use.TargetMember}"));
 
-    // What R1 lets command code reach, computed from the use cases' signatures: each RunAsync, the constructors of its input (and nothing else of it), the
-    // property getters of every other type its signature holds (result, progress, problem and the data types in them, and the records derived from them),
-    // and GraphJson.Serialize.
+    // What R1 lets command code reach, computed from the use cases' signatures: each RunAsync, the constructors of its input and of the types the input
+    // holds (and nothing else of them), the property getters of every other type its signature holds (result, progress, problem and the data types in
+    // them), and GraphJson.Serialize.
     internal static ISet<(string Type, string Member)> UseCaseSurface(IEnumerable<Type> useCases)
     {
         var surface = new HashSet<(string, string)> { (typeof(GraphJson).FullName!, nameof(GraphJson.Serialize)) };
+        foreach (var run in useCases.SelectMany(u => u.GetMethods(BindingFlags.Public | BindingFlags.Static)).Where(m => m.Name == RunAsync))
+        {
+            surface.Add((Definition(run.DeclaringType!), run.Name));
+            surface.UnionWith(Held(run.GetParameters()[0].ParameterType).Select(type => (Definition(type), ConstructorInfo.ConstructorName)));
+            surface.UnionWith(run.GetParameters().Skip(1).Select(p => p.ParameterType).Append(run.ReturnType).SelectMany(Held)
+                .SelectMany(type => type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                .Select(property => property.GetMethod).OfType<MethodInfo>().Select(getter => (Definition(getter.DeclaringType!), getter.Name)));
+        }
+
+        return surface;
+    }
+
+    // The jd types a signature's type holds, itself included: through generic arguments, element types and public properties, recursively, with the
+    // records derived from each. Not Connections, which a command only passes on, and not the BCL's, whose members are not jd's.
+    private static IEnumerable<Type> Held(Type root)
+    {
         var held = new HashSet<Type>();
         void Hold(Type type)
         {
@@ -55,18 +71,13 @@ public sealed partial class ThinCliTests
                 Hold(part);
             }
 
-            if (type.Namespace?.StartsWith("System", StringComparison.Ordinal) ?? true)
+            if (IsBcl(type))
             {
                 return;
             }
 
             foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
-                if (property.GetMethod is { } getter)
-                {
-                    surface.Add((Definition(getter.DeclaringType!), getter.Name));
-                }
-
                 Hold(property.PropertyType);
             }
 
@@ -76,20 +87,11 @@ public sealed partial class ThinCliTests
             }
         }
 
-        foreach (var run in useCases.SelectMany(u => u.GetMethods(BindingFlags.Public | BindingFlags.Static)).Where(m => m.Name == RunAsync))
-        {
-            surface.Add((Definition(run.DeclaringType!), run.Name));
-            // Only the input's own constructor: S25b1 widens this to the types an input holds (SourceDocument).
-            var input = run.GetParameters()[0].ParameterType;
-            surface.Add((Definition(input), ConstructorInfo.ConstructorName));
-            foreach (var type in run.GetParameters().Skip(1).Select(p => p.ParameterType).Append(run.ReturnType))
-            {
-                Hold(type);
-            }
-        }
-
-        return surface;
+        Hold(root);
+        return held.Where(type => !IsBcl(type));
     }
+
+    private static bool IsBcl(Type type) => type.Namespace?.StartsWith("System", StringComparison.Ordinal) ?? true;
 
     // The use cases: the types with a static RunAsync in the namespace of the anchor (Connections' for jd's).
     internal static IEnumerable<Type> UseCases(Type anchor) =>
@@ -107,7 +109,7 @@ public sealed partial class ThinCliTests
         IEnumerable<Type> Parts(Type type) => type.IsGenericType ? type.GetGenericArguments().SelectMany(Parts).Prepend(type) : type.HasElementType ? Parts(type.GetElementType()!) : [type];
         return typeof(Connections).GetProperties().Select(p => p.PropertyType.GetGenericArguments()[0]).Where(t => t.IsInterface)
             .SelectMany(port => port.GetMethods()).SelectMany(m => m.GetParameters().Select(p => p.ParameterType).Append(m.ReturnType)).SelectMany(Parts)
-            .Where(t => !(t.Namespace?.StartsWith("System", StringComparison.Ordinal) ?? true) && !t.IsGenericParameter).Select(Definition).Distinct().ToArray();
+            .Where(t => !IsBcl(t) && !t.IsGenericParameter).Select(Definition).Distinct().ToArray();
     }
 
     // R2, first sentence: a port is named (implemented, called, held) only in the composition types, and they reach the inner assemblies only through
