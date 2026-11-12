@@ -241,9 +241,11 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     [InlineData("unknown option '--bogus'.", "release", "deploy", "s.yaml", "--env", "e.yaml", "--catalog", "c", "--bogus")]
     public async Task Usage_errors_exit_2_and_print_the_problem_and_the_usage(string problem, params string[] args)
     {
+        var usage = (await RunAsync(new RecordingBackend(), "--help")).Out;
+
         var result = await RunAsync(new RecordingBackend(), args);
 
-        Assert.Equal((2, string.Empty, $"jd: {problem}{System.Environment.NewLine}{Cli.Usage}"), result);
+        Assert.Equal((2, string.Empty, $"jd: {problem}{System.Environment.NewLine}{usage}"), result);
     }
 
     [Theory]

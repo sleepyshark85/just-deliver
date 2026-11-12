@@ -470,9 +470,11 @@ public sealed class CliTests : IDisposable
     [InlineData("deploy has no --json option.", "deploy", "a.yaml", "--env", "e.yaml", "--catalog", "c", "--json")]
     public async Task Usage_errors_exit_2_and_print_the_problem_and_the_usage(string problem, params string[] args)
     {
+        var usage = (await RunAsync("--help")).Out;
+
         var result = await RunAsync(args);
 
-        Assert.Equal((2, string.Empty, $"jd: {problem}{System.Environment.NewLine}{Cli.Usage}"), result);
+        Assert.Equal((2, string.Empty, $"jd: {problem}{System.Environment.NewLine}{usage}"), result);
     }
 
     [Theory]
@@ -581,6 +583,25 @@ public sealed class CliTests : IDisposable
     {
         var result = await RunAsync(args);
 
-        Assert.Equal((0, Cli.Usage, string.Empty), result);
+        Assert.Equal(0, result.Code);
+        Assert.Equal(string.Empty, result.Err);
+        Assert.StartsWith("Usage:", result.Out, StringComparison.Ordinal);
+        foreach (var line in new[]
+        {
+            "  jd validate <workload.yaml>",
+            "  jd preview <workload.yaml> --env <environment.yaml> --catalog <dir> [--json]",
+            "  jd release create <manifest.yaml> --out <release-set.yaml>",
+            "  jd release show <release-set.yaml>",
+            "  jd release deploy <release-set.yaml> --env <environment.yaml> --catalog <dir> [--preview]",
+            "  jd release qualify <release-set.yaml> --env <environment.yaml> --catalog <dir>",
+            "  jd approve <label> --env <environment.yaml> --meaning <text>",
+            "  jd promote <label> --to <environment.yaml> --catalog <dir>",
+            "  jd deploy <workload.yaml> --env <environment.yaml> --catalog <dir> [--preview]",
+            "  jd env up <definition.yaml> --catalog <dir> --out <descriptor.yaml> [--base <descriptor.yaml>] [--force]",
+            "  jd --help",
+        })
+        {
+            Assert.Contains(line + "\n", result.Out, StringComparison.Ordinal);
+        }
     }
 }

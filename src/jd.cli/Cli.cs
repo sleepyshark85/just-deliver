@@ -92,13 +92,13 @@ internal static class Cli
             ApproveCommand => await ApproveCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
             PromoteCommand => await PromoteCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
             EnvCommand => await EnvCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
-            ValidateCommand => await ReadingAsync(() => ValidateCli.RunAsync(args[1..], stdout, stderr, cancellationToken), stderr),
-            _ => await ReadingAsync(() => RunResolveAsync(args, connections, stdout, stderr, cancellationToken), stderr),
+            ValidateCommand => await ExitOnReadFailureAsync(() => ValidateCli.RunAsync(args[1..], stdout, stderr, cancellationToken), stderr),
+            _ => await ExitOnReadFailureAsync(() => RunResolveAsync(args, connections, stdout, stderr, cancellationToken), stderr),
         };
     }
 
     // A command that reads its inputs checks first that they exist, so an I/O failure that escapes it is a permission or read failure; .NET's message names the file.
-    private static async Task<int> ReadingAsync(Func<Task<int>> command, TextWriter stderr)
+    private static async Task<int> ExitOnReadFailureAsync(Func<Task<int>> command, TextWriter stderr)
     {
         try
         {
@@ -111,7 +111,7 @@ internal static class Cli
         }
     }
 
-    // preview and deploy: their arguments, then their inputs, then the run.
+    // preview and deploy, and also what the dispatch's `_` arm sends here: no command and unknown commands. Their arguments, then their inputs, then the run.
     private static async Task<int> RunResolveAsync(string[] args, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var (options, problem) = Parse(args);
