@@ -11,14 +11,24 @@ using jd.resolver.workload;
 namespace jd.cli;
 
 /// <summary>
-/// The command line: parses arguments, runs the validator, the resolver and the orchestrator over the <see cref="Connections"/> of
-/// <see cref="Composition"/>, prints results and returns the exit code (0 success, 1 validation, resolution or deployment errors, 2 usage errors). Holds no resolution logic.
+/// The command line: hands each command to its own command type, or runs <c>preview</c> and <c>deploy</c> over the resolver and the orchestrator and
+/// the <see cref="Connections"/> of <see cref="Composition"/> until they move (docs/architecture/application.md section 10), and returns the
+/// <see cref="ExitCodes"/>. Holds no resolution logic.
 /// </summary>
-public static class Cli
+internal static class Cli
 {
-    private const int Success = 0;
-    private const int Invalid = 1;
-    private const int UsageError = 2;
+    internal const string ValidateCommand = "validate";
+    private const string PreviewCommand = "preview";
+    private const string DeployCommand = "deploy";
+    private const string ReleaseCommand = "release";
+    private const string ApproveCommand = "approve";
+    private const string PromoteCommand = "promote";
+    private const string EnvCommand = "env";
+    private const string HelpOption = "--help";
+    private const string ShortHelpOption = "-h";
+
+    // The problem when a workload command is not given exactly one workload file.
+    internal const string OneWorkloadProblem = "expected exactly one workload file.";
 
     internal const string Usage = """
         Usage:
@@ -55,11 +65,7 @@ public static class Cli
 
         """;
 
-    private abstract record Options(string Workload);
-
-    private sealed record ValidateOptions(string Workload) : Options(Workload);
-
-    private abstract record ResolveOptions(string Workload, string Environment, string Catalog) : Options(Workload);
+    private abstract record ResolveOptions(string Workload, string Environment, string Catalog);
 
     private sealed record PreviewOptions(string Workload, string Environment, string Catalog, bool Json) : ResolveOptions(Workload, Environment, Catalog);
 
@@ -74,72 +80,64 @@ public static class Cli
     public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken = default, Connections? connections = null)
     {
         connections ??= Composition.Connect(System.Environment.GetEnvironmentVariable);
-        if (args.Contains("--help") || args.Contains("-h"))
+        if (args.Contains(HelpOption) || args.Contains(ShortHelpOption))
         {
             stdout.Write(Usage);
-            return Success;
+            return ExitCodes.Success;
         }
 
-        if (args.FirstOrDefault() == "release")
+        return args.FirstOrDefault() switch
         {
-            return await ReleaseCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken);
-        }
+            ReleaseCommand => await ReleaseCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
+            ApproveCommand => await ApproveCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
+            PromoteCommand => await PromoteCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
+            EnvCommand => await EnvCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
+            ValidateCommand => await ExitOnReadFailureAsync(() => ValidateCli.RunAsync(args[1..], stdout, stderr, cancellationToken), stderr),
+            _ => await ExitOnReadFailureAsync(() => RunResolveAsync(args, connections, stdout, stderr, cancellationToken), stderr),
+        };
+    }
 
-        if (args.FirstOrDefault() == "approve")
+    // A command that reads its inputs checks first that they exist, so an I/O failure that escapes it is a permission or read failure; .NET's message names the file.
+    private static async Task<int> ExitOnReadFailureAsync(Func<Task<int>> command, TextWriter stderr)
+    {
+        try
         {
-            return await ApproveCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken);
+            return await command();
         }
-
-        if (args.FirstOrDefault() == "promote")
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return await PromoteCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken);
+            stderr.WriteLine($"jd: {ex.Message}");
+            return ExitCodes.UsageError;
         }
+    }
 
-        if (args.FirstOrDefault() == "env")
-        {
-            return await EnvCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken);
-        }
-
+    // preview and deploy, and also what the dispatch's `_` arm sends here: no command and unknown commands. Their arguments, then their inputs, then the run.
+    private static async Task<int> RunResolveAsync(string[] args, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
         var (options, problem) = Parse(args);
         if (options is null)
         {
             stderr.WriteLine($"jd: {problem}");
             stderr.Write(Usage);
-            return UsageError;
+            return ExitCodes.UsageError;
         }
 
-        var unreadable = Arguments.Unreadable(options.Workload, (options as ResolveOptions)?.Environment, (options as ResolveOptions)?.Catalog);
-        if (unreadable is not null)
+        if (Arguments.Unreadable(options.Workload, options.Environment, options.Catalog) is { } unreadable)
         {
             stderr.WriteLine($"jd: {unreadable}");
-            return UsageError;
+            return ExitCodes.UsageError;
         }
 
-        try
-        {
-            return await RunCommandAsync(options, connections, stdout, stderr, cancellationToken);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // The inputs exist (checked above), so this is a permission or read failure; .NET's message names the file.
-            stderr.WriteLine($"jd: {ex.Message}");
-            return UsageError;
-        }
+        return await ResolveAsync(options, connections, stdout, stderr, cancellationToken);
     }
 
-    private static async Task<int> RunCommandAsync(Options options, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    private static async Task<int> ResolveAsync(ResolveOptions resolve, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        var loaded = await WorkloadFile.LoadAsync(options.Workload, cancellationToken);
+        var loaded = await WorkloadFile.LoadAsync(resolve.Workload, cancellationToken);
         if (loaded.Value is not { } workload)
         {
             Print(loaded.Errors, stderr);
-            return Invalid;
-        }
-
-        if (options is not ResolveOptions resolve)
-        {
-            stdout.WriteLine($"{options.Workload}: valid.");
-            return Success;
+            return ExitCodes.Failure;
         }
 
         var catalogResult = await CatalogDirectory.LoadAsync(resolve.Catalog, cancellationToken);
@@ -147,24 +145,24 @@ public static class Cli
         if (catalogResult.Value is not { } catalog || environmentResult.Value is not { } environment)
         {
             Print(CatalogErrors(catalogResult, resolve.Catalog).Concat(environmentResult.Errors), stderr);
-            return Invalid;
+            return ExitCodes.Failure;
         }
 
         if (RefuseType(catalog, environment, resolve.Environment, stderr))
         {
-            return Invalid;
+            return ExitCodes.Failure;
         }
 
-        if (resolve is DeployOptions { DryRun: false } && RefuseGated(environment, "deploy", stderr))
+        if (resolve is DeployOptions { DryRun: false } && RefuseGated(environment, DeployCommand, stderr))
         {
-            return Invalid;
+            return ExitCodes.Failure;
         }
 
-        var graph = Resolver.Resolve(workload, options.Workload, catalog, environment);
+        var graph = Resolver.Resolve(workload, resolve.Workload, catalog, environment);
         if (graph.Errors.Count > 0)
         {
             Print(graph.Errors, stderr);
-            return Invalid;
+            return ExitCodes.Failure;
         }
 
         if (resolve is DeployOptions deploy)
@@ -173,7 +171,7 @@ public static class Cli
         }
 
         stdout.Write(resolve is PreviewOptions { Json: true } ? GraphJson.Serialize(graph) : PreviewFormatter.Format(graph));
-        return Success;
+        return ExitCodes.Success;
     }
 
     // An environment whose descriptor carries an approval policy takes deploys only through `jd promote` (docs/architecture/approvals.md section 2). The check reads
@@ -227,7 +225,7 @@ public static class Cli
     {
         if (await CheckTemplatesAsync(catalogDirectory, [graph], stderr, cancellationToken) is not { } templates)
         {
-            return (Invalid, null);
+            return (ExitCodes.Failure, null);
         }
 
         var orchestrator = new Orchestrator(connections.Backend(), templates, catalog, environment, connections.Probe());
@@ -238,10 +236,10 @@ public static class Cli
         if (!run.Succeeded)
         {
             stderr.WriteLine($"jd: stopped at {run.Nodes[^1].NodeId}: {run.Nodes[^1].Message}");
-            return (Invalid, run);
+            return (ExitCodes.Failure, run);
         }
 
-        return (Success, run);
+        return (ExitCodes.Success, run);
     }
 
     // The principal the run authenticates as; null, with the reason on stderr, when the credential is missing, malformed or refused.
@@ -266,15 +264,15 @@ public static class Cli
         }
     }
 
-    private static (Options? Options, string Problem) Parse(string[] args)
+    private static (ResolveOptions? Options, string Problem) Parse(string[] args)
     {
         var command = args.FirstOrDefault();
-        if (command is not ("validate" or "preview" or "deploy"))
+        if (command is not (PreviewCommand or DeployCommand))
         {
             return (null, command is null ? "no command given." : $"unknown command '{command}'.");
         }
 
-        var (scanned, problem) = Arguments.Scan(args, 1);
+        var (scanned, problem) = Arguments.Scan(args[1..]);
         if (scanned is null)
         {
             return (null, problem);
@@ -283,26 +281,19 @@ public static class Cli
         var (positional, environment, catalog, json, dryRun) = scanned;
         if (positional.Count != 1)
         {
-            return (null, "expected exactly one workload file.");
-        }
-
-        if (command == "validate")
-        {
-            return environment is null && catalog is null && !json && !dryRun
-                ? (new ValidateOptions(positional[0]), string.Empty)
-                : (null, "validate takes only a workload file.");
+            return (null, OneWorkloadProblem);
         }
 
         if (environment is null || catalog is null)
         {
-            return (null, $"{command} needs --env and --catalog.");
+            return (null, $"{command} needs {Arguments.EnvOption} and {Arguments.CatalogOption}.");
         }
 
-        if (command == "deploy")
+        if (command == DeployCommand)
         {
-            return json ? (null, "deploy has no --json option.") : (new DeployOptions(positional[0], environment, catalog, dryRun), string.Empty);
+            return json ? (null, $"{command} has no {Arguments.JsonOption} option.") : (new DeployOptions(positional[0], environment, catalog, dryRun), string.Empty);
         }
 
-        return dryRun ? (null, "preview has no --preview option.") : (new PreviewOptions(positional[0], environment, catalog, json), string.Empty);
+        return dryRun ? (null, $"{command} has no {Arguments.PreviewOption} option.") : (new PreviewOptions(positional[0], environment, catalog, json), string.Empty);
     }
 }

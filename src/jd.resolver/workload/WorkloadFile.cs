@@ -16,9 +16,13 @@ public static class WorkloadFile
     public static async Task<LoadResult<JObject>> LoadAsync(string path, CancellationToken cancellationToken = default) =>
         Checked(await DocumentLoader.LoadFileAsync(path, "workload definition", [Kind], cancellationToken));
 
-    /// <summary>Validates workload text; <paramref name="path"/> only names the source in errors. Pure: the release set validates the definitions it embeds through here.</summary>
-    public static async Task<LoadResult<JObject>> ParseAsync(string path, string text, CancellationToken cancellationToken = default) =>
-        Checked(await DocumentLoader.LoadAsync(path, text, [Kind], cancellationToken));
+    /// <summary>Loads the definition <paramref name="workload"/> holds; its errors name the document as it is named. The value is set exactly when there are no errors.</summary>
+    public static async Task<LoadResult<JObject>> LoadAsync(SourceDocument workload, CancellationToken cancellationToken) =>
+        Checked(await DocumentLoader.LoadAsync(workload.Name, workload.Text(), [Kind], cancellationToken));
+
+    /// <summary>Validates workload text; <paramref name="source"/> only names the source in errors. Pure: the release set validates the definitions it embeds through here.</summary>
+    public static async Task<LoadResult<JObject>> ParseAsync(string source, string text, CancellationToken cancellationToken = default) =>
+        Checked(await DocumentLoader.LoadAsync(source, text, [Kind], cancellationToken));
 
     private static LoadResult<JObject> Checked(LoadResult<Document> loaded)
     {

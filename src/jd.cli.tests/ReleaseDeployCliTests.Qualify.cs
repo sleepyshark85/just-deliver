@@ -156,16 +156,17 @@ public sealed partial class ReleaseDeployCliTests
     }
 
     [Theory]
-    [InlineData("release", "qualify")]
-    [InlineData("release", "qualify", "s.yaml", "--catalog", "c")]
-    [InlineData("release", "qualify", "s.yaml", "--env", "e.yaml", "--catalog", "c", "--preview")]
-    [InlineData("release", "qualify", "s.yaml", "--env", "e.yaml", "--catalog", "c", "--json")]
-    public async Task Usage_errors_of_qualify_exit_2_and_print_the_usage(params string[] args)
+    [InlineData("expected exactly one release set.", "release", "qualify")]
+    [InlineData("release qualify needs --env and --catalog.", "release", "qualify", "s.yaml", "--catalog", "c")]
+    [InlineData("release qualify has no --preview option; it never deploys.", "release", "qualify", "s.yaml", "--env", "e.yaml", "--catalog", "c", "--preview")]
+    [InlineData("release qualify has no --json option.", "release", "qualify", "s.yaml", "--env", "e.yaml", "--catalog", "c", "--json")]
+    public async Task Usage_errors_of_qualify_exit_2_and_print_the_problem_and_the_usage(string problem, params string[] args)
     {
-        var (code, _, stderr) = await RunAsync(new RecordingBackend(), args);
+        var usage = (await RunAsync(new RecordingBackend(), "--help")).Out;
 
-        Assert.Equal(2, code);
-        Assert.Contains("Usage:", stderr);
+        var result = await RunAsync(new RecordingBackend(), args);
+
+        Assert.Equal((2, string.Empty, $"jd: {problem}{System.Environment.NewLine}{usage}"), result);
     }
 
     [Fact]

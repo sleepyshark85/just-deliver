@@ -8,47 +8,26 @@ namespace jd.cli;
 /// </summary>
 internal sealed record Arguments(IReadOnlyList<string> Positional, string? Environment, string? Catalog, bool Json, bool DryRun)
 {
-    /// <summary>Reads <paramref name="args"/> from index <paramref name="first"/>; the problem is set when an option is unknown or lacks its value.</summary>
-    public static (Arguments? Arguments, string Problem) Scan(string[] args, int first)
+    internal const string EnvOption = "--env";
+    internal const string CatalogOption = "--catalog";
+    internal const string JsonOption = "--json";
+    internal const string PreviewOption = "--preview";
+
+    // What one pass over the arguments found: the positional arguments, the value of each value option given (the last, when one is given twice) and
+    // the flags given.
+    private sealed record Scanned(IReadOnlyList<string> Positional, IReadOnlyDictionary<string, string> Values, IReadOnlySet<string> Flags);
+
+    /// <summary>Reads a command's <paramref name="args"/>, those after its name; the problem is set when an option is unknown or lacks its value.</summary>
+    public static (Arguments? Arguments, string Problem) Scan(string[] args)
     {
-        string? environment = null, catalog = null;
-        bool json = false, dryRun = false;
-        var positional = new List<string>();
-        for (var i = first; i < args.Length; i++)
+        var (scanned, problem) = ScanOptions(args, [EnvOption, CatalogOption], [JsonOption, PreviewOption]);
+        if (scanned is null)
         {
-            switch (args[i])
-            {
-                case "--json":
-                    json = true;
-                    break;
-                case "--preview":
-                    dryRun = true;
-                    break;
-                case "--env" or "--catalog":
-                    if (i + 1 == args.Length)
-                    {
-                        return (null, $"{args[i]} needs a value.");
-                    }
-
-                    if (args[i++] == "--env")
-                    {
-                        environment = args[i];
-                    }
-                    else
-                    {
-                        catalog = args[i];
-                    }
-
-                    break;
-                case var option when option.StartsWith("--", StringComparison.Ordinal):
-                    return (null, $"unknown option '{option}'.");
-                default:
-                    positional.Add(args[i]);
-                    break;
-            }
+            return (null, problem);
         }
 
-        return (new Arguments(positional, environment, catalog, json, dryRun), string.Empty);
+        var (positional, values, flags) = scanned;
+        return (new Arguments(positional, values.GetValueOrDefault(EnvOption), values.GetValueOrDefault(CatalogOption), flags.Contains(JsonOption), flags.Contains(PreviewOption)), string.Empty);
     }
 
     /// <summary>
@@ -57,22 +36,45 @@ internal sealed record Arguments(IReadOnlyList<string> Positional, string? Envir
     /// </summary>
     public static (string? Label, IReadOnlyDictionary<string, string> Values, string Problem) ScanLabel(string[] args, params string[] valueOptions)
     {
-        var values = new Dictionary<string, string>();
+        var (scanned, problem) = ScanOptions(args, valueOptions, []);
+        if (scanned is null)
+        {
+            return (null, new Dictionary<string, string>(), problem);
+        }
+
+        if (scanned.Positional.Count != 1)
+        {
+            return (null, scanned.Values, "expected exactly one release label.");
+        }
+
+        var label = scanned.Positional[0];
+        return ReleaseRecordFile.LabelProblem(label) is { } labelProblem ? (null, scanned.Values, labelProblem) : (label, scanned.Values, string.Empty);
+    }
+
+    // The one pass every scan makes: a value option takes the argument after it, whatever it is; any other argument starting with "--" that is not a flag is unknown.
+    private static (Scanned? Scanned, string Problem) ScanOptions(string[] args, IReadOnlyCollection<string> valueOptions, IReadOnlyCollection<string> flags)
+    {
         var positional = new List<string>();
+        var values = new Dictionary<string, string>();
+        var given = new HashSet<string>();
         for (var i = 0; i < args.Length; i++)
         {
             if (valueOptions.Contains(args[i]))
             {
                 if (i + 1 == args.Length)
                 {
-                    return (null, values, $"{args[i]} needs a value.");
+                    return (null, $"{args[i]} needs a value.");
                 }
 
                 values[args[i]] = args[++i];
             }
+            else if (flags.Contains(args[i]))
+            {
+                given.Add(args[i]);
+            }
             else if (args[i].StartsWith("--", StringComparison.Ordinal))
             {
-                return (null, values, $"unknown option '{args[i]}'.");
+                return (null, $"unknown option '{args[i]}'.");
             }
             else
             {
@@ -80,12 +82,7 @@ internal sealed record Arguments(IReadOnlyList<string> Positional, string? Envir
             }
         }
 
-        if (positional.Count != 1)
-        {
-            return (null, values, "expected exactly one release label.");
-        }
-
-        return ReleaseRecordFile.LabelProblem(positional[0]) is { } labelProblem ? (null, values, labelProblem) : (positional[0], values, string.Empty);
+        return (new Scanned(positional, values, given), string.Empty);
     }
 
     /// <summary>Each input must be what its role needs: the file and the environment are files, the catalog is a directory. Null when all are fine.</summary>

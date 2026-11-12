@@ -58,7 +58,7 @@ namespace jd.cli.tests
         }
 
         [Fact]
-        public void A_use_case_is_a_type_with_a_static_run_and_its_surface_is_its_input_and_the_getters_of_its_signature_without_the_connections()
+        public void A_use_case_is_a_type_with_a_static_run_and_its_surface_is_its_inputs_constructors_and_the_getters_of_its_signature_without_the_connections()
         {
             var useCases = UseCases(typeof(planted.UseCase)).ToList();
             var surface = UseCaseSurface(useCases);
@@ -71,11 +71,21 @@ namespace jd.cli.tests
                     ("jd.resolver.graph.GraphJson", "Serialize"),
                     ("jd.cli.tests.planted.UseCase", "RunAsync"),
                     ("jd.cli.tests.planted.Input", ".ctor"),
+                    ("jd.cli.tests.planted.Piece", ".ctor"),
                     ("jd.cli.tests.planted.Result", "get_Problems"),
                     ("jd.cli.tests.planted.Problem", "get_Message"),
                     ("jd.cli.tests.planted.MissingFile", "get_Path"),
                 },
                 surface.ToHashSet());
+        }
+
+        // jd's own Validate: its command code may build the document and read the errors, nothing else of the document.
+        [Fact]
+        public void R1_names_the_validate_command_and_member_that_reach_past_the_validate_use_case()
+        {
+            var findings = R1(Planted, Only(typeof(planted.ValidateCommand)), UseCaseSurface(UseCases(typeof(Connections))));
+
+            Assert.Equal(["jd.cli.tests.planted.ValidateCommand.DecodesTheDocument reaches jd.resolver.SourceDocument.Text"], findings.Select(f => f.Message));
         }
 
         [Fact]
@@ -128,7 +138,9 @@ namespace jd.cli.tests
 // Planted references for the rule tests: never called, only scanned.
 namespace jd.cli.tests.planted
 {
-    internal sealed record Input(string Name);
+    internal sealed record Piece(string Text);
+
+    internal sealed record Input(string Name, Piece Piece);
 
     internal record Problem(string Message);
 
@@ -145,7 +157,7 @@ namespace jd.cli.tests.planted
     internal static class Command
     {
         public static async Task<string> RunsTheUseCaseAsync(Connections connections) =>
-            (await UseCase.RunAsync(new Input("x"), connections, CancellationToken.None)).Problems[0].Message + GraphJson.Serialize(null!);
+            (await UseCase.RunAsync(new Input("x", new Piece("y")), connections, CancellationToken.None)).Problems[0].Message + GraphJson.Serialize(null!);
 
         public static object Resolves() => Resolver.Resolve(null!, null!, null!, null!);
 
@@ -187,6 +199,14 @@ namespace jd.cli.tests.planted
 
             public static void Holds(IRecordStore records) => _ = records;
         }
+    }
+
+    internal static class ValidateCommand
+    {
+        public static async Task<string> ValidatesAsync() =>
+            string.Join('\n', (await Validate.RunAsync(new ValidateInput(new SourceDocument("x", "kind: Workload"u8.ToArray())), CancellationToken.None)).Errors.Select(e => e.File + e.Location + e.Message));
+
+        public static string DecodesTheDocument() => new SourceDocument("x", "kind: Workload"u8.ToArray()).Text();
     }
 
     internal sealed class Store : IRecordStore
