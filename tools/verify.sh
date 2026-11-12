@@ -70,14 +70,10 @@ if [[ -f src/jd.azure/jd.azure.csproj ]]; then
   [[ -z "$outside" ]] || fail "src/jd.azure/jd.azure.csproj may reference only jd.core (ProjectReference), Azure.* packages (PackageReference) and the .NET runtime (FrameworkReference), not: ${outside//$'\n'/; } (see docs/engineering/standards.md)"
 fi
 # R2 (docs/architecture/application.md section 4): only the CLI's composition files name the adapters, the backend providers or the container.
-# Cli.cs holds TemplateLibrary (from jd.bp.pulumi) until S25b2 moves the template loading behind a port, then drops this exception: it may
-# contain exactly the one `using jd.bp.pulumi;` line and no other match.
-composition='^src/jd\.cli/(Composition|DataDirectory|LocalRecordStore|HttpRevisionProbe)\.cs$'
+composition='^src/jd\.cli/(Composition|DataDirectory|LocalRecordStore|PulumiTemplates|HttpRevisionProbe)\.cs$'
 pattern='jd\.azure|jd\.bp\.|Microsoft\.Extensions\.DependencyInjection'
-outside=$(grep -rl -E "$pattern" --include=*.cs --exclude-dir=bin --exclude-dir=obj src/jd.cli | grep -v -E "$composition" | grep -v -x 'src/jd.cli/Cli.cs' || true)
+outside=$(grep -rl -E "$pattern" --include=*.cs --exclude-dir=bin --exclude-dir=obj src/jd.cli | grep -v -E "$composition" || true)
 [[ -z "$outside" ]] || fail "only the composition files of src/jd.cli may name jd.azure, jd.bp.* or Microsoft.Extensions.DependencyInjection, not: ${outside//$'\n'/; } (see docs/architecture/application.md)"
-cli_extra=$(grep -E "$pattern" src/jd.cli/Cli.cs | grep -v -x 'using jd\.bp\.pulumi;' || true)
-[[ -z "$cli_extra" ]] || fail "src/jd.cli/Cli.cs may name jd.bp.pulumi only in its one using line (until S25b2), not: ${cli_extra//$'\n'/; } (see docs/architecture/application.md)"
 echo "ok"
 
 step "Secrets"

@@ -26,7 +26,8 @@ internal static class Composition
         Backend: () => CreatePulumiBackend(environmentVariable),
         // The probe judges the revision's own answer, so a redirect is a failed probe, not a hop to some other host.
         Probe: () => new HttpRevisionProbe(HttpRevisionProbe.CreateClient()),
-        Time: () => TimeProvider.System);
+        Time: () => TimeProvider.System,
+        Templates: PulumiTemplates.Of);
 
     // The Pulumi backend on the state in jd's data directory (created on first use) and its key, with the optional Pulumi home and scratch directory.
     internal static Action<PulumiBackendOptions> PulumiSettings(Func<string, string?> environmentVariable)

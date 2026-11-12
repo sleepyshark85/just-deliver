@@ -1,3 +1,4 @@
+using System.Text;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.release;
@@ -20,7 +21,7 @@ public sealed class ReleaseResolverTests
             TestCatalog.Component("thing", "[out]", "nodes:\n  n:\n    template: t/n\n    config: { k: 1 }\nexports:\n  out: x\n"),
             TestCatalog.RuntimeFile,
         };
-        var loaded = await CatalogParser.ParseAsync(files.Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
+        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)))]));
         Assert.Empty(loaded.Errors);
         return loaded.Value!;
     }

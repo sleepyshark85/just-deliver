@@ -196,7 +196,7 @@ public sealed class DocumentLoaderTests : IDisposable
     {
         var descriptor = Write("dev.yaml", Descriptor);
 
-        var result = await WorkloadFile.LoadAsync(descriptor);
+        var result = await WorkloadFile.LoadAsync(new SourceDocument(descriptor, await File.ReadAllBytesAsync(descriptor)), CancellationToken.None);
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);

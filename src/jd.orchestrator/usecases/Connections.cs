@@ -2,6 +2,7 @@ using jd.core.bp;
 using jd.core.identity;
 using jd.core.records;
 using jd.core.revisions;
+using jd.resolver;
 
 namespace jd.orchestrator.usecases;
 
@@ -15,10 +16,12 @@ namespace jd.orchestrator.usecases;
 /// <param name="Backend">Previews, deploys and reads the stacks.</param>
 /// <param name="Probe">Checks that a new revision is healthy.</param>
 /// <param name="Time">Stamps the records and times the run.</param>
+/// <param name="Templates">The templates of a catalog's templates part, built per request.</param>
 public sealed record Connections(
     Func<IRecordStore> Records,
     Func<IDeployerIdentity> Identity,
     Func<ILiveRevisions> LiveRevisions,
     Func<IBackEndProvider> Backend,
     Func<IRevisionProbe> Probe,
-    Func<TimeProvider> Time);
+    Func<TimeProvider> Time,
+    Func<SourceCatalog, ITemplates> Templates);

@@ -72,7 +72,8 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
         () => Invoke(nameof(connections.LiveRevisions), connections.LiveRevisions),
         () => Invoke(nameof(connections.Backend), connections.Backend),
         () => Invoke(nameof(connections.Probe), connections.Probe),
-        () => Invoke(nameof(connections.Time), connections.Time));
+        () => Invoke(nameof(connections.Time), connections.Time),
+        connections.Templates);
 
     private T Invoke<T>(string factory, Func<T> build)
     {
@@ -198,7 +199,23 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
 
         Assert.Equal(1, code);
         Assert.Empty(backend.Calls);
-        Assert.Equal(1, stderr.Split("template directory not found").Length - 1);
+        Assert.Single(stderr.Split('\n'), line => line == $"{Path.Combine(catalog, "templates")}: template directory not found.");
+    }
+
+    [Fact]
+    public async Task A_catalog_error_is_printed_with_its_path_under_the_catalog_and_creates_nothing()
+    {
+        var set = await CreateSetAsync();
+        var catalog = Path.Combine(_temp, "catalog");
+        CliTests.CopyDirectory(Catalog, catalog);
+        await File.WriteAllTextAsync(Path.Combine(catalog, "components", "oops.yaml"), "kind: Component\nname: oops\n");
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunAsync(backend, ["release", "deploy", set, "--env", Environment, "--catalog", catalog]);
+
+        Assert.Equal(1, code);
+        Assert.Empty(backend.Calls);
+        Assert.Contains($"{Path.Combine(catalog, "components/oops.yaml")}: description: schema violation: PropertyRequired: #/description", stderr.Split('\n'));
     }
 
     [Fact]

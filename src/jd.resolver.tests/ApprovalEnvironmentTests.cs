@@ -25,7 +25,7 @@ public class ApprovalEnvironmentTests
         return await EnvironmentDefinitionFile.LoadAsync(path);
     }
 
-    private static async Task<Catalog> SeedCatalogAsync() => (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
+    private static async Task<Catalog> SeedCatalogAsync() => (await SeedCatalog.LoadAsync()).Value!;
 
     [Fact]
     public async Task A_descriptor_carries_its_policy()

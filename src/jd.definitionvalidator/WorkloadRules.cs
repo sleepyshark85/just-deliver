@@ -15,10 +15,10 @@ public static partial class WorkloadRules
 
     private const string ResourcePrefix = "resource.";
 
-    /// <summary>Every rule <paramref name="workload"/> breaks, one message each; empty when it keeps them all.</summary>
-    public static IReadOnlyList<string> Check(JToken workload)
+    /// <summary>Every rule <paramref name="workload"/> breaks, each where it is broken; empty when it keeps them all.</summary>
+    public static IReadOnlyList<RuleViolation> Check(JToken workload)
     {
-        var errors = new List<string>();
+        var errors = new List<RuleViolation>();
         var requires = workload["requires"] as JArray ?? new JArray();
 
         // The effective id of a requirement is its id, or its type when no id is set (ADR 0011).
@@ -41,20 +41,21 @@ public static partial class WorkloadRules
         foreach (var (effectiveId, positions) in declared.Where(d => d.Value.Count > 1))
         {
             var where = string.Join(", ", positions.Select(p => $"requires[{p}]"));
-            errors.Add($"{where}: the id '{effectiveId}' is used more than once (a requirement without an id uses its type as id). Set distinct 'id's.");
+            errors.Add(new RuleViolation(where, $"the id '{effectiveId}' is used more than once (a requirement without an id uses its type as id). Set distinct 'id's."));
         }
 
         if (workload["container"]?["variables"] is JObject variables)
         {
             foreach (var variable in variables.Properties())
             {
+                var location = $"container.variables.{variable.Name}";
                 foreach (Match reference in ExpressionRegex().Matches((string?)variable.Value ?? string.Empty))
                 {
                     // A variable is workload input crossing into the platform: it may only name what a requirement exports (D19).
                     var expression = reference.Groups[1].Value.Trim();
                     if (!expression.StartsWith(ResourcePrefix, StringComparison.Ordinal))
                     {
-                        errors.Add($"container.variables.{variable.Name}: '{reference.Value}' is not allowed; a variable may only reference a requirement's output, as ${{resource.<id>.<output>}}.");
+                        errors.Add(new RuleViolation(location, $"'{reference.Value}' is not allowed; a variable may only reference a requirement's output, as ${{resource.<id>.<output>}}."));
                         continue;
                     }
 
@@ -62,7 +63,7 @@ public static partial class WorkloadRules
                     var separator = body.IndexOf('.');
                     if (separator <= 0 || separator == body.Length - 1)
                     {
-                        errors.Add($"container.variables.{variable.Name}: '{reference.Value}' must have the form ${{resource.<id>.<output>}}.");
+                        errors.Add(new RuleViolation(location, $"'{reference.Value}' must have the form ${{resource.<id>.<output>}}."));
                         continue;
                     }
 
@@ -70,7 +71,7 @@ public static partial class WorkloadRules
                     if (!declared.ContainsKey(id))
                     {
                         var known = declared.Count == 0 ? "none" : string.Join(", ", declared.Keys);
-                        errors.Add($"container.variables.{variable.Name}: '{reference.Value}' refers to '{id}', which no requirement declares (declared ids: {known}).");
+                        errors.Add(new RuleViolation(location, $"'{reference.Value}' refers to '{id}', which no requirement declares (declared ids: {known})."));
                     }
                 }
             }

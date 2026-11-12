@@ -1,5 +1,4 @@
 using jd.orchestrator.usecases;
-using jd.resolver;
 
 namespace jd.cli;
 
@@ -26,7 +25,7 @@ internal static class ValidateCli
             return ExitCodes.UsageError;
         }
 
-        var input = new ValidateInput(new SourceDocument(workload, await File.ReadAllBytesAsync(workload, cancellationToken)));
+        var input = new ValidateInput(await Cli.ReadDocumentAsync(workload, cancellationToken));
         var result = await Validate.RunAsync(input, cancellationToken);
         Cli.Print(result.Errors, stderr);
         if (result.Outcome == Outcome.Succeeded)

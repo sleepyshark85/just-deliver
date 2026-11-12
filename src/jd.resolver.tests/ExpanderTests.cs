@@ -1,3 +1,4 @@
+using System.Text;
 using jd.definitionvalidator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
@@ -34,8 +35,8 @@ public class ExpanderTests
 
     private static async Task<Catalog> LoadAsync(params string[] components)
     {
-        var files = BaseFiles.Concat(components).Append(TestCatalog.RuntimeFile).Append(TestCatalog.GrantsFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
-        var result = await CatalogParser.ParseAsync(files);
+        var files = BaseFiles.Concat(components).Append(TestCatalog.RuntimeFile).Append(TestCatalog.GrantsFile).Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var result = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(result.Errors);
         return result.Value!;
     }
@@ -125,7 +126,7 @@ public class ExpanderTests
 
     private static async Task<Catalog> LoadWithoutRuntimeAsync(string[] files)
     {
-        var result = await CatalogParser.ParseAsync(BaseFiles.Concat(files).Select((content, i) => new CatalogSource($"f{i}.yaml", content)));
+        var result = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. BaseFiles.Concat(files).Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)))]));
         Assert.Empty(result.Errors);
         return result.Value!;
     }
@@ -285,7 +286,7 @@ public class ExpanderTests
     [Fact]
     public async Task Seed_catalog_and_sample_workload_expand_without_errors()
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
+        var catalog = (await SeedCatalog.LoadAsync()).Value!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var environment = new EnvironmentDescriptor(
             "dev",

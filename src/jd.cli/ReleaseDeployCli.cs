@@ -83,22 +83,26 @@ internal static class ReleaseDeployCli
         var setResult = options.Promotion is { } promoted
             ? await ReleaseSetFile.ParseAsync(options.Set, await records!.ReadAsync(promoted.QualifiedOn, promoted.Label, ReleaseRecordFile.SetFileName, cancellationToken), cancellationToken)
             : await ReleaseSetFile.LoadAsync(options.Set, cancellationToken);
-        var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog, cancellationToken);
+        var source = await Cli.ReadCatalogAsync(options.Catalog, cancellationToken);
+        var catalogResult = await CatalogParser.ParseAsync(source, cancellationToken);
         var environmentResult = await EnvironmentParser.LoadAsync(options.Environment, cancellationToken);
         if (setResult.Set is not { } set || catalogResult.Value is not { } catalog || environmentResult.Value is not { } environment)
         {
-            Cli.Print(setResult.Errors.Concat(Cli.CatalogErrors(catalogResult, options.Catalog)).Concat(environmentResult.Errors), stderr);
+            Cli.Print(setResult.Errors.Concat(source.Located(catalogResult.Errors)).Concat(environmentResult.Errors), stderr);
             return Invalid;
         }
 
-        if (Cli.RefuseType(catalog, environment, options.Environment, stderr))
+        var typeErrors = Checks.EnvironmentType(catalog, environment, options.Environment);
+        if (typeErrors.Count > 0)
         {
+            Cli.Print(typeErrors, stderr);
             return Invalid;
         }
 
         // A gated environment is deployed to only by promotion; this stops before the identity, the records or the backend is touched.
-        if (!options.DryRun && options.Promotion is null && Cli.RefuseGated(environment, Command(options.Qualify), stderr))
+        if (!options.DryRun && options.Promotion is null && Checks.Gate(environment) is { } gated)
         {
+            stderr.WriteLine(Cli.Refusal(gated, Command(options.Qualify)));
             return Invalid;
         }
 
@@ -117,8 +121,10 @@ internal static class ReleaseDeployCli
             return Invalid;
         }
 
-        if (await Cli.CheckTemplatesAsync(options.Catalog, graphs, stderr, cancellationToken) is not { } templates)
+        var (templates, misfits) = Checks.Templates(source, graphs, connections);
+        if (misfits.Count > 0)
         {
+            Cli.Print(misfits, stderr);
             return Invalid;
         }
 

@@ -8,7 +8,7 @@ public class SeedCatalogTests
     [Fact]
     public async Task Seed_catalog_loads_with_no_errors()
     {
-        var result = await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"));
+        var result = await SeedCatalog.LoadAsync();
 
         Assert.Empty(result.Errors);
         Assert.NotNull(result.Value);
@@ -20,7 +20,7 @@ public class SeedCatalogTests
     [Fact]
     public async Task Seed_catalog_declares_the_shared_resources_and_database_environment_part()
     {
-        var catalog = Assert.IsType<Catalog>((await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value);
+        var catalog = Assert.IsType<Catalog>((await SeedCatalog.LoadAsync()).Value);
 
         Assert.Equal(
             [("apps-env", SharedScope.Environment, "env-group,log-analytics"), ("cosmos-account", SharedScope.Shared, "shared-group"), ("env-group", SharedScope.Environment, ""),
@@ -34,31 +34,16 @@ public class SeedCatalogTests
         Assert.Equal(["databaseName", "databaseId"], environment.Exports.Keys);
     }
 
-    [Fact]
-    public async Task Missing_directory_is_an_error()
-    {
-        var result = await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "no-such-catalog"));
-
-        Assert.Contains("not found", Assert.Single(result.Errors).Message);
-    }
-
+    // The templates are a part of their own (docs/architecture/application.md section 3): a template file is no catalog document.
     [Fact]
     public async Task Templates_directory_is_not_loaded()
     {
-        var root = Directory.CreateTempSubdirectory().FullName;
-        try
-        {
-            await File.WriteAllTextAsync(Path.Combine(root, "catalog.yaml"), "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
-            Directory.CreateDirectory(Path.Combine(root, "templates", "azure"));
-            await File.WriteAllTextAsync(Path.Combine(root, "templates", "azure", "Pulumi.yaml"), "name: not-a-catalog-document\n");
+        var result = await CatalogParser.ParseAsync(new SourceCatalog("catalog",
+        [
+            new("catalog.yaml", "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n"u8.ToArray()),
+            new("templates/azure/Pulumi.yaml", "name: not-a-catalog-document\n"u8.ToArray()),
+        ]));
 
-            var result = await CatalogDirectory.LoadAsync(root);
-
-            Assert.Empty(result.Errors);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        Assert.Empty(result.Errors);
     }
 }

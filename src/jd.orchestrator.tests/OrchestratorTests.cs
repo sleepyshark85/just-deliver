@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using jd.core.bp;
 using jd.definitionvalidator;
 using jd.resolver;
@@ -73,8 +74,8 @@ public partial class OrchestratorTests
                 "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n" + Indent(ProbeAndRelease + runtime, 4),
             }
             .Concat(policy.Length > 0 ? [policy] : [])
-            .Select((content, i) => new CatalogSource($"f{i}.yaml", content));
-        var loaded = await CatalogParser.ParseAsync(files);
+            .Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: {workloadName}, team: crew }}\n{container}requires:\n{requires}");
         var graph = Resolver.Resolve(workload, "workload.yaml", loaded.Value!, Env);

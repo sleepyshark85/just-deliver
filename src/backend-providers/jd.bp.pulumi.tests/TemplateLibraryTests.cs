@@ -1,5 +1,7 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using jd.definitionvalidator;
+using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expansion;
@@ -37,7 +39,10 @@ public partial class TemplateLibraryTests
     [Fact]
     public async Task The_seed_catalog_and_sample_workload_fit_the_template_library()
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
+        var root = Path.Combine(AppContext.BaseDirectory, "catalog");
+        var documents = Directory.EnumerateFiles(root, "*.yaml", SearchOption.AllDirectories)
+            .Select(file => new SourceDocument(Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/'), File.ReadAllBytes(file)));
+        var catalog = (await CatalogParser.ParseAsync(new SourceCatalog(root, [.. documents]))).Value!;
         var environment = (await EnvironmentParser.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", "seed-environment.yaml"))).Value!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var graph = new GraphBuilder(environment, catalog.GrantTargets).Build(new PolicyApplier(catalog, environment).Apply(new Expander(catalog, environment).Expand(workload, "workload.yaml")));
@@ -284,8 +289,8 @@ public partial class TemplateLibraryTests
                 + "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffixOut, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n"
                 + "    nodes:\n      runtime:\n        template: t/rt\n        config: { image: i }\n",
             $"kind: Policy\nname: pol\nreason: r\nmatch: {{ kind: runtime }}\n{layer}: {{ runtime.{input}: from-policy }}\n",
-        }.Select((content, i) => new CatalogSource($"f{i}.yaml", content));
-        var loaded = await CatalogParser.ParseAsync(sources);
+        }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. sources]));
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\ncontainer:\n  image: reg/app:1\nrequires: []\n");
         var graph = jd.resolver.Resolver.Resolve(workload, "workload.yaml", loaded.Value!, new EnvironmentDescriptor("dev", "region-1", "dev", new Dictionary<string, string>(), ["container-app"], null));

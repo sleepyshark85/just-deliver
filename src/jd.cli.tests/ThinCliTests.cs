@@ -20,7 +20,7 @@ public sealed partial class ThinCliTests
 
     // The composition types of section 4; every other jd.cli type is command code.
     private static readonly string[] CompositionTypes =
-        [.. new[] { typeof(Composition), typeof(DataDirectory), typeof(LocalRecordStore), typeof(HttpRevisionProbe) }.Select(t => t.FullName!)];
+        [.. new[] { typeof(Composition), typeof(DataDirectory), typeof(LocalRecordStore), typeof(PulumiTemplates), typeof(HttpRevisionProbe) }.Select(t => t.FullName!)];
 
     // A rule broken: Key names the referring type and what it reaches (the allowlist's entry), Message also the member that does it.
     internal sealed record Finding(string Key, string Message);
@@ -99,27 +99,33 @@ public sealed partial class ThinCliTests
 
     private static string Definition(Type type) => (type.IsGenericType ? type.GetGenericTypeDefinition() : type).FullName!;
 
+    // What each of Connections' factories builds (its delegate's last type argument), and what it takes from a request (the others).
+    private static Type Built(PropertyInfo factory) => factory.PropertyType.GetGenericArguments()[^1];
+
+    private static IEnumerable<Type> Taken(PropertyInfo factory) => factory.PropertyType.GetGenericArguments()[..^1];
+
     // The ports: the interfaces Connections' factories build.
     private static string[] Ports() =>
-        typeof(Connections).GetProperties().Select(p => p.PropertyType.GetGenericArguments()[0]).Where(t => t.IsInterface).Select(Definition).ToArray();
+        typeof(Connections).GetProperties().Select(Built).Where(t => t.IsInterface).Select(Definition).ToArray();
 
     // The types in the ports' signatures, other than the BCL's.
     private static string[] PortSignatureTypes()
     {
         IEnumerable<Type> Parts(Type type) => type.IsGenericType ? type.GetGenericArguments().SelectMany(Parts).Prepend(type) : type.HasElementType ? Parts(type.GetElementType()!) : [type];
-        return typeof(Connections).GetProperties().Select(p => p.PropertyType.GetGenericArguments()[0]).Where(t => t.IsInterface)
+        return typeof(Connections).GetProperties().Select(Built).Where(t => t.IsInterface)
             .SelectMany(port => port.GetMethods()).SelectMany(m => m.GetParameters().Select(p => p.ParameterType).Append(m.ReturnType)).SelectMany(Parts)
             .Where(t => !IsBcl(t) && !t.IsGenericParameter).Select(Definition).Distinct().ToArray();
     }
 
     // R2, first sentence: a port is named (implemented, called, held) only in the composition types, and they reach the inner assemblies only through
-    // the ports, the types in the ports' signatures and Connections.
+    // the ports, the types in the ports' signatures, what a factory takes from a request (and the types it holds) and Connections.
     internal static IEnumerable<Finding> R2(IlScan scan, Func<string, bool> inScope, Func<string, bool> isComposition)
     {
         var ports = Ports();
         var named = scan.Mentions.Where(m => inScope(m.Type) && !isComposition(m.Type) && ports.Contains(m.Named.FullName))
             .Select(m => new Finding($"{m.Type} names {m.Named.FullName}", $"{m.Where} names the port {m.Named.FullName}"));
-        var through = ports.Concat(PortSignatureTypes()).Append(Definition(typeof(Connections))).ToHashSet();
+        var taken = typeof(Connections).GetProperties().SelectMany(Taken).SelectMany(Held).Select(Definition);
+        var through = ports.Concat(PortSignatureTypes()).Concat(taken).Append(Definition(typeof(Connections))).ToHashSet();
         var reached = scan.Uses.Where(use => inScope(use.Type) && isComposition(use.Type) && IsInner(use.Target) && !through.Contains(use.Target.FullName))
             .Select(use => new Finding($"{use.Type} -> {use.Target.FullName}.{use.TargetMember}", $"{use.Where} reaches {use.Target.FullName}.{use.TargetMember}, which is not a port"));
         return named.Concat(reached);

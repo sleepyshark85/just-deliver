@@ -265,6 +265,44 @@ public sealed class CliTests : IDisposable
         Assert.Contains(Path.Combine(catalog, "components/oops.yaml"), stderr);
     }
 
+    // Only the catalog loader's errors are given the path under the catalog (docs/architecture/application.md section 7); the resolver's name a
+    // catalog document as the catalog names it.
+    [Theory]
+    [InlineData("preview")]
+    [InlineData("deploy")]
+    public async Task A_resolver_error_names_the_catalog_document_as_the_catalog_names_it(string command)
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        WriteTemp("catalog/policies/a.yaml", "kind: Policy\nname: limit-a\nreason: r\nmatch: { template: azure/container-app }\nset: { maxInactiveRevisions: 2 }\n");
+        WriteTemp("catalog/policies/b.yaml", "kind: Policy\nname: limit-b\nreason: r\nmatch: { template: azure/container-app }\nset: { maxInactiveRevisions: 3 }\n");
+        var backend = new RecordingBackend();
+
+        var (code, stdout, stderr) = await RunWithAsync(backend, command, Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Empty(stdout);
+        Assert.Equal(
+            "policies/a.yaml: set.maxInactiveRevisions: policies 'limit-a' (policies/a.yaml) and 'limit-b' (policies/b.yaml) give field 'maxInactiveRevisions' of node 'runtime' different set values.\n",
+            stderr.ReplaceLineEndings("\n"));
+        Assert.Empty(backend.Calls);
+    }
+
+    [Fact]
+    public async Task Deploy_prints_a_catalog_error_with_the_path_under_the_catalog()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        WriteTemp("catalog/components/oops.yaml", "kind: Component\nname: oops\n");
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Equal($"{Path.Combine(catalog, "components/oops.yaml")}: description: schema violation: PropertyRequired: #/description", stderr.Split('\n')[0]);
+        Assert.Empty(backend.Calls);
+    }
+
     [Fact]
     public async Task A_catalog_wide_error_is_not_given_a_file_path()
     {
@@ -417,6 +455,54 @@ public sealed class CliTests : IDisposable
         Assert.Equal(1, code);
         Assert.Contains("template 'azure/application-insights' is not in the template library", stderr);
         Assert.Empty(backend.Calls);
+    }
+
+    [Fact]
+    public async Task Deploy_reports_a_missing_template_directory_once_before_creating_anything()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        Directory.Delete(Path.Combine(catalog, "templates"), recursive: true);
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Empty(backend.Calls);
+        Assert.Single(stderr.Split('\n'), line => line == $"{Path.Combine(catalog, "templates")}: template directory not found.");
+    }
+
+    // Edge 3 of docs/architecture/application.md section 8 (S25b2): an empty templates directory holds no template documents, so it reads as a
+    // missing one; before, it gave only each node's "not in the template library".
+    [Fact]
+    public async Task Deploy_reports_an_empty_template_directory_as_not_found()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        Directory.Delete(Path.Combine(catalog, "templates"), recursive: true);
+        Directory.CreateDirectory(Path.Combine(catalog, "templates"));
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Empty(backend.Calls);
+        Assert.Single(stderr.Split('\n'), line => line == $"{Path.Combine(catalog, "templates")}: template directory not found.");
+    }
+
+    [Fact]
+    public async Task Deploy_reads_only_the_template_files_of_the_template_directory()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        await File.WriteAllTextAsync(Path.Combine(catalog, "templates", "azure", "notes.yaml"), "not: [a template\n");
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(0, code);
+        Assert.Empty(stderr);
+        Assert.NotEmpty(backend.Calls);
     }
 
     [Fact]

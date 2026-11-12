@@ -1,4 +1,3 @@
-using jd.bp.pulumi;
 using jd.core.identity;
 using jd.orchestrator;
 using jd.orchestrator.usecases;
@@ -6,14 +5,12 @@ using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.graph;
-using jd.resolver.workload;
 
 namespace jd.cli;
 
 /// <summary>
-/// The command line: hands each command to its own command type, or runs <c>preview</c> and <c>deploy</c> over the resolver and the orchestrator and
-/// the <see cref="Connections"/> of <see cref="Composition"/> until they move (docs/architecture/application.md section 10), and returns the
-/// <see cref="ExitCodes"/>. Holds no resolution logic.
+/// The command line: hands each command to its own command type, or <c>preview</c> and <c>deploy</c> to their use cases over the
+/// <see cref="Connections"/> of <see cref="Composition"/>, and returns the <see cref="ExitCodes"/>. Parsing, reading, formatting; no rules.
 /// </summary>
 internal static class Cli
 {
@@ -93,8 +90,18 @@ internal static class Cli
             PromoteCommand => await PromoteCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
             EnvCommand => await EnvCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
             ValidateCommand => await ExitOnReadFailureAsync(() => ValidateCli.RunAsync(args[1..], stdout, stderr, cancellationToken), stderr),
-            _ => await ExitOnReadFailureAsync(() => RunResolveAsync(args, connections, stdout, stderr, cancellationToken), stderr),
+            PreviewCommand or DeployCommand => await ExitOnReadFailureAsync(() => RunWorkloadAsync(args, connections, stdout, stderr, cancellationToken), stderr),
+            null => UsageProblem("no command given.", stderr),
+            var unknown => UsageProblem($"unknown command '{unknown}'.", stderr),
         };
+    }
+
+    // A command line jd cannot use: the problem, then the usage.
+    private static int UsageProblem(string problem, TextWriter stderr)
+    {
+        stderr.WriteLine($"jd: {problem}");
+        stderr.Write(Usage);
+        return ExitCodes.UsageError;
     }
 
     // A command that reads its inputs checks first that they exist, so an I/O failure that escapes it is a permission or read failure; .NET's message names the file.
@@ -111,15 +118,13 @@ internal static class Cli
         }
     }
 
-    // preview and deploy, and also what the dispatch's `_` arm sends here: no command and unknown commands. Their arguments, then their inputs, then the run.
-    private static async Task<int> RunResolveAsync(string[] args, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    // preview and deploy: their arguments, then their inputs read as typed, then the use case.
+    private static async Task<int> RunWorkloadAsync(string[] args, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var (options, problem) = Parse(args);
         if (options is null)
         {
-            stderr.WriteLine($"jd: {problem}");
-            stderr.Write(Usage);
-            return ExitCodes.UsageError;
+            return UsageProblem(problem, stderr);
         }
 
         if (Arguments.Unreadable(options.Workload, options.Environment, options.Catalog) is { } unreadable)
@@ -128,114 +133,99 @@ internal static class Cli
             return ExitCodes.UsageError;
         }
 
-        return await ResolveAsync(options, connections, stdout, stderr, cancellationToken);
+        var workload = await ReadDocumentAsync(options.Workload, cancellationToken);
+        var environment = await ReadDocumentAsync(options.Environment, cancellationToken);
+        var catalog = await ReadCatalogAsync(options.Catalog, cancellationToken);
+        return options switch
+        {
+            DeployOptions deploy => await DeployAsync(new DeployInput(workload, environment, catalog, deploy.DryRun), connections, stdout, stderr, cancellationToken),
+            PreviewOptions preview => await PreviewAsync(
+                new PreviewInput(workload, environment, catalog), preview.Json ? GraphJson.Serialize : PreviewFormatter.Format, stdout, stderr, cancellationToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(args), options, "not a preview or deploy."),
+        };
     }
 
-    private static async Task<int> ResolveAsync(ResolveOptions resolve, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    private static async Task<int> PreviewAsync(
+        PreviewInput input, Func<ResolvedGraph, string> format, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        var loaded = await WorkloadFile.LoadAsync(resolve.Workload, cancellationToken);
-        if (loaded.Value is not { } workload)
+        var result = await Preview.RunAsync(input, cancellationToken);
+        Print(result.Errors, stderr);
+        if (result.Graph is { } graph)
         {
-            Print(loaded.Errors, stderr);
-            return ExitCodes.Failure;
+            stdout.Write(format(graph));
         }
 
-        var catalogResult = await CatalogDirectory.LoadAsync(resolve.Catalog, cancellationToken);
-        var environmentResult = await EnvironmentParser.LoadAsync(resolve.Environment, cancellationToken);
-        if (catalogResult.Value is not { } catalog || environmentResult.Value is not { } environment)
-        {
-            Print(CatalogErrors(catalogResult, resolve.Catalog).Concat(environmentResult.Errors), stderr);
-            return ExitCodes.Failure;
-        }
-
-        if (RefuseType(catalog, environment, resolve.Environment, stderr))
-        {
-            return ExitCodes.Failure;
-        }
-
-        if (resolve is DeployOptions { DryRun: false } && RefuseGated(environment, DeployCommand, stderr))
-        {
-            return ExitCodes.Failure;
-        }
-
-        var graph = Resolver.Resolve(workload, resolve.Workload, catalog, environment);
-        if (graph.Errors.Count > 0)
-        {
-            Print(graph.Errors, stderr);
-            return ExitCodes.Failure;
-        }
-
-        if (resolve is DeployOptions deploy)
-        {
-            return (await ProvisionAsync(deploy.Catalog, graph, catalog, environment, connections, deploy.DryRun, stdout, stderr, cancellationToken)).Code;
-        }
-
-        stdout.Write(resolve is PreviewOptions { Json: true } ? GraphJson.Serialize(graph) : PreviewFormatter.Format(graph));
-        return ExitCodes.Success;
+        return ExitCodes.Of(result.Outcome);
     }
 
-    // An environment whose descriptor carries an approval policy takes deploys only through `jd promote` (docs/architecture/approvals.md section 2). The check reads
-    // the block, not the type. Run before the identity, the records or the backend is touched; a preview creates nothing, so callers do not ask it.
-    internal static bool RefuseGated(EnvironmentDescriptor environment, string command, TextWriter stderr)
+    private static async Task<int> DeployAsync(
+        DeployInput input, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        if (environment.Approval is null)
+        var result = await Deploy.RunAsync(input, connections, Show, cancellationToken);
+        Print(result.Errors, stderr);
+        if (result.Problem is { } problem)
         {
-            return false;
+            stderr.WriteLine(Refusal(problem, DeployCommand));
         }
 
-        stderr.WriteLine($"jd: {command}: environment '{environment.Name}' is gated by an approval policy: use `jd promote`.");
-        return true;
+        if (result.Run is { Succeeded: false } run)
+        {
+            PrintStopped(run, stderr);
+        }
+
+        return ExitCodes.Of(result.Outcome);
+
+        // The walk's lines as each node finishes; jd deploy prints no line when its one workload starts.
+        void Show(Progress progress)
+        {
+            if (progress is NodeFinished finished)
+            {
+                stdout.Write(DeployFormatter.Format(finished.Report));
+            }
+        }
     }
 
-    // An environment's type must be the catalog's, and a type that requires an approval block must carry it (security boundary 13). Prints what is wrong, naming the file.
-    internal static bool RefuseType(Catalog catalog, EnvironmentDescriptor environment, string file, TextWriter stderr)
+    // The words of a refusal, around the problem's values.
+    internal static string Refusal(Problem problem, string command) => problem switch
     {
-        if (EnvironmentTypeCheck.Check(catalog, environment.Type, environment.Approval, file) is not { Count: > 0 } errors)
-        {
-            return false;
-        }
+        Gated gated => $"jd: {command}: environment '{gated.Environment}' is gated by an approval policy: use `jd promote`.",
+        _ => throw new ArgumentOutOfRangeException(nameof(problem), problem, "not a refusal a deploy meets."),
+    };
 
-        Print(errors, stderr);
-        return true;
-    }
+    private static void PrintStopped(RunReport run, TextWriter stderr) => stderr.WriteLine($"jd: stopped at {run.Nodes[^1].NodeId}: {run.Nodes[^1].Message}");
 
-    // Catalog errors name files relative to the catalog root; the person needs the path they can open.
-    // An error about the catalog as a whole names no real file and is left as it is.
-    internal static IEnumerable<LoadError> CatalogErrors(LoadResult<Catalog> result, string catalogDirectory) =>
-        result.Errors.Select(e => Path.Combine(catalogDirectory, e.File) is var full && File.Exists(full) ? e with { File = full } : e);
+    internal static async Task<SourceDocument> ReadDocumentAsync(string path, CancellationToken cancellationToken) =>
+        new(path, await File.ReadAllBytesAsync(path, cancellationToken));
 
-    // Templates live in the catalog's templates directory; the graphs must fit them before anything is created.
-    // Null when they do not (the misfits are printed once).
-    internal static async Task<TemplateLibrary?> CheckTemplatesAsync(string catalogDirectory, IEnumerable<ResolvedGraph> graphs, TextWriter stderr, CancellationToken cancellationToken)
+    // The catalog argument, which exists, as typed, and every *.yaml under it named relative to it as the catalog layout names it.
+    internal static async Task<SourceCatalog> ReadCatalogAsync(string directory, CancellationToken cancellationToken)
     {
-        var templates = await TemplateLibrary.LoadAsync(Path.Combine(catalogDirectory, CatalogDirectory.TemplatesDirectory), cancellationToken);
-        var misfits = graphs.SelectMany(templates.Check).Distinct().ToList(); // unreadable templates are repeated by every graph's check
-        if (misfits.Count == 0)
+        var documents = new List<SourceDocument>();
+        foreach (var file in Directory.EnumerateFiles(directory, "*.yaml", SearchOption.AllDirectories))
         {
-            return templates;
+            documents.Add(new SourceDocument(Path.GetRelativePath(directory, file).Replace(Path.DirectorySeparatorChar, '/'), await File.ReadAllBytesAsync(file, cancellationToken)));
         }
 
-        Print(misfits, stderr);
-        return null;
+        return new SourceCatalog(directory, documents);
     }
 
+    // TODO(S25c): env up's walk, until its use case: the graph checked against the catalog's templates, then deployed, each node printed as it finishes.
     internal static async Task<(int Code, RunReport? Run)> ProvisionAsync(
-        string catalogDirectory, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, Connections connections, bool dryRun, TextWriter stdout, TextWriter stderr,
+        SourceCatalog source, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, Connections connections, TextWriter stdout, TextWriter stderr,
         CancellationToken cancellationToken)
     {
-        if (await CheckTemplatesAsync(catalogDirectory, [graph], stderr, cancellationToken) is not { } templates)
+        var (templates, misfits) = Checks.Templates(source, [graph], connections);
+        if (misfits.Count > 0)
         {
+            Print(misfits, stderr);
             return (ExitCodes.Failure, null);
         }
 
         var orchestrator = new Orchestrator(connections.Backend(), templates, catalog, environment, connections.Probe());
-        void Show(NodeReport report) => stdout.Write(DeployFormatter.Format(report));
-        var run = dryRun
-            ? await orchestrator.PreviewAsync(graph, Show, cancellationToken)
-            : await orchestrator.DeployAsync(graph, Show, cancellationToken);
+        var run = await orchestrator.DeployAsync(graph, report => stdout.Write(DeployFormatter.Format(report)), cancellationToken);
         if (!run.Succeeded)
         {
-            stderr.WriteLine($"jd: stopped at {run.Nodes[^1].NodeId}: {run.Nodes[^1].Message}");
+            PrintStopped(run, stderr);
             return (ExitCodes.Failure, run);
         }
 
@@ -264,14 +254,10 @@ internal static class Cli
         }
     }
 
+    // args start with the command, preview or deploy.
     private static (ResolveOptions? Options, string Problem) Parse(string[] args)
     {
-        var command = args.FirstOrDefault();
-        if (command is not (PreviewCommand or DeployCommand))
-        {
-            return (null, command is null ? "no command given." : $"unknown command '{command}'.");
-        }
-
+        var command = args[0];
         var (scanned, problem) = Arguments.Scan(args[1..]);
         if (scanned is null)
         {

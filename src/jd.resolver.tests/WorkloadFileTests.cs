@@ -16,24 +16,19 @@ public sealed class WorkloadFileTests : IDisposable
     {
         var path = Path.Combine(_temp, "workload.yaml");
         await File.WriteAllTextAsync(path, content);
-        return await WorkloadFile.LoadAsync(path);
+        return await LoadFileAsync(path);
     }
+
+    private static async Task<LoadResult<JObject>> LoadFileAsync(string path) =>
+        await WorkloadFile.LoadAsync(new SourceDocument(path, await File.ReadAllBytesAsync(path)), CancellationToken.None);
 
     [Fact]
     public async Task The_sample_workload_loads()
     {
-        var result = await WorkloadFile.LoadAsync(Sample);
+        var result = await LoadFileAsync(Sample);
 
         Assert.Empty(result.Errors);
         Assert.Equal("just-deliver-sample-app", (string?)result.Value?["metadata"]?["name"]);
-    }
-
-    [Fact]
-    public async Task A_missing_file_is_an_error_at_that_file()
-    {
-        var error = Assert.Single((await WorkloadFile.LoadAsync("missing.yaml")).Errors);
-
-        Assert.Equal("missing.yaml", error.File);
     }
 
     [Fact]

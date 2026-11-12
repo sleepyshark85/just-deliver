@@ -8,7 +8,7 @@ public class WorkloadDefinitionTests
     private static readonly string SchemaPath = Path.Combine(AppContext.BaseDirectory, "workload.schema.json");
     private static readonly string SamplePath = Path.Combine(AppContext.BaseDirectory, "sample-workload.yaml");
 
-    private readonly YamlSchemaValidator _validator = new(WorkloadRules.Check);
+    private readonly YamlSchemaValidator _validator = new(workload => WorkloadRules.Check(workload).Select(e => $"{e.Location}: {e.Message}").ToList());
 
     private const string Header = @"
 apiVersion: just-deliver/v1

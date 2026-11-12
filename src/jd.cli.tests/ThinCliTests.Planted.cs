@@ -2,6 +2,7 @@ using System.Reflection.Metadata;
 using jd.core.records;
 using jd.orchestrator.usecases;
 using jd.resolver;
+using jd.resolver.environment;
 using jd.resolver.graph;
 using Xunit;
 
@@ -86,6 +87,21 @@ namespace jd.cli.tests
             var findings = R1(Planted, Only(typeof(planted.ValidateCommand)), UseCaseSurface(UseCases(typeof(Connections))));
 
             Assert.Equal(["jd.cli.tests.planted.ValidateCommand.DecodesTheDocument reaches jd.resolver.SourceDocument.Text"], findings.Select(f => f.Message));
+        }
+
+        // jd's own Preview and Deploy: their command code may build the inputs and read the results, the progress and the problem, nothing else.
+        [Fact]
+        public void R1_names_the_workload_command_and_member_that_reach_past_the_preview_and_deploy_use_cases()
+        {
+            var findings = R1(Planted, Only(typeof(planted.WorkloadCommand)), UseCaseSurface(UseCases(typeof(Connections))));
+
+            Assert.Equal(
+                [
+                    "jd.cli.tests.planted.WorkloadCommand.BuildsTheTemplates reaches jd.orchestrator.usecases.Connections.get_Templates",
+                    "jd.cli.tests.planted.WorkloadCommand.ChecksTheGate reaches jd.orchestrator.usecases.Checks.Gate",
+                    "jd.cli.tests.planted.WorkloadCommand.ReadsTheCatalog reaches jd.resolver.SourceCatalog.get_Documents",
+                ],
+                findings.Select(f => f.Message).Order(StringComparer.Ordinal));
         }
 
         [Fact]
@@ -207,6 +223,26 @@ namespace jd.cli.tests.planted
             string.Join('\n', (await Validate.RunAsync(new ValidateInput(new SourceDocument("x", "kind: Workload"u8.ToArray())), CancellationToken.None)).Errors.Select(e => e.File + e.Location + e.Message));
 
         public static string DecodesTheDocument() => new SourceDocument("x", "kind: Workload"u8.ToArray()).Text();
+    }
+
+    internal static class WorkloadCommand
+    {
+        private static readonly SourceDocument Document = new("x", "kind: Workload"u8.ToArray());
+
+        public static async Task<string> DeploysAsync(Connections connections)
+        {
+            var lines = new List<string>();
+            var result = await Deploy.RunAsync(
+                new DeployInput(Document, Document, new SourceCatalog("c", [Document]), false), connections, p => lines.Add(p is NodeFinished f ? f.Report.NodeId : string.Empty), CancellationToken.None);
+            var graph = (await Preview.RunAsync(new PreviewInput(Document, Document, new SourceCatalog("c", [Document])), CancellationToken.None)).Graph;
+            return $"{result.Run?.Nodes.Count}{(result.Problem as Gated)?.Environment}{graph?.Workload}{string.Concat(lines)}";
+        }
+
+        public static object? ChecksTheGate(EnvironmentDescriptor environment) => Checks.Gate(environment);
+
+        public static int ReadsTheCatalog() => new SourceCatalog("c", [Document]).Documents.Count;
+
+        public static object BuildsTheTemplates(Connections connections) => connections.Templates(new SourceCatalog("c", []));
     }
 
     internal sealed class Store : IRecordStore

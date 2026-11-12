@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using jd.definitionvalidator;
-using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.graph;
 using Newtonsoft.Json.Linq;
@@ -15,7 +14,7 @@ public class GoldenGraphTests
     [Fact]
     public async Task The_seed_workload_resolves_to_the_committed_graph()
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
+        var catalog = (await SeedCatalog.LoadAsync()).Value!;
         var environment = (await EnvironmentParser.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", "seed-environment.yaml"))).Value!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
 

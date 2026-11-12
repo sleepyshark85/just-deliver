@@ -51,20 +51,22 @@ internal static class EnvCli
         Options options, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var definitionResult = await EnvironmentDefinitionFile.LoadAsync(options.Definition, cancellationToken);
-        var catalogResult = await CatalogDirectory.LoadAsync(options.Catalog, cancellationToken);
+        var source = await Cli.ReadCatalogAsync(options.Catalog, cancellationToken);
+        var catalogResult = await CatalogParser.ParseAsync(source, cancellationToken);
         var baseResult = options.Base is null ? null : await EnvironmentParser.LoadAsync(options.Base, cancellationToken);
         if (definitionResult.Value is not { } definition || catalogResult.Value is not { } catalog || (baseResult is not null && baseResult.Value is null))
         {
-            Cli.Print(definitionResult.Errors.Concat(Cli.CatalogErrors(catalogResult, options.Catalog)).Concat(baseResult?.Errors ?? []), stderr);
+            Cli.Print(definitionResult.Errors.Concat(source.Located(catalogResult.Errors)).Concat(baseResult?.Errors ?? []), stderr);
             return Invalid;
         }
 
         // The definition's type, and the base's, must be the catalog's; a gated type's environment cannot be written without its block.
         var environment = definition.Over(baseResult?.Value);
-        var definitionRefused = Cli.RefuseType(catalog, environment, options.Definition, stderr);
-        var baseRefused = options.Base is { } basePath && baseResult?.Value is { } baseDescriptor && Cli.RefuseType(catalog, baseDescriptor, basePath, stderr);
-        if (definitionRefused || baseRefused)
+        var typeErrors = Checks.EnvironmentType(catalog, environment, options.Definition)
+            .Concat(options.Base is { } basePath && baseResult?.Value is { } baseDescriptor ? Checks.EnvironmentType(catalog, baseDescriptor, basePath) : []).ToList();
+        if (typeErrors.Count > 0)
         {
+            Cli.Print(typeErrors, stderr);
             return Invalid;
         }
 
@@ -79,7 +81,7 @@ internal static class EnvCli
             return Invalid;
         }
 
-        var (code, run) = await Cli.ProvisionAsync(options.Catalog, graph, catalog, environment, connections, dryRun: false, stdout, stderr, cancellationToken);
+        var (code, run) = await Cli.ProvisionAsync(source, graph, catalog, environment, connections, stdout, stderr, cancellationToken);
         if (run is null || code != Success)
         {
             return code;

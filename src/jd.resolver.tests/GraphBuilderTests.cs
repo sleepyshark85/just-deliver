@@ -36,8 +36,8 @@ public class GraphBuilderTests
     private static async Task<ResolvedGraph> BuildAsync(string nodes, string requires = "  - type: sqldb\n", params string[] policies)
     {
         var component = TestCatalog.Component("sqldb", "[endpoint]", $"nodes:\n{nodes}exports:\n  endpoint: x\n");
-        var files = BaseFiles.Append(component).Concat(policies).Append(TestCatalog.RuntimeFile).Append(TestCatalog.GrantsFile).Select((content, i) => new CatalogSource($"f{i}.yaml", content));
-        var loaded = await CatalogParser.ParseAsync(files);
+        var files = BaseFiles.Append(component).Concat(policies).Append(TestCatalog.RuntimeFile).Append(TestCatalog.GrantsFile).Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
         var applied = new PolicyApplier(loaded.Value!, Env).Apply(new Expander(loaded.Value!, Env).Expand(workload, "workload.yaml"));

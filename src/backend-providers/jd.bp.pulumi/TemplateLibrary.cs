@@ -18,7 +18,8 @@ internal sealed record TemplateInterface(IReadOnlySet<string> Inputs, IReadOnlyS
 /// </summary>
 public sealed class TemplateLibrary : ITemplateStore
 {
-    private const string TemplateFile = "Pulumi.yaml";
+    /// <summary>The file a template is: the library reads it in each template's directory.</summary>
+    public const string TemplateFile = "Pulumi.yaml";
 
     private readonly Dictionary<string, TemplateInterface> _templates = [];
     private readonly Dictionary<string, string> _content = [];
@@ -52,7 +53,8 @@ public sealed class TemplateLibrary : ITemplateStore
         return Parse(sources);
     }
 
-    internal static TemplateLibrary Parse(IEnumerable<(string Name, string Yaml)> sources)
+    /// <summary>The library of <paramref name="sources"/>: each template's name (its directory, <c>azure/log-analytics</c>) and the text of its <see cref="TemplateFile"/>.</summary>
+    public static TemplateLibrary Parse(IEnumerable<(string Name, string Yaml)> sources)
     {
         var library = new TemplateLibrary();
         foreach (var (name, yaml) in sources)
