@@ -198,7 +198,7 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
 
         Assert.Equal(1, code);
         Assert.Empty(backend.Calls);
-        Assert.Equal(1, stderr.Split("template directory not found").Length - 1);
+        Assert.Single(stderr.Split('\n'), line => line == $"{Path.Combine(catalog, "templates")}: template directory not found.");
     }
 
     [Fact]

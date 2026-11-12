@@ -420,6 +420,21 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
+    public async Task Deploy_reports_a_missing_template_directory_once_before_creating_anything()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        Directory.Delete(Path.Combine(catalog, "templates"), recursive: true);
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Empty(backend.Calls);
+        Assert.Single(stderr.Split('\n'), line => line == $"{Path.Combine(catalog, "templates")}: template directory not found.");
+    }
+
+    [Fact]
     public void The_pulumi_backend_keeps_its_state_in_the_data_directory_with_its_key_whatever_the_removed_variables_say()
     {
         var data = Path.Combine(_temp, "data");
