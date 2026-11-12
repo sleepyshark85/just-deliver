@@ -5,7 +5,7 @@ using Pulumi.Automation.Events;
 
 namespace jd.bp.pulumi;
 
-internal class PulumiResourceChangeParser : IResourceChangeParser<StepEventMetadata>
+internal sealed class PulumiResourceChangeParser : IResourceChangeParser<StepEventMetadata>
 {
     public ResourceChange? Parse(StepEventMetadata metadata)
     {

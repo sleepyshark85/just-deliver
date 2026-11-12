@@ -3,6 +3,7 @@ using jd.resolver.environment;
 
 namespace jd.resolver.expressions;
 
+/// <summary>What a <see cref="Reference"/> reads at deploy time.</summary>
 public enum ReferenceKind
 {
     /// <summary>An output of a graph node: <c>${node.output}</c>; the runtime node is the node named <c>runtime</c>.</summary>
@@ -18,6 +19,7 @@ public sealed record Reference(ReferenceKind Kind, string Target, string Output)
 /// <summary>The outcome of evaluating one string: <see cref="Resolved"/> or <see cref="Pending"/>.</summary>
 public abstract record EvalResult;
 
+/// <summary>A string whose expressions all evaluated: <see cref="Value"/> is final.</summary>
 public sealed record Resolved(string Value) : EvalResult;
 
 /// <summary>Waits on <see cref="References"/>; evaluate <see cref="Original"/> again once their values are known.</summary>

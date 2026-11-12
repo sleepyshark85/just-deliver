@@ -1,7 +1,9 @@
 namespace jd.core.bp;
 
-public class DeploymentResult
+/// <summary>What a deploy or preview of one stack reports: its outputs and the resource changes it made, or would make.</summary>
+public sealed class DeploymentResult
 {
+    /// <summary>The stack's outputs by output name, which later nodes' references and the release flow read.</summary>
     public required Dictionary<string, ConfigEntry> Outputs { get; set; }
 
     /// <summary>Count of resources per operation (e.g. "Create": 2, "Update": 1, "Same": 3), from the update summary.</summary>

@@ -21,7 +21,7 @@ public sealed record EnvironmentDescriptor(
     private const string RegionKey = "region";
     private const string TypeKey = "type";
 
-    public static readonly IReadOnlyList<string> ReservedKeys = [NameKey, RegionKey, TypeKey];
+    internal static readonly IReadOnlyList<string> ReservedKeys = [NameKey, RegionKey, TypeKey];
 
     /// <summary>Resolves <c>env.&lt;field&gt;</c>: only the reserved keys, from the top-level fields.</summary>
     public bool TryGet(string field, [NotNullWhen(true)] out string? value)

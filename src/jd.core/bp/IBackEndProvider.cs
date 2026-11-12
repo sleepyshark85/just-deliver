@@ -1,7 +1,9 @@
 namespace jd.core.bp;
 
+/// <summary>The port to the deployment engine: deploys, previews and reads one backend stack per graph node.</summary>
 public interface IBackEndProvider
 {
+    /// <summary>Brings the package's stack to its template and parameters, creating or changing resources, and returns its outputs.</summary>
     Task<DeploymentResult> DeployAsync(DeploymentPackage package, CancellationToken cancellationToken);
 
     /// <summary>Dry run: validates and computes changes without creating/modifying resources.</summary>

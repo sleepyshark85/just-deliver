@@ -10,8 +10,13 @@ namespace jd.azure;
 /// </summary>
 public sealed class ArmCredentials(string? tenantId, string? clientId, string? clientSecret)
 {
+    /// <summary>The environment variable holding the service principal's directory (tenant) id; the composition root reads it.</summary>
     public const string TenantVariable = "ARM_TENANT_ID";
+
+    /// <summary>The environment variable holding the service principal's application (client) id.</summary>
     public const string ClientVariable = "ARM_CLIENT_ID";
+
+    /// <summary>The environment variable holding the service principal's client secret.</summary>
     public const string SecretVariable = "ARM_CLIENT_SECRET";
 
     /// <summary>What to check when Azure refuses the credential, for either kind.</summary>

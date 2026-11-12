@@ -12,5 +12,6 @@ public sealed record DeployerIdentity(string TenantId, string ClientId, string O
 /// </summary>
 public interface IDeployerIdentity
 {
+    /// <summary>Asks the identity provider who the process's credential is; throws when the credential cannot authenticate.</summary>
     Task<DeployerIdentity> GetAsync(CancellationToken cancellationToken);
 }

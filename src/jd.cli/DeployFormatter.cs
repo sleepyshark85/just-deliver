@@ -6,7 +6,7 @@ using jd.orchestrator;
 namespace jd.cli;
 
 /// <summary>The per-node lines printed by <c>jd deploy</c>: outcome, changes and time, then each changed resource and, for the runtime, each release step.</summary>
-public static class DeployFormatter
+internal static class DeployFormatter
 {
     public static string Format(NodeReport report)
     {

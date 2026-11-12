@@ -5,6 +5,7 @@ using jd.resolver.graph;
 
 namespace jd.orchestrator;
 
+/// <summary>What an installation-qualification check compares with the live deployment.</summary>
 public enum IqCheckKind
 {
     /// <summary>A node of the workload's graph, previewed against what is deployed: any change means the deployment drifted.</summary>
@@ -20,12 +21,14 @@ public enum IqCheckKind
 /// <param name="Failure">Why it failed, naming the node or revision; empty when it passed.</param>
 public sealed record IqCheck(IqCheckKind Kind, string Workload, string Subject, string Failure)
 {
+    /// <summary>True when the check found the deployment as the release pins it.</summary>
     public bool Passed => Failure.Length == 0;
 }
 
 /// <summary>Installation qualification: every check that ran, none left out because another failed.</summary>
 public sealed record IqResult(IReadOnlyList<IqCheck> Checks, TimeSpan Elapsed)
 {
+    /// <summary>True when every check passed, so the release is qualified.</summary>
     public bool Passed => Checks.All(c => c.Passed);
 }
 
@@ -36,6 +39,7 @@ public sealed record IqResult(IReadOnlyList<IqCheck> Checks, TimeSpan Elapsed)
 /// </summary>
 public sealed class Qualifier(Orchestrator orchestrator, IBackEndProvider provider, ITemplateStore templates, ILiveRevisions revisions, TimeProvider time)
 {
+    /// <summary>Runs every check on the deployed <paramref name="graphs"/> (one per workload of the release) and reports them all.</summary>
     public async Task<IqResult> QualifyAsync(IReadOnlyList<ResolvedGraph> graphs, CancellationToken cancellationToken)
     {
         var started = time.GetTimestamp();
@@ -85,7 +89,7 @@ public sealed class Qualifier(Orchestrator orchestrator, IBackEndProvider provid
                     ? [new IqCheck(IqCheckKind.Image, graph.Workload, r.Name, $"revision {r.Name} reports no image.")]
                     : r.Images.Select(image => new IqCheck(IqCheckKind.Image, graph.Workload, r.Name, image == pinned ? string.Empty : $"pinned {pinned}, live {image} on revision {r.Name}")));
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException) // reporting boundary: any failure of the lookup is this check's failed result
         {
             return [Failed($"the live revisions could not be checked: {ex.Message}")];
         }

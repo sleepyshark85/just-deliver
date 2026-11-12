@@ -20,5 +20,6 @@ public sealed partial record LoadError(string File, string Location, string Mess
         return new LoadError(file, location, $"schema violation: {detail}");
     }
 
+    /// <summary>The one-line form a person reads: the file, the location when there is one, and the message.</summary>
     public override string ToString() => Location.Length == 0 ? $"{File}: {Message}" : $"{File}: {Location}: {Message}";
 }

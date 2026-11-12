@@ -15,7 +15,13 @@ public sealed record ExportValues(IReadOnlyDictionary<Reference, string> Values,
     /// <summary>No export is known.</summary>
     public static ExportValues None { get; } = new(new Dictionary<Reference, string>(), new HashSet<Reference>());
 
-    // outputs: by node id; a secret output counts as known and is tracked in Secrets. file: reported in errors about an export.
+    /// <summary>The exports of <paramref name="graph"/>'s requirements that <paramref name="outputs"/> settle; an export that fails to evaluate is added to <paramref name="errors"/>.</summary>
+    /// <param name="graph">The graph whose exports are evaluated.</param>
+    /// <param name="catalog">The catalog the graph was resolved from.</param>
+    /// <param name="environment">The environment the graph was resolved for.</param>
+    /// <param name="outputs">The deployed outputs by node id; a secret output counts as known and is tracked in <see cref="Secrets"/>.</param>
+    /// <param name="file">Reported in errors about an export.</param>
+    /// <param name="errors">Receives every export that cannot be evaluated.</param>
     public static ExportValues Evaluate(
         ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>> outputs, string file, ICollection<LoadError> errors)

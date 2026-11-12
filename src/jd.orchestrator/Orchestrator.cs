@@ -140,7 +140,7 @@ public sealed class Orchestrator(
                 _outputs[node.Id] = deployed.Outputs;
                 return NodeReport.For(node, deployed.HasChanges ? NodeOutcome.Deployed : NodeOutcome.Unchanged, string.Empty, deployed);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException) // reporting boundary: any backend failure is this node's failed report
             {
                 return NodeReport.For(node, NodeOutcome.Failed, ex.Message);
             }

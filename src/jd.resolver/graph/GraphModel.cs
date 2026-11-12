@@ -18,12 +18,16 @@ public enum Phase
     AfterRuntime,
 }
 
-// Id is <workload>/<env>/<scope>/<node>; scope is the requirement's effective id, or GraphBuilder.WorkloadScope.
-// Stack is the id with '/' replaced by '.' and '@' by '_' (Pulumi stack names allow [A-Za-z0-9_.-]): one backend stack
-// per node, unique because ids contain neither '.' nor '_'.
-// Hash is lowercase hex SHA-256 of the node's template, kind and canonical config (ConfigJson).
-// DependsOn holds the ids of the nodes whose outputs this node references, sorted; a runtime.* reference is an edge to the
-// runtime node (scope GraphBuilder.WorkloadScope, name ExpressionEvaluator.RuntimeNode). Probe and Release are set on the runtime node only; neither is part of the hash.
+/// <summary>
+/// One node of the resolved graph: what the orchestrator deploys as one backend stack.
+/// <see cref="Id"/> is <c>&lt;workload&gt;/&lt;env&gt;/&lt;scope&gt;/&lt;node&gt;</c>; <see cref="Scope"/> is the requirement's effective id, or
+/// <see cref="GraphBuilder.WorkloadScope"/>. <see cref="Stack"/> is the id with '/' replaced by '.' and '@' by '_' (Pulumi stack names allow
+/// [A-Za-z0-9_.-]): one backend stack per node, unique because ids contain neither '.' nor '_'. <see cref="Hash"/> is lowercase hex SHA-256 of
+/// the node's template, kind and canonical config (<see cref="ConfigJson"/>). <see cref="DependsOn"/> holds the ids of the nodes whose outputs
+/// this node references, sorted; a runtime.* reference is an edge to the runtime node (scope <see cref="GraphBuilder.WorkloadScope"/>, name
+/// <see cref="ExpressionEvaluator.RuntimeNode"/>). <see cref="Probe"/> and <see cref="Release"/> are set on the runtime node only; neither is part of
+/// the hash.
+/// </summary>
 public sealed record GraphNode(
     string Id,
     string Scope,

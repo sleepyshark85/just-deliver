@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 namespace jd.cli;
 
 /// <summary>The human-readable listing printed by <c>jd preview</c>: the graph's nodes in graph order.</summary>
-public static class PreviewFormatter
+internal static class PreviewFormatter
 {
     private const int ShortHashLength = 8;
 

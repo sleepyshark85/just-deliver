@@ -9,9 +9,10 @@
     <WarningsNotAsErrors>NU1901;NU1902</WarningsNotAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <!-- Required for IDE0005 (unused usings) to run on build; public XML docs are not mandated. -->
+    <!-- Required for IDE0005 (unused usings) to run on build, and for CS1591. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Production projects (under src/, not *.tests) document every public member (docs/engineering/csharp.md section 11); tests and samples need not. -->
+    <NoWarn Condition="$(MSBuildProjectName.EndsWith('.tests')) or !$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src'))">$(NoWarn);CS1591</NoWarn>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
 </Project>

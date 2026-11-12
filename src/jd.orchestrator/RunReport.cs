@@ -3,6 +3,7 @@ using jd.resolver.graph;
 
 namespace jd.orchestrator;
 
+/// <summary>What a walk did with one graph node.</summary>
 public enum NodeOutcome
 {
     /// <summary>Deployed, and the provider reported changes.</summary>
@@ -17,6 +18,7 @@ public enum NodeOutcome
     /// <summary>Preview only: a value from an upstream node that is not deployed is missing, so the node cannot be previewed.</summary>
     PendingUpstream,
 
+    /// <summary>The node could not be prepared, previewed or deployed; <see cref="NodeReport.Message"/> says why, and the walk stops.</summary>
     Failed,
 }
 
@@ -36,8 +38,10 @@ public enum Step
     Shift,
 }
 
+/// <summary>What happened to one step of the runtime node's release flow.</summary>
 public enum StepOutcome
 {
+    /// <summary>The step ran and succeeded.</summary>
     Done,
 
     /// <summary>Preview only: the step would run.</summary>
@@ -46,6 +50,7 @@ public enum StepOutcome
     /// <summary>Nothing to do: the revision is unchanged.</summary>
     Skipped,
 
+    /// <summary>The step ran and failed; the release stops at it.</summary>
     Failed,
 }
 
@@ -82,6 +87,7 @@ public sealed record NodeReport(
 /// <summary>The nodes handled, in the order they ran. A failure ends the walk, so nodes after it are absent.</summary>
 public sealed record RunReport(IReadOnlyList<NodeReport> Nodes)
 {
+    /// <summary>True when no node failed.</summary>
     public bool Succeeded => Nodes.All(n => n.Outcome != NodeOutcome.Failed);
 }
 
