@@ -1,3 +1,4 @@
+using System.Text;
 using jd.bp.pulumi;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -89,6 +90,35 @@ public sealed class CliTests : IDisposable
 
         Assert.Equal(1, code);
         Assert.Contains($"{path}: not valid YAML: duplicate key 'a'", stderr);
+    }
+
+    // Risk b of docs/architecture/application.md section 8: the workload is decoded as File.ReadAllText decodes it, whoever reads the file.
+    [Fact]
+    public async Task Validate_gives_the_same_output_for_a_workload_with_a_utf8_byte_order_mark()
+    {
+        var path = WriteTemp("workload.yaml", File.ReadAllText(Workload));
+        var withoutMark = await RunAsync("validate", path);
+        File.WriteAllBytes(path, [0xEF, 0xBB, 0xBF, .. File.ReadAllBytes(Workload)]);
+
+        var withMark = await RunAsync("validate", path);
+
+        Assert.Equal((0, $"{path}: valid.{System.Environment.NewLine}", string.Empty), withoutMark);
+        Assert.Equal(withoutMark, withMark);
+    }
+
+    [Fact]
+    public async Task Validate_reads_an_invalid_utf8_byte_as_the_replacement_character()
+    {
+        var sample = File.ReadAllText(Workload);
+        var team = sample.IndexOf("  team:", StringComparison.Ordinal);
+        var path = Path.Combine(_temp, "invalid-byte.yaml");
+        File.WriteAllBytes(path, [.. Encoding.UTF8.GetBytes(sample[..team]), .. "  t"u8, 0xFF, .. "am: x\n"u8, .. Encoding.UTF8.GetBytes(sample[team..])]);
+
+        var result = await RunAsync("validate", path);
+
+        Assert.Equal(
+            (1, string.Empty, $"{path}: metadata.t�am: schema violation: NoAdditionalPropertiesAllowed: #/metadata.t�am{System.Environment.NewLine}"),
+            result);
     }
 
     [Fact]
