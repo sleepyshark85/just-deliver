@@ -135,17 +135,21 @@ internal static class Cli
 
         var workload = await ReadDocumentAsync(options.Workload, cancellationToken);
         var environment = await ReadDocumentAsync(options.Environment, cancellationToken);
-        var catalog = await CatalogFiles.ReadAsync(options.Catalog, cancellationToken);
-        return options is DeployOptions deploy
-            ? await DeployAsync(new DeployInput(workload, environment, catalog.Source, deploy.DryRun), catalog, connections, stdout, stderr, cancellationToken)
-            : await PreviewAsync(new PreviewInput(workload, environment, catalog.Source), catalog, options is PreviewOptions { Json: true } ? GraphJson.Serialize : PreviewFormatter.Format, stdout, stderr, cancellationToken);
+        var catalog = await ReadCatalogAsync(options.Catalog, cancellationToken);
+        return options switch
+        {
+            DeployOptions deploy => await DeployAsync(new DeployInput(workload, environment, catalog, deploy.DryRun), connections, stdout, stderr, cancellationToken),
+            PreviewOptions preview => await PreviewAsync(
+                new PreviewInput(workload, environment, catalog), preview.Json ? GraphJson.Serialize : PreviewFormatter.Format, stdout, stderr, cancellationToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(args), options, "not a preview or deploy."),
+        };
     }
 
     private static async Task<int> PreviewAsync(
-        PreviewInput input, CatalogFiles catalog, Func<ResolvedGraph, string> format, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        PreviewInput input, Func<ResolvedGraph, string> format, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var result = await Preview.RunAsync(input, cancellationToken);
-        Print(catalog.Located(result.Errors), stderr);
+        Print(result.Errors, stderr);
         if (result.Graph is { } graph)
         {
             stdout.Write(format(graph));
@@ -155,10 +159,10 @@ internal static class Cli
     }
 
     private static async Task<int> DeployAsync(
-        DeployInput input, CatalogFiles catalog, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        DeployInput input, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var result = await Deploy.RunAsync(input, connections, Show, cancellationToken);
-        Print(catalog.Located(result.Errors), stderr);
+        Print(result.Errors, stderr);
         if (result.Problem is { } problem)
         {
             stderr.WriteLine(Refusal(problem, DeployCommand));
@@ -171,7 +175,7 @@ internal static class Cli
 
         return ExitCodes.Of(result.Outcome);
 
-        // The walk's lines as each node finishes; the start of the one workload is the command line's own.
+        // The walk's lines as each node finishes; jd deploy prints no line when its one workload starts.
         void Show(Progress progress)
         {
             if (progress is NodeFinished finished)
@@ -192,6 +196,18 @@ internal static class Cli
 
     internal static async Task<SourceDocument> ReadDocumentAsync(string path, CancellationToken cancellationToken) =>
         new(path, await File.ReadAllBytesAsync(path, cancellationToken));
+
+    // The catalog argument, which exists, as typed, and every *.yaml under it named relative to it as the catalog layout names it.
+    internal static async Task<SourceCatalog> ReadCatalogAsync(string directory, CancellationToken cancellationToken)
+    {
+        var documents = new List<SourceDocument>();
+        foreach (var file in Directory.EnumerateFiles(directory, "*.yaml", SearchOption.AllDirectories))
+        {
+            documents.Add(new SourceDocument(Path.GetRelativePath(directory, file).Replace(Path.DirectorySeparatorChar, '/'), await File.ReadAllBytesAsync(file, cancellationToken)));
+        }
+
+        return new SourceCatalog(directory, documents);
+    }
 
     // TODO(S25c): env up's walk, until its use case: the graph checked against the catalog's templates, then deployed, each node printed as it finishes.
     internal static async Task<(int Code, RunReport? Run)> ProvisionAsync(

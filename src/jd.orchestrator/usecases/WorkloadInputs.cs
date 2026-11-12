@@ -11,7 +11,8 @@ namespace jd.orchestrator.usecases;
 // against the catalog. WorkloadName names the workload's document as its errors do.
 internal sealed record WorkloadInputs(JObject Workload, string WorkloadName, Catalog Catalog, EnvironmentDescriptor Environment)
 {
-    // Null with the errors in the order a person fixes them: the workload's alone, then the catalog's and the environment's together, then the type's.
+    // Null with the errors in the order a person fixes them: the workload's alone, then the catalog's (located: application.md section 7) and the
+    // environment's together, then the type's.
     public static async Task<LoadResult<WorkloadInputs>> LoadAsync(SourceDocument workload, SourceDocument environment, SourceCatalog catalog, CancellationToken cancellationToken)
     {
         var loaded = await WorkloadFile.LoadAsync(workload, cancellationToken);
@@ -24,7 +25,7 @@ internal sealed record WorkloadInputs(JObject Workload, string WorkloadName, Cat
         var environmentResult = await EnvironmentParser.LoadAsync(environment, cancellationToken);
         if (catalogResult.Value is not { } parsed || environmentResult.Value is not { } descriptor)
         {
-            return new(null, [.. catalogResult.Errors, .. environmentResult.Errors]);
+            return new(null, [.. catalog.Located(catalogResult.Errors), .. environmentResult.Errors]);
         }
 
         var typeErrors = Checks.EnvironmentType(parsed, descriptor, environment.Name);

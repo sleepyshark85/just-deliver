@@ -356,7 +356,7 @@ public class PolicyApplierTests
     [Fact]
     public async Task Seed_catalog_and_sample_workload_resolve_with_monitoring_as_a_requirement()
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
+        var catalog = (await SeedCatalog.LoadAsync()).Value!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var environment = new EnvironmentDescriptor(
             "dev",

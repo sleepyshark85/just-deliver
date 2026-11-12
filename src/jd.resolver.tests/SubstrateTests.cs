@@ -20,7 +20,7 @@ public class SubstrateTests
 
     private static string Sample(string name) => Path.Combine(AppContext.BaseDirectory, "samples", "environments", name);
 
-    private static async Task<Catalog> CatalogAsync() => (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
+    private static async Task<Catalog> CatalogAsync() => (await SeedCatalog.LoadAsync()).Value!;
 
     private static async Task<EnvironmentDefinition> DefinitionAsync(string file = "shared.yaml", Func<string, string>? edit = null)
     {
@@ -47,16 +47,8 @@ public class SubstrateTests
     // The seed catalog with extra files.
     private static async Task<Catalog> SeedCatalogWithAsync(params (string Path, string Content)[] files)
     {
-        var source = Path.Combine(AppContext.BaseDirectory, "catalog");
-        var root = Directory.CreateTempSubdirectory("jd-catalog").FullName;
-        foreach (var (path, content) in Directory.GetFiles(source, "*", SearchOption.AllDirectories).Select(f => (Path.GetRelativePath(source, f), File.ReadAllText(f))).Concat(files))
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(root, path))!);
-            await File.WriteAllTextAsync(Path.Combine(root, path), content);
-        }
-
-        var loaded = await CatalogDirectory.LoadAsync(root);
-        Directory.Delete(root, recursive: true);
+        var seed = SeedCatalog.Read();
+        var loaded = await CatalogParser.ParseAsync(seed with { Documents = [.. seed.Documents, .. files.Select(f => new SourceDocument(f.Path, Encoding.UTF8.GetBytes(f.Content)))] });
         Assert.Empty(loaded.Errors);
         return loaded.Value!;
     }

@@ -265,6 +265,44 @@ public sealed class CliTests : IDisposable
         Assert.Contains(Path.Combine(catalog, "components/oops.yaml"), stderr);
     }
 
+    // Only the catalog loader's errors are given the path under the catalog (docs/architecture/application.md section 7); the resolver's name a
+    // catalog document as the catalog names it.
+    [Theory]
+    [InlineData("preview")]
+    [InlineData("deploy")]
+    public async Task A_resolver_error_names_the_catalog_document_as_the_catalog_names_it(string command)
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        WriteTemp("catalog/policies/a.yaml", "kind: Policy\nname: limit-a\nreason: r\nmatch: { template: azure/container-app }\nset: { maxInactiveRevisions: 2 }\n");
+        WriteTemp("catalog/policies/b.yaml", "kind: Policy\nname: limit-b\nreason: r\nmatch: { template: azure/container-app }\nset: { maxInactiveRevisions: 3 }\n");
+        var backend = new RecordingBackend();
+
+        var (code, stdout, stderr) = await RunWithAsync(backend, command, Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Empty(stdout);
+        Assert.Equal(
+            "policies/a.yaml: set.maxInactiveRevisions: policies 'limit-a' (policies/a.yaml) and 'limit-b' (policies/b.yaml) give field 'maxInactiveRevisions' of node 'runtime' different set values.\n",
+            stderr.ReplaceLineEndings("\n"));
+        Assert.Empty(backend.Calls);
+    }
+
+    [Fact]
+    public async Task Deploy_prints_a_catalog_error_with_the_path_under_the_catalog()
+    {
+        var catalog = Path.Combine(_temp, "catalog");
+        CopyDirectory(Catalog, catalog);
+        WriteTemp("catalog/components/oops.yaml", "kind: Component\nname: oops\n");
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunWithAsync(backend, "deploy", Workload, "--env", Environment, "--catalog", catalog);
+
+        Assert.Equal(1, code);
+        Assert.Equal($"{Path.Combine(catalog, "components/oops.yaml")}: description: schema violation: PropertyRequired: #/description", stderr.Split('\n')[0]);
+        Assert.Empty(backend.Calls);
+    }
+
     [Fact]
     public async Task A_catalog_wide_error_is_not_given_a_file_path()
     {

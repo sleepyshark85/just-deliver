@@ -35,11 +35,6 @@ public sealed partial class ThinCliTests
         [
             "jd.resolver.release.ReleaseRecordFile.LabelProblem",
         ],
-        ["jd.cli.CatalogFiles"] =
-        [
-            "jd.resolver.LoadError.<Clone>$",
-            "jd.resolver.LoadError.set_File",
-        ],
         ["jd.cli.Cli"] =
         [
             "jd.core.identity.IDeployerIdentity.GetAsync",
@@ -61,6 +56,7 @@ public sealed partial class ThinCliTests
             "jd.resolver.LoadResult`1.get_Errors",
             "jd.resolver.LoadResult`1.get_Value",
             "jd.resolver.Resolver.ResolveSubstrate",
+            "jd.resolver.SourceCatalog.Located",
             "jd.resolver.catalog.CatalogParser.ParseAsync",
             "jd.resolver.environment.ComposedDescriptor..ctor",
             "jd.resolver.environment.ComposedDescriptor.get_Errors",
@@ -139,6 +135,7 @@ public sealed partial class ThinCliTests
             "jd.orchestrator.usecases.Connections.get_Time",
             "jd.resolver.LoadResult`1.get_Errors",
             "jd.resolver.LoadResult`1.get_Value",
+            "jd.resolver.SourceCatalog.Located",
             "jd.resolver.catalog.CatalogParser.ParseAsync",
             "jd.resolver.environment.EnvironmentDescriptor.get_Name",
             "jd.resolver.environment.EnvironmentParser.LoadAsync",
@@ -196,12 +193,6 @@ public sealed partial class ThinCliTests
         [
             "System.IO.File.Exists",
             "System.IO.File.ReadAllTextAsync",
-        ],
-        ["jd.resolver.catalog.CatalogDirectory"] =
-        [
-            "System.IO.Directory.EnumerateFiles",
-            "System.IO.Directory.Exists",
-            "System.IO.File.ReadAllBytesAsync",
         ],
         ["jd.resolver.release.ReleaseBuilder"] =
         [

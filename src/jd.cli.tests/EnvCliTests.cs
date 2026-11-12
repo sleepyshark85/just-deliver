@@ -153,6 +153,20 @@ public sealed class EnvCliTests : IDisposable
     }
 
     [Fact]
+    public async Task Up_prints_a_catalog_error_with_the_path_under_the_catalog_and_creates_nothing()
+    {
+        var backend = new OutputBackend();
+        var catalog = Directory.CreateDirectory(Path.Combine(_temp, "catalog", "components")).Parent!.FullName;
+        await File.WriteAllTextAsync(Path.Combine(catalog, "components", "oops.yaml"), "kind: Component\nname: oops\n");
+
+        var (code, _, stderr) = await RunAsync(backend, null, "up", Shared, "--catalog", catalog, "--out", Path.Combine(_temp, "out.yaml"));
+
+        Assert.Equal(1, code);
+        Assert.Contains($"{Path.Combine(catalog, "components/oops.yaml")}: description: schema violation: PropertyRequired: #/description", stderr.Split('\n'));
+        Assert.Empty(backend.Calls);
+    }
+
+    [Fact]
     public async Task An_existing_output_is_refused_before_anything_is_created_unless_forced()
     {
         var backend = new OutputBackend();

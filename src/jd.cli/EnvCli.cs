@@ -51,12 +51,12 @@ internal static class EnvCli
         Options options, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         var definitionResult = await EnvironmentDefinitionFile.LoadAsync(options.Definition, cancellationToken);
-        var catalogFiles = await CatalogFiles.ReadAsync(options.Catalog, cancellationToken);
-        var catalogResult = await CatalogParser.ParseAsync(catalogFiles.Source, cancellationToken);
+        var source = await Cli.ReadCatalogAsync(options.Catalog, cancellationToken);
+        var catalogResult = await CatalogParser.ParseAsync(source, cancellationToken);
         var baseResult = options.Base is null ? null : await EnvironmentParser.LoadAsync(options.Base, cancellationToken);
         if (definitionResult.Value is not { } definition || catalogResult.Value is not { } catalog || (baseResult is not null && baseResult.Value is null))
         {
-            Cli.Print(definitionResult.Errors.Concat(catalogFiles.Located(catalogResult.Errors)).Concat(baseResult?.Errors ?? []), stderr);
+            Cli.Print(definitionResult.Errors.Concat(source.Located(catalogResult.Errors)).Concat(baseResult?.Errors ?? []), stderr);
             return Invalid;
         }
 
@@ -81,7 +81,7 @@ internal static class EnvCli
             return Invalid;
         }
 
-        var (code, run) = await Cli.ProvisionAsync(catalogFiles.Source, graph, catalog, environment, connections, stdout, stderr, cancellationToken);
+        var (code, run) = await Cli.ProvisionAsync(source, graph, catalog, environment, connections, stdout, stderr, cancellationToken);
         if (run is null || code != Success)
         {
             return code;

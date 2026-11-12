@@ -286,7 +286,7 @@ public class ExpanderTests
     [Fact]
     public async Task Seed_catalog_and_sample_workload_expand_without_errors()
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
+        var catalog = (await SeedCatalog.LoadAsync()).Value!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var environment = new EnvironmentDescriptor(
             "dev",

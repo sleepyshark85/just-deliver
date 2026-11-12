@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.graph;
 using Xunit;
@@ -21,7 +20,7 @@ public class GoldenSubstrateTests
 
     private static async Task CheckAsync(string sample, string? baseDescriptor)
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
+        var catalog = (await SeedCatalog.LoadAsync()).Value!;
         var definition = (await EnvironmentDefinitionFile.LoadAsync(Path.Combine(AppContext.BaseDirectory, "samples", "environments", sample + ".yaml"))).Value!;
         var baseEnvironment = baseDescriptor is null ? null : (await EnvironmentParser.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", baseDescriptor))).Value;
 

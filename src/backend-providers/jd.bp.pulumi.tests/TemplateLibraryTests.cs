@@ -39,7 +39,10 @@ public partial class TemplateLibraryTests
     [Fact]
     public async Task The_seed_catalog_and_sample_workload_fit_the_template_library()
     {
-        var catalog = (await CatalogDirectory.LoadAsync(Path.Combine(AppContext.BaseDirectory, "catalog"))).Value!;
+        var root = Path.Combine(AppContext.BaseDirectory, "catalog");
+        var documents = Directory.EnumerateFiles(root, "*.yaml", SearchOption.AllDirectories)
+            .Select(file => new SourceDocument(Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/'), File.ReadAllBytes(file)));
+        var catalog = (await CatalogParser.ParseAsync(new SourceCatalog(root, [.. documents]))).Value!;
         var environment = (await EnvironmentParser.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", "seed-environment.yaml"))).Value!;
         var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var graph = new GraphBuilder(environment, catalog.GrantTargets).Build(new PolicyApplier(catalog, environment).Apply(new Expander(catalog, environment).Expand(workload, "workload.yaml")));

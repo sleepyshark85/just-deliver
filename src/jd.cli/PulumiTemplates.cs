@@ -23,9 +23,13 @@ internal sealed class PulumiTemplates : ITemplates
     }
 
     /// <summary>The templates of <paramref name="part"/>; the documents that are no template file are not read.</summary>
-    public static PulumiTemplates Of(SourceCatalog part) => new(
-        TemplateLibrary.Parse(part.Documents.Where(d => d.Name.EndsWith(TemplateSuffix, StringComparison.Ordinal)).Select(d => (d.Name[..^TemplateSuffix.Length], d.Text()))),
-        part.Documents.Count == 0 ? [new LoadError(part.Name, string.Empty, "template directory not found.")] : []);
+    public static PulumiTemplates Of(SourceCatalog part)
+    {
+        var sources = part.Documents
+            .Where(document => document.Name.EndsWith(TemplateSuffix, StringComparison.Ordinal))
+            .Select(document => (Name: document.Name[..^TemplateSuffix.Length], Yaml: document.Text()));
+        return new(TemplateLibrary.Parse(sources), part.Documents.Count == 0 ? [new LoadError(part.Name, string.Empty, "template directory not found.")] : []);
+    }
 
     /// <inheritdoc/>
     public string GetContent(string templateName) => _library.GetContent(templateName);
