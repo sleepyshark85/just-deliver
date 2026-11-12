@@ -454,27 +454,25 @@ public sealed class CliTests : IDisposable
     }
 
     [Theory]
-    [InlineData("frobnicate")]
-    [InlineData("validate")]
-    [InlineData("validate", "a.yaml", "--json")]
-    [InlineData("preview", "a.yaml")]
-    [InlineData("preview", "a.yaml", "--env")]
-    [InlineData("preview", "a.yaml", "--bogus")]
-    [InlineData("preview", "a.yaml", "--env", "e.yaml", "--catalog", "c", "--preview")]
-    [InlineData("deploy", "a.yaml")]
-    [InlineData("deploy", "a.yaml", "--env", "e.yaml", "--catalog", "c", "--json")]
-    public async Task Usage_errors_exit_2_and_print_the_usage(params string[] args)
+    [InlineData("no command given.")]
+    [InlineData("unknown command 'frobnicate'.", "frobnicate")]
+    [InlineData("expected exactly one workload file.", "validate")]
+    [InlineData("expected exactly one workload file.", "validate", "a.yaml", "b.yaml")]
+    [InlineData("unknown option '--bogus'.", "validate", "a.yaml", "--bogus")]
+    [InlineData("validate takes only a workload file.", "validate", "a.yaml", "--json")]
+    [InlineData("validate takes only a workload file.", "validate", "a.yaml", "--env", "e.yaml")]
+    [InlineData("expected exactly one workload file.", "preview")]
+    [InlineData("preview needs --env and --catalog.", "preview", "a.yaml")]
+    [InlineData("--env needs a value.", "preview", "a.yaml", "--env")]
+    [InlineData("unknown option '--bogus'.", "preview", "a.yaml", "--bogus")]
+    [InlineData("preview has no --preview option.", "preview", "a.yaml", "--env", "e.yaml", "--catalog", "c", "--preview")]
+    [InlineData("deploy needs --env and --catalog.", "deploy", "a.yaml", "--env", "e.yaml")]
+    [InlineData("deploy has no --json option.", "deploy", "a.yaml", "--env", "e.yaml", "--catalog", "c", "--json")]
+    public async Task Usage_errors_exit_2_and_print_the_problem_and_the_usage(string problem, params string[] args)
     {
-        var (code, _, stderr) = await RunAsync(args);
+        var result = await RunAsync(args);
 
-        Assert.Equal(2, code);
-        Assert.Contains("Usage:", stderr);
-    }
-
-    [Fact]
-    public async Task No_arguments_is_a_usage_error()
-    {
-        Assert.Equal(2, (await RunAsync()).Code);
+        Assert.Equal((2, string.Empty, $"jd: {problem}{System.Environment.NewLine}{Cli.Usage}"), result);
     }
 
     [Theory]
@@ -535,8 +533,11 @@ public sealed class CliTests : IDisposable
         Assert.Contains($"jd: cannot read '{_temp}': ", stderr);
     }
 
-    [Fact]
-    public async Task A_file_the_process_cannot_read_exits_2_with_the_path()
+    // Each of validate and the resolving commands, whose inputs are checked before they are read.
+    [Theory]
+    [InlineData("validate")]
+    [InlineData("preview", "--env", "{env}", "--catalog", "{catalog}")]
+    public async Task A_file_the_process_cannot_read_exits_2_with_the_path(string command, params string[] options)
     {
         var path = WriteTemp("locked.yaml", "kind: Workload\n");
         if (OperatingSystem.IsWindows())
@@ -550,7 +551,7 @@ public sealed class CliTests : IDisposable
             return; // Running as a user that ignores file permissions (root).
         }
 
-        var (code, _, stderr) = await RunAsync("validate", path);
+        var (code, _, stderr) = await RunAsync([command, path, .. options.Select(o => o.Replace("{env}", Environment, StringComparison.Ordinal).Replace("{catalog}", Catalog, StringComparison.Ordinal))]);
 
         Assert.Equal(2, code);
         Assert.StartsWith("jd: ", stderr);
@@ -570,14 +571,16 @@ public sealed class CliTests : IDisposable
         }
     }
 
-    [Fact]
-    public async Task Help_prints_the_usage_and_exits_0()
+    // Either help option, anywhere on the line, wins over the command.
+    [Theory]
+    [InlineData("--help")]
+    [InlineData("-h")]
+    [InlineData("validate", "a.yaml", "--help")]
+    [InlineData("frobnicate", "-h")]
+    public async Task Help_prints_the_usage_and_exits_0(params string[] args)
     {
-        var (code, stdout, _) = await RunAsync("--help");
+        var result = await RunAsync(args);
 
-        Assert.Equal(0, code);
-        Assert.Contains("jd validate", stdout);
-        Assert.Contains("jd preview", stdout);
-        Assert.Contains("jd deploy", stdout);
+        Assert.Equal((0, Cli.Usage, string.Empty), result);
     }
 }

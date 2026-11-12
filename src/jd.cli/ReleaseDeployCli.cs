@@ -280,7 +280,7 @@ internal static class ReleaseDeployCli
     private static (Options? Options, string Problem) Parse(string[] args, bool qualify)
     {
         var command = Command(qualify);
-        var (scanned, problem) = Arguments.Scan(args, 0);
+        var (scanned, problem) = Arguments.Scan(args);
         if (scanned is null)
         {
             return (null, problem);
@@ -288,12 +288,12 @@ internal static class ReleaseDeployCli
 
         if (scanned.Json)
         {
-            return (null, $"{command} has no --json option.");
+            return (null, $"{command} has no {Arguments.JsonOption} option.");
         }
 
         if (qualify && scanned.DryRun)
         {
-            return (null, "release qualify has no --preview option; it never deploys.");
+            return (null, $"{command} has no {Arguments.PreviewOption} option; it never deploys.");
         }
 
         if (scanned.Positional.Count != 1)
@@ -302,7 +302,7 @@ internal static class ReleaseDeployCli
         }
 
         return scanned.Environment is null || scanned.Catalog is null
-            ? (null, $"{command} needs --env and --catalog.")
+            ? (null, $"{command} needs {Arguments.EnvOption} and {Arguments.CatalogOption}.")
             : (new Options(scanned.Positional[0], scanned.Environment, scanned.Catalog, scanned.DryRun, qualify), string.Empty);
     }
 }

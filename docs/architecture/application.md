@@ -57,9 +57,10 @@ inner layers do no I/O (rule R3, section 4).
 CLI). The use cases go in `src/jd.orchestrator/usecases/` (namespace `jd.orchestrator.usecases`); the walk engine stays where it is. No new
 project: a new one would have the same dependencies and mark no boundary (standards §2; section 9 compares).
 
-**One shape for every use case:** `static Task<TResult> RunAsync(TInput input, Connections connections, Action<Progress>? progress, CancellationToken)`
-(`Validate` and `Preview` take no connections). Inputs are plain values and documents, so an API request maps to one input one to one. A use
-case checks its plain values first, before it loads any document: the label and the meaning are refused before the environment is parsed.
+**One shape for every use case:** `static Task<TResult> RunAsync(TInput input, Connections connections, Action<Progress>? progress, CancellationToken)`.
+A use case takes `Action<Progress>?` only when it reports progress, as it takes `Connections` only when it reaches outside jd (`Validate` and
+`Preview` take no connections); `Validate` is `RunAsync(input, ct)`. Inputs are plain values and documents, so an API request maps to one
+input one to one. A use case checks its plain values first, before it loads any document: the label and the meaning are refused before the environment is parsed.
 
 | Input piece | Type | Where |
 |---|---|---|

@@ -8,19 +8,19 @@ namespace jd.cli;
 /// </summary>
 internal sealed record Arguments(IReadOnlyList<string> Positional, string? Environment, string? Catalog, bool Json, bool DryRun)
 {
-    private const string EnvOption = "--env";
-    private const string CatalogOption = "--catalog";
-    private const string JsonOption = "--json";
-    private const string PreviewOption = "--preview";
+    internal const string EnvOption = "--env";
+    internal const string CatalogOption = "--catalog";
+    internal const string JsonOption = "--json";
+    internal const string PreviewOption = "--preview";
 
     // What one pass over the arguments found: the positional arguments, the value of each value option given (the last, when one is given twice) and
     // the flags given.
     private sealed record Scanned(IReadOnlyList<string> Positional, IReadOnlyDictionary<string, string> Values, IReadOnlySet<string> Flags);
 
-    /// <summary>Reads <paramref name="args"/> from index <paramref name="first"/>; the problem is set when an option is unknown or lacks its value.</summary>
-    public static (Arguments? Arguments, string Problem) Scan(string[] args, int first)
+    /// <summary>Reads a command's <paramref name="args"/>, those after its name; the problem is set when an option is unknown or lacks its value.</summary>
+    public static (Arguments? Arguments, string Problem) Scan(string[] args)
     {
-        var (scanned, problem) = ScanOptions(args[first..], [EnvOption, CatalogOption], [JsonOption, PreviewOption]);
+        var (scanned, problem) = ScanOptions(args, [EnvOption, CatalogOption], [JsonOption, PreviewOption]);
         if (scanned is null)
         {
             return (null, problem);

@@ -10,7 +10,7 @@ public static class Validate
     /// <param name="cancellationToken">Cancels the check.</param>
     public static async Task<ValidateResult> RunAsync(ValidateInput input, CancellationToken cancellationToken)
     {
-        var loaded = await WorkloadFile.ParseAsync(input.Workload.Name, input.Workload.Text(), cancellationToken);
+        var loaded = await WorkloadFile.LoadAsync(input.Workload, cancellationToken);
         return new ValidateResult(loaded.Errors, loaded.Errors.Count == 0 ? Outcome.Succeeded : Outcome.Failed);
     }
 }
