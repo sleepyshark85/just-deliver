@@ -203,6 +203,22 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     }
 
     [Fact]
+    public async Task A_catalog_error_is_printed_with_its_path_under_the_catalog_and_creates_nothing()
+    {
+        var set = await CreateSetAsync();
+        var catalog = Path.Combine(_temp, "catalog");
+        CliTests.CopyDirectory(Catalog, catalog);
+        await File.WriteAllTextAsync(Path.Combine(catalog, "components", "oops.yaml"), "kind: Component\nname: oops\n");
+        var backend = new RecordingBackend();
+
+        var (code, _, stderr) = await RunAsync(backend, ["release", "deploy", set, "--env", Environment, "--catalog", catalog]);
+
+        Assert.Equal(1, code);
+        Assert.Empty(backend.Calls);
+        Assert.Contains($"{Path.Combine(catalog, "components/oops.yaml")}: description: schema violation: PropertyRequired: #/description", stderr.Split('\n'));
+    }
+
+    [Fact]
     public async Task Preview_walks_the_same_order_and_creates_nothing()
     {
         var set = await CreateSetAsync();
