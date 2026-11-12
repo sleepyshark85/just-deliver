@@ -8,7 +8,7 @@ namespace jd.cli;
 /// The probe over HTTPS: <c>GET https://&lt;fqdn&gt;&lt;path&gt;</c> passes when the status is the expected one. An attempt is cut off after
 /// the probe's interval, so a revision that hangs costs one interval, not the client's default timeout.
 /// </summary>
-public sealed class HttpRevisionProbe(HttpClient client) : IRevisionProbe
+internal sealed class HttpRevisionProbe(HttpClient client) : IRevisionProbe
 {
     /// <summary>The client the CLI uses. It does not follow redirects: the probe judges the revision's own answer, not another host's.</summary>
     public static HttpClient CreateClient() => new(new SocketsHttpHandler { AllowAutoRedirect = false });

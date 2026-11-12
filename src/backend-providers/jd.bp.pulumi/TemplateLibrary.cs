@@ -52,7 +52,7 @@ public sealed class TemplateLibrary : ITemplateStore
         return Parse(sources);
     }
 
-    public static TemplateLibrary Parse(IEnumerable<(string Name, string Yaml)> sources)
+    internal static TemplateLibrary Parse(IEnumerable<(string Name, string Yaml)> sources)
     {
         var library = new TemplateLibrary();
         foreach (var (name, yaml) in sources)
@@ -73,7 +73,7 @@ public sealed class TemplateLibrary : ITemplateStore
                     library._loadErrors.Add(new LoadError(file, string.Empty, "a template must be a YAML mapping."));
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) // any parse failure is this template's load error; broad until S25e1 reworks template loading (narrowing would make this adapter name YamlDotNet)
             {
                 library._loadErrors.Add(new LoadError(file, string.Empty, YamlSchemaValidator.DescribeYamlError(ex, yaml)));
             }
@@ -88,6 +88,7 @@ public sealed class TemplateLibrary : ITemplateStore
             .Where(p => !requiredOnly || (p.Value as JObject)?.ContainsKey("default") != true)
             .Select(p => p.Name).ToHashSet() ?? [];
 
+    /// <inheritdoc/>
     public string GetContent(string templateName) =>
         _content.TryGetValue(templateName, out var content) ? content : throw new KeyNotFoundException($"template '{templateName}' is not in the template library.");
 

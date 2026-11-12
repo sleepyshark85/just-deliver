@@ -12,7 +12,11 @@ public enum Layer
 
     /// <summary>The workload's own definition: its <c>container.variables</c>.</summary>
     Workload,
+
+    /// <summary>A policy's <c>set</c>: the value replaces whatever the earlier layers gave.</summary>
     PolicySet,
+
+    /// <summary>A policy's <c>default</c>: the value applies only where no earlier layer gave one.</summary>
     PolicyDefault,
 }
 
@@ -23,8 +27,11 @@ public sealed record Provenance(string Source, string Rule, Layer Layer)
     public string Describe() => Source == Rule || Layer == Layer.Workload ? $"{Layer}: {Rule}" : $"{Layer}: {Rule} ({Source})";
 }
 
-// Provenance: one entry per leaf config field, keyed by dotted path (consistencyPolicy.level); an array is one leaf.
-// Probe and Release are the runtime's, on the runtime node only.
+/// <summary>
+/// A node after the policies: its final config and where each field came from. <see cref="Provenance"/>: one entry per leaf config field,
+/// keyed by dotted path (consistencyPolicy.level); an array is one leaf. <see cref="Probe"/> and <see cref="Release"/> are the runtime's, on
+/// the runtime node only.
+/// </summary>
 public sealed record ResolvedNode(
     string Name,
     string Template,
@@ -34,7 +41,7 @@ public sealed record ResolvedNode(
     Probe? Probe = null,
     RuntimeRelease? Release = null);
 
-// The expanded requirement without its pre-policy nodes: Nodes are the ones to use.
+/// <summary>The expanded requirement without its pre-policy nodes: <see cref="Nodes"/> are the ones to use.</summary>
 public sealed record ResolvedRequirement(
     string Id,
     string? Type,

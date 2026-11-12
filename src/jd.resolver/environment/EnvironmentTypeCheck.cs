@@ -8,6 +8,7 @@ namespace jd.resolver.environment;
 /// </summary>
 public static class EnvironmentTypeCheck
 {
+    /// <summary>Every way <paramref name="type"/> and <paramref name="approval"/> break the catalog's rules, located in <paramref name="file"/>; empty when they keep them.</summary>
     public static IReadOnlyList<LoadError> Check(Catalog catalog, string type, ApprovalPolicy? approval, string file)
     {
         if (!catalog.EnvironmentTypes.TryGetValue(type, out var declared))

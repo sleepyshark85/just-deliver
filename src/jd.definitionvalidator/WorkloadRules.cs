@@ -15,6 +15,7 @@ public static partial class WorkloadRules
 
     private const string ResourcePrefix = "resource.";
 
+    /// <summary>Every rule <paramref name="workload"/> breaks, one message each; empty when it keeps them all.</summary>
     public static IReadOnlyList<string> Check(JToken workload)
     {
         var errors = new List<string>();

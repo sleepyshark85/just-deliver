@@ -11,6 +11,7 @@ namespace jd.resolver.graph;
 /// </summary>
 public static class ConfigJson
 {
+    /// <summary>The canonical JSON of <paramref name="value"/>.</summary>
     public static JToken ToToken(ConfigValue value) => value switch
     {
         ConfigObject { AsEntries: true } entries => new JArray(entries.Properties.OrderBy(p => p.Key, StringComparer.Ordinal)

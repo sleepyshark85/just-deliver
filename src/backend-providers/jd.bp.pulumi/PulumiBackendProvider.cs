@@ -7,7 +7,7 @@ using Pulumi.Automation.Events;
 
 namespace jd.bp.pulumi;
 
-internal class PulumiBackendProvider : IBackEndProvider
+internal sealed class PulumiBackendProvider : IBackEndProvider
 {
     private readonly IOptionsMonitor<PulumiBackendOptions> _optionsMonitor;
     private readonly ILogger<PulumiBackendProvider> _logger;

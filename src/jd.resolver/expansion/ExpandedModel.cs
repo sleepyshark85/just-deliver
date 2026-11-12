@@ -22,8 +22,10 @@ public sealed record ConfigText(EvalResult Result, IReadOnlySet<string> PartRead
 /// </summary>
 public sealed record ConfigObject(IReadOnlyDictionary<string, ConfigValue> Properties, bool AsEntries = false) : ConfigValue;
 
+/// <summary>A list from the catalog, each item evaluated; item order is kept, and the graph treats its strings as one provenance leaf.</summary>
 public sealed record ConfigArray(IReadOnlyList<ConfigValue> Items) : ConfigValue;
 
+/// <summary>A catalog node with its config evaluated, named as its part names it; policies apply to it next.</summary>
 public sealed record ExpandedNode(string Name, string Template, NodeKind Kind, IReadOnlyDictionary<string, ConfigValue> Config);
 
 /// <summary>
@@ -44,7 +46,10 @@ public sealed record ExpandedRuntime(string Source, IReadOnlyList<ExpandedNode> 
 /// <summary>Who the requirements belong to: a workload (it has a runtime), or an environment definition (substrate, no runtime).</summary>
 public enum OwnerKind
 {
+    /// <summary>A workload definition: requirements and a runtime.</summary>
     Workload,
+
+    /// <summary>An environment definition: the parts of its environment, no runtime.</summary>
     Environment,
 }
 

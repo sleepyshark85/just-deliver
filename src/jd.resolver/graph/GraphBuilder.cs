@@ -23,6 +23,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
 
     private sealed record Draft(string Id, string Scope, string Stack, ResolvedNode Node, List<string> DependsOn);
 
+    /// <summary>The graph of <paramref name="policy"/>'s nodes; its errors are the policy result's and those the build finds (references, cycles, grant targets).</summary>
     public ResolvedGraph Build(PolicyResult policy)
     {
         var errors = new List<LoadError>(policy.Errors);

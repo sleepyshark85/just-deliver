@@ -11,5 +11,6 @@ public sealed record ProbeResult(bool Passed, string Detail);
 /// </summary>
 public interface IRevisionProbe
 {
+    /// <summary>Asks <paramref name="fqdn"/> once at <see cref="Probe.Path"/>; a wrong status, a transport failure or no answer in time is a failed result.</summary>
     Task<ProbeResult> ProbeAsync(string fqdn, Probe probe, CancellationToken cancellationToken);
 }

@@ -131,7 +131,7 @@ internal sealed class ReleaseFlow(
             // The last deploy's outputs name the live revision (the traffic), so the persisted report carries them.
             return NodeReport.For(node, NodeOutcome.Deployed, string.Empty, shifted, steps);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException) // reporting boundary: any failed step stops the release with a failed report
         {
             return Stop(ex.Message);
         }

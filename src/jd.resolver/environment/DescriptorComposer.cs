@@ -22,9 +22,11 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
 {
     private static readonly ISerializer Serializer = new SerializerBuilder().WithQuotingNecessaryStrings().Build();
 
-    // outputs: by node id; null before the deploy, when an export waiting on an output is only checked. Secret and null outputs are
-    // dropped here, so an export that needs one, directly or through another part's export, stays pending and is reported: a secret
-    // never reaches the descriptor (security boundary 12).
+    /// <summary>The environment's descriptor, with every part export the deployed outputs settle, or the errors that keep it from being written.</summary>
+    /// <param name="outputs">The deployed outputs by node id; null before the deploy, when an export waiting on an output is only checked. Secret
+    /// and null outputs are dropped here, so an export that needs one, directly or through another part's export, stays pending and is reported:
+    /// a secret never reaches the descriptor (security boundary 12).</param>
+    /// <param name="cancellationToken">Cancels the composition.</param>
     public async Task<ComposedDescriptor> ComposeAsync(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>>? outputs, CancellationToken cancellationToken = default)
     {
         var errors = new List<LoadError>();

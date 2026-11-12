@@ -36,6 +36,10 @@ dotnet_diagnostic.IDE0051.severity = warning   # unused private member
 dotnet_diagnostic.IDE0052.severity = warning   # unread private member
 dotnet_diagnostic.IDE0060.severity = warning   # unused parameter
 
+# Classes are sealed unless designed for inheritance (docs/engineering/csharp.md section 3); also in assemblies with InternalsVisibleTo
+dotnet_diagnostic.CA1852.severity = warning
+dotnet_code_quality.CA1852.ignore_internalsvisibleto = true
+
 # Naming: PascalCase types/members and constants/static readonly fields, _camelCase private instance fields, I-prefixed interfaces
 dotnet_naming_rule.constants.symbols = constant_symbols
 dotnet_naming_rule.constants.style = pascal

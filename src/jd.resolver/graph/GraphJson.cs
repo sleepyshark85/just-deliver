@@ -11,6 +11,7 @@ namespace jd.resolver.graph;
 /// </summary>
 public static class GraphJson
 {
+    /// <summary>The graph's stable JSON text.</summary>
     public static string Serialize(ResolvedGraph graph) => new JObject
     {
         ["catalogVersion"] = graph.CatalogVersion,

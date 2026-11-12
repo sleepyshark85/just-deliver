@@ -10,7 +10,7 @@ namespace jd.definitionvalidator;
 /// <summary>
 /// Validates a YAML document against a JSON schema, then runs optional rules for what the schema cannot express.
 /// </summary>
-public class YamlSchemaValidator
+public sealed class YamlSchemaValidator
 {
     private const string MultipleDocumentsMessage = "contains several YAML documents; use one YAML document per file";
 
@@ -80,9 +80,9 @@ public class YamlSchemaValidator
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is YamlException or InvalidOperationException)
         {
-            // Best-effort enrichment (the scanner throws plain exceptions too); the caller falls back to the parser's message.
+            // Best-effort enrichment (the scanner also throws InvalidOperationException, on an unclosed flow collection); the caller falls back to the parser's message.
         }
 
         return null;
@@ -120,7 +120,8 @@ public class YamlSchemaValidator
         _rules = rules;
     }
 
-    public async Task<ValidationResult> ValidateAsync(string schemaFilePath, string yamlFilePath)
+    /// <summary>Validates the YAML file against the schema file; a missing file is a failed result, not an exception.</summary>
+    internal async Task<ValidationResult> ValidateAsync(string schemaFilePath, string yamlFilePath)
     {
         try
         {
@@ -138,15 +139,16 @@ public class YamlSchemaValidator
         }
     }
 
-    public async Task<ValidationResult> ValidateContentAsync(string schemaContent, string yamlContent)
+    internal async Task<ValidationResult> ValidateContentAsync(string schemaContent, string yamlContent)
     {
         JToken instance;
         try
         {
             instance = ParseYaml(yamlContent);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is YamlException or JsonException)
         {
+            // JsonException: an alias that contains itself cannot become a JSON tree.
             return new ValidationResult(false, new[] { $"Validation error: {DescribeYamlError(ex, yamlContent)}" });
         }
 
@@ -156,33 +158,34 @@ public class YamlSchemaValidator
     /// <summary>Validates a document already parsed with <see cref="ParseYaml"/>, so callers that need the tree too parse once.</summary>
     public async Task<ValidationResult> ValidateTokenAsync(string schemaContent, JToken instance)
     {
+        JsonSchema schema;
         try
         {
-            var schema = await JsonSchema.FromJsonAsync(schemaContent);
-            var validationErrors = schema.Validate(instance);
-
-            if (validationErrors.Count == 0)
-            {
-                var ruleErrors = _rules?.Invoke(instance) ?? Array.Empty<string>();
-                return ruleErrors.Count == 0
-                    ? new ValidationResult(true, Array.Empty<string>())
-                    : new ValidationResult(false, ruleErrors.ToArray());
-            }
-
-            var errors = validationErrors
-                .Select(e => e.ToString() ?? "Validation error")
-                .ToArray();
-            return new ValidationResult(false, errors);
+            schema = await JsonSchema.FromJsonAsync(schemaContent);
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
             return new ValidationResult(false, new[] { $"Validation error: {ex.Message}" });
         }
+
+        var validationErrors = schema.Validate(instance);
+        if (validationErrors.Count == 0)
+        {
+            var ruleErrors = _rules?.Invoke(instance) ?? Array.Empty<string>();
+            return ruleErrors.Count == 0
+                ? new ValidationResult(true, Array.Empty<string>())
+                : new ValidationResult(false, ruleErrors.ToArray());
+        }
+
+        var errors = validationErrors
+            .Select(e => e.ToString() ?? "Validation error")
+            .ToArray();
+        return new ValidationResult(false, errors);
     }
 }
 
 /// <summary>The outcome of a validation: whether the document is valid and, if not, each error.</summary>
-public class ValidationResult
+public sealed class ValidationResult
 {
     /// <summary>True when the document passed the schema and the rules.</summary>
     public bool IsValid { get; }

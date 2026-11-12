@@ -22,6 +22,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
     // Policy name order makes conflict reports and "same value" provenance independent of file order.
     private readonly IReadOnlyList<Policy> _policies = catalog.Policies.OrderBy(p => p.Name, StringComparer.Ordinal).ToList();
 
+    /// <summary>The expansion with every matching policy applied and each config field's provenance; its errors are the expansion's and the policies' (conflicts, required components).</summary>
     public PolicyResult Apply(ExpansionResult expansion)
     {
         // A requirement the expansion dropped is not in the result, so its errors must carry through.

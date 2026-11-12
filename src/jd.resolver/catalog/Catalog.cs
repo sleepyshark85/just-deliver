@@ -2,11 +2,12 @@ using Newtonsoft.Json.Linq;
 
 namespace jd.resolver.catalog;
 
-// The in-memory form of a catalog directory. Formats: schemas/catalog/*.schema.json.
-// Expressions (${...}) and config values are kept exactly as written; the expression
-// evaluator interprets them later. Source is the catalog-relative file a record came from.
-// GrantTargets: grant template to the input naming the resource the grant is on (catalog/grants.yaml).
-
+/// <summary>
+/// The in-memory form of a catalog directory: everything the resolver resolves workloads and environments against. Formats:
+/// schemas/catalog/*.schema.json. Expressions (${...}) and config values are kept exactly as written; the expression evaluator interprets
+/// them later. Source is the catalog-relative file a record came from. <see cref="GrantTargets"/>: grant template to the input naming the
+/// resource the grant is on (catalog/grants.yaml).
+/// </summary>
 public sealed record Catalog(
     string Version,
     IReadOnlyDictionary<string, EnvironmentType> EnvironmentTypes,
@@ -44,7 +45,10 @@ public sealed record SharedResource(string Source, string Name, SharedScope Scop
 /// <summary>Where a shared resource is deployed, and so the layer an environment type is: once for the shared layer, or once per environment.</summary>
 public enum SharedScope
 {
+    /// <summary>Deployed once, in the shared layer every environment reads.</summary>
     Shared,
+
+    /// <summary>Deployed once in each environment.</summary>
     Environment,
 }
 
@@ -70,27 +74,32 @@ internal static class ImplementationKey
         : null;
 }
 
+/// <summary>What a node's template does, which decides how the graph treats it.</summary>
 public enum NodeKind
 {
+    /// <summary>Deploys a resource of its own; the default kind. The graph checks no grant target on it, and the runtime node is one.</summary>
     Create,
+
+    /// <summary>Assigns a role on a resource; the catalog's grant targets name the input that holds the resource.</summary>
     Grant,
 }
 
+/// <summary>A catalog node as written: the template it deploys, its kind and its config, expressions not yet evaluated.</summary>
 public sealed record Node(string Template, NodeKind Kind, IReadOnlyDictionary<string, JToken> Config);
 
 /// <summary>A policy's criteria key (type, class, environmentType, kind, runtime, template) to the value it must equal.</summary>
 public sealed record MatchCriteria(IReadOnlyDictionary<string, string> Criteria)
 {
     // What a node-scope policy matches: the requirement's type (a component name) and class, and the environment's type.
-    public const string TypeKey = "type";
-    public const string ClassKey = "class";
-    public const string EnvironmentTypeKey = "environmentType";
+    internal const string TypeKey = "type";
+    internal const string ClassKey = "class";
+    internal const string EnvironmentTypeKey = "environmentType";
 
     // A node's template, and the runtime scope (kind: runtime) of a workload-scope policy.
-    public const string TemplateKey = "template";
-    public const string KindKey = "kind";
-    public const string RuntimeKey = "runtime";
-    public const string RuntimeKind = "runtime";
+    internal const string TemplateKey = "template";
+    internal const string KindKey = "kind";
+    internal const string RuntimeKey = "runtime";
+    internal const string RuntimeKind = "runtime";
 }
 
 /// <summary>
@@ -127,4 +136,5 @@ public sealed record Policy(
     IReadOnlyDictionary<string, JToken> Default,
     string? Require);
 
+/// <summary>How a resource kind's names are built: <see cref="Pattern"/>'s placeholders filled, characters outside the <see cref="Allowed"/> pattern dropped, and cut to <see cref="MaxLength"/> keeping a hash.</summary>
 public sealed record NamingRule(string Pattern, int MaxLength, string Allowed);
