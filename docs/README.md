@@ -40,6 +40,7 @@ provisions and deploys it, IT Ops moves from executor to gatekeeper.
 7. Engineering
    - [conventions.md](engineering/conventions.md) — how we work, the code quality bar, tests, design rules
    - [standards.md](engineering/standards.md) — binding rules for all code
+   - [csharp.md](engineering/csharp.md) — C# conventions: naming, types, methods, errors, async, tests, idioms
    - [review-checklist.md](engineering/review-checklist.md) — what every review checks
    - Sandbox subscription setup: [tools/sandbox](../tools/sandbox/README.md)
 

@@ -52,7 +52,7 @@ Any blocking finding means CHANGES REQUIRED. Findings cite a file and line and t
 - Consistent with the ADRs and architecture docs. Divergence must be escalated, not merged.
 
 ## 5. Code quality — blocking for clear violations
-- Naming, nullability, async/cancellation, error handling per standards §4.
+- Naming, types, methods, errors, async/cancellation, idioms per standards §4 and [csharp.md](csharp.md).
 - Matches surrounding style; comments explain why.
 
 ## 6. Tests — blocking
