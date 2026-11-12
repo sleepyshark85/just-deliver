@@ -1,7 +1,7 @@
 # just-deliver conventions
 
 How we work on just-deliver and the bar every change is held to. [standards.md](standards.md) holds the concrete rules
-(nothing hard-coded, the layer table, the free tier, git); this page says how work flows, what *good* means, and how the
+(nothing hard-coded, the layer table, the free tier, git), [csharp.md](csharp.md) the C# rules; this page says how work flows, what *good* means, and how the
 review applies it. The reviewer walks [review-checklist.md](review-checklist.md) with this page's
 [code quality bar](#code-quality-bar). Where this page and standards.md seem to disagree, standards.md wins for what a
 rule says and this page for how it is applied; raise the conflict so one of them is fixed.
@@ -15,7 +15,7 @@ rule says and this page for how it is applied; raise the conflict so one of them
 
   | Agent | Model | Used for |
   |---|---|---|
-  | `developer` | Sonnet | a slice; review findings that need design work |
+  | `developer` | Opus | a slice; review findings that need design work |
   | `fixer` | Sonnet | review findings that are all small, with an obvious fix, a few files each |
   | `reviewer` | Opus | judging a branch against its brief; never edits |
 

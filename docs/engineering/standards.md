@@ -51,7 +51,7 @@ Dependencies point inward. Inner layers know nothing about Pulumi, Azure or the 
 
 ## 4. Code
 
-- C# conventions per `.editorconfig`; `dotnet format` clean; warnings are errors.
+- C# conventions per [csharp.md](csharp.md) and `.editorconfig`; `dotnet format` clean; warnings are errors.
 - Nullable reference types honoured; no `!` suppression without a comment explaining why it is safe.
 - Async all the way for I/O; pass `CancellationToken` through public async APIs.
 - Errors: fail fast with messages a team member can act on; no swallowed exceptions.
