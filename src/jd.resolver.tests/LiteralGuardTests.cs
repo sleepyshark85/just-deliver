@@ -38,7 +38,7 @@ public sealed partial class LiteralGuardTests
     }
 
     // The production sources: every .cs file under src/ outside the test projects and the build output, relative to src/.
-    private static IEnumerable<string> ProductionSources(string sourceRoot) =>
+    internal static IEnumerable<string> ProductionSources(string sourceRoot) =>
         Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(sourceRoot, path).Replace(Path.DirectorySeparatorChar, '/'))
             .Where(file => !file.Split('/').Any(part => part is "bin" or "obj" || part.EndsWith(".tests", StringComparison.Ordinal)));
@@ -91,6 +91,7 @@ public sealed partial class LiteralGuardTests
             var d = "nodes[template]";
             var e = "nodes[0].template";
             var f = "nodes.templates";
+            var g = "see .template";
             """;
 
         var literals = Findings("planted.cs", source, new HashSet<string> { "template" }).Select(f => f.Literal);
@@ -101,7 +102,7 @@ public sealed partial class LiteralGuardTests
     [Fact]
     public void A_breach_is_each_unlisted_finding_and_each_stale_entry_in_full()
     {
-        var findings = new[] { new Finding("b.cs", 12, "kind"), new Finding("a.cs", 9, "name"), new Finding("a.cs", 10, "name"), new Finding("b.cs", 3, "type") };
+        var findings = new[] { new Finding("b.cs", 12, "kind"), new Finding("a.cs", 10, "name"), new Finding("a.cs", 9, "name"), new Finding("b.cs", 3, "type") };
 
         Assert.Equal(["a.cs:9: \"name\"", "a.cs:10: \"name\"", "b.cs:3: \"type\"", "stale allowlist entry: a.cs: \"kind\""], Breaches(findings, [("b.cs", "kind"), ("a.cs", "kind")]));
         Assert.Empty(Breaches(findings, [("a.cs", "name"), ("b.cs", "kind"), ("b.cs", "type")]));
