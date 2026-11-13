@@ -55,6 +55,10 @@ public sealed class ReleaseStartTests
         part => Build("templates", () => new RecordingConnections(_backend).With().Templates(part)));
 
     // The bytes of a set of the one workload of WorkloadUseCaseTests, as release create writes them; the workload's requirement can be renamed.
+    private static readonly FixedClock SetClock = new(new DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero));
+
+    // The set is stamped by a fixed clock, so two sets built in one test are byte-identical even across a second boundary: a deploy keeps
+    // set.yaml and a later qualify of the same label must offer the same bytes.
     internal static async Task<byte[]> SetAsync(string requirement = "thing")
     {
         var created = await CreateRelease.RunAsync(
@@ -63,7 +67,7 @@ public sealed class ReleaseStartTests
                 (reference, _) => Task.FromResult((reference, (ReadOnlyMemory<byte>?)Document(reference, Workload.Replace("- type: thing", $"- type: {requirement}", StringComparison.Ordinal)).Content))),
             new Connections(
                 () => throw new NotSupportedException(), () => throw new NotSupportedException(), () => throw new NotSupportedException(),
-                () => throw new NotSupportedException(), () => throw new NotSupportedException(), () => TimeProvider.System, _ => throw new NotSupportedException()),
+                () => throw new NotSupportedException(), () => throw new NotSupportedException(), () => SetClock, _ => throw new NotSupportedException()),
             CancellationToken.None);
         Assert.NotNull(created.Document);
         return created.Document.Value.ToArray();

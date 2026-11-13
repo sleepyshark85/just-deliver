@@ -28,11 +28,6 @@ public sealed class ReleaseUseCaseTests
     private static byte[] Definition(string name, string image) =>
         Encoding.UTF8.GetBytes($"apiVersion: just-deliver/v1\nkind: Workload\nmetadata:\n  name: {name}\n  team: team-a\ncontainer:\n  image: {image}\n");
 
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
-
     // Only the clock is reachable: creating a release reaches nothing else outside jd.
     private static Connections At(DateTimeOffset now) => new(
         () => throw new NotSupportedException(),

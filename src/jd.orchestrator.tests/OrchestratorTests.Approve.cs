@@ -20,11 +20,6 @@ public partial class OrchestratorTests
 
     private static readonly string ApprovalKey = MemoryRecordStore.Key("stage", "1.0.0", "20261017T090000000Z-approve.json");
 
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
-
     // The principal of the credential, or the failure of a credential that cannot name one.
     private sealed class FakeIdentity(string objectId, Exception? failure = null) : IDeployerIdentity
     {
