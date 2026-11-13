@@ -30,13 +30,19 @@ internal sealed class SchemaIndex
     private const string ScopeKeyword = "scope";
     private const string MetaSchemaName = $"schemas/{Annotation}.schema.json";
 
+    // The roles every part's nodes are read by: the security boundaries on nodes read them (binding completeness).
+    private static readonly string[] NodeRoles = [Roles.PartNodes, Roles.NodeKind, Roles.NodeTemplate, Roles.NodeConfig];
+
     private readonly Dictionary<string, JsonSchema> _byKind;
+    private readonly Dictionary<string, string> _schemaNames;
     private readonly Dictionary<string, KindNames> _names;
     private readonly Dictionary<string, List<RoleField>> _roles;
 
-    private SchemaIndex(Dictionary<string, JsonSchema> byKind)
+    private SchemaIndex(Dictionary<string, (string Name, JsonSchema Schema)> declared)
     {
+        var byKind = declared.ToDictionary(entry => entry.Key, entry => entry.Value.Schema);
         _byKind = byKind;
+        _schemaNames = declared.ToDictionary(entry => entry.Key, entry => entry.Value.Name);
         var fields = byKind.ToDictionary(entry => entry.Key, entry => Fields(entry.Value));
         var selects = fields.ToDictionary(entry => entry.Key, entry => Selects(entry.Value));
         _names = byKind.ToDictionary(entry => entry.Key, entry => Annotated(entry.Value, fields[entry.Key], selects[entry.Key]));
@@ -60,6 +66,30 @@ internal sealed class SchemaIndex
 
     /// <summary>The layers, in deploy order: the <c>enum</c> of the subschema that holds the <see cref="Roles.Layer"/> role.</summary>
     public IReadOnlyList<string> Layers { get; }
+
+    /// <summary>
+    /// Binding completeness (docs/architecture/documents.md section 4): a security boundary reads only what a schema binds, so every kind with a
+    /// part binds the node roles, a schema binds <see cref="Roles.Layer"/>, and each kind of <paramref name="required"/>, which must be one the
+    /// schemas declare, binds the roles given for it. A schema that does not is a mistake in jd: throws <see cref="InvalidOperationException"/>
+    /// naming every schema and role it misses.
+    /// </summary>
+    public void CheckBindings(IReadOnlyDictionary<string, IReadOnlyList<string>> required)
+    {
+        var withParts = _roles.Keys.Where(kind => BindsRole(kind, Roles.Part) || BindsRole(kind, Roles.RuntimePart));
+        var unbound = withParts.SelectMany(kind => NodeRoles.Select(role => (Kind: kind, Role: role)))
+            .Concat(required.SelectMany(entry => entry.Value.Select(role => (Kind: entry.Key, Role: role))))
+            .Where(binding => !BindsRole(binding.Kind, binding.Role))
+            .Select(binding => $"Schema '{_schemaNames[binding.Kind]}' does not bind role '{binding.Role}'.")
+            .Order(StringComparer.Ordinal)
+            .Concat(Layers.Count == 0 ? [$"No schema binds role '{Roles.Layer}'."] : Array.Empty<string>())
+            .ToList();
+        if (unbound.Count > 0)
+        {
+            throw new InvalidOperationException(string.Join(" ", unbound));
+        }
+    }
+
+    private bool BindsRole(string kind, string role) => _roles[kind].Any(field => field.Role == role);
 
     /// <summary>Builds the index from <paramref name="schemas"/>, each a name (for errors) and its text; the meta-schema is among them.</summary>
     internal static async Task<SchemaIndex> BuildAsync(IReadOnlyList<(string Name, string Text)> schemas)
@@ -92,7 +122,7 @@ internal sealed class SchemaIndex
             }
         }
 
-        return new SchemaIndex(byKind.ToDictionary(entry => entry.Key, entry => entry.Value.Schema));
+        return new SchemaIndex(byKind);
     }
 
     // Each schema's text by its $id, the key a reference resolves by.

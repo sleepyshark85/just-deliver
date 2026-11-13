@@ -70,6 +70,7 @@ public class GrantTargetTests
     [InlineData("'${role.reader}'")]
     [InlineData("''")]                                 // set but empty
     [InlineData("")]                                   // not set
+    [InlineData("null")]                               // set to YAML null
     public async Task A_grant_target_that_is_not_one_reference_to_its_own_part_or_the_runtime_is_a_load_error(string target)
     {
         var error = SingleError(await Parse(Component(Grant(target))));

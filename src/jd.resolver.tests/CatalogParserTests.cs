@@ -384,7 +384,7 @@ public class CatalogParserTests
     }
 
     [Theory]
-    [InlineData(ComponentHead + ClassesWith + "runtime: { template: t/rt, config: {} }\n", TestCatalog.PartPath + ".nodes.runtime", "'runtime' is the runtime node, declared only by a Runtime.")]
+    [InlineData(ComponentHead + ClassesWith + "runtime: { template: t/rt, config: {} }\n", TestCatalog.PartPath + ".nodes.runtime", "'runtime' is the runtime node, declared only by a runtime.")]
     [InlineData(RuntimeHead + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 6 }\n" + Release + RuntimeNode, "implementations.default.probe.intervalSeconds", "must not exceed timeoutSeconds.")]
     [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      runtime:\n        template: t/rt\n        config: { suffix: x }\n", "implementations.default.nodes.runtime.config.suffix", "the release flow sets this input; the runtime node must not.")]
     [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      runtime:\n        template: t/rt\n        config: { traffic: [] }\n", "implementations.default.nodes.runtime.config.traffic", "the release flow sets this input; the runtime node must not.")]
@@ -395,6 +395,16 @@ public class CatalogParserTests
         var error = Assert.Single(result.Errors);
         Assert.Equal(("f.yaml", location), (error.File, error.Location));
         Assert.Contains(message, error.Message);
+    }
+
+    [Fact]
+    public async Task A_probe_whose_interval_equals_its_timeout_loads()
+    {
+        var probe = "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 5 }\n";
+
+        var result = await Parse(("catalog.yaml", CatalogFile), ("f.yaml", RuntimeHead + probe + Release + RuntimeNode));
+
+        Assert.Empty(result.Errors);
     }
 
     [Theory]

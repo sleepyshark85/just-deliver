@@ -321,6 +321,7 @@ place so the next builds on a green tree. Lines are production lines (C#, schema
 | **S24b1b** Catalog-level roles | split from S24b1: `is` for `catalog.version`, `naming.*`, `roles`, `grant.target-input`, `environment-type.layer`, `environment-type.gated`; the binder fills `NamingRule`, roles, grant targets and `EnvironmentType`; the `S24b1b` guard group emptied | — | ~+60 / −60 | no | goldens identical; quality |
 | **S24b2** Reads and scopes | read, node-name, scope-node and `uses`-direction checks out of `CatalogParser` into concept rules over `Part`, locations from the index | — | ~+120 / −130 | no | boundaries 3, 5, 7, 8 by their tests; component named `resource` or `role` refused; quality |
 | **S24b3** Grants, contracts, completeness | grant, contract, same-classes and runtime checks as concept rules; binding completeness; `Catalog` → the concept collections; `CatalogParser` deleted | — | ~+120 / −130 | no | boundaries 1, 2, 9, 10; a test per missing binding; quality |
+| **S24b4** Catalog collections | split from S24b3: `Catalog` → the concept collections; `CatalogParser` deleted (loading = loader + name rules + binder + concept rules); `CheckReservedNames`, the policy and naming checks, `ToRollout`/`ToPolicy` placed; binding completeness identifies the runtime and catalog kinds without kind constants; export locations per export (`JToken.Path`) if the expansion model carries them | — | ~+150 / −200 | no | goldens identical; quality |
 | **S24c1** Environment | `Environment` record bound from a definition or a descriptor; `EnvironmentDefinition`, `EnvironmentDescriptor` field knowledge deleted; descriptor reserved-values check proven or deleted | — | ~+100 / −130 | no | boundaries 4, 13; `${env.values…}`, `${env.offers}` refused; quality |
 | **S24c2** Workload | workload and requirement roles; `ExpressionContext` takes `Environment` and the workload owner; `WorkloadRules` on bound values, returning `LoadError`s; `ReleaseBuilder` reads the same bindings | — | ~+120 / −130 | no | boundaries 6, 11; an unbound workload field carrying `${cosmos-account.id}` is inert; quality |
 | **S24d** Policies | `match:` criteria, `policy.*` roles; `MatchCriteria` deleted; scope-shape rules (concept 10) take field names from the binding | — | ~+80 / −110 | no | every policy negative test kept, messages unchanged; quality |
@@ -385,7 +386,7 @@ Class: **(a)** moves to data; **(b)** an external protocol, an adapter constant 
 
 | File:line | What it knows | Class | Goes |
 |---|---|---|---|
-| `catalog/Catalog.cs:10-19` | `Catalog`: one field per catalog file kind | a | S24b3: concept collections |
+| `catalog/Catalog.cs:10-19` | `Catalog`: one field per catalog file kind | a | S24b4: concept collections |
 | `catalog/Catalog.cs:25,32-58` | `EnvironmentType`, `Component`, `Implementation`, `SharedResource`, `Part`, `Runtime`, `RuntimeImplementation` | a | S24b1: `PartOwner`, `Part` |
 | `catalog/Catalog.cs:45-49` | `SharedScope` `Shared`, `Environment` (layer names) | a | S24b1: the `layer` enum |
 | `catalog/Catalog.cs:61-71` | `ImplementationKey.Default = "default"`, the lookup | a / c | S24b1: `fallback` (key a, lookup c) |
@@ -441,7 +442,7 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 | `catalog/CatalogParser.cs:515,531,539,588` | `….classes`, `….exports.<e>`, `<property>.<key>` | a | S24a3, S24b3 |
 | `policies/PolicyApplier.cs:51,130` | `requires`, `default`/`set` | a | S24c2, S24d |
 | `expansion/Expander.cs:72,76,86,92,107,114,159,208,261` | `offers[<i>]`, `offers`, `requires[<i>]`, `implementations.<k>.…` | a | S24b1, S24c1 |
-| `graph/GraphBuilder.cs:37,161` | `exports.<n>`, `template` | a | S24b3 |
+| `graph/GraphBuilder.cs:37,161` | `exports.<n>`, `template` | a | S24b4 |
 | `backend-providers/jd.bp.pulumi/TemplateLibrary.cs:104` | `template` (jd's node field, in an adapter) | a | S24b3: the node's catalog location from the binding |
 | `release/ReleaseBuilder.cs:53,101,123,138-150` | `workloads[<i>].definition`, `container.image`, `workloads`, `….dependsOn[<j>]` | a | S24c2 |
 | `release/ReleaseSetFile.cs:78,92` | `createdAt`, `workloads[<i>].definition` | a | S24f |
@@ -489,7 +490,7 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 | S24a2 | the `node` definition in three catalog schemas, `approval` in two (duplication in data); `YamlSchemaValidator.ValidateAsync(path)`/`ValidateContentAsync`, used only by tests (unneeded code); its `catch (Exception)` around schema loading turns a broken embedded schema into a validation error (errors) |
 | S24b1 | `Reader` with 8 positional fields (`CatalogParser.cs:48-52`) (long parameter list) |
 | S24b2 | nested ternary chains in `CheckReads` (`:353-363`) and `CheckNodeNames` (`:323-327`) (structure) |
-| S24b3 | `CatalogParser` 659 lines, parsing and fifteen checks in one type (one responsibility) |
+| S24b4 | `CatalogParser` 659 lines, parsing and fifteen checks in one type (one responsibility) |
 | S24c1 | the descriptor reserved-values check (`EnvironmentParser.cs:37-40`): prove with a test or delete (untested branch) |
 | S24c2 | `ExpressionContext` with 11 positional arguments (`Expander.cs:172-174`, `DescriptorComposer.cs:34-36`, `PolicyApplier.cs:29-31`); `ExpansionResult` with 11 (`ExpandedModel.cs:62-73`) (long parameter lists); `Expander.ExpandEnvironment` 78 lines (`:49-127`); `WorkloadRules` returns `"location: message"` strings re-split in `WorkloadFile.cs:48-52` (stringly typed errors) |
 | S24d | `MatchCriteria.RuntimeKey` and `RuntimeKind` both `"runtime"` with different meanings (names) |
