@@ -8,8 +8,6 @@ namespace jd.resolver.tests;
 // which binds nothing) beside the other shipped schemas as they are.
 public sealed class BindingCompletenessTests
 {
-    private const string Owners = "schemas/catalog/component.schema.json, schemas/catalog/runtime.schema.json, schemas/catalog/sharedresource.schema.json";
-
     private static string SchemasDirectory => Path.Combine(AppContext.BaseDirectory, "schemas");
 
     // Every shipped schema under the name jd.resolver.csproj embeds it with, the one named planted with `binding` replaced by `replacement`.
@@ -48,7 +46,10 @@ public sealed class BindingCompletenessTests
     {
         var message = await UnboundAsync("schemas/catalog/part.schema.json", role);
 
-        Assert.Equal(string.Join(" ", Owners.Split(", ").Select(schema => $"Schema '{schema}' does not bind role '{role}'.")), message);
+        Assert.Equal(
+            $"Schema 'schemas/catalog/component.schema.json' does not bind role '{role}'. Schema 'schemas/catalog/runtime.schema.json' does not bind role '{role}'. "
+            + $"Schema 'schemas/catalog/sharedresource.schema.json' does not bind role '{role}'.",
+            message);
     }
 
     [Fact]

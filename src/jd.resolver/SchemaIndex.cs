@@ -75,10 +75,10 @@ internal sealed class SchemaIndex
     /// </summary>
     public void CheckBindings(IReadOnlyDictionary<string, IReadOnlyList<string>> required)
     {
-        var withParts = _roles.Keys.Where(kind => Binds(kind, Roles.Part) || Binds(kind, Roles.RuntimePart));
+        var withParts = _roles.Keys.Where(kind => BindsRole(kind, Roles.Part) || BindsRole(kind, Roles.RuntimePart));
         var unbound = withParts.SelectMany(kind => NodeRoles.Select(role => (Kind: kind, Role: role)))
             .Concat(required.SelectMany(entry => entry.Value.Select(role => (Kind: entry.Key, Role: role))))
-            .Where(binding => !Binds(binding.Kind, binding.Role))
+            .Where(binding => !BindsRole(binding.Kind, binding.Role))
             .Select(binding => $"Schema '{_schemaNames[binding.Kind]}' does not bind role '{binding.Role}'.")
             .Order(StringComparer.Ordinal)
             .Concat(Layers.Count == 0 ? [$"No schema binds role '{Roles.Layer}'."] : Array.Empty<string>())
@@ -89,7 +89,7 @@ internal sealed class SchemaIndex
         }
     }
 
-    private bool Binds(string kind, string role) => _roles[kind].Any(field => field.Role == role);
+    private bool BindsRole(string kind, string role) => _roles[kind].Any(field => field.Role == role);
 
     /// <summary>Builds the index from <paramref name="schemas"/>, each a name (for errors) and its text; the meta-schema is among them.</summary>
     internal static async Task<SchemaIndex> BuildAsync(IReadOnlyList<(string Name, string Text)> schemas)

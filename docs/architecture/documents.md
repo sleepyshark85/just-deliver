@@ -386,7 +386,7 @@ Class: **(a)** moves to data; **(b)** an external protocol, an adapter constant 
 
 | File:line | What it knows | Class | Goes |
 |---|---|---|---|
-| `catalog/Catalog.cs:10-19` | `Catalog`: one field per catalog file kind | a | S24b3: concept collections |
+| `catalog/Catalog.cs:10-19` | `Catalog`: one field per catalog file kind | a | S24b4: concept collections |
 | `catalog/Catalog.cs:25,32-58` | `EnvironmentType`, `Component`, `Implementation`, `SharedResource`, `Part`, `Runtime`, `RuntimeImplementation` | a | S24b1: `PartOwner`, `Part` |
 | `catalog/Catalog.cs:45-49` | `SharedScope` `Shared`, `Environment` (layer names) | a | S24b1: the `layer` enum |
 | `catalog/Catalog.cs:61-71` | `ImplementationKey.Default = "default"`, the lookup | a / c | S24b1: `fallback` (key a, lookup c) |
@@ -442,7 +442,7 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 | `catalog/CatalogParser.cs:515,531,539,588` | `….classes`, `….exports.<e>`, `<property>.<key>` | a | S24a3, S24b3 |
 | `policies/PolicyApplier.cs:51,130` | `requires`, `default`/`set` | a | S24c2, S24d |
 | `expansion/Expander.cs:72,76,86,92,107,114,159,208,261` | `offers[<i>]`, `offers`, `requires[<i>]`, `implementations.<k>.…` | a | S24b1, S24c1 |
-| `graph/GraphBuilder.cs:37,161` | `exports.<n>`, `template` | a | S24b3 |
+| `graph/GraphBuilder.cs:37,161` | `exports.<n>`, `template` | a | S24b4 |
 | `backend-providers/jd.bp.pulumi/TemplateLibrary.cs:104` | `template` (jd's node field, in an adapter) | a | S24b3: the node's catalog location from the binding |
 | `release/ReleaseBuilder.cs:53,101,123,138-150` | `workloads[<i>].definition`, `container.image`, `workloads`, `….dependsOn[<j>]` | a | S24c2 |
 | `release/ReleaseSetFile.cs:78,92` | `createdAt`, `workloads[<i>].definition` | a | S24f |
@@ -490,7 +490,7 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 | S24a2 | the `node` definition in three catalog schemas, `approval` in two (duplication in data); `YamlSchemaValidator.ValidateAsync(path)`/`ValidateContentAsync`, used only by tests (unneeded code); its `catch (Exception)` around schema loading turns a broken embedded schema into a validation error (errors) |
 | S24b1 | `Reader` with 8 positional fields (`CatalogParser.cs:48-52`) (long parameter list) |
 | S24b2 | nested ternary chains in `CheckReads` (`:353-363`) and `CheckNodeNames` (`:323-327`) (structure) |
-| S24b3 | `CatalogParser` 659 lines, parsing and fifteen checks in one type (one responsibility) |
+| S24b4 | `CatalogParser` 659 lines, parsing and fifteen checks in one type (one responsibility) |
 | S24c1 | the descriptor reserved-values check (`EnvironmentParser.cs:37-40`): prove with a test or delete (untested branch) |
 | S24c2 | `ExpressionContext` with 11 positional arguments (`Expander.cs:172-174`, `DescriptorComposer.cs:34-36`, `PolicyApplier.cs:29-31`); `ExpansionResult` with 11 (`ExpandedModel.cs:62-73`) (long parameter lists); `Expander.ExpandEnvironment` 78 lines (`:49-127`); `WorkloadRules` returns `"location: message"` strings re-split in `WorkloadFile.cs:48-52` (stringly typed errors) |
 | S24d | `MatchCriteria.RuntimeKey` and `RuntimeKind` both `"runtime"` with different meanings (names) |

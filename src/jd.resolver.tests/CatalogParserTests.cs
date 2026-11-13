@@ -397,6 +397,16 @@ public class CatalogParserTests
         Assert.Contains(message, error.Message);
     }
 
+    [Fact]
+    public async Task A_probe_whose_interval_equals_its_timeout_loads()
+    {
+        var probe = "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 5 }\n";
+
+        var result = await Parse(("catalog.yaml", CatalogFile), ("f.yaml", RuntimeHead + probe + Release + RuntimeNode));
+
+        Assert.Empty(result.Errors);
+    }
+
     [Theory]
     [InlineData("{ path: health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.path")]
     [InlineData("{ path: /health, expectedStatus: 99, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.expectedStatus")]

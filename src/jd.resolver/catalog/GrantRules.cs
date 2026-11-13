@@ -17,33 +17,34 @@ internal static class GrantRules
     /// <paramref name="targetsKind"/>), or a target input of another form.
     /// </summary>
     public static IReadOnlyList<LoadError> Check(
-        IEnumerable<PartOwner> owners, IReadOnlyList<string> layers, IReadOnlyDictionary<string, string> targets, string targetsKind) =>
-        [.. from owner in owners
+        IEnumerable<PartOwner> owners, IReadOnlyList<string> layers, IReadOnlyDictionary<string, string> targets, string targetsKind)
+    {
+        LoadError? Problem(PartOwner owner, Part part, Node node)
+        {
+            if (layers.Contains(part.Scope))
+            {
+                return new LoadError(owner.Source, node.Location,
+                    $"a grant node belongs only in a class part or the runtime, not in a part of the {part.Scope} scope: a grant targets only the workload's own resources.");
+            }
+
+            if (!targets.TryGetValue(node.Template, out var input))
+            {
+                return new LoadError(owner.Source, node.TemplateLocation,
+                    $"'{node.Template}' is not a grant template in the catalog's {targetsKind} targets ({string.Join(", ", targets.Keys.Order(StringComparer.Ordinal))}); list it with the input that names its target.");
+            }
+
+            // A string token's cast cannot give null.
+            var isOwnNode = node.Config.GetValueOrDefault(input) is JValue { Type: JTokenType.String } target
+                && ExpressionEvaluator.SingleReference((string)target!) is { } reference
+                && (part.Nodes.ContainsKey(reference.Node) || reference.Node == ExpressionEvaluator.RuntimeNode);
+            return isOwnNode ? null : new LoadError(owner.Source, $"{node.ConfigLocation}.{input}", ExpressionEvaluator.GrantTargetRule(input));
+        }
+
+        return [.. from owner in owners
             from part in owner.Parts
             from node in part.Nodes.Values.Where(node => node.Kind == NodeKind.Grant)
-            let error = Problem(owner, part, node, layers, targets, targetsKind)
+            let error = Problem(owner, part, node)
             where error is not null
             select error];
-
-    private static LoadError? Problem(
-        PartOwner owner, Part part, Node node, IReadOnlyList<string> layers, IReadOnlyDictionary<string, string> targets, string targetsKind)
-    {
-        if (layers.Contains(part.Scope))
-        {
-            return new LoadError(owner.Source, node.Location,
-                $"a grant node belongs only in a class part or the runtime, not in a part of the {part.Scope} scope: a grant targets only the workload's own resources.");
-        }
-
-        if (!targets.TryGetValue(node.Template, out var input))
-        {
-            return new LoadError(owner.Source, node.TemplateLocation,
-                $"'{node.Template}' is not a grant template in the catalog's {targetsKind} targets ({string.Join(", ", targets.Keys.Order(StringComparer.Ordinal))}); list it with the input that names its target.");
-        }
-
-        // A string token's cast cannot give null.
-        var isOwnNode = node.Config.GetValueOrDefault(input) is JValue { Type: JTokenType.String } target
-            && ExpressionEvaluator.SingleReference((string)target!) is { } reference
-            && (part.Nodes.ContainsKey(reference.Node) || reference.Node == ExpressionEvaluator.RuntimeNode);
-        return isOwnNode ? null : new LoadError(owner.Source, $"{node.ConfigLocation}.{input}", ExpressionEvaluator.GrantTargetRule(input));
     }
 }

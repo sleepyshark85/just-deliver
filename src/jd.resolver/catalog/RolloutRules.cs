@@ -20,6 +20,6 @@ internal static class RolloutRules
                 ? [new LoadError(source, rollout.IntervalLocation, "must not exceed timeoutSeconds.")]
                 : [];
             return interval.Concat(new[] { rollout.Release.SuffixInput, rollout.Release.TrafficInput }.Where(node.Config.ContainsKey)
-                .Select(input => new LoadError(source, $"{node.ConfigLocation}.{input}", "the release flow sets this input; the runtime node must not.")));
+                .Select(input => new LoadError(source, node.Config[input].Path, "the release flow sets this input; the runtime node must not.")));
         })];
 }

@@ -11,7 +11,7 @@ namespace jd.resolver.catalog;
 /// </summary>
 public static class CatalogParser
 {
-    // Bridge: the kinds the catalog dispatches on, until the binder reads catalog documents by their schemas (S24b1, S24b3).
+    // Bridge: the kinds the catalog dispatches on, until the binder reads catalog documents by their schemas (S24b1, S24b4).
     private const string CatalogKind = "Catalog";
     private const string ComponentKind = "Component";
     private const string RuntimeKind = "Runtime";
