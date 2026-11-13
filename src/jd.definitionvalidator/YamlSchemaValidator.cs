@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
@@ -92,7 +93,8 @@ public sealed class YamlSchemaValidator
 
     /// <summary>
     /// Parses YAML into the JSON tree the schemas are validated against (same scalar typing as validation).
-    /// Throws <see cref="YamlException"/> on invalid YAML, a repeated key or more than one document.
+    /// Throws <see cref="YamlException"/> on invalid YAML, a repeated key or more than one document, and <see cref="JsonException"/> on an
+    /// alias that contains itself.
     /// </summary>
     public static JToken ParseYaml(string yamlContent)
     {
@@ -109,6 +111,27 @@ public sealed class YamlSchemaValidator
         // No depth limit: the YAML is read already, so the JSON reader's default limit (64) would only turn deep but valid YAML into a JsonReaderException.
         using var reader = new JsonTextReader(new StringReader(JsonConvert.SerializeObject(yamlObject))) { DateParseHandling = DateParseHandling.None, MaxDepth = null };
         return JToken.Load(reader);
+    }
+
+    /// <summary>
+    /// Parses as <see cref="ParseYaml"/> does; YAML that does not parse is false, with <paramref name="error"/> describing it as
+    /// <see cref="DescribeYamlError"/> does.
+    /// </summary>
+    public static bool TryParseYaml(string yamlContent, [NotNullWhen(true)] out JToken? tree, [NotNullWhen(false)] out string? error)
+    {
+        try
+        {
+            tree = ParseYaml(yamlContent);
+            error = null;
+            return true;
+        }
+        catch (Exception ex) when (ex is YamlException or JsonException)
+        {
+            // JsonException: an alias that contains itself cannot become a JSON tree.
+            tree = null;
+            error = DescribeYamlError(ex, yamlContent);
+            return false;
+        }
     }
 
     /// <param name="rules">
@@ -141,18 +164,9 @@ public sealed class YamlSchemaValidator
 
     internal async Task<ValidationResult> ValidateContentAsync(string schemaContent, string yamlContent)
     {
-        JToken instance;
-        try
-        {
-            instance = ParseYaml(yamlContent);
-        }
-        catch (Exception ex) when (ex is YamlException or JsonException)
-        {
-            // JsonException: an alias that contains itself cannot become a JSON tree.
-            return new ValidationResult(false, new[] { $"Validation error: {DescribeYamlError(ex, yamlContent)}" });
-        }
-
-        return await ValidateTokenAsync(schemaContent, instance);
+        return TryParseYaml(yamlContent, out var instance, out var error)
+            ? await ValidateTokenAsync(schemaContent, instance)
+            : new ValidationResult(false, [$"Validation error: {error}"]);
     }
 
     /// <summary>Validates a document already parsed with <see cref="ParseYaml"/>, so callers that need the tree too parse once.</summary>

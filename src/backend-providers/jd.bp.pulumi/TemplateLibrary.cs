@@ -8,18 +8,20 @@ using Newtonsoft.Json.Linq;
 
 namespace jd.bp.pulumi;
 
-/// <summary>What a template's <c>Pulumi.yaml</c> declares: its inputs (<c>configuration:</c>), those without a default, and its <c>outputs:</c>.</summary>
-internal sealed record TemplateInterface(IReadOnlySet<string> Inputs, IReadOnlySet<string> RequiredInputs, IReadOnlySet<string> Outputs);
-
 /// <summary>
-/// The Pulumi YAML template library (<c>catalog/templates/&lt;provider&gt;/&lt;name&gt;/Pulumi.yaml</c>) and the offline check that a
-/// <see cref="ResolvedGraph"/> fits it: the templates exist, nodes set only declared inputs and all required ones,
-/// and node-output references name declared outputs. Lives here because templates are Pulumi-specific.
+/// The Pulumi YAML template library: each template's <c>Pulumi.yaml</c> by its name, and the offline check that a <see cref="ResolvedGraph"/>
+/// fits it: the templates exist, nodes set only declared inputs and all required ones, and node-output references name declared outputs.
+/// Lives here because templates are Pulumi-specific.
 /// </summary>
 public sealed class TemplateLibrary : ITemplateStore
 {
-    /// <summary>The file a template is: the library reads it in each template's directory.</summary>
+    /// <summary>The file a template is, in the directory that names it.</summary>
     public const string TemplateFile = "Pulumi.yaml";
+
+    // The Pulumi YAML keys a template declares its interface with.
+    private const string InputsKey = "configuration";
+    private const string OutputsKey = "outputs";
+    private const string DefaultKey = "default";
 
     private readonly Dictionary<string, TemplateInterface> _templates = [];
     private readonly Dictionary<string, string> _content = [];
@@ -29,66 +31,48 @@ public sealed class TemplateLibrary : ITemplateStore
     {
     }
 
+    /// <summary>What a template declares: its inputs, those without a default, and its outputs.</summary>
+    private sealed record TemplateInterface(IReadOnlySet<string> Inputs, IReadOnlySet<string> RequiredInputs, IReadOnlySet<string> Outputs);
+
     /// <summary>Templates that could not be read, each with its file; <see cref="Check"/> repeats them.</summary>
     public IReadOnlyList<LoadError> Errors => _loadErrors;
 
-    /// <summary>Reads every <c>Pulumi.yaml</c> under <paramref name="root"/>; the template name is its directory relative to the root.</summary>
-    public static async Task<TemplateLibrary> LoadAsync(string root, CancellationToken cancellationToken = default)
-    {
-        if (!Directory.Exists(root))
-        {
-            var missing = new TemplateLibrary();
-            missing._loadErrors.Add(new LoadError(root, string.Empty, "template directory not found."));
-            return missing;
-        }
-
-        var sources = new List<(string Name, string Yaml)>();
-        foreach (var file in Directory.EnumerateFiles(root, TemplateFile, SearchOption.AllDirectories))
-        {
-            // Safe: EnumerateFiles yields paths with a file name, so the directory is never null.
-            var name = Path.GetRelativePath(root, Path.GetDirectoryName(file)!).Replace(Path.DirectorySeparatorChar, '/');
-            sources.Add((name, await File.ReadAllTextAsync(file, cancellationToken)));
-        }
-
-        return Parse(sources);
-    }
-
-    /// <summary>The library of <paramref name="sources"/>: each template's name (its directory, <c>azure/log-analytics</c>) and the text of its <see cref="TemplateFile"/>.</summary>
+    /// <summary>The library of <paramref name="sources"/>: each template's name (<c>azure/log-analytics</c>) and the text of its <see cref="TemplateFile"/>.</summary>
     public static TemplateLibrary Parse(IEnumerable<(string Name, string Yaml)> sources)
     {
         var library = new TemplateLibrary();
         foreach (var (name, yaml) in sources)
         {
             var file = $"{name}/{TemplateFile}";
-            try
+            if (!YamlSchemaValidator.TryParseYaml(yaml, out var tree, out var error))
             {
-                if (YamlSchemaValidator.ParseYaml(yaml) is JObject root)
-                {
-                    library._content[name] = yaml;
-                    library._templates[name] = new TemplateInterface(
-                        Names(root, "configuration"),
-                        Names(root, "configuration", requiredOnly: true),
-                        Names(root, "outputs"));
-                }
-                else
-                {
-                    library._loadErrors.Add(new LoadError(file, string.Empty, "a template must be a YAML mapping."));
-                }
+                library._loadErrors.Add(new LoadError(file, string.Empty, error));
             }
-            catch (Exception ex) // any parse failure is this template's load error; broad until S25e1 reworks template loading (narrowing would make this adapter name YamlDotNet)
+            else if (tree is JObject template)
             {
-                library._loadErrors.Add(new LoadError(file, string.Empty, YamlSchemaValidator.DescribeYamlError(ex, yaml)));
+                library._content[name] = yaml;
+                library._templates[name] = Interface(template);
+            }
+            else
+            {
+                library._loadErrors.Add(new LoadError(file, string.Empty, "a template must be a YAML mapping."));
             }
         }
 
         return library;
     }
 
-    // An input without a "default" must be supplied by the node.
-    private static HashSet<string> Names(JObject root, string block, bool requiredOnly = false) =>
-        (root[block] as JObject)?.Properties()
-            .Where(p => !requiredOnly || (p.Value as JObject)?.ContainsKey("default") != true)
-            .Select(p => p.Name).ToHashSet() ?? [];
+    // An input without a default must be supplied by the node.
+    private static TemplateInterface Interface(JObject template)
+    {
+        var inputs = Declared(template, InputsKey).ToList();
+        return new TemplateInterface(
+            inputs.Select(input => input.Name).ToHashSet(),
+            inputs.Where(input => (input.Value as JObject)?.ContainsKey(DefaultKey) != true).Select(input => input.Name).ToHashSet(),
+            Declared(template, OutputsKey).Select(output => output.Name).ToHashSet());
+    }
+
+    private static IEnumerable<JProperty> Declared(JObject template, string key) => (template[key] as JObject)?.Properties() ?? [];
 
     /// <inheritdoc/>
     public string GetContent(string templateName) =>
@@ -108,38 +92,7 @@ public sealed class TemplateLibrary : ITemplateStore
                 continue;
             }
 
-            foreach (var key in node.Config.Keys.Where(k => !template.Inputs.Contains(k)).Order(StringComparer.Ordinal))
-            {
-                errors.Add(new LoadError(node.Id, key, $"template '{node.Template}' does not declare the input '{key}'."));
-            }
-
-            // The release flow sets the runtime node's suffix and traffic inputs, so the node need not, and must not (a policy can still
-            // set one after the catalog loaded); the template must have them and the outputs the flow reads.
-            string[] engineInputs = [];
-            if (node.Release is { } release)
-            {
-                engineInputs = [release.SuffixInput, release.TrafficInput];
-                foreach (var input in engineInputs.Where(i => !template.Inputs.Contains(i)).Order(StringComparer.Ordinal))
-                {
-                    errors.Add(new LoadError(node.Id, input, $"template '{node.Template}' does not declare the input '{input}' that the runtime's release block names."));
-                }
-
-                foreach (var input in engineInputs.Where(node.Config.ContainsKey).Order(StringComparer.Ordinal))
-                {
-                    errors.Add(new LoadError(node.Id, input, $"the release flow sets the input '{input}'; the runtime node must not."));
-                }
-
-                foreach (var output in new[] { release.TrafficOutput, release.SuffixOutput, release.RevisionOutput, release.FqdnOutput, release.ResourceIdOutput }.Where(o => !template.Outputs.Contains(o)))
-                {
-                    errors.Add(new LoadError(node.Id, output, $"template '{node.Template}' declares no output '{output}' that the runtime's release block names."));
-                }
-            }
-
-            foreach (var key in template.RequiredInputs.Except(engineInputs).Where(k => !node.Config.ContainsKey(k)).Order(StringComparer.Ordinal))
-            {
-                errors.Add(new LoadError(node.Id, key, $"template '{node.Template}' requires the input '{key}' and the node does not set it."));
-            }
-
+            errors.AddRange(FitErrors(node, template));
             foreach (var (key, value) in node.Config.OrderBy(c => c.Key, StringComparer.Ordinal))
             {
                 CheckOutputs(node.Scope, References(value), node.Id, key);
@@ -168,6 +121,40 @@ public sealed class TemplateLibrary : ITemplateStore
                     errors.Add(new LoadError(file, location, $"references {reference.Target}.{reference.Output}, but template '{target.Template}' (node '{target.Id}') declares no output '{reference.Output}'."));
                 }
             }
+        }
+    }
+
+    // Where the node does not fit its template's inputs or, for the runtime, the outputs the release flow reads. The release flow sets the
+    // runtime node's suffix and traffic inputs, so the node need not, and must not (a policy can still set one after the catalog loaded).
+    private static IEnumerable<LoadError> FitErrors(GraphNode node, TemplateInterface template)
+    {
+        var release = node.Release;
+        string[] engineInputs = release is null ? [] : [release.SuffixInput, release.TrafficInput];
+        string[] engineOutputs = release is null ? [] : [release.TrafficOutput, release.SuffixOutput, release.RevisionOutput, release.FqdnOutput, release.ResourceIdOutput];
+
+        foreach (var key in node.Config.Keys.Where(k => !template.Inputs.Contains(k)).Order(StringComparer.Ordinal))
+        {
+            yield return new LoadError(node.Id, key, $"template '{node.Template}' does not declare the input '{key}'.");
+        }
+
+        foreach (var input in engineInputs.Where(i => !template.Inputs.Contains(i)).Order(StringComparer.Ordinal))
+        {
+            yield return new LoadError(node.Id, input, $"template '{node.Template}' does not declare the input '{input}' that the runtime's release block names.");
+        }
+
+        foreach (var input in engineInputs.Where(node.Config.ContainsKey).Order(StringComparer.Ordinal))
+        {
+            yield return new LoadError(node.Id, input, $"the release flow sets the input '{input}'; the runtime node must not.");
+        }
+
+        foreach (var output in engineOutputs.Where(o => !template.Outputs.Contains(o)))
+        {
+            yield return new LoadError(node.Id, output, $"template '{node.Template}' declares no output '{output}' that the runtime's release block names.");
+        }
+
+        foreach (var key in template.RequiredInputs.Except(engineInputs).Where(k => !node.Config.ContainsKey(k)).Order(StringComparer.Ordinal))
+        {
+            yield return new LoadError(node.Id, key, $"template '{node.Template}' requires the input '{key}' and the node does not set it.");
         }
     }
 
