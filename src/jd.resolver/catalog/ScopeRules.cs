@@ -9,7 +9,7 @@ namespace jd.resolver.catalog;
 internal static class ScopeRules
 {
     /// <summary>Every problem with what the shared resources, by name, read: a resource of a later one of <paramref name="layers"/>, or a cycle.</summary>
-    public static IReadOnlyList<LoadError> CheckReads(IReadOnlyList<string> layers, IReadOnlyDictionary<string, PartOwner> shared)
+    public static IReadOnlyList<LoadError> CheckReadOrder(IReadOnlyList<string> layers, IReadOnlyDictionary<string, PartOwner> shared)
     {
         var order = layers.ToList();
         var later =

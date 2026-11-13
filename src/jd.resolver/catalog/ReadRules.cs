@@ -16,15 +16,16 @@ internal static class ReadRules
     // (OwnComponent), read from that implementation's environment part (OwnEnvironment, null when it has none).
     private sealed record Reader(PartOwner Owner, Part Part, bool IsRuntime, string? OwnComponent, Part? OwnEnvironment);
 
-    // The part owners a root can name, by what they are; a shared resource that is declared twice is the first.
+    // The part owners a root can name, by what they are; a name that is a component or runtime is read as that, even when a shared resource has it too.
     private sealed record Owners(IReadOnlyDictionary<string, PartOwner> Shared, IReadOnlySet<string> Components, IReadOnlySet<string> Runtimes);
 
     /// <summary>
-    /// Every node-name problem, then every read problem, of the parts of <paramref name="shared"/>, <paramref name="components"/> and
-    /// <paramref name="runtimes"/>; a part of one of <paramref name="layers"/> before a part deployed with each workload.
+    /// Every node-name problem, then every read problem, of the parts of <paramref name="shared"/> (<paramref name="sharedByName"/> by name, the first
+    /// of a duplicate name), <paramref name="components"/> and <paramref name="runtimes"/>; a part of one of <paramref name="layers"/> before a part deployed with each workload.
     /// </summary>
     public static IReadOnlyList<LoadError> Check(
-        IReadOnlyList<string> layers, IReadOnlyList<PartOwner> shared, IReadOnlyList<PartOwner> components, IReadOnlyList<PartOwner> runtimes)
+        IReadOnlyList<string> layers, IReadOnlyList<PartOwner> shared, IReadOnlyDictionary<string, PartOwner> sharedByName, IReadOnlyList<PartOwner> components,
+        IReadOnlyList<PartOwner> runtimes)
     {
         List<Reader> readers =
         [
@@ -34,8 +35,7 @@ internal static class ReadRules
                 .Select(part => new Reader(component, part, IsRuntime: false, component.Name, EnvironmentOf(component, part, layers)))),
             .. runtimes.SelectMany(runtime => runtime.Parts.Select(part => new Reader(runtime, part, IsRuntime: true, OwnComponent: null, OwnEnvironment: null))),
         ];
-        var owners = new Owners(
-            shared.DistinctBy(owner => owner.Name).ToDictionary(owner => owner.Name), components.Select(owner => owner.Name).ToHashSet(), runtimes.Select(owner => owner.Name).ToHashSet());
+        var owners = new Owners(sharedByName, components.Select(owner => owner.Name).ToHashSet(), runtimes.Select(owner => owner.Name).ToHashSet());
         return [.. readers.SelectMany(NodeNameErrors), .. readers.SelectMany(reader => ReadErrors(reader, owners))];
     }
 

@@ -63,7 +63,8 @@ public static class CatalogParser
             }
         }
 
-        // Names first (one Catalog, names unique, references declared); the checks below read the first of a duplicate name.
+        // Names first (one Catalog, names unique, references declared); a name declared twice is that error, and a read of it is judged by what it is
+        // first among components and runtimes, then among shared resources.
         var index = await SchemaIndex.Shipped;
         errors.AddRange(NameRules.Check(index, new DocumentSet(SetName, Kinds, documents, valid, unreadable)));
         var layers = index.Layers;
@@ -86,8 +87,8 @@ public static class CatalogParser
         var named = documents.Where(d => d.Kind is ComponentKind or RuntimeKind or SharedResourceKind).ToList();
         CheckReservedNames(named, errors);
         var sharedByName = shared.DistinctBy(s => s.Name).ToDictionary(s => s.Name);
-        errors.AddRange(ScopeRules.CheckReads(layers, sharedByName));
-        errors.AddRange(ReadRules.Check(layers, shared, components, runtimes));
+        errors.AddRange(ScopeRules.CheckReadOrder(layers, sharedByName));
+        errors.AddRange(ReadRules.Check(layers, shared, sharedByName, components, runtimes));
         errors.AddRange(ScopeRules.CheckNodeNames(layers, shared.Concat(components), sharedByName));
         CheckGrants([.. shared, .. components, .. runtimes], layers, grantTargets, errors);
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
