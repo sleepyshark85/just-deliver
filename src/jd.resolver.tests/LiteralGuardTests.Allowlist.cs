@@ -6,7 +6,7 @@ namespace jd.resolver.tests;
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
-        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b1b, S24b2, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
+        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b2, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
 
     private static IEnumerable<(string File, string Literal)> Entries(Dictionary<string, string[]> group) =>
         group.SelectMany(entry => entry.Value.Select(literal => (entry.Key, literal)));
@@ -31,8 +31,8 @@ public sealed partial class LiteralGuardTests
         // the role names the engine reads (Appendix B), like the expression roots
         ["jd.resolver/Roles.cs"] =
         [
-            "contract", "env.type", "layer", "node.config", "node.kind", "node.template", "part.exports", "part.nodes", "part.scope", "requirement.class",
-            "runtime.part",
+            "catalog.version", "contract", "env.type", "environment-type.layer", "layer", "naming.allowed", "naming.pattern", "naming.rules", "node.config",
+            "node.kind", "node.template", "part.exports", "part.nodes", "part.scope", "requirement.class", "roles", "runtime.part",
         ],
         ["jd.resolver/expansion/ConfigWalker.cs"] = ["workload.variables"], // the fn::entries source (Appendix A: concept 4)
         // the annotation keyword and the annotations it reads (each named once); JSON Schema's own keyword
@@ -61,14 +61,6 @@ public sealed partial class LiteralGuardTests
     private static readonly Dictionary<string, string[]> ProseFalsePositives = new()
     {
         ["jd.azure/ArmCredentials.cs"] = ["is"], // "X is not set"; 'is' is also an x-jd keyword
-    };
-
-    private static readonly Dictionary<string, string[]> S24b1b = new()
-    {
-        ["jd.resolver/catalog/CatalogParser.cs"] =
-        [
-            ".allowed", "allowed", "approval", "environmentTypes", "layer", "maxLength", "pattern", "roles", "rules", "rules.", "targets", "version",
-        ],
     };
 
     private static readonly Dictionary<string, string[]> S24b2 = new()

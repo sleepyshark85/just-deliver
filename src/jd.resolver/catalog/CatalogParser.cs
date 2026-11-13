@@ -88,11 +88,11 @@ public static class CatalogParser
         var rollouts = boundRuntimes.SelectMany(runtime => runtime.Owner.Parts.Select(part => ToRollout(runtime.Document, runtime.Owner, part))).ToList();
         var shared = Owners(binder, documents, SharedResourceKind, valid);
         var policies = OfKind(documents, PolicyKind).Where(valid.Contains).Select(ToPolicy).ToList();
-        var namingDocuments = OfKind(documents, NamingKind).Where(valid.Contains).ToList();
-        var naming = Merge(namingDocuments, "rules", ToNamingRule);
-        CheckNamingAllowed(namingDocuments, errors);
-        var roles = Merge(OfKind(documents, RolesKind).Where(valid.Contains), "roles", role => (string?)role ?? string.Empty);
-        var grantTargets = Merge(OfKind(documents, GrantsKind).Where(valid.Contains), "targets", Text);
+        var namingFiles = OfKind(documents, NamingKind).Where(valid.Contains).Select(document => (document.Source, Rules: binder.ReadNamingRules(document))).ToList();
+        var naming = Merge(namingFiles.Select(file => file.Rules));
+        CheckNamingAllowed(namingFiles, errors);
+        var roles = Merge(OfKind(documents, RolesKind).Where(valid.Contains).Select(binder.ReadRoleDefinitions));
+        var grantTargets = Merge(OfKind(documents, GrantsKind).Where(valid.Contains).Select(binder.ReadGrantTargets));
 
         // Shared resources, components and runtimes share one namespace: each is a root a part reads (${<name>.<export>}), a
         // requirement's type names a component, an environment will offer components and a runtime.
@@ -109,9 +109,7 @@ public static class CatalogParser
         CheckScopeNodeNames(readers, sharedByName.Keys, errors);
         CheckGrants(readers, grantTargets, errors);
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
-        var environmentTypes = catalogs.FirstOrDefault() is { } first && valid.Contains(first)
-            ? Map(first.Body["environmentTypes"]).ToDictionary(e => e.Key, e => new EnvironmentType((bool?)e.Value["approval"] ?? false, Text(e.Value["layer"])))
-            : null;
+        var environmentTypes = catalogs.FirstOrDefault() is { } first && valid.Contains(first) ? binder.ReadEnvironmentTypes(first) : null;
         CheckSharedLayerKeys(components.Concat(runtimes), environmentTypes, layers, errors);
         CheckPolicyScopes(policies, errors);
         CheckPolicyPaths(policies, errors);
@@ -125,9 +123,8 @@ public static class CatalogParser
             return new LoadResult<Catalog>(null, errors);
         }
 
-        var version = (string?)catalogs[0].Body["version"] ?? string.Empty;
         var catalog = new Catalog(
-            version,
+            binder.ReadVersion(catalogs[0]),
             layers,
             environmentTypes,
             components.ToDictionary(c => c.Name),
@@ -163,7 +160,7 @@ public static class CatalogParser
 
     // A valid document has the name its schema requires.
     private static List<(Document Document, PartOwner Owner)> Bound(Binder binder, List<Document> documents, string kind, HashSet<Document> valid) =>
-        [.. OfKind(documents, kind).Where(valid.Contains).Select(document => (document, binder.Owner(document, NameOf(document) ?? string.Empty)))];
+        [.. OfKind(documents, kind).Where(valid.Contains).Select(document => (document, binder.ReadOwner(document, NameOf(document) ?? string.Empty)))];
 
     private static List<PartOwner> Owners(Binder binder, List<Document> documents, string kind, HashSet<Document> valid) =>
         [.. Bound(binder, documents, kind, valid).Select(bound => bound.Owner)];
@@ -418,7 +415,7 @@ public static class CatalogParser
     // Only an environment of the last layer deploys a component or runtime part, so an implementation keyed by an earlier layer's type would never
     // be used. Whether a key is a declared type at all is the ref rule's.
     private static void CheckSharedLayerKeys(
-        IEnumerable<PartOwner> owners, Dictionary<string, EnvironmentType>? environmentTypes, IReadOnlyList<string> layers, List<LoadError> errors)
+        IEnumerable<PartOwner> owners, IReadOnlyDictionary<string, EnvironmentType>? environmentTypes, IReadOnlyList<string> layers, List<LoadError> errors)
     {
         var keyed = owners.SelectMany(o => o.Parts.SelectMany(p => p.Keys).Where(k => k.Role == Roles.EnvironmentType).Distinct().Select(k => (o.Source, Key: k)));
         foreach (var (source, key) in keyed)
@@ -475,34 +472,33 @@ public static class CatalogParser
     // A truncated name ends in a lowercase hex hash that is appended after filtering, so every rule must allow those digits.
     private const string HashDigits = "0123456789abcdef";
 
-    private static void CheckNamingAllowed(List<Document> documents, List<LoadError> errors)
+    // Each file's rules, a kind ruled in two files included: the define rule reports the second, and its allowed characters are checked as well.
+    private static void CheckNamingAllowed(List<(string Source, IReadOnlyDictionary<string, NamingRule> Rules)> files, List<LoadError> errors)
     {
-        foreach (var document in documents)
+        foreach (var (source, rules) in files)
         {
-            foreach (var (kind, rule) in Map(document.Body["rules"]))
+            foreach (var rule in rules.Values)
             {
-                var location = $"rules.{kind}.allowed";
-                var allowed = Text(rule["allowed"]);
                 try
                 {
-                    var regex = new Regex(allowed);
+                    var regex = new Regex(rule.Allowed);
                     var rejected = HashDigits.Where(c => !regex.IsMatch(c.ToString())).ToList();
                     if (rejected.Count > 0)
                     {
-                        errors.Add(new LoadError(document.Source, location, $"'{allowed}' must allow every hash digit 0-9a-f; it rejects {string.Concat(rejected)}."));
+                        errors.Add(new LoadError(source, rule.AllowedLocation, $"'{rule.Allowed}' must allow every hash digit 0-9a-f; it rejects {string.Concat(rejected)}."));
                     }
                 }
                 catch (ArgumentException e)
                 {
-                    errors.Add(new LoadError(document.Source, location, $"'{allowed}' is not a valid regex character class: {e.Message}"));
+                    errors.Add(new LoadError(source, rule.AllowedLocation, $"'{rule.Allowed}' is not a valid regex character class: {e.Message}"));
                 }
             }
         }
     }
 
     // Naming, Roles and Grants files are merged; a key in two files is the define rule's error, and the first is kept.
-    private static Dictionary<string, T> Merge<T>(IEnumerable<Document> documents, string property, Func<JToken, T> convert) =>
-        documents.SelectMany(document => Map(document.Body[property])).DistinctBy(entry => entry.Key).ToDictionary(entry => entry.Key, entry => convert(entry.Value));
+    private static Dictionary<string, T> Merge<T>(IEnumerable<IReadOnlyDictionary<string, T>> files) =>
+        files.SelectMany(file => file).DistinctBy(entry => entry.Key).ToDictionary(entry => entry.Key, entry => entry.Value);
 
     private static Rollout ToRollout(Document document, PartOwner runtime, Part part)
     {
@@ -527,8 +523,6 @@ public static class CatalogParser
         Map(d.Body["set"]),
         Map(d.Body["default"]),
         (string?)d.Body["require"]);
-
-    private static NamingRule ToNamingRule(JToken rule) => new(Text(rule["pattern"]), (int?)rule["maxLength"] ?? 0, Text(rule["allowed"]));
 
     private static MatchCriteria ToMatch(JToken? match) => new(Map(match).ToDictionary(e => e.Key, e => Text(e.Value)));
 

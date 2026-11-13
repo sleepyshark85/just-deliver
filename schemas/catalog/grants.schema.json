@@ -12,7 +12,7 @@
       "type": "object",
       "x-jd": { "define": "grant template" },
       "minProperties": 1,
-      "additionalProperties": { "type": "string", "minLength": 1 }
+      "additionalProperties": { "type": "string", "minLength": 1, "x-jd": { "is": "grant.target-input" } }
     }
   }
 }
