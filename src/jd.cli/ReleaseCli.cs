@@ -27,9 +27,12 @@ internal static class ReleaseCli
     // args are the arguments after "release".
     public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
     {
-        if (args.FirstOrDefault() is DeployCommand or QualifyCommand)
+        switch (args.FirstOrDefault())
         {
-            return await ReleaseDeployCli.RunAsync(args[1..], args[0] == QualifyCommand, stdout, stderr, connections, cancellationToken);
+            case DeployCommand:
+                return await ReleaseDeployCli.DeployAsync(args[1..], stdout, stderr, connections, cancellationToken);
+            case QualifyCommand:
+                return await ReleaseDeployCli.QualifyAsync(args[1..], stdout, stderr, connections, cancellationToken);
         }
 
         var (options, problem) = Parse(args);
