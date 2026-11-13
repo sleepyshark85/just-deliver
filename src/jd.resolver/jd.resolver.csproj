@@ -1,12 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Every document format is part of the code, so its schema ships inside the assembly; each schema declares its kind (EmbeddedSchemas). -->
+  <!-- Every document format is part of the code, so its schema ships inside the assembly; each schema declares its kind (SchemaIndex). -->
   <ItemGroup>
     <EmbeddedResource Include="../../schemas/**/*.schema.json" LogicalName="schemas/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="jd.resolver.tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NJsonSchema" />
   </ItemGroup>
 
   <ItemGroup>

@@ -38,7 +38,7 @@ public static class EnvironmentParser
         }
 
         var values = new Dictionary<string, string>();
-        Flatten(valuesNode, string.Empty, values, source, errors);
+        Flatten(valuesNode, string.Empty, values);
         var name = (string)body["name"]!;
         var approval = body["approval"] is { } block ? ApprovalPolicy.FromJson(block) : null;
         errors.AddRange(approval is null ? [] : CheckApproval(approval, name, source));
@@ -62,20 +62,15 @@ public static class EnvironmentParser
         }
     }
 
-    // Values are nested mappings of strings, so every leaf is a string. A dot in a key would make a dot path
-    // ambiguous (a flat "a.b" key against nested a: { b }), which would let one value shadow another, so it is rejected.
-    private static void Flatten(JObject node, string prefix, Dictionary<string, string> into, string source, List<LoadError> errors)
+    // Values are nested mappings of strings, so every leaf is a string; the schema refuses a key with a dot, so each dot path is one value.
+    private static void Flatten(JObject node, string prefix, Dictionary<string, string> into)
     {
         foreach (var property in node.Properties())
         {
             var path = prefix.Length == 0 ? property.Name : $"{prefix}.{property.Name}";
-            if (property.Name.Length == 0 || property.Name.Contains('.'))
+            if (property.Value is JObject child)
             {
-                errors.Add(new LoadError(source, $"values.{path}", "keys must be non-empty and must not contain '.'; nest a mapping instead (a: { b: … })."));
-            }
-            else if (property.Value is JObject child)
-            {
-                Flatten(child, path, into, source, errors);
+                Flatten(child, path, into);
             }
             else
             {

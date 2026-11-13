@@ -16,8 +16,6 @@ public static class DocumentLoader
     /// <summary>The one field read before a schema is known: it picks the schema. Public, so the writers of documents name it too.</summary>
     public const string KindField = "kind";
 
-    private static readonly YamlSchemaValidator Validator = new();
-
     /// <summary>Loads and validates the YAML file at <paramref name="path"/>; <paramref name="what"/> names the file in the error when it does not exist.</summary>
     internal static async Task<LoadResult<Document>> LoadFileAsync(string path, string what, IReadOnlyCollection<string> kinds, CancellationToken cancellationToken)
     {
@@ -62,8 +60,7 @@ public static class DocumentLoader
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var result = await Validator.ValidateTokenAsync(EmbeddedSchemas.ByKind[document.Kind], document.Body);
-        return result.Errors.Select(e => LoadError.FromSchema(document.Source, e)).ToList();
+        return (await SchemaIndex.Shipped).Validate(document);
     }
 
     private static LoadResult<Document> Read(string source, JToken tree, IReadOnlyCollection<string> kinds)

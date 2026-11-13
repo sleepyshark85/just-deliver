@@ -32,8 +32,8 @@
         "nodes": {
           "description": "Graph nodes by name; the node named 'runtime' is the workload's runtime, deployed by the release flow (phase runtime).",
           "type": "object",
-          "required": ["runtime"],
-          "additionalProperties": { "$ref": "#/definitions/node" }
+          "allOf": [{ "$ref": "part.schema.json#/definitions/nodes" }],
+          "required": ["runtime"]
         },
         "probe": {
           "description": "How to check the deployed runtime is healthy. The graph carries it on the runtime node.",
@@ -65,16 +65,6 @@
             "resourceIdOutput": { "description": "Output with the runtime resource's id; qualification looks up its live revisions by it.", "type": "string", "minLength": 1 }
           }
         }
-      }
-    },
-    "node": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["template", "config"],
-      "properties": {
-        "template": { "description": "Template reference, relative to the catalog's templates directory.", "type": "string", "minLength": 1 },
-        "kind": { "description": "create (default) or grant. Grants are surfaced in the approval diff.", "enum": ["create", "grant"], "default": "create" },
-        "config": { "description": "Template configuration. Values are any YAML scalar or map, kept as written.", "type": "object" }
       }
     }
   }
