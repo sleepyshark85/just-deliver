@@ -124,4 +124,15 @@ public sealed class LiteralScannerTests
     {
         Assert.Contains($"line {line}", Assert.Throws<InvalidOperationException>(() => LiteralScanner.Scan(source)).Message);
     }
+
+    [Theory]
+    [InlineData("var a = \"a", 1)]
+    [InlineData("var a = 1;\nvar b = @\"a", 2)]
+    [InlineData("var a = $\"a{b}", 1)]
+    [InlineData("var a = \"\"\"a", 1)]
+    [InlineData("var a = 1;\nvar b = \"\"\"\n  a", 3)]
+    public void A_literal_that_runs_past_the_end_fails_naming_the_line_it_stopped_at(string source, int line)
+    {
+        Assert.Contains($"line {line}", Assert.Throws<InvalidOperationException>(() => LiteralScanner.Scan(source)).Message);
+    }
 }

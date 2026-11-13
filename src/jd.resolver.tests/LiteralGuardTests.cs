@@ -12,9 +12,22 @@ public sealed partial class LiteralGuardTests
 
     // A literal names a field when it has no whitespace and one of its dot- or bracket-separated parts is a field name.
     internal static IEnumerable<Finding> Findings(string file, string source, IReadOnlySet<string> fields) =>
-        LiteralScanner.Scan(source)
+        ScanFile(file, source)
             .Where(literal => !literal.Text.Any(char.IsWhiteSpace) && literal.Text.Split(['.', '[', ']']).Any(fields.Contains))
             .Select(literal => new Finding(file, literal.Line, literal.Text));
+
+    // The scanner's failure names a line; among the sources, the file is what lets anyone act on it.
+    private static IReadOnlyList<SourceLiteral> ScanFile(string file, string source)
+    {
+        try
+        {
+            return LiteralScanner.Scan(source);
+        }
+        catch (InvalidOperationException stopped)
+        {
+            throw new InvalidOperationException($"{file}: {stopped.Message}", stopped);
+        }
+    }
 
     // Each finding not on the allowlist, and each entry that names no finding, as a line of its own, in full.
     internal static IEnumerable<string> Breaches(IEnumerable<Finding> findings, IReadOnlyCollection<(string File, string Literal)> allowlist)
@@ -117,5 +130,14 @@ public sealed partial class LiteralGuardTests
 
         Assert.Equal("a.cs:9: \"name\"", Assert.ThrowsAny<Exception>(() => AssertOnly(findings, [])).Message);
         AssertOnly(findings, [("a.cs", "name")]);
+    }
+
+    [Fact]
+    public void A_source_the_scanner_cannot_read_fails_naming_its_file_and_line()
+    {
+        var failure = Assert.Throws<InvalidOperationException>(() => Findings("planted/Broken.cs", "var a = \"a\";\n}\n", new HashSet<string> { "a" }));
+
+        Assert.StartsWith("planted/Broken.cs: The literal scanner stopped at line 2", failure.Message);
+        Assert.IsType<InvalidOperationException>(failure.InnerException);
     }
 }

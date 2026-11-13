@@ -93,8 +93,8 @@ internal sealed class LiteralScanner
 
     // The scan went wrong where it could not tell: skipping on would hide the rest of the file from the guard.
     private InvalidOperationException Stopped() =>
-        new($"The literal scanner stopped at line {LineOf(Math.Min(_at, _source.Length))}, before the end of the source: a stray '}}', or a character " +
-            "literal or string it misread (a directive's apostrophe, as in '#region Don't edit', is not code it can skip).");
+        new($"The literal scanner stopped at line {LineOf(Math.Min(_at, _source.Length))}, before the end of the source: a stray '}}', a string or " +
+            "character literal that does not end, or an apostrophe it misread (a directive, as in '#region Don't edit', is not code it can skip).");
 
     // A string starts with its '$' and '@' prefixes, then a quote; a prefix without a quote is code (an '@' identifier).
     private bool TryString()

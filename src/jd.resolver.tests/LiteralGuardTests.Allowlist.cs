@@ -2,11 +2,11 @@ namespace jd.resolver.tests;
 
 // The literals the guard allows, by file (relative to src/). Section 2's exceptions stay; every other group holds today's literals, named after
 // the slice Appendix A expects to remove them (for a literal that several slices remove from one file, the last of them). A slice deletes its
-// group, and a stale entry fails, so the list only shrinks; S24g leaves only the exceptions.
+// group, and a stale entry fails, so the list only shrinks; S24g leaves section 2's exceptions and the prose false positives.
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
-        [.. new[] { SectionTwoExceptions, S24a3, S24b1, S24b2, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
+        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24a3, S24b1, S24b2, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
 
     private static IEnumerable<(string File, string Literal)> Entries(Dictionary<string, string[]> group) =>
         group.SelectMany(entry => entry.Value.Select(literal => (entry.Key, literal)));
@@ -16,7 +16,6 @@ public sealed partial class LiteralGuardTests
     private static readonly Dictionary<string, string[]> SectionTwoExceptions = new()
     {
         ["backend-providers/jd.bp.pulumi/TemplateLibrary.cs"] = ["default"], // Pulumi.yaml (choice 6)
-        ["jd.azure/ArmCredentials.cs"] = ["is"], // English in a message ("X is not set"), not a field: the guard's whitespace rule cannot tell a lone word
         ["jd.azure/ArmDeployerIdentity.cs"] = ["https://management.azure.com/.default"], // ARM's token scope
         ["jd.cli/Cli.cs"] = ["release"], // a command
         ["jd.orchestrator/ConfigFiller.cs"] = ["name"], // an fn::entries item
@@ -48,6 +47,13 @@ public sealed partial class LiteralGuardTests
             "workloads",
         ],
         ["jd.resolver/release/ReleaseRecordFile.cs"] = ["set.yaml"], // the local record store's layout (concept 11)
+    };
+
+    // Prose in a message that the guard's heuristic cannot tell apart from a field: a lone word is a literal without whitespace. Not an exception
+    // of section 2; rewording the message would delete its entry.
+    private static readonly Dictionary<string, string[]> ProseFalsePositives = new()
+    {
+        ["jd.azure/ArmCredentials.cs"] = ["is"], // "X is not set"; 'is' is also an x-jd keyword
     };
 
     private static readonly Dictionary<string, string[]> S24a3 = new()
