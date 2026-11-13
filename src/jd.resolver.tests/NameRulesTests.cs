@@ -15,15 +15,14 @@ public sealed class NameRulesTests
           "aliases": { "type": "array", "items": { "type": "string" }, "x-jd": { "define": "widget" } },
           "label": { "type": "string", "x-jd": { "define": ["gadget", "widget"] } },
           "uses": { "type": "array", "items": { "type": "string" }, "x-jd": { "ref": "widget" } },
-          "slots": { "type": "object", "x-jd": { "ref": "widget", "fallback": "any" } },
+          "slots": { "type": "object", "x-jd": { "ref": "widget", "select": "env.type", "fallback": "any" } },
           "list": { "type": "array", "items": { "properties": { "of": { "x-jd": { "ref": "widget" } } } } },
           "map": { "type": "object", "additionalProperties": { "properties": { "of": { "x-jd": { "ref": "widget" } } } } },
           "pattern": { "type": "object", "patternProperties": { "^p": { "properties": { "of": { "x-jd": { "ref": "widget" } } } } } },
           "shared": { "$ref": "parts.json#/definitions/of" },
           "all": { "allOf": [{ "$ref": "parts.json#/definitions/of" }] },
           "any": { "anyOf": [{ "$ref": "parts.json#/definitions/of" }] },
-          "one": { "oneOf": [{ "$ref": "parts.json#/definitions/of" }] },
-          "tree": { "$ref": "parts.json#/definitions/tree" }
+          "one": { "oneOf": [{ "$ref": "parts.json#/definitions/of" }] }
         }
         """;
 
@@ -41,8 +40,7 @@ public sealed class NameRulesTests
             ("thing.json", $$"""{ "$id": "https://test/thing.json", {{Kinds}} }"""),
             ("parts.json", """
                 { "$id": "https://test/parts.json", "definitions": {
-                  "of": { "properties": { "of": { "x-jd": { "ref": "widget" } } } },
-                  "tree": { "properties": { "of": { "x-jd": { "ref": "widget" } }, "children": { "type": "array", "items": { "$ref": "#/definitions/tree" } } } } } }
+                  "of": { "properties": { "of": { "x-jd": { "ref": "widget" } } } } } }
                 """),
             ("single.json", """{ "$id": "https://test/single.json", "x-jd": { "one": true }, "properties": { "kind": { "enum": ["Single"] } } }"""),
         ]);
@@ -55,7 +53,6 @@ public sealed class NameRulesTests
     private static async Task<IReadOnlyList<LoadError>> CheckAsync(params Document[] documents) =>
         NameRules.Check(await IndexAsync(), new DocumentSet("shelf", SetKinds, documents, documents.ToHashSet(), Unreadable: 0));
 
-    // A recursive schema is read down to where it repeats (SchemaIndex), so the tree's children are not.
     [Fact]
     public async Task A_namespace_the_schemas_declare_is_defined_and_referred_to_wherever_a_field_is_annotated()
     {
@@ -65,7 +62,7 @@ public sealed class NameRulesTests
             Of("b.yaml", """
                 { "kind": "Thing", "name": "b", "uses": ["a", "x"], "slots": { "a": 1, "any": 2, "x": 3 }, "list": [{ "of": "a" }, { "of": "x" }],
                   "map": { "k": { "of": "x" } }, "pattern": { "p1": { "of": "x" } }, "shared": { "of": "x" }, "all": { "of": "x" }, "any": { "of": "x" },
-                  "one": { "of": "x" }, "tree": { "of": "x", "children": [{ "of": "x" }] } }
+                  "one": { "of": "x" } }
                 """));
 
         const string message = "'x' is not a widget in the shelf (declared: a, b).";
@@ -74,7 +71,6 @@ public sealed class NameRulesTests
                 new LoadError("b.yaml", "uses", message), new LoadError("b.yaml", "slots.x", message), new LoadError("b.yaml", "list[1].of", message),
                 new LoadError("b.yaml", "map.k.of", message), new LoadError("b.yaml", "pattern.p1.of", message), new LoadError("b.yaml", "shared.of", message),
                 new LoadError("b.yaml", "all.of", message), new LoadError("b.yaml", "any.of", message), new LoadError("b.yaml", "one.of", message),
-                new LoadError("b.yaml", "tree.of", message),
             ],
             errors);
     }

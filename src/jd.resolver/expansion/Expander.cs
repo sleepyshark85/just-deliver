@@ -42,8 +42,8 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 
     /// <summary>
     /// Collects what an environment definition's offers reach in its type's layer into the one scope <see cref="SubstrateScope"/>
-    /// (docs/architecture/components.md section 3): the layer's shared resources reached through <c>uses</c> and, in an environment layer,
-    /// the offered components' environment parts. Every shared-scope resource an environment layer reaches must be in
+    /// (docs/architecture/components.md section 3): the layer's shared resources reached through <c>uses</c> and, in the last layer (where
+    /// workloads deploy), the offered components' parts of that layer. Every resource of an earlier layer it reaches must be in
     /// <paramref name="baseDescriptor"/>, which it reads but never deploys. The definition has no team and no runtime.
     /// </summary>
     public ExpansionResult ExpandEnvironment(EnvironmentDefinition definition, string definitionFile, EnvironmentDescriptor? baseDescriptor)
@@ -54,31 +54,31 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 
         // The type is checked against the catalog before an environment is resolved (EnvironmentTypeCheck).
         var layer = catalog.EnvironmentTypes[environment.Type].Layer;
-        var parts = new List<(string Name, string Source, string Path, Part Part)>();
+        var order = catalog.Layers.ToList();
+        var parts = new List<(string Name, string Source, Part Part)>();
         var uses = new List<string>();
         var runtimes = new List<string>();
         foreach (var (offer, index) in definition.Offers.Select((o, i) => (o, i)))
         {
             if (catalog.Components.TryGetValue(offer, out var component))
             {
-                uses.AddRange(component.Uses);
-                if (layer == SharedScope.Shared)
+                uses.AddRange(component.Reads);
+                if (layer != order[^1])
                 {
                     continue;
                 }
 
-                if (ImplementationKey.For(component.Implementations, environment.Type) is not { } key)
+                var (selected, miss) = component.Select(Selecting(), scope => scope == layer);
+                if (miss is not null)
                 {
-                    Fail($"offers[{index}]", NoImplementation($"component '{offer}'"));
+                    Fail($"offers[{index}]", miss.Message($"component '{offer}'"));
                 }
-                else if (component.Implementations[key].Environment is { } part)
-                {
-                    parts.Add((offer, component.Source, $"implementations.{key}.environment.", part));
-                }
+
+                parts.AddRange(selected.Select(part => (offer, component.Source, part)));
             }
             else if (catalog.Runtimes.TryGetValue(offer, out var runtime))
             {
-                uses.AddRange(runtime.Uses);
+                uses.AddRange(runtime.Reads);
                 runtimes.Add(offer);
             }
             else
@@ -96,13 +96,13 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         var baseValues = baseDescriptor?.Values ?? new Dictionary<string, string>();
         var missingInBase = baseDescriptor is null ? "there is no base descriptor" : $"base descriptor '{baseDescriptor.Name}' has no values for it";
         bool InBase(string part) => baseValues.Keys.Any(k => k.StartsWith(part + ".", StringComparison.Ordinal));
-        foreach (var resource in Reached(uses).Select(r => catalog.SharedResources[r]))
+        foreach (var (resource, part) in Reached(uses).Select(r => catalog.SharedResources[r]).SelectMany(r => r.Parts.Select(part => (r, part))))
         {
-            if (resource.Scope == layer)
+            if (part.Scope == layer)
             {
-                parts.Add((resource.Name, resource.Source, string.Empty, resource.Part));
+                parts.Add((resource.Name, resource.Source, part));
             }
-            else if (layer == SharedScope.Environment && !InBase(resource.Name))
+            else if (order.IndexOf(part.Scope) < order.IndexOf(layer) && !InBase(resource.Name))
             {
                 Fail("offers", $"the offers reach shared resource '{resource.Name}', but {missingInBase}; an environment never deploys a shared resource, so pass as the base the descriptor of a shared layer that offers it.");
             }
@@ -120,7 +120,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         {
             var evaluator = EvaluatorFor(owner, SubstrateScope, parts.SelectMany(p => p.Part.Nodes.Keys), parts: exports);
             requirements.AddRange(parts.Select(p => new ExpandedRequirement(
-                SubstrateScope, null, null, p.Source, EvaluateNodes(p.Source, p.Path, p.Part.Nodes, errors, (_, _) => (evaluator, null)), new Dictionary<string, EvalResult>())));
+                SubstrateScope, null, null, p.Source, EvaluateNodes(p.Source, p.Part.Nodes, errors, (_, _) => (evaluator, null)), new Dictionary<string, EvalResult>())));
         }
 
         return new ExpansionResult(owner.Kind, definitionFile, owner.Name, owner.Team, null, null, requirements, new HashSet<string>(), null, errors, exports);
@@ -135,7 +135,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         {
             if (reached.Add(name))
             {
-                catalog.SharedResources[name].Uses.ToList().ForEach(pending.Enqueue);
+                catalog.SharedResources[name].Reads.ToList().ForEach(pending.Enqueue);
             }
         }
 
@@ -173,8 +173,8 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             catalog.Roles, catalog.Naming, environment, owner.Name, owner.Team, currentId, nodeNames.ToHashSet(), known ?? new Dictionary<Reference, string>(), owner.Image, owner.Port,
             parts ?? new Dictionary<string, IReadOnlyDictionary<string, string>>()));
 
-    // Exact lookup, no matching: the component named by the type, which the environment must offer (security boundary 11), its
-    // implementation for the environment's type (else the default), the class.
+    // Exact lookup, no matching: the component named by the type, which the environment must offer (security boundary 11), and its part
+    // the environment's type and the class select.
     private ExpandedRequirement? ExpandOne(Requirement requirement, Owner owner, string ownerFile, string location, List<LoadError> errors)
     {
         void Fail(string message) => errors.Add(new LoadError(ownerFile, location, $"requirement '{requirement.Id}': {message}"));
@@ -190,25 +190,21 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             return null;
         }
 
-        if (ImplementationKey.For(component.Implementations, environment.Type) is not { } key)
+        var (selected, miss) = component.Select(new Dictionary<string, string>(Selecting()) { [Roles.RequirementClass] = requirement.Class }, IsWorkloadScope);
+        if (miss is not null)
         {
-            Fail(NoImplementation($"component '{component.Name}'"));
+            Fail(miss.Message($"component '{component.Name}'"));
             return null;
         }
 
-        var classes = component.Implementations[key].Classes;
-        if (!classes.TryGetValue(requirement.Class, out var part))
-        {
-            Fail($"component '{component.Name}' has no class '{requirement.Class}' for environment type '{environment.Type}' (classes: {string.Join(", ", classes.Keys)}).");
-            return null;
-        }
+        // Both maps selected, so one class part is left: the schema gives every implementation at least one class.
+        var part = selected.Single();
 
         // Component problems are reported against the component file; the prefix says which requirement exposed them.
         var found = new List<LoadError>();
-        var path = $"implementations.{key}.classes.{requirement.Class}";
         var evaluator = EvaluatorFor(owner, requirement.Id, part.Nodes.Keys);
-        var nodes = EvaluateNodes(component.Source, $"{path}.", part.Nodes, found, (_, _) => (evaluator, null));
-        var exports = EvaluateExports(component.Source, path, part.Exports, evaluator, found);
+        var nodes = EvaluateNodes(component.Source, part.Nodes, found, (_, _) => (evaluator, null));
+        var exports = EvaluateExports(component.Source, part.ExportsLocation, part.Exports, evaluator, found);
         if (found.Count > 0)
         {
             errors.AddRange(found.Select(e => e with { Message = $"for {location} ('{requirement.Id}'): {e.Message}" }));
@@ -218,8 +214,11 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         return new ExpandedRequirement(requirement.Id, requirement.Type, requirement.Class, component.Source, nodes, exports);
     }
 
-    private string NoImplementation(string owner) =>
-        $"{owner} has no implementation for environment type '{environment.Type}' and no '{ImplementationKey.Default}' implementation.";
+    // What selects a part here: the environment's type; a requirement adds its class.
+    private Dictionary<string, string> Selecting() => new() { [Roles.EnvironmentType] = environment.Type };
+
+    // Workloads deploy in a scope that is no layer.
+    private bool IsWorkloadScope(string scope) => !catalog.Layers.Contains(scope);
 
     // Every workload gets the runtime the environment offers, in the implementation for the environment's type; each node is evaluated
     // with its own name as the current id. A workload variable reading an export that is already a value resolves here; the others wait
@@ -238,14 +237,16 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         }
 
         var runtime = catalog.Runtimes[name];
-
-        if (ImplementationKey.For(runtime.Implementations, environment.Type) is not { } key)
+        var (selected, miss) = runtime.Select(Selecting(), IsWorkloadScope);
+        if (miss is not null)
         {
-            errors.Add(new LoadError(ownerFile, location, NoImplementation($"runtime '{runtime.Name}'")));
+            errors.Add(new LoadError(ownerFile, location, miss.Message($"runtime '{runtime.Name}'")));
             return null;
         }
 
-        var implementation = runtime.Implementations[key];
+        // The runtime's implementation map selected, so its one part is left.
+        var part = selected.Single();
+        var (probe, release) = catalog.Rollouts[Catalog.RolloutKey(runtime, part)];
 
         var known = new Dictionary<Reference, string>();
         foreach (var requirement in requirements)
@@ -258,25 +259,25 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 
         var found = new List<LoadError>();
         var variables = new WorkloadVariables(owner.Variables, ownerFile);
-        var nodes = EvaluateNodes(runtime.Source, $"implementations.{key}.", implementation.Nodes, found, (name, kind) => IsRuntimeNode(name, kind)
-            ? (EvaluatorFor(owner, name, implementation.Nodes.Keys, known), variables)
-            : (EvaluatorFor(owner, name, implementation.Nodes.Keys), null));
+        var nodes = EvaluateNodes(runtime.Source, part.Nodes, found, (name, kind) => IsRuntimeNode(name, kind)
+            ? (EvaluatorFor(owner, name, part.Nodes.Keys, known), variables)
+            : (EvaluatorFor(owner, name, part.Nodes.Keys), null));
         if (found.Count > 0)
         {
             errors.AddRange(found.Select(e => e with { Message = $"for the runtime: {e.Message}" }));
             return null;
         }
 
-        return new ExpandedRuntime(runtime.Source, nodes, implementation.Probe, implementation.Release);
+        return new ExpandedRuntime(runtime.Source, nodes, probe, release);
     }
 
     // Only the runtime node (never a grant) reads the workload's variables and the requirements' exports; any other node that tries is
     // an error, reported where it is found.
     private static bool IsRuntimeNode(string name, NodeKind kind) => name == ExpressionEvaluator.RuntimeNode && kind != NodeKind.Grant;
 
-    // Source and prefix say where the nodes are written, for errors: the catalog file and the part's location in it.
+    // Source says where the nodes are written, for errors: the catalog file; each node knows its location in it.
     private static List<ExpandedNode> EvaluateNodes(
-        string source, string prefix, IReadOnlyDictionary<string, Node> partNodes, List<LoadError> found,
+        string source, IReadOnlyDictionary<string, Node> partNodes, List<LoadError> found,
         Func<string, NodeKind, (ExpressionEvaluator Evaluator, WorkloadVariables? Variables)> contextFor)
     {
         var nodes = new List<ExpandedNode>();
@@ -284,19 +285,19 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         {
             var (evaluator, variables) = contextFor(nodeName, node.Kind);
             nodes.Add(new ExpandedNode(nodeName, node.Template, node.Kind,
-                ConfigWalker.WalkConfig(node.Config, evaluator, source, $"{prefix}nodes.{nodeName}.config", found, variables).Properties));
+                ConfigWalker.WalkConfig(node.Config, evaluator, source, node.ConfigLocation, found, variables).Properties));
         }
 
         return nodes;
     }
 
     private static Dictionary<string, EvalResult> EvaluateExports(
-        string source, string path, IReadOnlyDictionary<string, string> partExports, ExpressionEvaluator evaluator, List<LoadError> found)
+        string source, string location, IReadOnlyDictionary<string, string> partExports, ExpressionEvaluator evaluator, List<LoadError> found)
     {
         var exports = new Dictionary<string, EvalResult>();
         foreach (var (key, text) in partExports)
         {
-            if (evaluator.Evaluate(text, source, $"{path}.exports.{key}", found) is { } result)
+            if (evaluator.Evaluate(text, source, $"{location}.{key}", found) is { } result)
             {
                 exports[key] = result;
             }

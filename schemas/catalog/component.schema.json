@@ -4,6 +4,7 @@
   "title": "just-deliver catalog component",
   "description": "What a workload asks for by name (for example 'database'): one contract, and an implementation per environment type. Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across shared resources, components and runtimes.",
   "type": "object",
+  "x-jd": { "is": "owner" },
   "additionalProperties": false,
   "required": ["kind", "name", "description", "exports", "implementations"],
   "properties": {
@@ -18,20 +19,21 @@
     "exports": {
       "description": "The contract: the only valid names in ${resource.<id>.<name>}. Every class of every implementation exports exactly these (checked by the resolver).",
       "type": "array",
+      "x-jd": { "is": "contract" },
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 }
     },
     "uses": {
       "description": "The shared resources its parts may read as ${<name>.<export>} (checked by the resolver).",
       "type": "array",
-      "x-jd": { "ref": "shared resource" },
+      "x-jd": { "is": "part.reads", "ref": "shared resource" },
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 }
     },
     "implementations": {
       "description": "Environment type (declared in the Catalog file) or 'default' -> implementation. An environment uses its type's implementation, else 'default'; every implementation declares the same classes (checked by the resolver).",
       "type": "object",
-      "x-jd": { "ref": "environment type", "fallback": "default" },
+      "x-jd": { "ref": "environment type", "select": "env.type", "fallback": "default" },
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",
@@ -40,13 +42,15 @@
         "properties": {
           "environment": {
             "description": "The nodes deployed once per environment that offers the component, and their exports; its class parts read them as ${<component>.<export>}.",
-            "$ref": "part.schema.json"
+            "$ref": "part.schema.json",
+            "x-jd": { "scope": "environment" }
           },
           "classes": {
             "description": "Class (what a workload may request with 'class') -> the nodes each requiring workload gets and its exports.",
             "type": "object",
+            "x-jd": { "select": "requirement.class" },
             "minProperties": 1,
-            "additionalProperties": { "$ref": "part.schema.json" }
+            "additionalProperties": { "$ref": "part.schema.json", "x-jd": { "scope": "workload" } }
           }
         }
       }

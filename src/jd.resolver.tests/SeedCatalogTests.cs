@@ -23,13 +23,13 @@ public class SeedCatalogTests
         var catalog = Assert.IsType<Catalog>((await SeedCatalog.LoadAsync()).Value);
 
         Assert.Equal(
-            [("apps-env", SharedScope.Environment, "env-group,log-analytics"), ("cosmos-account", SharedScope.Shared, "shared-group"), ("env-group", SharedScope.Environment, ""),
-                ("log-analytics", SharedScope.Shared, "shared-group"), ("shared-group", SharedScope.Shared, "")],
-            catalog.SharedResources.Values.Select(s => (s.Name, s.Scope, string.Join(',', s.Uses))).OrderBy(s => s.Name, StringComparer.Ordinal));
-        Assert.Equal("${shared-group.name}", catalog.SharedResources["cosmos-account"].Part.Exports["resourceGroup"]);
+            [("apps-env", "environment", "env-group,log-analytics"), ("cosmos-account", "shared", "shared-group"), ("env-group", "environment", ""),
+                ("log-analytics", "shared", "shared-group"), ("shared-group", "shared", "")],
+            catalog.SharedResources.Values.Select(s => (s.Name, Assert.Single(s.Parts).Scope, string.Join(',', s.Reads))).OrderBy(s => s.Name, StringComparer.Ordinal));
+        Assert.Equal("${shared-group.name}", catalog.SharedResources["cosmos-account"].Parts[0].Exports["resourceGroup"]);
         var database = catalog.Components["database"];
-        Assert.Equal(["cosmos-account"], database.Uses);
-        var environment = Assert.IsType<Part>(database.Implementations["default"].Environment);
+        Assert.Equal(["cosmos-account"], database.Reads);
+        var environment = TestCatalog.PartAt(database, "implementations.default.environment");
         Assert.Equal("${cosmos-account.resourceGroup}", (string?)environment.Nodes["database"].Config["resourceGroupName"]);
         Assert.Equal(["databaseName", "databaseId"], environment.Exports.Keys);
     }

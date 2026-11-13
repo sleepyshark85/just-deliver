@@ -54,8 +54,8 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
             values[part] = group;
         }
 
-        // A shared layer offers nothing to workloads: they deploy on an environment, which reads the shared layer as its base.
-        var offers = catalog.EnvironmentTypes[environment.Type].Layer == SharedScope.Shared ? [] : definition.Offers;
+        // Workloads deploy in the last layer, so an earlier layer offers them nothing: they deploy on an environment, which reads it as its base.
+        var offers = catalog.EnvironmentTypes[environment.Type].Layer != catalog.Layers[^1] ? [] : definition.Offers;
         var document = new JObject
         {
             [DocumentLoader.KindField] = EnvironmentParser.Kind,

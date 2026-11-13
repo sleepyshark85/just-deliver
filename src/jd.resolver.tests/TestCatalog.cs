@@ -1,4 +1,5 @@
 using jd.resolver.catalog;
+using Xunit;
 
 namespace jd.resolver.tests;
 
@@ -30,6 +31,9 @@ internal static class TestCatalog
     /// </summary>
     public static string Component(string name, string exports, string part, string key = "default", string className = "standard") =>
         $"kind: Component\nname: {name}\ndescription: d\nexports: {exports}\nimplementations:\n  {key}:\n    classes:\n      {className}:\n{Indent(part, 8)}";
+
+    /// <summary>The part of <paramref name="owner"/> at <paramref name="location"/> in its file.</summary>
+    public static Part PartAt(PartOwner owner, string location) => Assert.Single(owner.Parts, part => part.Location == location);
 
     /// <summary>A Runtime file's lines up to its implementations; append <see cref="RuntimeImplementation"/>s.</summary>
     public const string RuntimeHeader = "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n";

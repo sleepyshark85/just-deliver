@@ -51,14 +51,14 @@ public class CatalogParserTests
         Assert.Equal([("dev", false), ("stage", true)], catalog.EnvironmentTypes.Select(t => (t.Key, t.Value.Approval)).OrderBy(t => t.Key, StringComparer.Ordinal));
         var component = Assert.Single(catalog.Components).Value;
         Assert.Equal(("alpha-db", "components/a.yaml"), (component.Name, component.Source));
-        Assert.Equal(["endpoint"], component.Exports);
-        var part = Assert.Single(Assert.Single(component.Implementations, i => i.Key == "default").Value.Classes, c => c.Key == "standard").Value;
+        Assert.Equal(["endpoint"], component.Contract);
+        var part = TestCatalog.PartAt(component, "implementations.default.classes.standard");
         Assert.Equal(NodeKind.Create, part.Nodes["db"].Kind);
         Assert.Equal(1, (int)part.Nodes["db"].Config["size"]);
         Assert.Equal("${db.endpoint}", part.Exports["endpoint"]);
         var runtime = Assert.Single(catalog.Runtimes).Value;
-        var implementation = Assert.Single(runtime.Implementations, i => i.Key == "default").Value;
-        Assert.Equal(("container-app", "runtimes/r.yaml", TestCatalog.Probe, TestCatalog.Release), (runtime.Name, runtime.Source, implementation.Probe, implementation.Release));
+        var implementation = TestCatalog.PartAt(runtime, "implementations.default");
+        Assert.Equal(("container-app", "runtimes/r.yaml", (TestCatalog.Probe, TestCatalog.Release)), (runtime.Name, runtime.Source, catalog.Rollouts[("container-app", "default")]));
         Assert.Equal("t/runtime", implementation.Nodes["runtime"].Template);
         var policy = Assert.Single(catalog.Policies);
         Assert.Equal("alpha-db", policy.Require);

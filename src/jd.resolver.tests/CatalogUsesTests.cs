@@ -50,14 +50,14 @@ public class CatalogUsesTests
         Assert.Empty(result.Errors);
         var catalog = Assert.IsType<Catalog>(result.Value);
         var account = catalog.SharedResources["cosmos-account"];
-        Assert.Equal(("shared/b.yaml", SharedScope.Shared), (account.Source, account.Scope));
-        Assert.Equal(["shared-group"], account.Uses);
-        Assert.Equal("${shared-group.name}", account.Part.Exports["resourceGroup"]);
+        Assert.Equal(("shared/b.yaml", "shared"), (account.Source, Assert.Single(account.Parts).Scope));
+        Assert.Equal(["shared-group"], account.Reads);
+        Assert.Equal("${shared-group.name}", account.Parts[0].Exports["resourceGroup"]);
         var component = catalog.Components["alpha-db"];
-        Assert.Equal(["cosmos-account"], component.Uses);
-        var environment = Assert.IsType<Part>(component.Implementations["default"].Environment);
+        Assert.Equal(["cosmos-account"], component.Reads);
+        var environment = TestCatalog.PartAt(component, "implementations.default.environment");
         Assert.Equal("${db.name}", environment.Exports["databaseName"]);
-        Assert.Equal(["shared-group"], catalog.Runtimes["container-app"].Uses);
+        Assert.Equal(["shared-group"], catalog.Runtimes["container-app"].Reads);
     }
 
     [Theory]

@@ -205,7 +205,7 @@ public class SubstrateTests
 
         var error = Assert.Single(Errors(Offering("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog));
 
-        Assert.Equal(("offers[1]", "component 'cache' has no implementation for environment type 'dev' and no 'default' implementation."), (error.Location, error.Message));
+        Assert.Equal(("offers[1]", "component 'cache' has no implementations entry for 'dev' and no 'default' entry (keys: stage)."), (error.Location, error.Message));
     }
 
     [Fact]
