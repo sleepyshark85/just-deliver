@@ -6,7 +6,7 @@ namespace jd.resolver.tests;
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
-        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3, S24b4, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
+        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
 
     private static IEnumerable<(string File, string Literal)> Entries(Dictionary<string, string[]> group) =>
         group.SelectMany(entry => entry.Value.Select(literal => (entry.Key, literal)));
@@ -68,12 +68,6 @@ public sealed partial class LiteralGuardTests
         ["backend-providers/jd.bp.pulumi/TemplateLibrary.cs"] = ["exports.", "template"],
     };
 
-    private static readonly Dictionary<string, string[]> S24b4 = new()
-    {
-        ["jd.resolver/graph/ExportValues.cs"] = ["exports."],
-        ["jd.resolver/graph/GraphBuilder.cs"] = ["exports."],
-    };
-
     private static readonly Dictionary<string, string[]> S24c1 = new()
     {
         ["jd.resolver/environment/EnvironmentDefinition.cs"] = ["approval", "name", "offers", "region", "type"],
@@ -94,6 +88,8 @@ public sealed partial class LiteralGuardTests
         [
             "class", "container", "id", "image", "metadata", "name", "port", "ports", "requires", "requires[", "team", "type", "variables",
         ],
+        ["jd.resolver/graph/ExportValues.cs"] = ["exports."],
+        ["jd.resolver/graph/GraphBuilder.cs"] = ["exports."],
         ["jd.resolver/policies/PolicyApplier.cs"] = ["container.variables", "requires"],
         ["jd.resolver/release/ReleaseBuilder.cs"] =
         [

@@ -36,10 +36,10 @@ internal static class PolicyRules
         }
         else
         {
-            var node = criteria.Keys.Where(k => k is MatchCriteria.TypeKey or MatchCriteria.ClassKey or MatchCriteria.TemplateKey).Order().ToList();
-            if (node.Count > 0)
+            var nodeCriteria = criteria.Keys.Where(k => k is MatchCriteria.TypeKey or MatchCriteria.ClassKey or MatchCriteria.TemplateKey).Order().ToList();
+            if (nodeCriteria.Count > 0)
             {
-                yield return Error("match", $"a 'kind: {MatchCriteria.RuntimeKind}' policy cannot also match {string.Join(", ", node)}.");
+                yield return Error("match", $"a 'kind: {MatchCriteria.RuntimeKind}' policy cannot also match {string.Join(", ", nodeCriteria)}.");
             }
 
             foreach (var (field, path) in from field in Fields(policy)

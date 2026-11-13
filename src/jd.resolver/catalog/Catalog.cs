@@ -3,8 +3,8 @@ namespace jd.resolver.catalog;
 /// <summary>
 /// The in-memory form of a catalog directory: everything the resolver resolves workloads and environments against, one collection per concept
 /// (docs/architecture/documents.md section 3), each filled from the documents whose kind binds the concept's role (<see cref="CatalogLoader"/>):
-/// a component holds a contract, a shared resource its scope, a runtime its runtime part. Formats: schemas/catalog/*.schema.json. Expressions (${...}) and config values are kept exactly as written; the expression evaluator interprets
-/// them later. Source is the catalog-relative file a record came from. <see cref="Layers"/>: the layers in deploy order, from the schemas.
+/// a component holds a contract, a shared resource its scope, a runtime its runtime part. Formats: schemas/catalog/*.schema.json. Expressions (${...}) and config values are kept exactly as written;
+/// the expression evaluator interprets them later. Source is the catalog-relative file a record came from. <see cref="Layers"/>: the layers in deploy order, from the schemas.
 /// <see cref="Rollouts"/>: each runtime part's probe and release block, by the runtime's name and the part's selection key.
 /// <see cref="GrantTargets"/>: grant template to the input naming the resource the grant is on (catalog/grants.yaml).
 /// </summary>

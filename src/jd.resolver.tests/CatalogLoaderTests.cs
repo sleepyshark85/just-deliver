@@ -4,7 +4,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-public class CatalogLoaderTests
+public sealed class CatalogLoaderTests
 {
     private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
 

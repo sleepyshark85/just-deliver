@@ -37,14 +37,16 @@ public static class CatalogLoader
         var unreadable = 0;
         foreach (var file in source.Documents.Where(document => !IsTemplate(document)).OrderBy(document => document.Name, StringComparer.Ordinal))
         {
-            if (await ReadDocumentAsync(file, errors, cancellationToken) is not (var document, var isValid))
+            var read = await ReadDocumentAsync(file, cancellationToken);
+            errors.AddRange(read.Errors);
+            if (read.Document is not { } document)
             {
                 unreadable++;
                 continue;
             }
 
             documents.Add(document);
-            if (isValid)
+            if (read.Valid)
             {
                 valid.Add(document);
             }
@@ -56,78 +58,91 @@ public static class CatalogLoader
         index.CheckBindings();
         var set = new DocumentSet(SetName, Kinds, documents, valid, unreadable);
         errors.AddRange(NameRules.Check(index, set));
-        var catalog = BindAndCheck(index, set, errors);
-        return new LoadResult<Catalog>(errors.Count == 0 ? catalog : null, errors);
+        var bound = Bind(index, set);
+        errors.AddRange(Check(index, bound));
+        return new LoadResult<Catalog>(errors.Count == 0 ? Build(index, bound) : null, errors);
     }
 
-    // The concept records the valid documents hold, each collection from the kinds that bind its role, checked by the concept rules into errors;
-    // null when no valid document declares the environment types. No errors means exactly one did.
-    private static Catalog? BindAndCheck(SchemaIndex index, DocumentSet set, List<LoadError> errors)
+    // The concept records the valid documents hold, each collection from the kinds that bind its role.
+    private static Bound Bind(SchemaIndex index, DocumentSet set)
     {
         var binder = new Binder(index);
         var documents = set.Documents;
-        var bound = documents.Where(set.Valid.Contains).ToList();
-        List<(Document Document, PartOwner Owner)> Owners(string role) => [.. Binding(index, bound, role)
-            .Select(document => (document, binder.ReadOwner(document, NameRules.Defined(index, document).Select(name => name.Name).FirstOrDefault() ?? string.Empty)))];
+        var valid = documents.Where(set.Valid.Contains).ToList();
+        List<(Document Document, PartOwner Owner)> Owners(string role) => [.. Binding(index, valid, role)
+            // A document that binds an owner role defines its name (valid documents do), so there is always a first.
+            .Select(document => (document, binder.ReadOwner(document, NameRules.Defined(index, document).Select(name => name.Name).First())))];
         var components = Owners(Roles.Contract).ConvertAll(component => component.Owner);
         var shared = Owners(Roles.PartScope).ConvertAll(resource => resource.Owner);
-        var boundRuntimes = Owners(Roles.RuntimePart);
-        var runtimes = boundRuntimes.ConvertAll(runtime => runtime.Owner);
-        var rollouts = boundRuntimes.SelectMany(runtime => runtime.Owner.Parts.Select(part => Rollout.Read(runtime.Document, runtime.Owner, part))).ToList();
-        var policies = Binding(index, bound, Roles.PolicyName).ConvertAll(Policy.Read);
-        var namingFiles = Binding(index, bound, Roles.NamingRules).ConvertAll(document => (document.Source, Rules: binder.ReadNamingRules(document)));
-        var grantTargets = Merge(Binding(index, bound, Roles.GrantTargetInput).Select(binder.ReadGrantTargets));
+        var runtimes = Owners(Roles.RuntimePart);
+        var namingFiles = Binding(index, valid, Roles.NamingRules).ConvertAll(document => (document.Source, Rules: binder.ReadNamingRules(document)));
         // A missing or invalid catalog document is reported on its own; checking against its types too would only add noise.
         var declaring = Binding(index, documents, Roles.EnvironmentTypeLayer).FirstOrDefault();
-        var environmentTypes = declaring is not null && set.Valid.Contains(declaring) ? binder.ReadEnvironmentTypes(declaring) : null;
+        (string Version, IReadOnlyDictionary<string, EnvironmentType> Types)? environment =
+            declaring is not null && set.Valid.Contains(declaring) ? (binder.ReadVersion(declaring), binder.ReadEnvironmentTypes(declaring)) : null;
 
-        var layers = index.Layers;
-        var sharedByName = shared.DistinctBy(resource => resource.Name).ToDictionary(resource => resource.Name);
-        errors.AddRange(namingFiles.SelectMany(file => file.Rules.Values.Select(rule => rule.CheckAllowed(file.Source))).OfType<LoadError>());
-        errors.AddRange(NameRules.CheckReserved(index, Binding(index, documents, Roles.Owner), ExpressionEvaluator.ReservedRoots));
-        errors.AddRange(ScopeRules.CheckReadOrder(layers, sharedByName));
-        errors.AddRange(ReadRules.Check(layers, shared, sharedByName, components, runtimes));
-        errors.AddRange(ScopeRules.CheckNodeNames(layers, shared.Concat(components), sharedByName));
-        errors.AddRange(GrantRules.Check([.. shared, .. components, .. runtimes], layers, grantTargets, string.Join(", ", index.KindsBinding(Roles.GrantTargetInput))));
-        errors.AddRange(environmentTypes is null ? [] : ScopeRules.CheckImplementationKeys(components.Concat(runtimes), environmentTypes, layers));
-        errors.AddRange(PolicyRules.Check(policies));
-        errors.AddRange(RolloutRules.Check(rollouts));
-        errors.AddRange(ContractRules.CheckSameClasses(components));
-        errors.AddRange(ContractRules.CheckExports(components, layers));
-
-        if (errors.Count > 0 || declaring is null || environmentTypes is null)
-        {
-            return null;
-        }
-
-        return new Catalog(
-            binder.ReadVersion(declaring),
-            layers,
-            environmentTypes,
-            components.ToDictionary(component => component.Name),
-            sharedByName,
-            runtimes.ToDictionary(runtime => runtime.Name),
-            rollouts.ToDictionary(rollout => Catalog.RolloutKey(rollout.Runtime, rollout.Part), rollout => (rollout.Probe, rollout.Release)),
-            grantTargets,
-            policies,
+        return new Bound(
+            Binding(index, documents, Roles.Owner),
+            components,
+            shared,
+            runtimes.ConvertAll(runtime => runtime.Owner),
+            shared.DistinctBy(resource => resource.Name).ToDictionary(resource => resource.Name),
+            [.. runtimes.SelectMany(runtime => runtime.Owner.Parts.Select(part => Rollout.Read(runtime.Document, runtime.Owner, part)))],
+            Binding(index, valid, Roles.PolicyName).ConvertAll(Policy.Read),
+            namingFiles,
             Merge(namingFiles.Select(file => file.Rules)),
-            Merge(Binding(index, bound, Roles.RoleDefinitions).Select(binder.ReadRoleDefinitions)));
+            Merge(Binding(index, valid, Roles.GrantTargetInput).Select(binder.ReadGrantTargets)),
+            Merge(Binding(index, valid, Roles.RoleDefinitions).Select(binder.ReadRoleDefinitions)),
+            environment);
     }
 
-    // The document and whether it passed its schema; null when the file has no readable kind.
-    private static async Task<(Document Document, bool Valid)?> ReadDocumentAsync(SourceDocument source, List<LoadError> errors, CancellationToken cancellationToken)
+    // The concept rules over the bound collections, in the order their errors list.
+    private static IReadOnlyList<LoadError> Check(SchemaIndex index, Bound bound)
+    {
+        var layers = index.Layers;
+        var types = bound.Environment?.Types;
+        return
+        [
+            .. bound.NamingFiles.SelectMany(file => file.Rules.Values.Select(rule => rule.CheckAllowed(file.Source))).OfType<LoadError>(),
+            .. NameRules.CheckReserved(index, bound.OwnerDocuments, ExpressionEvaluator.ReservedRoots),
+            .. ScopeRules.CheckReadOrder(layers, bound.SharedByName),
+            .. ReadRules.Check(layers, bound.Shared, bound.SharedByName, bound.Components, bound.Runtimes),
+            .. ScopeRules.CheckNodeNames(layers, bound.Shared.Concat(bound.Components), bound.SharedByName),
+            .. GrantRules.Check([.. bound.Shared, .. bound.Components, .. bound.Runtimes], layers, bound.GrantTargets, string.Join(", ", index.KindsBinding(Roles.GrantTargetInput))),
+            .. types is null ? [] : ScopeRules.CheckImplementationKeys(bound.Components.Concat(bound.Runtimes), types, layers),
+            .. PolicyRules.Check(bound.Policies),
+            .. RolloutRules.Check(bound.Rollouts),
+            .. ContractRules.CheckSameClasses(bound.Components),
+            .. ContractRules.CheckExports(bound.Components, layers),
+        ];
+    }
+
+    // The catalog the bound collections make; null when no valid document declares the environment types, which no errors rules out: exactly one does.
+    private static Catalog? Build(SchemaIndex index, Bound bound) => bound.Environment is not var (version, types) ? null : new Catalog(
+        version,
+        index.Layers,
+        types,
+        bound.Components.ToDictionary(component => component.Name),
+        bound.SharedByName,
+        bound.Runtimes.ToDictionary(runtime => runtime.Name),
+        bound.Rollouts.ToDictionary(rollout => Catalog.RolloutKey(rollout.Runtime, rollout.Part), rollout => (rollout.Probe, rollout.Release)),
+        bound.GrantTargets,
+        bound.Policies,
+        bound.Naming,
+        bound.RoleDefinitions);
+
+    // The document and whether it passed its schema, with the errors of reading it; no document when the file has no readable kind.
+    private static async Task<ReadResult> ReadDocumentAsync(SourceDocument source, CancellationToken cancellationToken)
     {
         var parsed = DocumentLoader.Parse(source.Name, source.Text(), Kinds);
-        errors.AddRange(parsed.Errors);
         if (parsed.Value is not { } document)
         {
-            return null;
+            return new ReadResult(null, false, parsed.Errors);
         }
 
         // An unknown kind is refused here: readable, so not a missing Catalog, and no kind-specific check applies to it.
         var schemaErrors = await DocumentLoader.ValidateAsync(document, Kinds, cancellationToken);
-        errors.AddRange(schemaErrors);
-        return (document, schemaErrors.Count == 0);
+        return new ReadResult(document, schemaErrors.Count == 0, [.. parsed.Errors, .. schemaErrors]);
     }
 
     private static bool IsTemplate(SourceDocument document) => document.Name.StartsWith(TemplatesPrefix, StringComparison.Ordinal);
@@ -142,4 +157,21 @@ public static class CatalogLoader
     // Naming, Roles and Grants files are merged; a key in two files is the define rule's error, and the first is kept.
     private static Dictionary<string, T> Merge<T>(IEnumerable<IReadOnlyDictionary<string, T>> files) =>
         files.SelectMany(file => file).DistinctBy(entry => entry.Key).ToDictionary(entry => entry.Key, entry => entry.Value);
+
+    private sealed record ReadResult(Document? Document, bool Valid, IReadOnlyList<LoadError> Errors);
+
+    // What the valid documents hold, one collection per concept; Environment is the Catalog document's version and environment types, when it is valid.
+    private sealed record Bound(
+        IReadOnlyList<Document> OwnerDocuments,
+        IReadOnlyList<PartOwner> Components,
+        IReadOnlyList<PartOwner> Shared,
+        IReadOnlyList<PartOwner> Runtimes,
+        IReadOnlyDictionary<string, PartOwner> SharedByName,
+        IReadOnlyList<Rollout> Rollouts,
+        IReadOnlyList<Policy> Policies,
+        IReadOnlyList<(string Source, IReadOnlyDictionary<string, NamingRule> Rules)> NamingFiles,
+        IReadOnlyDictionary<string, NamingRule> Naming,
+        IReadOnlyDictionary<string, string> GrantTargets,
+        IReadOnlyDictionary<string, string> RoleDefinitions,
+        (string Version, IReadOnlyDictionary<string, EnvironmentType> Types)? Environment);
 }

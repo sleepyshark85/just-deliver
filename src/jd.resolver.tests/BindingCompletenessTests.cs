@@ -9,20 +9,20 @@ public sealed class BindingCompletenessTests
 {
     private static string SchemasDirectory => Path.Combine(AppContext.BaseDirectory, "schemas");
 
-    // Every shipped schema under the name jd.resolver.csproj embeds it with, the one named planted with `binding` replaced by `replacement`.
-    private static Task<SchemaIndex> PlantedAsync(string schema, string binding, string replacement) => SchemaIndex.BuildAsync([
+    // Every shipped schema under the name jd.resolver.csproj embeds it with, the one named planted with each of `bindings` replaced by `replacement`.
+    private static Task<SchemaIndex> PlantedAsync(string schema, string replacement, params string[] bindings) => SchemaIndex.BuildAsync([
         .. Directory.EnumerateFiles(SchemasDirectory, "*.schema.json", SearchOption.AllDirectories).Select(file =>
         {
             var name = $"schemas/{Path.GetRelativePath(SchemasDirectory, file).Replace(Path.DirectorySeparatorChar, '/')}";
             var text = File.ReadAllText(file);
-            Assert.True(name != schema || text.Contains(binding, StringComparison.Ordinal), $"{schema} has no {binding}");
-            return (name, name == schema ? text.Replace(binding, replacement, StringComparison.Ordinal) : text);
+            Assert.True(name != schema || bindings.All(binding => text.Contains(binding, StringComparison.Ordinal)), $"{schema} lacks one of {string.Join(", ", bindings)}");
+            return (name, name == schema ? bindings.Aggregate(text, (planted, binding) => planted.Replace(binding, replacement, StringComparison.Ordinal)) : text);
         }),
     ]);
 
-    private static async Task<string> UnboundAsync(string schema, string role)
+    private static async Task<string> UnboundAsync(string schema, params string[] roles)
     {
-        var index = await PlantedAsync(schema, $"\"is\": \"{role}\"", "\"message\": \"unbound\"");
+        var index = await PlantedAsync(schema, "\"message\": \"unbound\"", [.. roles.Select(role => $"\"is\": \"{role}\"")]);
 
         return Assert.Throws<InvalidOperationException>(() => index.CheckBindings()).Message;
     }
@@ -66,6 +66,15 @@ public sealed class BindingCompletenessTests
         var message = await UnboundAsync("schemas/catalog/catalog.schema.json", "environment-type.gated");
 
         Assert.Equal("Schema 'schemas/catalog/catalog.schema.json' does not bind role 'environment-type.gated'.", message);
+    }
+
+    // The layer is what makes a type's gating readable, so a catalog that binds neither leaves no kind that declares types to check.
+    [Fact]
+    public async Task A_catalog_that_binds_neither_the_layer_nor_the_gating_of_a_type_stops_jd()
+    {
+        var message = await UnboundAsync("schemas/catalog/catalog.schema.json", "environment-type.layer", "environment-type.gated");
+
+        Assert.Equal("No schema binds role 'environment-type.layer'.", message);
     }
 
     // Without the layers no part has a deploy order (SchemaIndex.Layers would be empty).

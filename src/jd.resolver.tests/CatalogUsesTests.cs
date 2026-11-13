@@ -82,10 +82,12 @@ public class CatalogUsesTests
     {
         var shared = SingleError(await Parse(("s.yaml", Shared(name))));
         var component = SingleError(await Parse(("c.yaml", Component(name: name))));
+        var runtime = SingleError(await Parse(("r.yaml", TestCatalog.Runtime("nodes:\n  runtime:\n    template: t/rt\n    config: {}\n").Replace("container-app", name, StringComparison.Ordinal))));
 
         Assert.Equal(("s.yaml", "name"), (shared.File, shared.Location));
         Assert.Equal($"'{name}' is a reserved root of expressions (env, resource, role, runtime, workload); choose another name.", shared.Message);
         Assert.Equal(("c.yaml", "name"), (component.File, component.Location));
+        Assert.Equal(("r.yaml", "name", shared.Message), (runtime.File, runtime.Location, runtime.Message));
     }
 
     // The name is checked even when the file fails its schema for another reason.

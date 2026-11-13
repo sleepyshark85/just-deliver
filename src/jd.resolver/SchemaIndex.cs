@@ -77,18 +77,17 @@ internal sealed class SchemaIndex
 
     /// <summary>
     /// Binding completeness (docs/architecture/documents.md section 4): a security boundary reads only what a schema binds, so a kind that binds a
-    /// part binds the node roles, a kind that declares environment types binds whether each is gated, a kind binds the runtime's part, and a schema
-    /// binds <see cref="Roles.Layer"/>. A schema that does not is a mistake in jd: throws <see cref="InvalidOperationException"/> naming every
-    /// schema and role it misses.
+    /// part binds the node roles, a kind that declares environment types binds whether each is gated, and some schema binds the runtime's part, the
+    /// environment types' layer and <see cref="Roles.Layer"/>. A schema that does not is a mistake in jd: throws <see cref="InvalidOperationException"/>
+    /// naming every schema and role it misses.
     /// </summary>
     public void CheckBindings()
     {
         var unbound = Implied.SelectMany(entry => KindsBinding(entry.Key).SelectMany(kind => entry.Value.Select(role => (Kind: kind, Role: role))))
             .Where(binding => !BindsRole(binding.Kind, binding.Role))
             .Select(binding => $"Schema '{_schemaNames[binding.Kind]}' does not bind role '{binding.Role}'.")
-            .Distinct()
             .Order(StringComparer.Ordinal)
-            .Concat(KindsBinding(Roles.RuntimePart).Count == 0 ? [$"No schema binds role '{Roles.RuntimePart}'."] : Array.Empty<string>())
+            .Concat(new[] { Roles.RuntimePart, Roles.EnvironmentTypeLayer }.Where(role => KindsBinding(role).Count == 0).Select(role => $"No schema binds role '{role}'."))
             .Concat(Layers.Count == 0 ? [$"No schema binds role '{Roles.Layer}'."] : Array.Empty<string>())
             .ToList();
         if (unbound.Count > 0)
