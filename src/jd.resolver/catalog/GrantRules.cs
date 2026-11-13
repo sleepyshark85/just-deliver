@@ -13,17 +13,20 @@ internal static class GrantRules
 {
     /// <summary>
     /// Every problem with a grant node of <paramref name="owners"/>' parts: one in a part of one of <paramref name="layers"/>, a template that is
-    /// not a key of <paramref name="targets"/> (grant template to the input naming its target), or a target input of another form.
+    /// not a key of <paramref name="targets"/> (grant template to the input naming its target, read from the files of kind
+    /// <paramref name="targetsKind"/>), or a target input of another form.
     /// </summary>
-    public static IReadOnlyList<LoadError> Check(IEnumerable<PartOwner> owners, IReadOnlyList<string> layers, IReadOnlyDictionary<string, string> targets) =>
+    public static IReadOnlyList<LoadError> Check(
+        IEnumerable<PartOwner> owners, IReadOnlyList<string> layers, IReadOnlyDictionary<string, string> targets, string targetsKind) =>
         [.. from owner in owners
             from part in owner.Parts
             from node in part.Nodes.Values.Where(node => node.Kind == NodeKind.Grant)
-            let error = Problem(owner, part, node, layers, targets)
+            let error = Problem(owner, part, node, layers, targets, targetsKind)
             where error is not null
             select error];
 
-    private static LoadError? Problem(PartOwner owner, Part part, Node node, IReadOnlyList<string> layers, IReadOnlyDictionary<string, string> targets)
+    private static LoadError? Problem(
+        PartOwner owner, Part part, Node node, IReadOnlyList<string> layers, IReadOnlyDictionary<string, string> targets, string targetsKind)
     {
         if (layers.Contains(part.Scope))
         {
@@ -34,7 +37,7 @@ internal static class GrantRules
         if (!targets.TryGetValue(node.Template, out var input))
         {
             return new LoadError(owner.Source, node.TemplateLocation,
-                $"'{node.Template}' is not a grant template in the catalog's grant targets ({string.Join(", ", targets.Keys.Order(StringComparer.Ordinal))}); list it with the input that names its target.");
+                $"'{node.Template}' is not a grant template in the catalog's {targetsKind} targets ({string.Join(", ", targets.Keys.Order(StringComparer.Ordinal))}); list it with the input that names its target.");
         }
 
         // A string token's cast cannot give null.

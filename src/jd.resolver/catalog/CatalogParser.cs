@@ -98,7 +98,7 @@ public static class CatalogParser
         errors.AddRange(ScopeRules.CheckReadOrder(layers, sharedByName));
         errors.AddRange(ReadRules.Check(layers, shared, sharedByName, components, runtimes));
         errors.AddRange(ScopeRules.CheckNodeNames(layers, shared.Concat(components), sharedByName));
-        errors.AddRange(GrantRules.Check([.. shared, .. components, .. runtimes], layers, grantTargets));
+        errors.AddRange(GrantRules.Check([.. shared, .. components, .. runtimes], layers, grantTargets, GrantsKind));
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
         var environmentTypes = catalogs.FirstOrDefault() is { } first && valid.Contains(first) ? binder.ReadEnvironmentTypes(first) : null;
         CheckSharedLayerKeys(components.Concat(runtimes), environmentTypes, layers, errors);

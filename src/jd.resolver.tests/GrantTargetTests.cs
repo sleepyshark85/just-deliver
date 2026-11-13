@@ -97,7 +97,7 @@ public class GrantTargetTests
         var error = SingleError(await Parse(Component(Grant("'${container.scope}'", template: "t/other"))));
 
         Assert.Equal(("c.yaml", $"{TestCatalog.PartPath}.nodes.access.template"), (error.File, error.Location));
-        Assert.Equal("'t/other' is not a grant template in the catalog's grant targets (t/g); list it with the input that names its target.", error.Message);
+        Assert.Equal("'t/other' is not a grant template in the catalog's Grants targets (t/g); list it with the input that names its target.", error.Message);
     }
 
     [Fact]
