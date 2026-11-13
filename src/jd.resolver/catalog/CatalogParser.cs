@@ -63,8 +63,8 @@ public static class CatalogParser
             }
         }
 
-        // Names first (one Catalog, names unique, references declared); a name declared twice is that error, and a read of it is judged by what it is
-        // first among components and runtimes, then among shared resources.
+        // Names first (one Catalog, names unique, references declared); a name declared twice is that error, and a read of it that is not in uses is
+        // judged first as a component or runtime, then as a shared resource.
         var index = await SchemaIndex.Shipped;
         errors.AddRange(NameRules.Check(index, new DocumentSet(SetName, Kinds, documents, valid, unreadable)));
         var layers = index.Layers;
