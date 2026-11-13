@@ -17,7 +17,7 @@ public static class Checks
     /// name <paramref name="file"/>.
     /// </summary>
     public static IReadOnlyList<LoadError> EnvironmentType(Catalog catalog, EnvironmentDescriptor environment, string file) =>
-        EnvironmentTypeCheck.Check(catalog, environment.Type, environment.Approval, file);
+        EnvironmentTypeCheck.Check(catalog, environment, file);
 
     /// <summary>
     /// An environment whose descriptor carries an approval policy is deployed to only by promotion (docs/architecture/approvals.md section 2): the check

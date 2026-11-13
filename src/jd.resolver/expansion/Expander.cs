@@ -41,16 +41,17 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
     }
 
     /// <summary>
-    /// Collects what an environment definition's offers reach in its type's layer into the one scope <see cref="SubstrateScope"/>
+    /// Collects what the offers of the environment, a definition resolved over <paramref name="baseDescriptor"/>, reach in its type's layer into the one scope <see cref="SubstrateScope"/>
     /// (docs/architecture/components.md section 3): the layer's shared resources reached through <c>uses</c> and, in the last layer (where
     /// workloads deploy), the offered components' parts of that layer. Every resource of an earlier layer it reaches must be in
     /// <paramref name="baseDescriptor"/>, which it reads but never deploys. The definition has no team and no runtime.
     /// </summary>
-    public ExpansionResult ExpandEnvironment(EnvironmentDefinition definition, string definitionFile, EnvironmentDescriptor? baseDescriptor)
+    public ExpansionResult ExpandEnvironment(string definitionFile, EnvironmentDescriptor? baseDescriptor)
     {
-        var owner = new Owner(OwnerKind.Environment, EnvironmentOwnerPrefix + definition.Name, string.Empty, null, null, new JObject());
+        var owner = new Owner(OwnerKind.Environment, EnvironmentOwnerPrefix + environment.Name, string.Empty, null, null, new JObject());
         var errors = new List<LoadError>();
         void Fail(string location, string message) => errors.Add(new LoadError(definitionFile, location, message));
+        string Offers() => environment.Location(Roles.EnvironmentOffers); // read when an error is reported
 
         // The type is checked against the catalog before an environment is resolved (EnvironmentTypeCheck).
         var layer = catalog.EnvironmentTypes[environment.Type].Layer;
@@ -58,7 +59,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         var parts = new List<(string Name, string Source, Part Part)>();
         var uses = new List<string>();
         var runtimes = new List<string>();
-        foreach (var (offer, index) in definition.Offers.Select((o, i) => (o, i)))
+        foreach (var (offer, index) in environment.Offers.Select((o, i) => (o, i)))
         {
             if (catalog.Components.TryGetValue(offer, out var component))
             {
@@ -71,7 +72,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
                 var (selected, miss) = component.Select(Selecting(), scope => scope == layer);
                 if (miss is not null)
                 {
-                    Fail($"offers[{index}]", miss.Message($"component '{offer}'"));
+                    Fail($"{Offers()}[{index}]", miss.Message($"component '{offer}'"));
                 }
 
                 parts.AddRange(selected.Select(part => (offer, component.Source, part)));
@@ -83,13 +84,13 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             }
             else
             {
-                Fail($"offers[{index}]", $"'{offer}' is not a component or runtime in the catalog.");
+                Fail($"{Offers()}[{index}]", $"'{offer}' is not a component or runtime in the catalog.");
             }
         }
 
         if (runtimes.Count > 1)
         {
-            Fail("offers", $"an environment offers at most one runtime; it offers {string.Join(", ", runtimes)}.");
+            Fail(Offers(), $"an environment offers at most one runtime; it offers {string.Join(", ", runtimes)}.");
         }
 
         // One owner per shared stack (security boundary 8): an environment layer reads the shared resources from its base, never deploys them.
@@ -104,14 +105,14 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             }
             else if (order.IndexOf(part.Scope) < order.IndexOf(layer) && !InBase(resource.Name))
             {
-                Fail("offers", $"the offers reach shared resource '{resource.Name}', but {missingInBase}; an environment never deploys a shared resource, so pass as the base the descriptor of a shared layer that offers it.");
+                Fail(Offers(), $"the offers reach shared resource '{resource.Name}', but {missingInBase}; an environment never deploys a shared resource, so pass as the base the descriptor of a shared layer that offers it.");
             }
         }
 
         // The descriptor adds new keys only, so a part of this run cannot be one the base already has.
         foreach (var part in parts.Where(p => InBase(p.Name)))
         {
-            Fail("offers", $"part '{part.Name}' is already in the base descriptor's values; an environment adds new parts only.");
+            Fail(Offers(), $"part '{part.Name}' is already in the base descriptor's values; an environment adds new parts only.");
         }
 
         var exports = parts.ToDictionary(p => p.Name, p => p.Part.Exports);

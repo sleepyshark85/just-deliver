@@ -291,4 +291,20 @@ public sealed class SchemaIndexTests
 
         Assert.Equal(["$['m'].*"], index.NamesOf("Thing").Refs.Select(field => field.Path));
     }
+
+    // A field the document leaves out is located, and named in messages, by the property that would hold it (EnvironmentTypeCheck).
+    [Fact]
+    public async Task A_role_field_is_named_by_the_property_it_ends_in_and_unnamed_for_a_maps_values_or_a_lists_items()
+    {
+        var index = await BuildAsync(Planted("doc.json", """
+            "properties": { "kind": { "enum": ["Thing"] },
+              "gate": { "type": "object", "x-jd": { "is": "env.approval" } },
+              "m": { "type": "object", "additionalProperties": { "x-jd": { "is": "part" } } },
+              "l": { "type": "array", "items": { "x-jd": { "is": "requirement" } } } }
+            """));
+
+        Assert.Equal(
+            [("env.approval", "gate"), ("part", null), ("requirement", null)],
+            index.RolesOf("Thing").Select(field => (field.Role, field.Name)).OrderBy(field => field.Role, StringComparer.Ordinal));
+    }
 }

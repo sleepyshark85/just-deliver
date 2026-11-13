@@ -137,6 +137,16 @@ public class ExpressionEvaluatorTests
         Assert.Equal("shop by team-a in dev", Resolve("${workload.name} by ${workload.team} in ${env.name}"));
     }
 
+    // The fields env.* reads are the ones the env.* roles bind, from a descriptor as it is read.
+    [Fact]
+    public async Task Env_reads_the_name_region_and_type_a_descriptor_binds()
+    {
+        var read = await EnvironmentParser.ParseAsync("env.yaml", "kind: Environment\nname: test-env\nregion: testregion\ntype: dev\noffers: []\nvalues: { part: { a: b } }\n");
+
+        Assert.Empty(read.Errors);
+        Assert.Equal("test-env/testregion/dev", Resolve("${env.name}/${env.region}/${env.type}", Context() with { Environment = read.Value! }));
+    }
+
     [Fact]
     public void Env_workload_and_role_namespaces_resolve()
     {
@@ -209,6 +219,13 @@ public class ExpressionEvaluatorTests
     [InlineData("${env.region.x}", "'env.region.x' is not an environment field")]
     [InlineData("${env.cosmos-account.id}", "'env.cosmos-account.id' is not an environment field")] // boundary 4: no way around uses
     [InlineData("${guid(env.cosmos-account.id)}", "'env.cosmos-account.id' is not an environment field")]
+    // Boundary 4: env.values and env.offers are roles the binder fills, never roots (docs/architecture/documents.md section 3).
+    [InlineData("${env.values.cosmos-account.id}", "'env.values.cosmos-account.id' is not an environment field; env.* reads only env.name, env.region, env.type")]
+    [InlineData("${env.offers}", "'env.offers' is not an environment field; env.* reads only env.name, env.region, env.type")]
+    [InlineData("${env.approval}", "'env.approval' is not an environment field; env.* reads only env.name, env.region, env.type")]
+    // A descriptor's values are not env fields, by key or by dot path.
+    [InlineData("${env.env-group.name}", "'env.env-group.name' is not an environment field")]
+    [InlineData("${env.values}", "'env.values' is not an environment field")]
     [InlineData("${role.nope}", "'role.nope' is not a role in the catalog")]
     [InlineData("${workload.region}", "not a workload field")]
     [InlineData("${nope.output}", "unknown node 'nope'")]

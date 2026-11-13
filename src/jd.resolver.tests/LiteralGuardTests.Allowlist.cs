@@ -6,7 +6,7 @@ namespace jd.resolver.tests;
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
-        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
+        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
 
     private static IEnumerable<(string File, string Literal)> Entries(Dictionary<string, string[]> group) =>
         group.SelectMany(entry => entry.Value.Select(literal => (entry.Key, literal)));
@@ -31,14 +31,16 @@ public sealed partial class LiteralGuardTests
         // the role names the engine reads (Appendix B), like the expression roots
         ["jd.resolver/Roles.cs"] =
         [
-            "catalog.version", "contract", "env.type", "environment-type.layer", "layer", "naming.allowed", "naming.pattern", "naming.rules", "node.config",
-            "node.kind", "node.template", "part.exports", "part.nodes", "part.scope", "policy.name", "requirement.class", "roles", "runtime.part",
+            "approval.approvers", "approval.qualified-on", "approval.required", "approval.separate", "catalog.version", "contract", "env.approval",
+            "env.name", "env.offers", "env.region", "env.type", "env.values", "environment-type.layer", "layer", "naming.allowed", "naming.pattern",
+            "naming.rules", "node.config", "node.kind", "node.template", "part.exports", "part.nodes", "part.scope", "policy.name", "requirement.class",
+            "roles", "runtime.part",
         ],
         ["jd.resolver/expansion/ConfigWalker.cs"] = ["workload.variables"], // the fn::entries source (Appendix A: concept 4)
         // the annotation keyword and the annotations it reads (each named once); JSON Schema's own keyword
         ["jd.resolver/SchemaIndex.cs"] = ["define", "fallback", "is", "message", "one", "properties", "ref", "scope", "select", "x-jd"],
         ["jd.resolver/expressions/BuiltIns.cs"] = ["hash", "id", "name", "workload"], // name() and its placeholders
-        ["jd.resolver/expressions/ExpressionEvaluator.cs"] = ["image", "name", "port", "runtime", "team", "workload"], // expression roots
+        ["jd.resolver/expressions/ExpressionEvaluator.cs"] = ["image", "name", "port", "region", "runtime", "team", "type", "workload"], // expression roots
         ["jd.resolver/graph/ConfigJson.cs"] = ["name"], // an fn::entries item
         ["jd.resolver/graph/GraphBuilder.cs"] = ["config", "kind", "template"], // the node hash (H47)
         ["jd.resolver/graph/GraphJson.cs"] =
@@ -66,18 +68,6 @@ public sealed partial class LiteralGuardTests
     private static readonly Dictionary<string, string[]> S24b3 = new()
     {
         ["backend-providers/jd.bp.pulumi/TemplateLibrary.cs"] = ["exports.", "template"],
-    };
-
-    private static readonly Dictionary<string, string[]> S24c1 = new()
-    {
-        ["jd.resolver/environment/EnvironmentDefinition.cs"] = ["approval", "name", "offers", "region", "type"],
-        ["jd.resolver/environment/EnvironmentDescriptor.cs"] = ["name", "region", "type"],
-        ["jd.resolver/environment/EnvironmentParser.cs"] =
-        [
-            "approval", "approval.qualifiedOn", "approval.required", "name", "offers", "region", "type", "values", "values.",
-        ],
-        ["jd.resolver/environment/EnvironmentTypeCheck.cs"] = ["approval", "type"],
-        ["jd.resolver/expansion/Expander.cs"] = ["offers", "offers["],
     };
 
     private static readonly Dictionary<string, string[]> S24c2 = new()

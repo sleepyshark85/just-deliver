@@ -12,13 +12,13 @@ namespace jd.resolver.environment;
 public sealed record ComposedDescriptor(string? Yaml, IReadOnlyList<LoadError> Errors);
 
 /// <summary>
-/// Composes the environment descriptor of an <see cref="EnvironmentDefinition"/>: every part of the run's graph contributes its exports,
+/// Composes the descriptor of an environment a definition is resolved in: every part of the run's graph contributes its exports,
 /// evaluated with the deployed outputs and keyed <c>values.&lt;part&gt;.&lt;export&gt;</c>, beside the base descriptor's values (the
 /// expander refuses a part the base already has); the result is validated with <see cref="EnvironmentParser"/>. Pure. Called twice: before
 /// deploying (no outputs, to find every error while nothing exists yet) and after, with the node outputs. The environment is the one the
-/// graph was resolved in (<see cref="EnvironmentDefinition.Over"/>); its values are the base descriptor's.
+/// graph was resolved in (<see cref="EnvironmentDescriptor.Over"/>); its values are the base descriptor's.
 /// </summary>
-public sealed class DescriptorComposer(EnvironmentDefinition definition, string definitionFile, Catalog catalog, EnvironmentDescriptor environment, ResolvedGraph graph)
+public sealed class DescriptorComposer(string definitionFile, Catalog catalog, EnvironmentDescriptor environment, ResolvedGraph graph)
 {
     private static readonly ISerializer Serializer = new SerializerBuilder().WithQuotingNecessaryStrings().Build();
 
@@ -55,10 +55,12 @@ public sealed class DescriptorComposer(EnvironmentDefinition definition, string 
         }
 
         // Workloads deploy in the last layer, so an earlier layer offers them nothing: they deploy on an environment, which reads it as its base.
-        var offers = catalog.EnvironmentTypes[environment.Type].Layer != catalog.Layers[^1] ? [] : definition.Offers;
+        var offers = catalog.EnvironmentTypes[environment.Type].Layer != catalog.Layers[^1] ? [] : environment.Offers;
+        // The descriptor's kind is the one kind that binds the deployed values.
+        var kind = EnvironmentParser.DescriptorKinds(await SchemaIndex.Shipped).Single();
         var document = new JObject
         {
-            [DocumentLoader.KindField] = EnvironmentParser.Kind,
+            [DocumentLoader.KindField] = kind,
             ["name"] = environment.Name,
             ["region"] = environment.Region,
             ["type"] = environment.Type,

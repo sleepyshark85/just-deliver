@@ -72,8 +72,35 @@ internal static class Roles
     /// <summary>A policy's name; the documents of a kind that binds it are policies.</summary>
     public const string PolicyName = "policy.name";
 
+    /// <summary>The environment's name, read as <c>${env.name}</c>.</summary>
+    public const string EnvironmentName = "env.name";
+
+    /// <summary>Where the environment is deployed, read as <c>${env.region}</c>.</summary>
+    public const string EnvironmentRegion = "env.region";
+
     /// <summary>The environment's type, which selects an implementation.</summary>
     public const string EnvironmentType = "env.type";
+
+    /// <summary>The components and the runtime the environment offers, by name.</summary>
+    public const string EnvironmentOffers = "env.offers";
+
+    /// <summary>The deployed parts' exports, as nested mappings of strings; only a descriptor binds it, never an expression root.</summary>
+    public const string EnvironmentValues = "env.values";
+
+    /// <summary>The environment's approval block, whose presence gates it.</summary>
+    public const string EnvironmentApproval = "env.approval";
+
+    /// <summary>The environment whose records must show a set qualified.</summary>
+    public const string ApprovalQualifiedOn = "approval.qualified-on";
+
+    /// <summary>How many distinct approvers are needed.</summary>
+    public const string ApprovalRequired = "approval.required";
+
+    /// <summary>The object ids that may approve.</summary>
+    public const string ApprovalApprovers = "approval.approvers";
+
+    /// <summary>Whether an approver must not have deployed the label on the environment the set is qualified on.</summary>
+    public const string ApprovalSeparate = "approval.separate";
 
     /// <summary>A requirement's class, which selects a class part.</summary>
     public const string RequirementClass = "requirement.class";

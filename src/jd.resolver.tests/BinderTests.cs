@@ -1,4 +1,5 @@
 using jd.resolver.catalog;
+using jd.resolver.environment;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -134,6 +135,20 @@ public sealed class BinderTests
         Assert.Empty(binder.ReadNamingRules(plain));
         Assert.Empty(binder.ReadRoleDefinitions(plain));
         Assert.Empty(binder.ReadGrantTargets(plain));
+    }
+
+    // The binder takes only schema-valid documents, which hold both fields of the block; a binding lost from the schema must not read as 0 required
+    // approvers and no separation, which would weaken the gate.
+    [Theory]
+    [InlineData("""{ "qualifiedOn": "dev", "approvers": [], "separateFromDeployer": true }""")] // no count
+    [InlineData("""{ "qualifiedOn": "dev", "required": 1, "approvers": [] }""")] // no separation flag
+    public async Task An_approval_block_missing_a_field_is_not_bound_to_a_weaker_policy(string approval)
+    {
+        var index = await SchemaIndex.Shipped;
+        var kind = EnvironmentParser.DescriptorKinds(index).Single();
+        var body = JObject.Parse($$"""{ "kind": "{{kind}}", "name": "dev", "approval": {{approval}} }""");
+
+        Assert.Throws<ArgumentNullException>(() => new Binder(index).ReadEnvironment(new Document("env.yaml", kind, body)));
     }
 
     [Fact]

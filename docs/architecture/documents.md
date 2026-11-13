@@ -85,8 +85,8 @@ is written as `oneOf` + `message`: the policy-scope shapes stay code (concept 10
 
 The concept records stay typed and the algorithms stay the same, their reads adjusted to the new records (`PartOwner` replaces five types, so `Expander` and `PolicyApplier` read it where they read those): `Node`, `Part` (gains `Scope`, `Reads` and its location),
 `PartOwner` (name, source, `uses`, contract, its parts by selection keys; replaces `Component`, `SharedResource`, `Runtime`, `Implementation`,
-`RuntimeImplementation`), `Probe`, `RuntimeRelease`, `Policy`, `NamingRule`, `ApprovalPolicy`, `Environment` (one record for a definition and
-a descriptor; replaces `EnvironmentDefinition` and `EnvironmentDescriptor`, as `EnvironmentDefinition.Over` already does),
+`RuntimeImplementation`), `Probe`, `RuntimeRelease`, `Policy`, `NamingRule`, `ApprovalPolicy`, `EnvironmentDescriptor` (one record for a definition and
+a descriptor; replaces `EnvironmentDefinition`; S24c1 kept the name, since `Environment` clashes with `System.Environment`),
 `Requirement`, `ReleaseWorkload`. **Deleted**: the per-file types `Catalog` (its fields are one collection per file kind), `EnvironmentDefinition`,
 `CatalogSource`, every `*LoadResult` (one `LoadResult<T>` of value and errors), `ApprovalRecord.Stored*` (choice 2 a only), the `To*`
 converters, `ImplementationKey`, `SharedScope`, `MatchCriteria`. `Expander`, `GraphBuilder`, `ReleaseFlow`, `Qualifier` and `PreviewFormatter`
