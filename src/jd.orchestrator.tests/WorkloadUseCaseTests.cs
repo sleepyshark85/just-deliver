@@ -12,7 +12,7 @@ public sealed class WorkloadUseCaseTests
     private const string WorkloadName = "teams/shop/workload.yaml";
     private const string EnvironmentName = "envs/dev.yaml";
 
-    private const string Workload = """
+    internal const string Workload = """
         apiVersion: just-deliver/v1
         kind: Workload
         metadata:
@@ -24,11 +24,11 @@ public sealed class WorkloadUseCaseTests
           - type: thing
         """;
 
-    private const string Environment = "kind: Environment\nname: dev\nregion: region-1\ntype: dev\noffers: [container-app, thing]\nvalues: {}\n";
+    internal const string Environment = "kind: Environment\nname: dev\nregion: region-1\ntype: dev\noffers: [container-app, thing]\nvalues: {}\n";
 
-    private const string Approval = "approval:\n  qualifiedOn: test\n  required: 1\n  approvers: [\"00000000-0000-0000-0000-000000000000\"]\n  separateFromDeployer: true\n";
+    internal const string Approval = "approval:\n  qualifiedOn: test\n  required: 1\n  approvers: [\"00000000-0000-0000-0000-000000000000\"]\n  separateFromDeployer: true\n";
 
-    private static readonly SourceCatalog Catalog = new("cat",
+    internal static readonly SourceCatalog Catalog = new("cat",
     [
         Document("catalog.yaml", "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment, approval: false }, stage: { layer: environment, approval: true } }\n"),
         Document("components/thing.yaml",
@@ -44,7 +44,7 @@ public sealed class WorkloadUseCaseTests
 
     private readonly FakeBackend _backend = new();
 
-    private static SourceDocument Document(string name, string text) => new(name, Encoding.UTF8.GetBytes(text));
+    internal static SourceDocument Document(string name, string text) => new(name, Encoding.UTF8.GetBytes(text));
 
     private readonly RecordingConnections _connections;
 
