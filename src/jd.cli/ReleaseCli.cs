@@ -18,8 +18,11 @@ internal static class ReleaseCli
     private const string DeployCommand = "deploy";
     private const string QualifyCommand = "qualify";
 
-    // Out is set exactly for create.
-    private sealed record Options(string Input, string? Out);
+    private abstract record Options(string Input);
+
+    private sealed record CreateOptions(string Manifest, string Out) : Options(Manifest);
+
+    private sealed record ShowOptions(string Set) : Options(Set);
 
     // args are the arguments after "release".
     public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
@@ -43,14 +46,17 @@ internal static class ReleaseCli
             return ExitCodes.UsageError;
         }
 
-        return options.Out is { } output
-            ? await CreateAsync(options.Input, output, connections, stdout, stderr, cancellationToken)
-            : await ShowAsync(options.Input, stdout, stderr, cancellationToken);
+        return options switch
+        {
+            CreateOptions create => await CreateAsync(create, connections, stdout, stderr, cancellationToken),
+            _ => await ShowAsync(options.Input, stdout, stderr, cancellationToken),
+        };
     }
 
     private static async Task<int> CreateAsync(
-        string manifest, string output, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+        CreateOptions options, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
+        var (manifest, output) = options;
         var input = new CreateReleaseInput(await Cli.ReadDocumentAsync(manifest, cancellationToken), BesideManifest(manifest));
         var result = await CreateRelease.RunAsync(input, connections, cancellationToken);
         Cli.Print(result.Errors, stderr);
@@ -100,7 +106,7 @@ internal static class ReleaseCli
     // The input must exist; an existing --out is refused up front, before anything is read, because a release set is never changed.
     private static string? Unusable(Options options) =>
         Arguments.Unreadable(options.Input, null, null)
-        ?? (options.Out is { } output && File.Exists(output) ? $"'{output}' already exists; a release set is immutable, so create a new file." : null);
+        ?? (options is CreateOptions { Out: var output } && File.Exists(output) ? $"'{output}' already exists; a release set is immutable, so create a new file." : null);
 
     private static (Options? Options, string Problem) Parse(string[] args)
     {
@@ -124,10 +130,14 @@ internal static class ReleaseCli
             return (null, command == CreateCommand ? "expected exactly one release manifest." : "expected exactly one release set.");
         }
 
-        var output = values.GetValueOrDefault(Arguments.OutOption);
-        return command == CreateCommand && output is null
-            ? (null, $"{CreateCommand} needs {Arguments.OutOption} <release-set.yaml>.")
-            : (new Options(positional[0], output), string.Empty);
+        if (command == ShowCommand)
+        {
+            return (new ShowOptions(positional[0]), string.Empty);
+        }
+
+        return values.GetValueOrDefault(Arguments.OutOption) is { } output
+            ? (new CreateOptions(positional[0], output), string.Empty)
+            : (null, $"{CreateCommand} needs {Arguments.OutOption} <release-set.yaml>.");
     }
 
     private static string Format(ReleaseSet set, string createdAt)

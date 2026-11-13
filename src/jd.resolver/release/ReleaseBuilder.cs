@@ -8,7 +8,7 @@ namespace jd.resolver.release;
 /// One workload going into a release set.
 /// </summary>
 /// <param name="File">Names the definition in its errors: the name its reader gave when creating, the release set when loading.</param>
-/// <param name="Location">Prefix for locations inside the definition: empty for a definition file, <c>workloads[i].definition</c> in a release set.</param>
+/// <param name="Location">Prefix for locations inside the definition: empty for a definition its reader read, <c>workloads[i].definition</c> in a release set.</param>
 /// <param name="Sha256">Lowercase hex SHA-256 over the exact bytes of the definition.</param>
 /// <param name="Definition">The definition text as decoded from those bytes (a byte order mark is kept, so it re-encodes to them).</param>
 /// <param name="DependsOn">Names of workloads that deploy first.</param>
