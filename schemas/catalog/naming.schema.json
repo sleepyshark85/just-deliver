@@ -11,6 +11,7 @@
     "rules": {
       "description": "Resource kind (the argument of name()) -> rule.",
       "type": "object",
+      "x-jd": { "define": "naming kind" },
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",

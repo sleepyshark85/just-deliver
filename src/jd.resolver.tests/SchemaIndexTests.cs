@@ -142,7 +142,7 @@ public sealed class SchemaIndexTests
     public async Task Every_x_jd_keyword_used_as_the_meta_schema_says_is_accepted()
     {
         var index = await BuildAsync(Planted("doc.json", """
-            "x-jd": { "is": "owner", "define": ["part-owner", "component"], "ref": "component", "select": "env.type", "fallback": "default",
+            "x-jd": { "is": "owner", "define": ["part owner", "component"], "ref": "component", "select": "env.type", "fallback": "default",
                       "scope": "workload", "match": "requirement.class", "one": true, "message": "m" },
             "properties": { "kind": { "enum": ["Thing"] }, "a": { "x-jd": { "define": "policy", "scope": "shared" } } }
             """));

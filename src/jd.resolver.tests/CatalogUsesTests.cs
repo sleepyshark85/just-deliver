@@ -100,7 +100,7 @@ public class CatalogUsesTests
             ("r.yaml", Runtime(Uses("r.yaml"), "{}"))));
 
         Assert.Equal((file, "uses"), (error.File, error.Location));
-        Assert.Equal("'cosmos-acount' is not a shared resource in the catalog (shared resources: env-group, shared-group).", error.Message);
+        Assert.Equal("'cosmos-acount' is not a shared resource in the catalog (declared: env-group, shared-group).", error.Message);
     }
 
     // The second declaration is the one error: the checks that read shared resources by name use the first.
@@ -121,7 +121,7 @@ public class CatalogUsesTests
         var error = SingleError(await Parse(("c.yaml", Component()), ("r.yaml", Runtime("[]", "{}")), ("s.yaml", Shared("shared-group", uses: $"[{used}]"))));
 
         Assert.Equal(("s.yaml", "uses"), (error.File, error.Location));
-        Assert.Equal($"'{used}' is a component or runtime; uses lists shared resources only.", error.Message);
+        Assert.Equal($"'{used}' is not a shared resource in the catalog (declared: shared-group).", error.Message);
     }
 
     [Fact]

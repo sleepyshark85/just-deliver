@@ -94,17 +94,16 @@ public class CatalogParserTests
     {
         var result = await Parse(("components/a.yaml", ComponentFile("alpha-db")));
 
-        Assert.Contains(result.Errors, e => e.Message.Contains("exactly one is required"));
+        Assert.Equal([new LoadError("(catalog)", string.Empty, "no file of kind Catalog; exactly one is required.")], result.Errors);
     }
 
+    // The second Catalog is one mistake: its environment types are not read as names declared a second time.
     [Fact]
     public async Task Duplicate_catalog_file_is_an_error_on_the_second_file()
     {
         var result = await Parse(("a.yaml", CatalogFile), ("b.yaml", CatalogFile));
 
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("b.yaml", error.File);
-        Assert.Contains("a.yaml", error.Message);
+        Assert.Equal([new LoadError("b.yaml", "kind", "a second Catalog file; exactly one is allowed (first: a.yaml).")], result.Errors);
     }
 
     [Theory]
@@ -154,7 +153,7 @@ public class CatalogParserTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal((file, "implementations.stagee"), (error.File, error.Location));
-        Assert.Equal("'stagee' is not a declared environment type (declared: dev, stage).", error.Message);
+        Assert.Equal("'stagee' is not an environment type in the catalog (declared: dev, stage).", error.Message);
     }
 
     [Theory]
@@ -203,7 +202,7 @@ public class CatalogParserTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("p.yaml", "match.environmentType"), (error.File, error.Location));
-        Assert.Contains("'stagee' is not a declared environment type (declared: dev, stage)", error.Message);
+        Assert.Equal("'stagee' is not an environment type in the catalog (declared: dev, stage).", error.Message);
     }
 
     [Fact]
@@ -424,8 +423,9 @@ public class CatalogParserTests
 
         var error = Assert.Single(undeclared.Errors);
         Assert.Equal(("p.yaml", "require"), (error.File, error.Location));
-        Assert.Equal("'beta-db' is not a component in the catalog (components: alpha-db).", error.Message);
-        Assert.Equal(("p.yaml", "require"), (Assert.Single(runtime.Errors).File, Assert.Single(runtime.Errors).Location));
+        Assert.Equal("'beta-db' is not a component in the catalog (declared: alpha-db).", error.Message);
+        var notComponent = Assert.Single(runtime.Errors);
+        Assert.Equal(("p.yaml", "require", "'container-app' is not a component in the catalog (declared: alpha-db)."), (notComponent.File, notComponent.Location, notComponent.Message));
     }
 
     [Fact]
@@ -537,15 +537,25 @@ public class CatalogParserTests
         Assert.Contains("schema violation", error.Message);
     }
 
-    [Fact]
-    public async Task Same_naming_rule_or_role_in_two_files_is_an_error()
+    // Names that are a map's keys: YAML refuses a key twice in one file (Repeated_key_is_an_error), so a second definition is in another file.
+    [Theory]
+    [InlineData("kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n", "roles.reader", "reader")]
+    [InlineData("kind: Naming\nrules:\n  thing:\n    pattern: \"{id}\"\n    maxLength: 20\n    allowed: \"[a-z0-9]\"\n", "rules.thing", "thing")]
+    [InlineData("kind: Grants\ntargets: { t/g: scope }\n", "targets.t/g", "t/g")]
+    public async Task Same_naming_rule_role_or_grant_template_in_two_files_is_an_error(string file, string location, string name)
     {
-        const string role = "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n";
-        var result = await Parse(("catalog.yaml", CatalogFile), ("r1.yaml", role), ("r2.yaml", role));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("r1.yaml", file), ("r2.yaml", file));
 
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("r2.yaml", error.File);
-        Assert.Equal("roles.reader", error.Location);
+        Assert.Equal([new LoadError("r2.yaml", location, $"'{name}' is already declared in r1.yaml.")], result.Errors);
+    }
+
+    // A policy that failed its schema is reported there; the component it requires is not reported as undeclared as well.
+    [Fact]
+    public async Task A_reference_in_a_file_that_failed_its_schema_is_not_checked()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", PolicyFile("pol-a").Replace("reason: because\n", string.Empty, StringComparison.Ordinal) + "require: beta-db\n"));
+
+        Assert.Equal(("p.yaml", "reason"), (Assert.Single(result.Errors).File, Assert.Single(result.Errors).Location));
     }
 
     [Fact]
