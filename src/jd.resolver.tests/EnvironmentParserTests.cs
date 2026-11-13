@@ -69,8 +69,8 @@ public class EnvironmentParserTests
     [Fact]
     public async Task Code_rule_errors_are_all_reported_together()
     {
-        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  type: x\n  a.b: c"));
-        Assert.Equal(["values.type", "values.a.b"], result.Errors.Select(e => e.Location));
+        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  type: x\n  region: y"));
+        Assert.Equal(["values.region", "values.type"], result.Errors.Select(e => e.Location));
     }
 
     [Fact]
@@ -78,16 +78,34 @@ public class EnvironmentParserTests
     {
         var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  cosmos.accountId: /other"));
         var error = Assert.Single(result.Errors);
-        Assert.Equal("values.cosmos.accountId", error.Location);
-        Assert.Contains("'.'", error.Message);
+        Assert.Equal(("values['cosmos.accountId']", DottedKeyMessage), (error.Location, error.Message));
         Assert.Null(result.Value);
     }
 
-    [Fact]
-    public async Task Dotted_key_in_a_nested_mapping_is_rejected()
+    // The schema's message, reported where the key is however deep it is nested (the validator ignores propertyNames, so the rule is
+    // patternProperties with a refusing additionalProperties).
+    private const string DottedKeyMessage = "keys must be non-empty and must not contain '.'; nest a mapping instead (a: { b: … }).";
+
+    [Theory]
+    [InlineData("logAnalytics: { \"a.b\": x }", "values.logAnalytics['a.b']")]
+    [InlineData("logAnalytics: { deeper: { \".b\": x } }", "values.logAnalytics.deeper['.b']")]
+    [InlineData("logAnalytics: { \"\": x }", "values.logAnalytics.")]
+    public async Task A_dotted_or_empty_key_in_a_nested_mapping_is_rejected_with_the_schema_message(string values, string location)
     {
-        var result = await Parse(Valid.Replace("logAnalytics: { id: /law/id }", "logAnalytics: { \"a.b\": x }"));
-        Assert.Equal("values.logAnalytics.a.b", Assert.Single(result.Errors).Location);
+        var result = await Parse(Valid.Replace("logAnalytics: { id: /law/id }", values));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal((location, DottedKeyMessage), (error.Location, error.Message));
+    }
+
+    [Fact]
+    public async Task A_leaf_that_is_neither_a_string_nor_a_mapping_reports_the_validators_text_not_the_key_message()
+    {
+        var result = await Parse(Valid.Replace("logAnalytics: { id: /law/id }", "logAnalytics: { id: [x] }"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("values.logAnalytics", error.Location);
+        Assert.StartsWith("schema violation: AdditionalPropertiesNotValid: #/values.logAnalytics", error.Message);
     }
 
     [Fact]

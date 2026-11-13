@@ -24,18 +24,6 @@ public static class CatalogParser
 
     private static readonly string[] Kinds = [CatalogKind, ComponentKind, RuntimeKind, SharedResourceKind, PolicyKind, NamingKind, RolesKind, GrantsKind];
 
-    // Kinds of earlier catalogs, and what replaced them (docs/architecture/components.md section 2).
-    private static readonly Dictionary<string, string> ReplacedKinds = new()
-    {
-        ["ResourceType"] = $"a {ComponentKind} file holds the type's contract (exports) beside its implementations",
-        ["Mapping"] = $"a {ComponentKind}'s implementations (per environment type, then class) replace a type's mappings, and a {RuntimeKind} file the runtime mapping",
-    };
-
-    // A policy field of earlier catalogs: a policy requires, it never adds (docs/architecture/components.md section 3).
-    private const string RemovedPolicyAdd = "add";
-
-    private static readonly Regex NodeNamePattern = new("^[a-z]([a-z0-9-]*[a-z0-9])?$", RegexOptions.CultureInvariant);
-
     // One part, with what its config and exports may read besides its own nodes and the reserved roots: the shared resources in Uses and,
     // for a class part, its own component (OwnComponent) and that implementation's environment part. Prefix locates the part in its file;
     // Scope is null for the workload's parts, so a runtime's part is the workload part without an own component.
@@ -153,20 +141,6 @@ public static class CatalogParser
         if (parsed.Value is not { } document)
         {
             return null;
-        }
-
-        if (ReplacedKinds.TryGetValue(document.Kind, out var replacement))
-        {
-            errors.Add(new LoadError(source.Name, DocumentLoader.KindField, $"kind '{document.Kind}' is no longer supported: {replacement}."));
-            return (document, false);
-        }
-
-        if (document.Kind == PolicyKind && document.Body.ContainsKey(RemovedPolicyAdd))
-        {
-            // One clear error instead of the schema's "not allowed"; the rest of the file is not checked until it is migrated.
-            errors.Add(new LoadError(source.Name, RemovedPolicyAdd,
-                "a policy can no longer add nodes: a workload declares what it gets in its 'requires'; use 'require: <component>' to make every workload the policy matches require one."));
-            return (document, false);
         }
 
         // An unknown kind is refused here: readable, so not a missing Catalog, and no kind-specific check applies to it.
@@ -304,9 +278,8 @@ public static class CatalogParser
             r.Source, $"implementations.{i.Key}.", r.Name, Scope: null, new Part(i.Value.Nodes, new Dictionary<string, string>()), r.Uses, OwnComponent: null, OwnEnvironment: null))),
     ];
 
-    // Node names become parts of graph node ids and backend stack names, so they are lowercase kebab (enforced here: the schema validator
-    // ignores the propertyNames keyword). A node may not take a name its part reads as a root, or one of the two would be unreachable;
-    // the runtime's own 'runtime' node is the reserved root.
+    // A node may not take a name its part reads as a root, or one of the two would be unreachable; the runtime's own 'runtime' node is the
+    // reserved root. The name's form is the part schema's.
     private static void CheckNodeNames(List<Reader> readers, List<LoadError> errors)
     {
         foreach (var reader in readers)
@@ -314,8 +287,7 @@ public static class CatalogParser
             foreach (var node in reader.Part.Nodes.Keys)
             {
                 var problem =
-                    !NodeNamePattern.IsMatch(node) ? $"'{node}' is not a valid node name; use lowercase letters, digits and hyphens, starting with a letter and not ending in a hyphen."
-                    : node == ExpressionEvaluator.RuntimeNode ? (reader.IsRuntime ? null : $"'{node}' is the runtime node, declared only by a {RuntimeKind}.")
+                    node == ExpressionEvaluator.RuntimeNode ? (reader.IsRuntime ? null : $"'{node}' is the runtime node, declared only by a {RuntimeKind}.")
                     : ExpressionEvaluator.ReservedRoots.Contains(node) || reader.Uses.Contains(node) || node == reader.OwnComponent ? $"'{node}' is a name this part reads as a root; rename the node."
                     : null;
                 if (problem is not null)

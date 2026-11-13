@@ -280,8 +280,8 @@ public class CatalogUsesTests
         var environment = SingleError(await Parse(("c.yaml", Component(environment: "{ nodes: { Bad_Name: { template: t/db, config: {} } }, exports: {} }"))));
 
         Assert.Equal(("s.yaml", "nodes.Bad_Name"), (shared.File, shared.Location));
-        Assert.StartsWith("'Bad_Name' is not a valid node name;", shared.Message);
-        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.Bad_Name"), (environment.File, environment.Location));
+        Assert.Equal(CatalogParserTests.NodeNameMessage, shared.Message);
+        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.Bad_Name", CatalogParserTests.NodeNameMessage), (environment.File, environment.Location, environment.Message));
     }
 
     [Theory]

@@ -24,7 +24,7 @@
           "additionalProperties": false,
           "required": ["layer"],
           "properties": {
-            "layer": { "description": "Which `jd env up` layer an environment of this type is: `shared` deploys the `scope: shared` resources, `environment` the `scope: environment` resources and the offered components' environment parts. Implementations are keyed by `environment` types only.", "enum": ["shared", "environment"] },
+            "layer": { "description": "Which `jd env up` layer an environment of this type is: `shared` deploys the `scope: shared` resources, `environment` the `scope: environment` resources and the offered components' environment parts. Implementations are keyed by `environment` types only.", "$ref": "part.schema.json#/definitions/layer" },
             "approval": { "description": "true: an environment of this type must carry an `approval` block, so it cannot be written ungated. Any type may carry one; the block is what gates.", "type": "boolean" }
           }
         }
