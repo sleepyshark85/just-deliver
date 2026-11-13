@@ -118,7 +118,7 @@ public sealed class DocumentLoaderTests : IDisposable
     [Fact]
     public async Task A_descriptor_given_as_a_definition_is_refused()
     {
-        var result = await EnvironmentDefinitionFile.LoadAsync(Write("dev.env.yaml", Descriptor));
+        var result = await EnvironmentDefinitionFile.LoadAsync(await SourceFiles.ReadAsync(Write("dev.env.yaml", Descriptor)), CancellationToken.None);
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
@@ -130,7 +130,7 @@ public sealed class DocumentLoaderTests : IDisposable
     {
         var workload = Write("workload.yaml", await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
 
-        var result = await EnvironmentDefinitionFile.LoadAsync(workload);
+        var result = await EnvironmentDefinitionFile.LoadAsync(await SourceFiles.ReadAsync(workload), CancellationToken.None);
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
@@ -196,7 +196,7 @@ public sealed class DocumentLoaderTests : IDisposable
     {
         var descriptor = Write("dev.yaml", Descriptor);
 
-        var result = await WorkloadFile.LoadAsync(new SourceDocument(descriptor, await File.ReadAllBytesAsync(descriptor)), CancellationToken.None);
+        var result = await WorkloadFile.LoadAsync(await SourceFiles.ReadAsync(descriptor), CancellationToken.None);
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
@@ -215,13 +215,4 @@ public sealed class DocumentLoaderTests : IDisposable
         Assert.StartsWith("schema violation: NoAdditionalPropertiesAllowed", error.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task A_missing_definition_is_an_error_saying_what_was_not_found()
-    {
-        var missing = Path.Combine(_temp, "missing.yaml");
-
-        var error = Assert.Single((await EnvironmentDefinitionFile.LoadAsync(missing)).Errors);
-
-        Assert.Equal((missing, string.Empty, "environment definition not found."), (error.File, error.Location, error.Message));
-    }
 }

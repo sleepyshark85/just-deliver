@@ -1,19 +1,15 @@
 using jd.orchestrator.usecases;
-using jd.resolver;
-using jd.resolver.catalog;
-using jd.resolver.environment;
 
 namespace jd.cli;
 
 /// <summary>
-/// <c>jd env up</c>: resolves an environment definition through the resolver, provisions it through the orchestrator and writes the
-/// descriptor from the outputs. Wiring only; the rules are <see cref="DescriptorComposer"/>'s. Exit codes as <see cref="Cli"/>.
+/// <c>jd env up</c>: reads the definition, the catalog and the base as typed, hands them to <see cref="EnvUp"/>, prints the walk and the result, and
+/// writes the descriptor to <c>--out</c>. Parsing, reading, writing and output only; exit codes from <see cref="ExitCodes"/>. A read or write that
+/// fails is the dispatch's to report.
 /// </summary>
 internal static class EnvCli
 {
-    private const int Success = 0;
-    private const int Invalid = 1;
-    private const int UsageError = 2;
+    private const string UpCommand = "up";
 
     private sealed record Options(string Definition, string Catalog, string Out, string? Base, bool Force);
 
@@ -26,146 +22,71 @@ internal static class EnvCli
         {
             stderr.WriteLine($"jd: {problem}");
             stderr.Write(Cli.Usage);
-            return UsageError;
+            return ExitCodes.UsageError;
         }
 
-        problem = Unreadable(options);
-        if (problem is not null)
+        if (Unusable(options) is { } unusable)
         {
-            stderr.WriteLine($"jd: {problem}");
-            return UsageError;
+            stderr.WriteLine($"jd: {unusable}");
+            return ExitCodes.UsageError;
         }
 
-        try
-        {
-            return await UpAsync(options, connections, stdout, stderr, cancellationToken);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            stderr.WriteLine($"jd: {ex.Message}");
-            return UsageError;
-        }
+        return await UpAsync(options, connections, stdout, stderr, cancellationToken);
     }
 
     private static async Task<int> UpAsync(
         Options options, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        var definitionResult = await EnvironmentDefinitionFile.LoadAsync(options.Definition, cancellationToken);
-        var source = await Cli.ReadCatalogAsync(options.Catalog, cancellationToken);
-        var catalogResult = await CatalogParser.ParseAsync(source, cancellationToken);
-        var baseResult = options.Base is null ? null : await EnvironmentParser.LoadAsync(options.Base, cancellationToken);
-        if (definitionResult.Value is not { } definition || catalogResult.Value is not { } catalog || (baseResult is not null && baseResult.Value is null))
+        var input = new EnvUpInput(
+            await Cli.ReadDocumentAsync(options.Definition, cancellationToken),
+            await Cli.ReadCatalogAsync(options.Catalog, cancellationToken),
+            options.Base is null ? null : await Cli.ReadDocumentAsync(options.Base, cancellationToken));
+        var result = await EnvUp.RunAsync(input, connections, Cli.ShowWalk(stdout), cancellationToken);
+        Cli.Print(result.Errors, stderr);
+        if (result.Run is { Succeeded: false } run)
         {
-            Cli.Print(definitionResult.Errors.Concat(source.Located(catalogResult.Errors)).Concat(baseResult?.Errors ?? []), stderr);
-            return Invalid;
+            Cli.PrintStopped(run, stderr);
         }
 
-        // The definition's type, and the base's, must be the catalog's; a gated type's environment cannot be written without its block.
-        var environment = definition.Over(baseResult?.Value);
-        var typeErrors = Checks.EnvironmentType(catalog, environment, options.Definition)
-            .Concat(options.Base is { } basePath && baseResult?.Value is { } baseDescriptor ? Checks.EnvironmentType(catalog, baseDescriptor, basePath) : []).ToList();
-        if (typeErrors.Count > 0)
+        if (result is { Descriptor: { } descriptor, Environment: { } environment })
         {
-            Cli.Print(typeErrors, stderr);
-            return Invalid;
+            await using (var stream = new FileStream(options.Out, options.Force ? FileMode.Create : FileMode.CreateNew, FileAccess.Write))
+            {
+                await stream.WriteAsync(descriptor, cancellationToken);
+            }
+
+            stdout.WriteLine($"{options.Out}: environment {environment.Name} ({environment.Region}, {environment.Type}) written.");
         }
 
-        var graph = Resolver.ResolveSubstrate(definition, options.Definition, catalog, environment, baseResult?.Value);
-        var composer = new DescriptorComposer(definition, options.Definition, catalog, environment, graph);
-
-        // Everything that can be known before anything is created is checked first: the graph, and the descriptor with its values still pending.
-        var dryRun = graph.Errors.Count > 0 ? new ComposedDescriptor(null, graph.Errors) : await composer.ComposeAsync(null, cancellationToken);
-        if (dryRun.Errors.Count > 0)
-        {
-            Cli.Print(dryRun.Errors, stderr);
-            return Invalid;
-        }
-
-        var (code, run) = await Cli.ProvisionAsync(source, graph, catalog, environment, connections, stdout, stderr, cancellationToken);
-        if (run is null || code != Success)
-        {
-            return code;
-        }
-
-        var composed = await composer.ComposeAsync(run.Nodes.ToDictionary(n => n.NodeId, n => n.Outputs), cancellationToken);
-        if (composed.Yaml is not { } yaml)
-        {
-            Cli.Print(composed.Errors, stderr);
-            return Invalid;
-        }
-
-        await using (var stream = new FileStream(options.Out, options.Force ? FileMode.Create : FileMode.CreateNew, FileAccess.Write))
-        await using (var writer = new StreamWriter(stream))
-        {
-            await writer.WriteAsync(yaml.AsMemory(), cancellationToken);
-        }
-
-        stdout.WriteLine($"{options.Out}: environment {environment.Name} ({environment.Region}, {environment.Type}) written.");
-        return Success;
+        return ExitCodes.Of(result.Outcome);
     }
 
-    // Each input must be what its role needs; an existing --out is refused up front, before anything is created.
-    private static string? Unreadable(Options options)
-    {
-        if (!File.Exists(options.Definition))
-        {
-            return $"cannot read '{options.Definition}': not found or not a file.";
-        }
-
-        if (options.Base is not null && !File.Exists(options.Base))
-        {
-            return $"cannot read '{options.Base}': not found or not a file.";
-        }
-
-        if (!Directory.Exists(options.Catalog))
-        {
-            return $"cannot read '{options.Catalog}': not found or not a directory.";
-        }
-
-        return File.Exists(options.Out) && !options.Force ? $"'{options.Out}' already exists; pass --force to overwrite it." : null;
-    }
+    // The inputs must exist; an existing --out is refused up front, before anything is read or created, unless --force says to overwrite it.
+    private static string? Unusable(Options options) =>
+        Arguments.Unreadable(options.Definition, options.Base, options.Catalog)
+        ?? (File.Exists(options.Out) && !options.Force ? $"'{options.Out}' already exists; pass {Arguments.ForceOption} to overwrite it." : null);
 
     private static (Options? Options, string Problem) Parse(string[] args)
     {
-        if (args.FirstOrDefault() != "up")
+        if (args.FirstOrDefault() != UpCommand)
         {
-            return (null, args.Length == 0 ? "env needs a command: up." : $"unknown env command '{args[0]}'.");
+            return (null, args.Length == 0 ? $"{Cli.EnvCommand} needs a command: {UpCommand}." : $"unknown {Cli.EnvCommand} command '{args[0]}'.");
         }
 
-        var values = new Dictionary<string, string>();
-        var force = false;
-        var positional = new List<string>();
-        for (var i = 1; i < args.Length; i++)
+        var (scanned, problem) = Arguments.ScanOptions(args[1..], [Arguments.CatalogOption, Arguments.OutOption, Arguments.BaseOption], [Arguments.ForceOption]);
+        if (scanned is null)
         {
-            switch (args[i])
-            {
-                case "--force":
-                    force = true;
-                    break;
-                case "--catalog" or "--out" or "--base":
-                    if (i + 1 == args.Length)
-                    {
-                        return (null, $"{args[i]} needs a value.");
-                    }
-
-                    values[args[i]] = args[i + 1];
-                    i++;
-                    break;
-                case var option when option.StartsWith("--", StringComparison.Ordinal):
-                    return (null, $"unknown option '{option}'.");
-                default:
-                    positional.Add(args[i]);
-                    break;
-            }
+            return (null, problem);
         }
 
+        var (positional, values, flags) = scanned;
         if (positional.Count != 1)
         {
             return (null, "expected exactly one definition file.");
         }
 
-        return values.TryGetValue("--catalog", out var catalog) && values.TryGetValue("--out", out var output)
-            ? (new Options(positional[0], catalog, output, values.GetValueOrDefault("--base"), force), string.Empty)
-            : (null, "env up needs --catalog and --out.");
+        return values.TryGetValue(Arguments.CatalogOption, out var catalog) && values.TryGetValue(Arguments.OutOption, out var output)
+            ? (new Options(positional[0], catalog, output, values.GetValueOrDefault(Arguments.BaseOption), flags.Contains(Arguments.ForceOption)), string.Empty)
+            : (null, $"{Cli.EnvCommand} {UpCommand} needs {Arguments.CatalogOption} and {Arguments.OutOption}.");
     }
 }

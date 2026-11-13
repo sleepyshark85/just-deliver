@@ -2,6 +2,7 @@ using System.Reflection.Metadata;
 using jd.core.records;
 using jd.orchestrator.usecases;
 using jd.resolver;
+using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.graph;
 using Xunit;
@@ -100,6 +101,23 @@ namespace jd.cli.tests
                     "jd.cli.tests.planted.WorkloadCommand.BuildsTheTemplates reaches jd.orchestrator.usecases.Connections.get_Templates",
                     "jd.cli.tests.planted.WorkloadCommand.ChecksTheGate reaches jd.orchestrator.usecases.Checks.Gate",
                     "jd.cli.tests.planted.WorkloadCommand.ReadsTheCatalog reaches jd.resolver.SourceCatalog.get_Documents",
+                ],
+                findings.Select(f => f.Message).Order(StringComparer.Ordinal));
+        }
+
+        // jd's own EnvUp: its command code may build the input and read the result and the progress; loading, checking, resolving and composing are
+        // the use case's.
+        [Fact]
+        public void R1_names_the_env_command_and_member_that_reach_past_the_env_up_use_case()
+        {
+            var findings = R1(Planted, Only(typeof(planted.EnvCommand)), UseCaseSurface(UseCases(typeof(Connections))));
+
+            Assert.Equal(
+                [
+                    "jd.cli.tests.planted.EnvCommand.ChecksTheType reaches jd.orchestrator.usecases.Checks.EnvironmentType",
+                    "jd.cli.tests.planted.EnvCommand.ComposesTheDescriptor reaches jd.resolver.environment.DescriptorComposer..ctor",
+                    "jd.cli.tests.planted.EnvCommand.LoadsTheDefinition reaches jd.resolver.environment.EnvironmentDefinitionFile.LoadAsync",
+                    "jd.cli.tests.planted.EnvCommand.LocatesTheCatalogErrors reaches jd.resolver.SourceCatalog.Located",
                 ],
                 findings.Select(f => f.Message).Order(StringComparer.Ordinal));
         }
@@ -243,6 +261,28 @@ namespace jd.cli.tests.planted
         public static int ReadsTheCatalog() => new SourceCatalog("c", [Document]).Documents.Count;
 
         public static object BuildsTheTemplates(Connections connections) => connections.Templates(new SourceCatalog("c", []));
+    }
+
+    internal static class EnvCommand
+    {
+        private static readonly SourceDocument Document = new("x", "kind: EnvironmentDefinition"u8.ToArray());
+
+        public static async Task<string> UpsAsync(Connections connections)
+        {
+            var lines = new List<string>();
+            var result = await EnvUp.RunAsync(
+                new EnvUpInput(Document, new SourceCatalog("c", [Document]), null), connections, p => lines.Add(p is NodeFinished f ? f.Report.NodeId : string.Empty), CancellationToken.None);
+            return $"{result.Run?.Succeeded}{result.Environment?.Name}{result.Environment?.Region}{result.Descriptor?.Length}{string.Concat(lines)}";
+        }
+
+        public static object LoadsTheDefinition() => EnvironmentDefinitionFile.LoadAsync(Document, CancellationToken.None);
+
+        public static object ChecksTheType(Catalog catalog, EnvironmentDescriptor environment) => Checks.EnvironmentType(catalog, environment, "x");
+
+        public static object LocatesTheCatalogErrors() => new SourceCatalog("c", [Document]).Located([]);
+
+        public static object ComposesTheDescriptor(EnvironmentDefinition definition, Catalog catalog, EnvironmentDescriptor environment, ResolvedGraph graph) =>
+            new DescriptorComposer(definition, "x", catalog, environment, graph);
     }
 
     internal sealed class Store : IRecordStore

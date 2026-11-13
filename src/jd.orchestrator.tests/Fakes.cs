@@ -1,6 +1,9 @@
 using jd.core.bp;
 using jd.core.revisions;
+using jd.orchestrator.usecases;
+using jd.resolver;
 using jd.resolver.catalog;
+using jd.resolver.graph;
 
 namespace jd.orchestrator.tests;
 
@@ -113,5 +116,36 @@ internal sealed class FakeLiveRevisions(Func<string, IReadOnlyList<LiveRevision>
     {
         Calls.Add(resourceId);
         return Task.FromResult(answer(resourceId));
+    }
+}
+
+// The connections a use-case test runs on: the backend factory and the templates factory record in Built that they were called, the templates fit
+// any graph unless given misfits (which every check repeats), and the other factories are not to be reached.
+internal sealed class RecordingConnections(FakeBackend backend)
+{
+    public List<string> Built { get; } = [];
+
+    public Connections With(params LoadError[] misfits) => new(
+        () => throw new NotSupportedException(),
+        () => throw new NotSupportedException(),
+        () => throw new NotSupportedException(),
+        () =>
+        {
+            Built.Add("backend");
+            return backend;
+        },
+        () => new FakeProbe(backend.Log),
+        () => TimeProvider.System,
+        part =>
+        {
+            Built.Add($"templates {part.Name} {string.Join(',', part.Documents.Select(d => d.Name))}");
+            return new FakeTemplates(backend, misfits);
+        });
+
+    private sealed class FakeTemplates(FakeBackend backend, IReadOnlyList<LoadError> misfits) : ITemplates
+    {
+        public string GetContent(string templateName) => backend.GetContent(templateName);
+
+        public IReadOnlyList<LoadError> Check(ResolvedGraph graph) => misfits;
     }
 }

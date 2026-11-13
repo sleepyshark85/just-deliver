@@ -2,8 +2,6 @@ using jd.core.identity;
 using jd.orchestrator;
 using jd.orchestrator.usecases;
 using jd.resolver;
-using jd.resolver.catalog;
-using jd.resolver.environment;
 using jd.resolver.graph;
 
 namespace jd.cli;
@@ -20,7 +18,7 @@ internal static class Cli
     private const string ReleaseCommand = "release";
     private const string ApproveCommand = "approve";
     private const string PromoteCommand = "promote";
-    private const string EnvCommand = "env";
+    internal const string EnvCommand = "env";
     private const string HelpOption = "--help";
     private const string ShortHelpOption = "-h";
 
@@ -88,7 +86,7 @@ internal static class Cli
             ReleaseCommand => await ReleaseCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
             ApproveCommand => await ApproveCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
             PromoteCommand => await PromoteCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
-            EnvCommand => await EnvCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
+            EnvCommand => await ExitOnReadFailureAsync(() => EnvCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken), stderr),
             ValidateCommand => await ExitOnReadFailureAsync(() => ValidateCli.RunAsync(args[1..], stdout, stderr, cancellationToken), stderr),
             PreviewCommand or DeployCommand => await ExitOnReadFailureAsync(() => RunWorkloadAsync(args, connections, stdout, stderr, cancellationToken), stderr),
             null => UsageProblem("no command given.", stderr),
@@ -104,7 +102,8 @@ internal static class Cli
         return ExitCodes.UsageError;
     }
 
-    // A command that reads its inputs checks first that they exist, so an I/O failure that escapes it is a permission or read failure; .NET's message names the file.
+    // A command that reads its inputs checks first that they exist, so an I/O failure that escapes it is a permission, read or write failure; .NET's message
+    // names the file.
     private static async Task<int> ExitOnReadFailureAsync(Func<Task<int>> command, TextWriter stderr)
     {
         try
@@ -161,7 +160,7 @@ internal static class Cli
     private static async Task<int> DeployAsync(
         DeployInput input, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        var result = await Deploy.RunAsync(input, connections, Show, cancellationToken);
+        var result = await Deploy.RunAsync(input, connections, ShowWalk(stdout), cancellationToken);
         Print(result.Errors, stderr);
         if (result.Problem is { } problem)
         {
@@ -174,16 +173,16 @@ internal static class Cli
         }
 
         return ExitCodes.Of(result.Outcome);
-
-        // The walk's lines as each node finishes; jd deploy prints no line when its one workload starts.
-        void Show(Progress progress)
-        {
-            if (progress is NodeFinished finished)
-            {
-                stdout.Write(DeployFormatter.Format(finished.Report));
-            }
-        }
     }
+
+    // The walk's lines as each node finishes; jd deploy prints no line when a workload starts (jd env up has no workloads).
+    internal static Action<Progress> ShowWalk(TextWriter stdout) => progress =>
+    {
+        if (progress is NodeFinished finished)
+        {
+            stdout.Write(DeployFormatter.Format(finished.Report));
+        }
+    };
 
     // The words of a refusal, around the problem's values.
     internal static string Refusal(Problem problem, string command) => problem switch
@@ -192,7 +191,8 @@ internal static class Cli
         _ => throw new ArgumentOutOfRangeException(nameof(problem), problem, "not a refusal a deploy meets."),
     };
 
-    private static void PrintStopped(RunReport run, TextWriter stderr) => stderr.WriteLine($"jd: stopped at {run.Nodes[^1].NodeId}: {run.Nodes[^1].Message}");
+    // The failed node of a walk that stopped, and why.
+    internal static void PrintStopped(RunReport run, TextWriter stderr) => stderr.WriteLine($"jd: stopped at {run.Nodes[^1].NodeId}: {run.Nodes[^1].Message}");
 
     internal static async Task<SourceDocument> ReadDocumentAsync(string path, CancellationToken cancellationToken) =>
         new(path, await File.ReadAllBytesAsync(path, cancellationToken));
@@ -207,29 +207,6 @@ internal static class Cli
         }
 
         return new SourceCatalog(directory, documents);
-    }
-
-    // TODO(S25c): env up's walk, until its use case: the graph checked against the catalog's templates, then deployed, each node printed as it finishes.
-    internal static async Task<(int Code, RunReport? Run)> ProvisionAsync(
-        SourceCatalog source, ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment, Connections connections, TextWriter stdout, TextWriter stderr,
-        CancellationToken cancellationToken)
-    {
-        var (templates, misfits) = Checks.Templates(source, [graph], connections);
-        if (misfits.Count > 0)
-        {
-            Print(misfits, stderr);
-            return (ExitCodes.Failure, null);
-        }
-
-        var orchestrator = new Orchestrator(connections.Backend(), templates, catalog, environment, connections.Probe());
-        var run = await orchestrator.DeployAsync(graph, report => stdout.Write(DeployFormatter.Format(report)), cancellationToken);
-        if (!run.Succeeded)
-        {
-            PrintStopped(run, stderr);
-            return (ExitCodes.Failure, run);
-        }
-
-        return (ExitCodes.Success, run);
     }
 
     // The principal the run authenticates as; null, with the reason on stderr, when the credential is missing, malformed or refused.

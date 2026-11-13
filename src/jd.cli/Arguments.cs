@@ -3,8 +3,9 @@ using jd.resolver.release;
 namespace jd.cli;
 
 /// <summary>
-/// The arguments the commands that take <c>&lt;file&gt; [--env &lt;file&gt;] [--catalog &lt;dir&gt;] [--preview] [--json]</c> share. Each command decides
-/// which of them it accepts and requires; this only reads them and checks that the inputs exist.
+/// The arguments the commands that take <c>&lt;file&gt; [--env &lt;file&gt;] [--catalog &lt;dir&gt;] [--preview] [--json]</c> share, the option names of
+/// the others, and the one scan every command's arguments go through. Each command decides which of them it accepts and requires; this only reads
+/// them and checks that the inputs exist.
 /// </summary>
 internal sealed record Arguments(IReadOnlyList<string> Positional, string? Environment, string? Catalog, bool Json, bool DryRun)
 {
@@ -12,10 +13,15 @@ internal sealed record Arguments(IReadOnlyList<string> Positional, string? Envir
     internal const string CatalogOption = "--catalog";
     internal const string JsonOption = "--json";
     internal const string PreviewOption = "--preview";
+    internal const string OutOption = "--out";
+    internal const string BaseOption = "--base";
+    internal const string ForceOption = "--force";
 
-    // What one pass over the arguments found: the positional arguments, the value of each value option given (the last, when one is given twice) and
-    // the flags given.
-    private sealed record Scanned(IReadOnlyList<string> Positional, IReadOnlyDictionary<string, string> Values, IReadOnlySet<string> Flags);
+    /// <summary>
+    /// What one pass over the arguments found: the positional arguments, the value of each value option given (the last, when one is given twice) and
+    /// the flags given.
+    /// </summary>
+    public sealed record Scanned(IReadOnlyList<string> Positional, IReadOnlyDictionary<string, string> Values, IReadOnlySet<string> Flags);
 
     /// <summary>Reads a command's <paramref name="args"/>, those after its name; the problem is set when an option is unknown or lacks its value.</summary>
     public static (Arguments? Arguments, string Problem) Scan(string[] args)
@@ -51,8 +57,11 @@ internal sealed record Arguments(IReadOnlyList<string> Positional, string? Envir
         return ReleaseRecordFile.LabelProblem(label) is { } labelProblem ? (null, scanned.Values, labelProblem) : (label, scanned.Values, string.Empty);
     }
 
-    // The one pass every scan makes: a value option takes the argument after it, whatever it is; any other argument starting with "--" that is not a flag is unknown.
-    private static (Scanned? Scanned, string Problem) ScanOptions(string[] args, IReadOnlyCollection<string> valueOptions, IReadOnlyCollection<string> flags)
+    /// <summary>
+    /// The one pass every scan makes: a value option takes the argument after it, whatever it is; any other argument starting with "--" that is not a
+    /// flag is unknown. Null, with the problem, when an option is unknown or lacks its value.
+    /// </summary>
+    public static (Scanned? Scanned, string Problem) ScanOptions(string[] args, IReadOnlyCollection<string> valueOptions, IReadOnlyCollection<string> flags)
     {
         var positional = new List<string>();
         var values = new Dictionary<string, string>();

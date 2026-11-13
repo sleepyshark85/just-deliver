@@ -15,10 +15,6 @@ public sealed partial class ThinCliTests
             "jd.resolver.LoadResult`1.get_Errors",
             "jd.resolver.LoadResult`1.get_Value",
             "jd.resolver.environment.ApprovalPolicy.Counts",
-            "jd.resolver.environment.ApprovalPolicy.get_QualifiedOn",
-            "jd.resolver.environment.ApprovalPolicy.get_Required",
-            "jd.resolver.environment.EnvironmentDescriptor.get_Approval",
-            "jd.resolver.environment.EnvironmentDescriptor.get_Name",
             "jd.resolver.environment.EnvironmentParser.LoadAsync",
             "jd.resolver.release.ApprovalReading.get_Approvers",
             "jd.resolver.release.ApprovalReading.get_Ignored",
@@ -38,37 +34,12 @@ public sealed partial class ThinCliTests
         ["jd.cli.Cli"] =
         [
             "jd.core.identity.IDeployerIdentity.GetAsync",
-            "jd.orchestrator.Orchestrator..ctor",
-            "jd.orchestrator.Orchestrator.DeployAsync",
-            "jd.orchestrator.usecases.Checks.Templates",
-            "jd.orchestrator.usecases.Connections.get_Backend",
             "jd.orchestrator.usecases.Connections.get_Identity",
-            "jd.orchestrator.usecases.Connections.get_Probe",
         ],
         ["jd.cli.DeployFormatter"] =
         [
             "jd.core.bp.DeploymentResult.ChangedOperations",
             "jd.core.bp.DeploymentResult.IsChange",
-        ],
-        ["jd.cli.EnvCli"] =
-        [
-            "jd.orchestrator.usecases.Checks.EnvironmentType",
-            "jd.resolver.LoadResult`1.get_Errors",
-            "jd.resolver.LoadResult`1.get_Value",
-            "jd.resolver.Resolver.ResolveSubstrate",
-            "jd.resolver.SourceCatalog.Located",
-            "jd.resolver.catalog.CatalogParser.ParseAsync",
-            "jd.resolver.environment.ComposedDescriptor..ctor",
-            "jd.resolver.environment.ComposedDescriptor.get_Errors",
-            "jd.resolver.environment.ComposedDescriptor.get_Yaml",
-            "jd.resolver.environment.DescriptorComposer..ctor",
-            "jd.resolver.environment.DescriptorComposer.ComposeAsync",
-            "jd.resolver.environment.EnvironmentDefinition.Over",
-            "jd.resolver.environment.EnvironmentDefinitionFile.LoadAsync",
-            "jd.resolver.environment.EnvironmentDescriptor.get_Name",
-            "jd.resolver.environment.EnvironmentDescriptor.get_Region",
-            "jd.resolver.environment.EnvironmentDescriptor.get_Type",
-            "jd.resolver.environment.EnvironmentParser.LoadAsync",
         ],
         ["jd.cli.PreviewFormatter"] =
         [
@@ -82,9 +53,6 @@ public sealed partial class ThinCliTests
             "jd.orchestrator.usecases.Connections.get_Records",
             "jd.resolver.LoadResult`1.get_Errors",
             "jd.resolver.LoadResult`1.get_Value",
-            "jd.resolver.environment.ApprovalPolicy.get_QualifiedOn",
-            "jd.resolver.environment.EnvironmentDescriptor.get_Approval",
-            "jd.resolver.environment.EnvironmentDescriptor.get_Name",
             "jd.resolver.environment.EnvironmentParser.LoadAsync",
             "jd.resolver.release.PromotionCheck.CheckAsync",
             "jd.resolver.release.PromotionDecision.get_IgnoredApprovals",
@@ -137,7 +105,6 @@ public sealed partial class ThinCliTests
             "jd.resolver.LoadResult`1.get_Value",
             "jd.resolver.SourceCatalog.Located",
             "jd.resolver.catalog.CatalogParser.ParseAsync",
-            "jd.resolver.environment.EnvironmentDescriptor.get_Name",
             "jd.resolver.environment.EnvironmentParser.LoadAsync",
             "jd.resolver.release.ReleaseHash.Of",
             "jd.resolver.release.ReleaseRecordFile.KeepSetAsync",
@@ -163,10 +130,7 @@ public sealed partial class ThinCliTests
         ],
         ["jd.cli.Cli"] =
         [
-            "jd.core.bp.IBackEndProvider",
             "jd.core.identity.IDeployerIdentity",
-            "jd.orchestrator.IRevisionProbe",
-            "jd.orchestrator.ITemplates",
         ],
         ["jd.cli.PromoteCli"] =
         [

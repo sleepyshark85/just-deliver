@@ -32,18 +32,17 @@ public static class Deploy
             return Failed(graph.Errors);
         }
 
-        var (templates, misfits) = Checks.Templates(input.Catalog, [graph], connections);
-        if (misfits.Count > 0)
+        var (orchestrator, misfits) = Walk.Prepare(input.Catalog, graph, inputs.Catalog, inputs.Environment, connections);
+        if (orchestrator is null)
         {
             return Failed(misfits);
         }
 
-        var orchestrator = new Orchestrator(connections.Backend(), templates, inputs.Catalog, inputs.Environment, connections.Probe());
         progress?.Invoke(new WorkloadStarted(graph.Workload));
-        void Finished(NodeReport report) => progress?.Invoke(new NodeFinished(report));
+        var finished = Walk.Reporting(progress);
         var run = input.Preview
-            ? await orchestrator.PreviewAsync(graph, Finished, cancellationToken)
-            : await orchestrator.DeployAsync(graph, Finished, cancellationToken);
+            ? await orchestrator.PreviewAsync(graph, finished, cancellationToken)
+            : await orchestrator.DeployAsync(graph, finished, cancellationToken);
         return new DeployResult([], null, run.Succeeded ? Outcome.Succeeded : Outcome.Failed, run);
     }
 

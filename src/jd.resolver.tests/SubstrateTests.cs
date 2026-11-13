@@ -32,7 +32,7 @@ public class SubstrateTests
             await File.WriteAllTextAsync(path, text);
         }
 
-        var result = await EnvironmentDefinitionFile.LoadAsync(path);
+        var result = await EnvironmentDefinitionFile.LoadAsync(await SourceFiles.ReadAsync(path), CancellationToken.None);
         Assert.Empty(result.Errors);
         return result.Value!;
     }
@@ -380,7 +380,7 @@ public class SubstrateTests
             await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(Sample("dev.yaml"))).Replace("region: southeastasia\n", string.Empty, StringComparison.Ordinal));
 
             Assert.Equal("region-9", (await ComposeAsync(dev, DevOutputs)).Region);
-            var loaded = await EnvironmentDefinitionFile.LoadAsync(path);
+            var loaded = await EnvironmentDefinitionFile.LoadAsync(await SourceFiles.ReadAsync(path), CancellationToken.None);
             Assert.Null(loaded.Value);
             Assert.Contains(loaded.Errors, e => e.File == path && e.Message.Contains("region", StringComparison.Ordinal));
         }
@@ -396,10 +396,9 @@ public class SubstrateTests
         var dir = Directory.CreateTempSubdirectory("jd-def").FullName;
         var path = Path.Combine(dir, "d.yaml");
         await File.WriteAllTextAsync(path, "kind: EnvironmentDefinition\nname: xyz\ntype: dev\nrequires: [{ type: env-substrate }]\nvalues: {}\n");
-        var old = await EnvironmentDefinitionFile.LoadAsync(path);
+        var old = await EnvironmentDefinitionFile.LoadAsync(await SourceFiles.ReadAsync(path), CancellationToken.None);
 
         Assert.Contains(old.Errors, e => e.File == path && e.Message.Contains("offers"));
-        Assert.Contains("not found", Assert.Single((await EnvironmentDefinitionFile.LoadAsync(Path.Combine(dir, "none.yaml"))).Errors).Message);
     }
 
     [Fact]
