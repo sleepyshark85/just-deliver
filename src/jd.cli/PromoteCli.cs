@@ -75,6 +75,6 @@ internal static class PromoteCli
 
         stdout.WriteLine($"promoting {label} from {policy.QualifiedOn} (set sha256 {setSha256})");
         return await ReleaseDeployCli.PromoteAsync(
-            to, catalog, new ReleaseDeployCli.Promotion(principal, policy.QualifiedOn, label, setSha256), stdout, stderr, connections, cancellationToken);
+            to, catalog, new Promotion(principal, policy.QualifiedOn, label, setSha256), stdout, stderr, connections, cancellationToken);
     }
 }

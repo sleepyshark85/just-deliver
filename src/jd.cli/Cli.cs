@@ -17,7 +17,7 @@ internal static class Cli
     private const string DeployCommand = "deploy";
     internal const string ReleaseCommand = "release";
     private const string ApproveCommand = "approve";
-    private const string PromoteCommand = "promote";
+    internal const string PromoteCommand = "promote";
     internal const string EnvCommand = "env";
     private const string HelpOption = "--help";
     private const string ShortHelpOption = "-h";
@@ -104,7 +104,7 @@ internal static class Cli
 
     // A command that reads its inputs checks first that they exist, so an I/O failure that escapes it is a permission, read or write failure; .NET's message
     // names the file.
-    private static async Task<int> ExitOnReadFailureAsync(Func<Task<int>> command, TextWriter stderr)
+    internal static async Task<int> ExitOnReadFailureAsync(Func<Task<int>> command, TextWriter stderr)
     {
         try
         {
@@ -188,6 +188,10 @@ internal static class Cli
     internal static string Refusal(Problem problem, string command) => problem switch
     {
         Gated gated => $"jd: {command}: environment '{gated.Environment}' is gated by an approval policy: use `jd promote`.",
+        KeptSetChanged changed => $"jd: {command}: the kept set '{changed.Set}' changed since it was checked (expected sha256 {changed.ExpectedSha256}).",
+        IdentityRefused refused => $"jd: {refused.Reason}",
+        RecordingRefused refused => $"jd: {refused.Reason}",
+        ConnectionFailed failed => $"jd: {failed.Reason}",
         _ => throw new ArgumentOutOfRangeException(nameof(problem), problem, "not a refusal a deploy meets."),
     };
 

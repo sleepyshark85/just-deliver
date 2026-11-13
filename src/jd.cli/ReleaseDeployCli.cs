@@ -1,38 +1,19 @@
 using System.Globalization;
-using jd.core.identity;
-using jd.core.records;
 using jd.orchestrator;
 using jd.orchestrator.usecases;
-using jd.resolver;
-using jd.resolver.catalog;
 using jd.resolver.environment;
-using jd.resolver.graph;
 using jd.resolver.release;
 
 namespace jd.cli;
 
 /// <summary>
-/// <c>jd release deploy</c>: loads the set, resolves every workload and checks every graph against the templates, then lets the
-/// orchestrator provision them in deploy order. <c>jd release qualify</c> starts the same way (a recorded run: records directory, identity,
-/// <c>set.yaml</c>) and then checks the deployment (IQ) instead of changing it. Wiring and output only; exit codes as <see cref="Cli"/>.
+/// <c>jd release deploy</c>: reads the set, the environment and the catalog, lets <see cref="ReleaseStart"/> load, check and resolve them and build what
+/// the run calls, then lets the orchestrator provision the workloads in deploy order. <c>jd release qualify</c> starts the same way (a recorded run:
+/// identity, <c>set.yaml</c>) and then checks the deployment (IQ) instead of changing it. Reading and output; exit codes from <see cref="ExitCodes"/>.
 /// </summary>
 internal static class ReleaseDeployCli
 {
-    private const int Success = 0;
-    private const int Invalid = 1;
-    private const int UsageError = 2;
-
-    // Promotion is set only by PromoteAsync, never by an argument: the run is the walk of a promotion that was judged already.
-    private sealed record Options(string Set, string Environment, string Catalog, bool DryRun, bool Qualify)
-    {
-        public Promotion? Promotion { get; init; }
-    }
-
-    // What `jd promote` has settled before the walk: who runs it, where the set to deploy is kept (its label on the policy's qualifiedOn) and the hash it must have.
-    internal sealed record Promotion(DeployerIdentity Principal, string QualifiedOn, string Label, string SetSha256);
-
-    // What a recorded run has before anything is deployed: where the records go, who deploys, and the kept set's hash.
-    private sealed record Recording(IRecordStore Records, DeployerIdentity Identity, string SetSha256);
+    private sealed record Options(string Set, string Environment, string Catalog, bool DryRun, bool Qualify);
 
     // args are the arguments after "release deploy" or "release qualify" (qualify).
     public static async Task<int> RunAsync(string[] args, bool qualify, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
@@ -42,136 +23,67 @@ internal static class ReleaseDeployCli
         {
             stderr.WriteLine($"jd: {problem}");
             stderr.Write(Cli.Usage);
-            return UsageError;
+            return ExitCodes.UsageError;
         }
 
-        return await RunCheckedAsync(options, connections, stdout, stderr, cancellationToken);
+        if (Arguments.Unreadable(options.Set, options.Environment, options.Catalog) is { } unreadable)
+        {
+            stderr.WriteLine($"jd: {unreadable}");
+            return ExitCodes.UsageError;
+        }
+
+        var input = new ReleaseStartInput(
+            await Cli.ReadDocumentAsync(options.Set, cancellationToken), await Cli.ReadDocumentAsync(options.Environment, cancellationToken),
+            await Cli.ReadCatalogAsync(options.Catalog, cancellationToken), options.DryRun, null);
+        if (await StartAsync(input, Command(qualify), connections, stderr, cancellationToken) is not { } run)
+        {
+            return ExitCodes.Failure;
+        }
+
+        return qualify ? await QualifyAsync(run, stdout, stderr, cancellationToken) : await DeployAsync(run, options.DryRun, stdout, stderr, cancellationToken);
     }
 
-    // The walk of `jd promote` on the target, below the gate that refuses a direct deploy: the target, the catalog, and what promote settled. The kept
-    // set is named in messages as the records name it.
+    // The walk of `jd promote` on the target, below the gate that refuses a direct deploy: the target and the catalog promote checked exist, and what it
+    // settled. Its dispatch has no read-failure catch, so the walk has its own.
     public static Task<int> PromoteAsync(
         string environment, string catalog, Promotion promotion, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken) =>
-        RunCheckedAsync(
-            new Options(ReleaseRecordFile.KeptSetName(promotion.QualifiedOn, promotion.Label), environment, catalog, false, false) { Promotion = promotion }, connections, stdout, stderr, cancellationToken);
+        Cli.ExitOnReadFailureAsync(
+            async () =>
+            {
+                var input = new ReleaseStartInput(
+                    null, await Cli.ReadDocumentAsync(environment, cancellationToken), await Cli.ReadCatalogAsync(catalog, cancellationToken), false, promotion);
+                return await StartAsync(input, Cli.PromoteCommand, connections, stderr, cancellationToken) is { } run
+                    ? await DeployAsync(run, false, stdout, stderr, cancellationToken)
+                    : ExitCodes.Failure;
+            },
+            stderr);
 
-    private static async Task<int> RunCheckedAsync(Options options, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    // The started run; null, with every error or the refusal on stderr, when the start refused it.
+    private static async Task<StartedRelease?> StartAsync(ReleaseStartInput input, string command, Connections connections, TextWriter stderr, CancellationToken cancellationToken)
     {
-        // A promotion's set is the kept one it read, and its target and catalog were checked by promote.
-        if (options.Promotion is null && Arguments.Unreadable(options.Set, options.Environment, options.Catalog) is { } problem)
+        var result = await ReleaseStart.StartAsync(input, connections, cancellationToken);
+        Cli.Print(result.Errors, stderr);
+        if (result.Problem is { } problem)
         {
-            stderr.WriteLine($"jd: {problem}");
-            return UsageError;
+            stderr.WriteLine(Cli.Refusal(problem, command));
         }
 
-        try
-        {
-            // A preview deploys nothing, so it records nothing; a qualification records the check.
-            return await DeployAsync(options, options.DryRun ? null : connections.Records(), connections, stdout, stderr, cancellationToken);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            stderr.WriteLine($"jd: {ex.Message}");
-            return UsageError;
-        }
+        return result.Run;
     }
 
-    private static async Task<int> DeployAsync(Options options, IRecordStore? records, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    private static async Task<int> DeployAsync(StartedRelease run, bool preview, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        var time = connections.Time();
-        var started = time.GetUtcNow();
-        // A promotion is never a preview, so it has the records.
-        var setResult = options.Promotion is { } promoted
-            ? await ReleaseSetFile.ParseAsync(new SourceDocument(options.Set, await records!.ReadAsync(promoted.QualifiedOn, promoted.Label, ReleaseRecordFile.SetFileName, cancellationToken)), cancellationToken)
-            : await ReleaseSetFile.LoadAsync(options.Set, cancellationToken);
-        var source = await Cli.ReadCatalogAsync(options.Catalog, cancellationToken);
-        var catalogResult = await CatalogParser.ParseAsync(source, cancellationToken);
-        var environmentResult = await EnvironmentParser.LoadAsync(options.Environment, cancellationToken);
-        if (setResult.Set is not { } set || catalogResult.Value is not { } catalog || environmentResult.Value is not { } environment)
-        {
-            Cli.Print(setResult.Errors.Concat(source.Located(catalogResult.Errors)).Concat(environmentResult.Errors), stderr);
-            return Invalid;
-        }
-
-        var typeErrors = Checks.EnvironmentType(catalog, environment, options.Environment);
-        if (typeErrors.Count > 0)
-        {
-            Cli.Print(typeErrors, stderr);
-            return Invalid;
-        }
-
-        // A gated environment is deployed to only by promotion; this stops before the identity, the records or the backend is touched.
-        if (!options.DryRun && options.Promotion is null && Checks.Gate(environment) is { } gated)
-        {
-            stderr.WriteLine(Cli.Refusal(gated, Command(options.Qualify)));
-            return Invalid;
-        }
-
-        // The promotion judged the hash of the kept set; the bytes read now are the ones deployed, so they must be those.
-        if (options.Promotion is { } promotion && ReleaseHash.Of(setResult.Bytes.Span) != promotion.SetSha256)
-        {
-            stderr.WriteLine($"jd: promote: the kept set '{options.Set}' changed since it was checked (expected sha256 {promotion.SetSha256}).");
-            return Invalid;
-        }
-
-        // Everything is resolved and checked before anything is created.
-        var (graphs, errors) = await ReleaseResolver.ResolveAsync(options.Set, set, catalog, environment, cancellationToken);
-        if (errors.Count > 0)
-        {
-            Cli.Print(errors, stderr);
-            return Invalid;
-        }
-
-        var (templates, misfits) = Checks.Templates(source, graphs, connections);
-        if (misfits.Count > 0)
-        {
-            Cli.Print(misfits, stderr);
-            return Invalid;
-        }
-
-        // A recorded run knows who deploys, and that no other set was deployed under this label, before it calls the backend.
-        Recording? recording = null;
-        if (records is not null)
-        {
-            recording = await StartRecordingAsync(records, options.Promotion?.Principal, connections, setResult.Bytes, set.Label, environment.Name, stderr, cancellationToken);
-            if (recording is null)
-            {
-                return Invalid;
-            }
-        }
-
-        // Everything a run calls is built before any backend call, so a reader that cannot be built stops it before anything is deployed.
-        // A preview records nothing and qualifies nothing, so it has no qualifier.
-        Orchestrator orchestrator;
-        Qualifier? qualifier = null;
-        try
-        {
-            var backend = connections.Backend();
-            orchestrator = new Orchestrator(backend, templates, catalog, environment, connections.Probe());
-            qualifier = recording is null ? null : new Qualifier(orchestrator, backend, templates, connections.LiveRevisions(), time);
-        }
-        catch (InvalidOperationException ex)
-        {
-            stderr.WriteLine($"jd: {ex.Message}");
-            return Invalid;
-        }
-
-        if (options.Qualify)
-        {
-            // records is null only for a --preview, which qualify refuses at parse time, so a qualification always has a recording and a qualifier here.
-            return await QualifyAsync(recording!, set, environment, graphs, qualifier!, started, time, stdout, stderr, cancellationToken);
-        }
-
+        var (set, environment, graphs, orchestrator, recording, time, started) = run;
         var walk = time.GetTimestamp();
         var runs = await orchestrator.DeployReleaseAsync(
             graphs,
-            options.DryRun,
+            preview,
             name => stdout.WriteLine($"workload {name}"),
             report => stdout.Write(DeployFormatter.Format(report)),
             cancellationToken);
         var walked = time.GetElapsedTime(walk);
 
-        stdout.WriteLine(Summarize(set, environment.Name, runs, options.DryRun));
+        stdout.WriteLine(Summarize(set, environment.Name, runs, preview));
         var failed = runs.FirstOrDefault(r => !r.Run.Succeeded);
         if (failed is not null)
         {
@@ -181,9 +93,9 @@ internal static class ReleaseDeployCli
 
         // IQ runs only after every workload deployed; on a failure it is not run, and a failed IQ leaves the deployment as it is.
         IqResult? iq = null;
-        if (qualifier is not null && failed is null)
+        if (recording is not null && failed is null)
         {
-            iq = await qualifier.QualifyAsync(graphs, cancellationToken);
+            iq = await recording.Qualifier.QualifyAsync(graphs, cancellationToken);
             ReportIq(set, environment, iq, stdout, stderr);
         }
 
@@ -193,23 +105,25 @@ internal static class ReleaseDeployCli
             var json = ReleaseRecordBuilder.Build(set, recording.SetSha256, environment, graphs, runs, recording.Identity, started, finished, walked, iq);
             if (!await RecordAsync(recording, set.Label, environment.Name, finished, ReleaseRecordFile.DeployActivity, json, "deployed", stdout, stderr, cancellationToken))
             {
-                return Invalid;
+                return ExitCodes.Failure;
             }
         }
 
-        return failed is null && (iq?.Passed ?? true) ? Success : Invalid;
+        return failed is null && (iq?.Passed ?? true) ? ExitCodes.Success : ExitCodes.Failure;
     }
 
     // Checks the deployment without touching it; the record is written whether IQ passed or not.
-    private static async Task<int> QualifyAsync(
-        Recording recording, ReleaseSet set, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, Qualifier qualifier, DateTimeOffset started, TimeProvider time,
-        TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    private static async Task<int> QualifyAsync(StartedRelease run, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
-        var iq = await qualifier.QualifyAsync(graphs, cancellationToken);
+        var (set, environment, graphs, _, recording, time, started) = run;
+        // A qualification is never a preview (parse refuses --preview), so its start built the recording.
+        var iq = await recording!.Qualifier.QualifyAsync(graphs, cancellationToken);
         ReportIq(set, environment, iq, stdout, stderr);
         var finished = time.GetUtcNow();
         var json = ReleaseRecordBuilder.BuildQualify(set, recording.SetSha256, environment, graphs, recording.Identity, started, finished, iq);
-        return await RecordAsync(recording, set.Label, environment.Name, finished, ReleaseRecordFile.QualifyActivity, json, "checked", stdout, stderr, cancellationToken) && iq.Passed ? Success : Invalid;
+        return await RecordAsync(recording, set.Label, environment.Name, finished, ReleaseRecordFile.QualifyActivity, json, "checked", stdout, stderr, cancellationToken) && iq.Passed
+            ? ExitCodes.Success
+            : ExitCodes.Failure;
     }
 
     // The verdict on stdout, and every failed check on stderr.
@@ -221,34 +135,6 @@ internal static class ReleaseDeployCli
         {
             stderr.WriteLine($"jd: IQ failed: {failure.Workload}: {failure.Failure}");
         }
-    }
-
-    // Null, with the reason on stderr, when the run must not start: the principal (known already, for a promotion) cannot be named, the label cannot name a directory, or it holds another set.
-    private static async Task<Recording?> StartRecordingAsync(
-        IRecordStore records, DeployerIdentity? known, Connections connections, ReadOnlyMemory<byte> setBytes, string label, string environmentName, TextWriter stderr,
-        CancellationToken cancellationToken)
-    {
-        if ((known ?? await Cli.GetIdentityAsync(connections, stderr, cancellationToken)) is not { } principal)
-        {
-            return null;
-        }
-
-        try
-        {
-            var (sha256, conflict) = await ReleaseRecordFile.KeepSetAsync(records, environmentName, label, setBytes, cancellationToken);
-            if (conflict is null)
-            {
-                return new Recording(records, principal, sha256);
-            }
-
-            stderr.WriteLine($"jd: {conflict}");
-        }
-        catch (ArgumentException ex)
-        {
-            stderr.WriteLine($"jd: {ex.Message}");
-        }
-
-        return null;
     }
 
     // What was done stays whether or not the record is written; false (and why) when it could not be.
@@ -282,7 +168,7 @@ internal static class ReleaseDeployCli
             + (notStarted.Count == 0 ? "0 not started." : $"{notStarted.Count.ToString(CultureInfo.InvariantCulture)} not started ({string.Join(", ", notStarted)}).");
     }
 
-    private static string Command(bool qualify) => qualify ? "release qualify" : "release deploy";
+    private static string Command(bool qualify) => $"{Cli.ReleaseCommand} {(qualify ? ReleaseCli.QualifyCommand : ReleaseCli.DeployCommand)}";
 
     private static (Options? Options, string Problem) Parse(string[] args, bool qualify)
     {

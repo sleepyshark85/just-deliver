@@ -51,6 +51,7 @@ public sealed partial class ThinCliTests
         ["jd.cli.PromoteCli"] =
         [
             "jd.orchestrator.usecases.Connections.get_Records",
+            "jd.orchestrator.usecases.Promotion..ctor",
             "jd.resolver.LoadResult`1.get_Errors",
             "jd.resolver.LoadResult`1.get_Value",
             "jd.resolver.environment.EnvironmentParser.LoadAsync",
@@ -60,49 +61,35 @@ public sealed partial class ThinCliTests
             "jd.resolver.release.PromotionDecision.get_Reasons",
             "jd.resolver.release.PromotionDecision.get_SetSha256",
         ],
+        // The release run's start is a use-case step its command calls until S25e2; the walk, IQ and the record are the command's until then.
         ["jd.cli.ReleaseDeployCli"] =
         [
-            "jd.core.records.IRecordStore.ReadAsync",
             "jd.orchestrator.IqCheck.get_Failure",
             "jd.orchestrator.IqCheck.get_Passed",
             "jd.orchestrator.IqCheck.get_Workload",
             "jd.orchestrator.IqResult.get_Checks",
             "jd.orchestrator.IqResult.get_Passed",
-            "jd.orchestrator.Orchestrator..ctor",
             "jd.orchestrator.Orchestrator.DeployReleaseAsync",
-            "jd.orchestrator.Qualifier..ctor",
             "jd.orchestrator.Qualifier.QualifyAsync",
             "jd.orchestrator.ReleaseRecordBuilder.Build",
             "jd.orchestrator.ReleaseRecordBuilder.BuildQualify",
             "jd.orchestrator.WorkloadRun.get_Run",
             "jd.orchestrator.WorkloadRun.get_Workload",
-            "jd.orchestrator.usecases.Checks.EnvironmentType",
-            "jd.orchestrator.usecases.Checks.Gate",
-            "jd.orchestrator.usecases.Checks.Templates",
-            "jd.orchestrator.usecases.Connections.get_Backend",
-            "jd.orchestrator.usecases.Connections.get_LiveRevisions",
-            "jd.orchestrator.usecases.Connections.get_Probe",
-            "jd.orchestrator.usecases.Connections.get_Records",
-            "jd.orchestrator.usecases.Connections.get_Time",
-            "jd.resolver.LoadResult`1.get_Errors",
-            "jd.resolver.LoadResult`1.get_Value",
-            "jd.resolver.SourceCatalog.Located",
-            "jd.resolver.catalog.CatalogParser.ParseAsync",
-            "jd.resolver.environment.EnvironmentParser.LoadAsync",
-            "jd.resolver.release.ReleaseHash.Of",
-            "jd.resolver.release.ReleaseRecordFile.KeepSetAsync",
-            "jd.resolver.release.ReleaseRecordFile.KeptSetName",
+            "jd.orchestrator.usecases.Recording.get_Identity",
+            "jd.orchestrator.usecases.Recording.get_Qualifier",
+            "jd.orchestrator.usecases.Recording.get_Records",
+            "jd.orchestrator.usecases.Recording.get_SetSha256",
+            "jd.orchestrator.usecases.ReleaseStart.StartAsync",
+            "jd.orchestrator.usecases.ReleaseStartInput..ctor",
+            "jd.orchestrator.usecases.ReleaseStartResult.get_Errors",
+            "jd.orchestrator.usecases.ReleaseStartResult.get_Problem",
+            "jd.orchestrator.usecases.ReleaseStartResult.get_Run",
+            "jd.orchestrator.usecases.StartedRelease.Deconstruct",
             "jd.resolver.release.ReleaseRecordFile.WriteAsync",
-            "jd.resolver.release.ReleaseResolver.ResolveAsync",
-            "jd.resolver.release.ReleaseSetFile.LoadAsync",
-            "jd.resolver.release.ReleaseSetFile.ParseAsync",
-            "jd.resolver.release.ReleaseSetResult.get_Bytes",
-            "jd.resolver.release.ReleaseSetResult.get_Errors",
-            "jd.resolver.release.ReleaseSetResult.get_Set",
         ],
     };
 
-    // R2 today: the commands that build the orchestrator, the qualifier, the records and the templates from the factories, so name the ports they return.
+    // R2 today: the commands that build the records or the identity from the factories, or write the record of a started release run, so name the ports.
     private static readonly Dictionary<string, string[]> R2Allowlist = new()
     {
         ["jd.cli.ApproveCli"] =
@@ -119,15 +106,11 @@ public sealed partial class ThinCliTests
         ],
         ["jd.cli.ReleaseDeployCli"] =
         [
-            "jd.core.bp.IBackEndProvider",
             "jd.core.records.IRecordStore",
-            "jd.core.revisions.ILiveRevisions",
-            "jd.orchestrator.IRevisionProbe",
-            "jd.orchestrator.ITemplates",
         ],
     };
 
-    // R3 today: the loaders that read the workload, the catalog, the descriptor and the release files from disk (the S25 slices hand them documents).
+    // R3 today: the path forms left, which read the descriptor from disk (DocumentLoader, until S25f2) and validate a file (YamlSchemaValidator, until S25g).
     private static readonly Dictionary<string, string[]> R3Allowlist = new()
     {
         ["jd.definitionvalidator.YamlSchemaValidator"] =
@@ -138,11 +121,6 @@ public sealed partial class ThinCliTests
         [
             "System.IO.File.Exists",
             "System.IO.File.ReadAllTextAsync",
-        ],
-        ["jd.resolver.release.ReleaseSetFile"] =
-        [
-            "System.IO.File.Exists",
-            "System.IO.File.ReadAllBytesAsync",
         ],
     };
 }

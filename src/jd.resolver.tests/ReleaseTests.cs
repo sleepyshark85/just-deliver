@@ -87,7 +87,7 @@ public sealed class ReleaseTests : IDisposable
         var path = Path.Combine(_temp, "set.yaml");
         await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
 
-        var loaded = await ReleaseSetFile.LoadAsync(path);
+        var loaded = await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path));
 
         Assert.Empty(loaded.Errors);
         Assert.Equal(await File.ReadAllBytesAsync(path), loaded.Bytes.ToArray());
@@ -221,7 +221,7 @@ public sealed class ReleaseTests : IDisposable
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(bytes)), set.Workloads[0].DefinitionSha256);
         var path = Path.Combine(_temp, "set.yaml");
         await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
-        var loaded = await ReleaseSetFile.LoadAsync(path);
+        var loaded = await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path));
         Assert.Empty(loaded.Errors);
         Assert.Equal(Key(set), Key(loaded.Set!));
     }
@@ -234,7 +234,7 @@ public sealed class ReleaseTests : IDisposable
         await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
         await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(path)).Replace("team: team-a", "team: team-b"));
 
-        var errors = (await ReleaseSetFile.LoadAsync(path)).Errors.Select(e => e.ToString()).ToList();
+        var errors = (await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path))).Errors.Select(e => e.ToString()).ToList();
 
         // Both embedded copies changed, so both are caught, each at its own entry.
         Assert.Equal(2, errors.Count);
@@ -260,7 +260,7 @@ public sealed class ReleaseTests : IDisposable
         var edited = string.Concat(text.AsSpan(0, first), "dependsOn: [web-db]", text.AsSpan(first + "dependsOn: []".Length)).Replace("dependsOn: []", "dependsOn: [web-app]");
         await File.WriteAllTextAsync(path, edited);
 
-        var error = Assert.Single((await ReleaseSetFile.LoadAsync(path)).Errors);
+        var error = Assert.Single((await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path))).Errors);
 
         Assert.Equal($"{path}: workloads: dependency cycle: web-app -> web-db -> web-app (each depends on the next).", error.ToString());
     }
@@ -276,7 +276,7 @@ public sealed class ReleaseTests : IDisposable
         var rehash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Definition("web-app").Replace(Pin, ":latest"))));
         await File.WriteAllTextAsync(path, text.Replace(Pin, ":latest").Replace(set.Workloads[0].DefinitionSha256, rehash));
 
-        var errors = (await ReleaseSetFile.LoadAsync(path)).Errors.Select(e => e.ToString()).ToList();
+        var errors = (await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path))).Errors.Select(e => e.ToString()).ToList();
 
         Assert.Contains(errors, e => e.StartsWith($"{path}: workloads[0].definition.container.image: ", StringComparison.Ordinal) && e.Contains("not pinned by digest"));
     }
@@ -303,7 +303,7 @@ public sealed class ReleaseTests : IDisposable
         var set = await BuildAsync(manifest);
         var path = Path.Combine(_temp, "set.yaml");
         await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
-        var loaded = await ReleaseSetFile.LoadAsync(path);
+        var loaded = await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path));
 
         Assert.Equal("web-app", set.Workloads[0].Name);
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(bytes)), set.Workloads[0].DefinitionSha256);
@@ -312,13 +312,12 @@ public sealed class ReleaseTests : IDisposable
     }
 
     [Fact]
-    public async Task Loading_a_set_that_is_not_there_or_breaks_its_schema_is_an_error()
+    public async Task Loading_a_set_that_breaks_its_schema_is_an_error()
     {
-        Assert.Single((await ReleaseSetFile.LoadAsync(Path.Combine(_temp, "none.yaml"))).Errors);
         var path = Path.Combine(_temp, "set.yaml");
         await File.WriteAllTextAsync(path, "kind: ReleaseSet\nlabel: 1.0.0\n");
 
-        Assert.NotEmpty((await ReleaseSetFile.LoadAsync(path)).Errors);
+        Assert.NotEmpty((await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path))).Errors);
     }
 
     [Fact]
@@ -338,7 +337,7 @@ public sealed class ReleaseTests : IDisposable
         // The app depends on the worker, so the worker deploys first although the app sorts first by name.
         Assert.Equal(["just-deliver-sample-worker", "just-deliver-sample-app"], set.Order);
         Assert.Equal(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", "sample.release-set.yaml")), actual);
-        Assert.Empty((await ReleaseSetFile.LoadAsync(path)).Errors);
+        Assert.Empty((await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path))).Errors);
     }
 
     private static string SnapshotSource([CallerFilePath] string testFile = "") => Path.Combine(Path.GetDirectoryName(testFile)!, "golden", "sample.release-set.yaml");

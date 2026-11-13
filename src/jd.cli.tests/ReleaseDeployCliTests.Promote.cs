@@ -1,5 +1,6 @@
 using jd.core.identity;
 using jd.core.revisions;
+using jd.orchestrator.usecases;
 using Xunit;
 
 namespace jd.cli.tests;
@@ -271,14 +272,35 @@ public sealed partial class ReleaseDeployCliTests
     {
         var stage = await ApprovedAsync();
         var backend = new RecordingBackend();
-        var changed = new ReleaseDeployCli.Promotion(new DeployerIdentity("tenant-1", "client-1", Dave), "dev", "1.0.0", new string('0', 64));
+        var changed = new Promotion(new DeployerIdentity("tenant-1", "client-1", Dave), "dev", "1.0.0", new string('0', 64));
 
         var stderr = new StringWriter();
         var code = await ReleaseDeployCli.PromoteAsync(
             stage, Catalog, changed, new StringWriter(), stderr, Connections(backend), CancellationToken.None);
 
         Assert.Equal(1, code);
-        Assert.Contains("changed since it was checked", stderr.ToString());
+        Assert.Equal($"jd: promote: the kept set 'dev/1.0.0/set.yaml' changed since it was checked (expected sha256 {new string('0', 64)}).{System.Environment.NewLine}", stderr.ToString());
+        Assert.Empty(backend.Calls);
+        Assert.Empty(StageFiles("*-deploy.json"));
+        Assert.DoesNotContain(StageFiles("*"), file => file.EndsWith("set.yaml", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_kept_set_that_cannot_be_read_by_the_walk_exits_2_naming_it_before_anything_is_deployed_or_kept()
+    {
+        var stage = await ApprovedAsync();
+        var backend = new RecordingBackend();
+        var promotion = new Promotion(new DeployerIdentity("tenant-1", "client-1", Dave), "dev", "1.0.0", new string('0', 64));
+        var kept = Path.Combine(_records, "dev", "1.0.0", "set.yaml");
+        File.Delete(kept); // removed between promote's check and its walk
+
+        var stderr = new StringWriter();
+        var code = await ReleaseDeployCli.PromoteAsync(
+            stage, Catalog, promotion, new StringWriter(), stderr, Connections(backend), CancellationToken.None);
+
+        Assert.Equal(2, code);
+        Assert.StartsWith("jd: ", stderr.ToString(), StringComparison.Ordinal);
+        Assert.Contains(kept, stderr.ToString(), StringComparison.Ordinal);
         Assert.Empty(backend.Calls);
         Assert.Empty(StageFiles("*-deploy.json"));
         Assert.DoesNotContain(StageFiles("*"), file => file.EndsWith("set.yaml", StringComparison.Ordinal));

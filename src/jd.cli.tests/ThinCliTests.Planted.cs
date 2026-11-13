@@ -139,6 +139,27 @@ namespace jd.cli.tests
                 findings.Select(f => f.Message).Order(StringComparer.Ordinal));
         }
 
+        // jd's release run start: a refusal's values are the problem's to read, but loading, the gate, the re-hash, resolving, keeping the set and
+        // building the backend are the step's, and the step itself is reached only through today's allowlist (it is no use case).
+        [Fact]
+        public void R1_names_the_release_deploy_command_and_member_that_run_the_start_itself()
+        {
+            var findings = R1(Planted, Only(typeof(planted.ReleaseDeployCommand)), UseCaseSurface(UseCases(typeof(Connections))));
+
+            Assert.Equal(
+                [
+                    "jd.cli.tests.planted.ReleaseDeployCommand.BuildsTheBackend reaches jd.orchestrator.usecases.Connections.get_Backend",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.ChecksTheGate reaches jd.orchestrator.usecases.Checks.Gate",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.KeepsTheSet reaches jd.resolver.release.ReleaseRecordFile.KeepSetAsync",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.LoadsTheSet reaches jd.resolver.release.ReleaseSetFile.ParseAsync",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.RehashesTheKeptSet reaches jd.resolver.release.ReleaseHash.Of",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.Resolves reaches jd.resolver.release.ReleaseResolver.ResolveAsync",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.StartsAsync reaches jd.orchestrator.usecases.ReleaseStart.StartAsync",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.StartsAsync reaches jd.orchestrator.usecases.ReleaseStartInput..ctor",
+                ],
+                findings.Select(f => f.Message).Order(StringComparer.Ordinal));
+        }
+
         [Fact]
         public void R2_names_the_type_and_member_that_name_a_port_outside_the_composition_and_the_composition_that_bypasses_one()
         {
@@ -320,6 +341,28 @@ namespace jd.cli.tests.planted
         public static object SerializesTheSet(ReleaseSet set) => ReleaseSetFile.Serialize(set);
 
         public static object ReadsTheClock(Connections connections) => connections.Time();
+    }
+
+    internal static class ReleaseDeployCommand
+    {
+        private static readonly SourceDocument Document = new("x", "kind: ReleaseSet"u8.ToArray());
+
+        public static string WordsTheRefusal(KeptSetChanged changed) => $"{changed.Set} {changed.ExpectedSha256}";
+
+        public static async Task<object> StartsAsync(Connections connections) =>
+            await ReleaseStart.StartAsync(new ReleaseStartInput(Document, Document, new SourceCatalog("c", []), false, null), connections, CancellationToken.None);
+
+        public static object LoadsTheSet() => ReleaseSetFile.ParseAsync(Document);
+
+        public static object? ChecksTheGate(EnvironmentDescriptor environment) => Checks.Gate(environment);
+
+        public static string RehashesTheKeptSet() => ReleaseHash.Of("x"u8);
+
+        public static object Resolves(ReleaseSet set, Catalog catalog, EnvironmentDescriptor environment) => ReleaseResolver.ResolveAsync("x", set, catalog, environment);
+
+        public static object KeepsTheSet(IRecordStore records) => ReleaseRecordFile.KeepSetAsync(records, "dev", "1.0.0", "x"u8.ToArray());
+
+        public static object BuildsTheBackend(Connections connections) => connections.Backend();
     }
 
     internal sealed class Store : IRecordStore
