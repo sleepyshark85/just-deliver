@@ -104,4 +104,24 @@ public sealed class LiteralScannerTests
 
         Assert.Equal([new SourceLiteral(1, "a"), new SourceLiteral(2, "b"), new SourceLiteral(3, "c"), new SourceLiteral(4, "\n    d\n    ")], LiteralScanner.Scan(source));
     }
+
+    [Fact]
+    public void A_stray_closing_brace_fails_naming_its_line_not_skipping_the_rest_of_the_file()
+    {
+        const string source = """
+            var a = "a";
+            }
+            var b = "b";
+            """;
+
+        Assert.Contains("line 2", Assert.Throws<InvalidOperationException>(() => LiteralScanner.Scan(source)).Message);
+    }
+
+    [Theory]
+    [InlineData("#region Don't edit\nvar a = 'x';\nvar b = \"b\";\n", 1)]
+    [InlineData("var a = \"a\";\n#region Don't edit\n", 2)]
+    public void An_apostrophe_in_a_directive_fails_naming_its_line_not_skipping_the_rest_of_the_file(string source, int line)
+    {
+        Assert.Contains($"line {line}", Assert.Throws<InvalidOperationException>(() => LiteralScanner.Scan(source)).Message);
+    }
 }

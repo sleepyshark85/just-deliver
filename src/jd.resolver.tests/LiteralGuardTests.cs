@@ -43,6 +43,7 @@ public sealed partial class LiteralGuardTests
             .Select(path => Path.GetRelativePath(sourceRoot, path).Replace(Path.DirectorySeparatorChar, '/'))
             .Where(file => !file.Split('/').Any(part => part is "bin" or "obj" || part.EndsWith(".tests", StringComparison.Ordinal)));
 
+    // '!': Path.GetDirectoryName returns null only for a root or an empty path; [CallerFilePath] is the full path of this source file, never either.
     private static string RepositoryRoot([CallerFilePath] string testFile = "") => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(testFile)!, "..", ".."));
 
     [Fact]
@@ -107,5 +108,14 @@ public sealed partial class LiteralGuardTests
         Assert.Equal(["a.cs:9: \"name\"", "a.cs:10: \"name\"", "b.cs:3: \"type\"", "stale allowlist entry: a.cs: \"kind\""], Breaches(findings, [("b.cs", "kind"), ("a.cs", "kind")]));
         Assert.Empty(Breaches(findings, [("a.cs", "name"), ("b.cs", "kind"), ("b.cs", "type")]));
         Assert.Equal("b.cs:3: \"type\"\nstale allowlist entry: c.cs: \"id\"", Assert.ThrowsAny<Exception>(() => AssertOnly(findings, [("a.cs", "name"), ("b.cs", "kind"), ("c.cs", "id")])).Message);
+    }
+
+    [Fact]
+    public void One_breach_alone_fails_and_no_breach_passes()
+    {
+        var findings = new[] { new Finding("a.cs", 9, "name") };
+
+        Assert.Equal("a.cs:9: \"name\"", Assert.ThrowsAny<Exception>(() => AssertOnly(findings, [])).Message);
+        AssertOnly(findings, [("a.cs", "name")]);
     }
 }

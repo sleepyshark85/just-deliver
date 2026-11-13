@@ -18,7 +18,12 @@ internal sealed class LiteralScanner
     public static IReadOnlyList<SourceLiteral> Scan(string source)
     {
         var scanner = new LiteralScanner(source);
-        scanner.Code();
+        scanner.ScanCode();
+        if (scanner._at != source.Length)
+        {
+            throw scanner.Stopped();
+        }
+
         return scanner._found;
     }
 
@@ -26,7 +31,7 @@ internal sealed class LiteralScanner
 
     private bool At(string text) => string.CompareOrdinal(_source, _at, text, 0, text.Length) == 0;
 
-    private int Run(char c)
+    private int RunLength(char c)
     {
         var end = _at;
         while (end < _source.Length && _source[end] == c)
@@ -38,7 +43,7 @@ internal sealed class LiteralScanner
     }
 
     // Code up to the end, or up to the '}' that closes the hole it is in, which is left for the string to consume.
-    private void Code()
+    private void ScanCode()
     {
         var depth = 0;
         while (!AtEnd && !(_source[_at] == '}' && depth == 0))
@@ -53,7 +58,7 @@ internal sealed class LiteralScanner
             }
             else if (_source[_at] == '\'')
             {
-                CharLiteral();
+                SkipCharLiteral();
             }
             else if (!TryString())
             {
@@ -69,16 +74,27 @@ internal sealed class LiteralScanner
         _at = found < 0 ? _source.Length : found + end.Length;
     }
 
-    private void CharLiteral()
+    private void SkipCharLiteral()
     {
         _at++;
-        while (!AtEnd && _source[_at] != '\'')
+        while (!AtEnd && _source[_at] != '\'' && _source[_at] != '\n')
         {
             _at += At(Backslash) ? 2 : 1;
         }
 
+        // A char literal never spans lines: a quote that finds none is not one (a directive's apostrophe, '#region Don't edit').
+        if (AtEnd || _source[_at] == '\n')
+        {
+            throw Stopped();
+        }
+
         _at++;
     }
+
+    // The scan went wrong where it could not tell: skipping on would hide the rest of the file from the guard.
+    private InvalidOperationException Stopped() =>
+        new($"The literal scanner stopped at line {LineOf(Math.Min(_at, _source.Length))}, before the end of the source: a stray '}}', or a character " +
+            "literal or string it misread (a directive's apostrophe, as in '#region Don't edit', is not code it can skip).");
 
     // A string starts with its '$' and '@' prefixes, then a quote; a prefix without a quote is code (an '@' identifier).
     private bool TryString()
@@ -99,22 +115,22 @@ internal sealed class LiteralScanner
         var dollars = prefix.Count(c => c == '$');
         if (prefix.Contains('@'))
         {
-            Quoted(dollars, DoubledQuote);
+            ScanQuoted(dollars, DoubledQuote);
         }
-        else if (Run('"') >= 3)
+        else if (RunLength('"') >= 3)
         {
-            Raw(dollars);
+            ScanRaw(dollars);
         }
         else
         {
-            Quoted(dollars, Backslash);
+            ScanQuoted(dollars, Backslash);
         }
 
         return true;
     }
 
     // A regular or verbatim string, up to the quote its escape does not take; when interpolated, '{{' is text and a '{' opens a hole.
-    private void Quoted(int dollars, string escape)
+    private void ScanQuoted(int dollars, string escape)
     {
         _at++;
         var start = _at;
@@ -131,7 +147,7 @@ internal sealed class LiteralScanner
             else if (dollars > 0 && _source[_at] == '{')
             {
                 Emit(start);
-                Hole(dollars);
+                ScanHole(dollars);
                 start = _at;
             }
             else
@@ -146,20 +162,20 @@ internal sealed class LiteralScanner
 
     // A raw string ends at as many quotes as it starts with; when interpolated, a hole opens at as many braces as it has '$', and the braces before
     // them in the run are text.
-    private void Raw(int dollars)
+    private void ScanRaw(int dollars)
     {
-        var quotes = Run('"');
+        var quotes = RunLength('"');
         var closing = new string('"', quotes);
         _at += quotes;
         var start = _at;
         while (!AtEnd && !At(closing))
         {
-            var braces = Run('{');
+            var braces = RunLength('{');
             if (dollars > 0 && braces >= dollars)
             {
                 _at += braces - dollars;
                 Emit(start);
-                Hole(dollars);
+                ScanHole(dollars);
                 start = _at;
             }
             else
@@ -173,10 +189,10 @@ internal sealed class LiteralScanner
     }
 
     // An interpolation hole: its opening braces, code, and its closing braces, as many of each as the string has '$'.
-    private void Hole(int braces)
+    private void ScanHole(int braces)
     {
         _at += braces;
-        Code();
+        ScanCode();
         _at += braces;
     }
 
