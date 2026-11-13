@@ -167,6 +167,31 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
     }
 
     [Fact]
+    public async Task The_summary_counts_the_deployed_the_unchanged_the_failed_and_the_not_started_workloads()
+    {
+        // Four copies of the sample worker, deployed in the order of their names: the first changes, the second is unchanged, the third fails.
+        string[] names = ["mix-a", "mix-b", "mix-c", "mix-d"];
+        var worker = await File.ReadAllTextAsync(Path.Combine(Samples, "workloads", "sample-worker.yaml"));
+        foreach (var name in names)
+        {
+            await File.WriteAllTextAsync(Path.Combine(_temp, $"{name}.yaml"), worker.Replace($"name: {Worker}", $"name: {name}", StringComparison.Ordinal));
+        }
+
+        var manifest = Path.Combine(_temp, "mix.manifest.yaml");
+        await File.WriteAllTextAsync(manifest, "kind: ReleaseManifest\nlabel: 1.0.0\nworkloads:\n" + string.Concat(names.Select(n => $"  - definition: {n}.yaml\n")));
+        var set = Path.Combine(_temp, "mix.set.yaml");
+        Assert.Equal(0, await Cli.RunAsync(["release", "create", manifest, "--out", set], TextWriter.Null, TextWriter.Null, CancellationToken.None, Connections(null) with { Time = () => TimeProvider.System }));
+        var backend = new RecordingBackend { FailOn = "mix-c.dev.database.container" };
+        backend.Unchanged.Add("mix-b");
+
+        var (code, stdout, stderr) = await RunAsync(backend, Deploy(set));
+
+        Assert.Equal(1, code);
+        Assert.Equal("jd: stopped at mix-c, node mix-c/dev/database/container: provider exploded\n", stderr.ReplaceLineEndings("\n"));
+        Assert.Contains("\nrelease 1.0.0 on dev: 1 deployed, 1 unchanged, 1 failed, 1 not started (mix-d).\n", stdout.ReplaceLineEndings("\n"), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_template_misfit_in_the_second_workload_stops_the_whole_set_before_anything_is_created()
     {
         // The app asks for a component whose class names a template the library does not have; the worker is fine.

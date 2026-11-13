@@ -35,8 +35,8 @@ public sealed partial class ReleaseDeployCliTests
 
         Assert.Equal(0, code);
         Assert.Empty(stderr);
-        Assert.Contains("release 1.0.0 on dev: IQ passed", stdout);
         var file = Assert.Single(RecordFiles);
+        Assert.EndsWith($"release 1.0.0 on dev: IQ passed, 12 checks, 0 failed.\nrecord: {file}\n", stdout.ReplaceLineEndings("\n"), StringComparison.Ordinal);
         Assert.Empty(QualifyRecordFiles);
         var record = Read(file);
         Assert.Equal("succeeded", (string?)record["outcome"]);
@@ -75,13 +75,15 @@ public sealed partial class ReleaseDeployCliTests
         var (code, stdout, stderr) = await RunAsync(backend, Deploy(set));
 
         Assert.Equal(1, code);
-        Assert.Contains($"jd: IQ failed: {Worker}: node {Worker}/dev/database/container differs from what is deployed: Update 1", stderr);
-        Assert.Contains($"jd: IQ failed: {Worker}: pinned {FakeLiveRevisions.Pinned}, live {Other} on revision app--oob1", stderr);
-        Assert.Contains($"jd: IQ failed: {App}: pinned {FakeLiveRevisions.Pinned}, live {Other} on revision app--oob1", stderr);
-        Assert.Contains("release 1.0.0 on dev: 2 deployed, 0 unchanged, 0 failed, 0 not started.", stdout);
-        Assert.Contains("IQ failed, ", stdout);
+        Assert.Equal(
+            $"jd: IQ failed: {Worker}: node {Worker}/dev/database/container differs from what is deployed: Update 1\n"
+            + $"jd: IQ failed: {Worker}: pinned {FakeLiveRevisions.Pinned}, live {Other} on revision app--oob1\n"
+            + $"jd: IQ failed: {App}: pinned {FakeLiveRevisions.Pinned}, live {Other} on revision app--oob1\n",
+            stderr.ReplaceLineEndings("\n"));
         var file = Assert.Single(RecordFiles);
-        Assert.Contains($"record: {file}", stdout);
+        Assert.EndsWith(
+            "release 1.0.0 on dev: 2 deployed, 0 unchanged, 0 failed, 0 not started.\nrelease 1.0.0 on dev: IQ failed, 12 checks, 3 failed.\n" + $"record: {file}\n",
+            stdout.ReplaceLineEndings("\n"), StringComparison.Ordinal);
         var record = Read(file);
         Assert.Equal("succeeded", (string?)record["outcome"]);
         Assert.Equal("failed", (string?)record["iq"]!["status"]);

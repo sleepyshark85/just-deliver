@@ -267,12 +267,31 @@ public sealed partial class ReleaseDeployCliTests
         _clock = new StepClock(); // the same readings again: the second record's path is the first one's
 
         var backend = new RecordingBackend();
-        var (code, _, stderr) = await RunAsync(backend, Deploy(set));
+        var (code, stdout, stderr) = await RunAsync(backend, Deploy(set));
 
         Assert.Equal(1, code);
         Assert.NotEmpty(backend.Calls);
-        Assert.Contains("jd: the release was deployed, but its record could not be written", stderr);
+        Assert.Equal($"jd: the release was deployed, but its record could not be written: The file '{first}' already exists.\n", stderr.ReplaceLineEndings("\n"));
+        Assert.EndsWith("release 1.0.0 on dev: IQ passed, 12 checks, 0 failed.\n", stdout.ReplaceLineEndings("\n"), StringComparison.Ordinal);
         Assert.Equal(firstBytes, await File.ReadAllBytesAsync(first));
         Assert.Single(RecordFiles);
+    }
+
+    [Fact]
+    public async Task A_qualify_record_that_cannot_be_written_exits_1_and_says_the_release_was_checked()
+    {
+        var set = await CreateSetAsync();
+        await RunAsync(new RecordingBackend { Deployed = true }, Qualify(set));
+        var first = Assert.Single(QualifyRecordFiles);
+        var firstBytes = await File.ReadAllBytesAsync(first);
+        _clock = new StepClock(); // the same readings again: the second record's path is the first one's
+
+        var (code, stdout, stderr) = await RunAsync(new RecordingBackend { Deployed = true }, Qualify(set));
+
+        Assert.Equal(1, code);
+        Assert.Equal($"jd: the release was checked, but its record could not be written: The file '{first}' already exists.\n", stderr.ReplaceLineEndings("\n"));
+        Assert.Equal("release 1.0.0 on dev: IQ passed, 12 checks, 0 failed.\n", stdout.ReplaceLineEndings("\n"));
+        Assert.Equal(firstBytes, await File.ReadAllBytesAsync(first));
+        Assert.Single(QualifyRecordFiles);
     }
 }

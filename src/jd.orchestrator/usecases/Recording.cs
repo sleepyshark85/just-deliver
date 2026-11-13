@@ -8,4 +8,4 @@ namespace jd.orchestrator.usecases;
 /// <param name="Identity">The principal the run deploys as.</param>
 /// <param name="SetSha256">The kept set's hash.</param>
 /// <param name="Qualifier">Checks the deployment (IQ).</param>
-public sealed record Recording(IRecordStore Records, DeployerIdentity Identity, string SetSha256, Qualifier Qualifier);
+internal sealed record Recording(IRecordStore Records, DeployerIdentity Identity, string SetSha256, Qualifier Qualifier);

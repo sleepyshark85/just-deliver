@@ -1,5 +1,5 @@
 namespace jd.orchestrator.usecases;
 
-/// <summary>The record of what was done could not be written.</summary>
+/// <summary>The record could not be written; what was done stays done.</summary>
 /// <param name="Reason">The records' own words.</param>
 public sealed record RecordNotWritten(string Reason) : Problem;

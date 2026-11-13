@@ -11,7 +11,8 @@ namespace jd.cli.tests;
 // The probe passes unless ProbePasses is false. With Deployed, every stack looks deployed and clean; so does a stack this backend deployed,
 // as after a deploy: a preview finds no change and the state has the outputs the templates declare (what a qualification reads); the traffic is valid JSON
 // naming a revision, as the release flow reads it. With a Clock, each deploy moves it by DeployTime and each preview by PreviewTime;
-// the previews of the stacks in PreviewDrift find a change. The outputs named in SecretOutputs are secret; Packages holds every package deployed.
+// the previews of the stacks in PreviewDrift find a change, and the workloads in Unchanged look deployed and their deploys change nothing.
+// The outputs named in SecretOutputs are secret; Packages holds every package deployed.
 internal sealed class RecordingBackend : IBackEndProvider, IRevisionProbe
 {
     public List<string> Calls { get; } = [];
@@ -22,6 +23,7 @@ internal sealed class RecordingBackend : IBackEndProvider, IRevisionProbe
     public TimeSpan DeployTime { get; set; }
     public TimeSpan PreviewTime { get; set; }
     public HashSet<string> PreviewDrift { get; } = [];
+    public HashSet<string> Unchanged { get; } = [];
     public HashSet<string> SecretOutputs { get; } = [];
     public List<DeploymentPackage> Packages { get; } = [];
     private readonly HashSet<string> _deployedStacks = [];
@@ -31,14 +33,16 @@ internal sealed class RecordingBackend : IBackEndProvider, IRevisionProbe
         Calls.Add("deploy " + package.StackName);
         Packages.Add(package);
         Clock?.Advance(DeployTime);
-        var outputs = OutputsOf(package.DeploymentContent);
+        var outputs = OutputsOf(package.StackName, package.DeploymentContent);
         if (package.StackName == FailOn)
         {
             throw new InvalidOperationException("provider exploded");
         }
 
         _deployedStacks.Add(package.StackName);
-        return Task.FromResult(new DeploymentResult { Outputs = outputs, Summary = new() { ["Create"] = 1 }, Changes = [new ResourceChange { Urn = "urn", Type = "azure-native:t:T", Operation = "create" }] });
+        return Task.FromResult(IsUnchanged(package.StackName)
+            ? new DeploymentResult { Outputs = outputs, Summary = new() { ["Same"] = 1 } }
+            : new DeploymentResult { Outputs = outputs, Summary = new() { ["Create"] = 1 }, Changes = [new ResourceChange { Urn = "urn", Type = "azure-native:t:T", Operation = "create" }] });
     }
 
     public Task<DeploymentResult> PreviewAsync(DeploymentPackage package, CancellationToken cancellationToken)
@@ -50,13 +54,19 @@ internal sealed class RecordingBackend : IBackEndProvider, IRevisionProbe
     }
 
     public Task<Dictionary<string, ConfigEntry>?> GetOutputsAsync(string stackName, string deploymentContent, CancellationToken cancellationToken) =>
-        Task.FromResult(IsDeployed(stackName) ? OutputsOf(deploymentContent) : null);
+        Task.FromResult(IsDeployed(stackName) ? OutputsOf(stackName, deploymentContent) : null);
 
-    private bool IsDeployed(string stack) => Deployed || _deployedStacks.Contains(stack);
+    private bool IsDeployed(string stack) => Deployed || IsUnchanged(stack) || _deployedStacks.Contains(stack);
 
-    private Dictionary<string, ConfigEntry> OutputsOf(string deploymentContent) =>
+    // A stack's name starts with its workload's.
+    private bool IsUnchanged(string stack) => Unchanged.Contains(stack.Split('.')[0]);
+
+    // An unchanged workload's traffic is already on the revision its deploy reports, so its release flow has nothing to probe or shift.
+    private Dictionary<string, ConfigEntry> OutputsOf(string stack, string deploymentContent) =>
         ((YamlSchemaValidator.ParseYaml(deploymentContent) as JObject)?["outputs"] as JObject)?.Properties()
-            .ToDictionary(p => p.Name, p => new ConfigEntry(p.Name == "traffic" ? """[{"revisionName":"app--r1","weight":100}]""" : "out-" + p.Name, SecretOutputs.Contains(p.Name))) ?? [];
+            .ToDictionary(p => p.Name, p => new ConfigEntry(p.Name == "traffic" ? Traffic(IsUnchanged(stack) ? "out-latestRevisionName" : "app--r1") : "out-" + p.Name, SecretOutputs.Contains(p.Name))) ?? [];
+
+    private static string Traffic(string revision) => $$"""[{"revisionName":"{{revision}}","weight":100}]""";
 
     public Task<ProbeResult> ProbeAsync(string fqdn, Probe probe, CancellationToken cancellationToken)
     {
