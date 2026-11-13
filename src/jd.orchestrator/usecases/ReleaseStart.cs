@@ -20,6 +20,9 @@ public static class ReleaseStart
     // templates they fit.
     private sealed record Checked(ReleaseSet Set, ReadOnlyMemory<byte> SetBytes, Catalog Catalog, EnvironmentDescriptor Environment, IReadOnlyList<ResolvedGraph> Graphs, ITemplates Templates);
 
+    // What a recorded run has once its set is kept.
+    private sealed record Kept(IRecordStore Records, DeployerIdentity Identity, string SetSha256);
+
     /// <summary>Starts the run of <paramref name="input"/>, or stops at the first refusal with nothing deployed.</summary>
     /// <param name="input">The set or the promotion, the environment, the catalog and whether to only preview.</param>
     /// <param name="connections">The records, the identity, the backend, the probe, the reader of live revisions, the clock and the templates.</param>
@@ -43,7 +46,7 @@ public static class ReleaseStart
         }
 
         // A recorded run knows who deploys, and that no other set was deployed under this label, before it calls the backend.
-        (DeployerIdentity Principal, string SetSha256)? kept = null;
+        Kept? kept = null;
         if (records is not null)
         {
             (kept, problem) = await KeepAsync(records, input.Promotion?.Principal, run, connections, cancellationToken);
@@ -53,7 +56,7 @@ public static class ReleaseStart
             }
         }
 
-        return Connect(run, records, kept, connections, time, started);
+        return Connect(run, kept, connections, time, started);
     }
 
     // The set (a promotion's: the kept one), the catalog and the environment loaded and checked, every workload resolved and fitted to the templates;
@@ -107,7 +110,7 @@ public static class ReleaseStart
 
     // The principal (known already, for a promotion) and the kept set's hash; or why the run must not start: the principal cannot be named, the label
     // cannot name a place in the records, or it holds another set.
-    private static async Task<((DeployerIdentity Principal, string SetSha256)? Kept, Problem? Refusal)> KeepAsync(
+    private static async Task<(Kept? Kept, Problem? Refusal)> KeepAsync(
         IRecordStore records, DeployerIdentity? known, Checked run, Connections connections, CancellationToken cancellationToken)
     {
         DeployerIdentity principal;
@@ -123,7 +126,7 @@ public static class ReleaseStart
         try
         {
             var (sha256, conflict) = await ReleaseRecordFile.KeepSetAsync(records, run.Environment.Name, run.Set.Label, run.SetBytes, cancellationToken);
-            return conflict is null ? ((principal, sha256), null) : (null, new RecordingRefused(conflict));
+            return conflict is null ? (new Kept(records, principal, sha256), null) : (null, new RecordingRefused(conflict));
         }
         catch (ArgumentException ex)
         {
@@ -133,16 +136,15 @@ public static class ReleaseStart
 
     // Everything the run calls, built together before any backend call, so one that cannot be built stops the run before anything is deployed. A
     // preview records nothing and qualifies nothing, so it has no qualifier.
-    private static ReleaseStartResult Connect(
-        Checked run, IRecordStore? records, (DeployerIdentity Principal, string SetSha256)? kept, Connections connections, TimeProvider time, DateTimeOffset started)
+    private static ReleaseStartResult Connect(Checked run, Kept? kept, Connections connections, TimeProvider time, DateTimeOffset started)
     {
         try
         {
             var backend = connections.Backend();
             var orchestrator = new Orchestrator(backend, run.Templates, run.Catalog, run.Environment, connections.Probe());
-            var recording = records is null || kept is not { } k
+            var recording = kept is null
                 ? null
-                : new Recording(records, k.Principal, k.SetSha256, new Qualifier(orchestrator, backend, run.Templates, connections.LiveRevisions(), time));
+                : new Recording(kept.Records, kept.Identity, kept.SetSha256, new Qualifier(orchestrator, backend, run.Templates, connections.LiveRevisions(), time));
             return new([], null, new StartedRelease(run.Set, run.Environment, run.Graphs, orchestrator, recording, time, started));
         }
         catch (InvalidOperationException ex)
