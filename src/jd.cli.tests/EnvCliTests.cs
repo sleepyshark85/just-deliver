@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using jd.core.bp;
+using jd.resolver.environment;
 using Xunit;
 
 namespace jd.cli.tests;
@@ -89,7 +90,7 @@ public sealed class EnvCliTests : IDisposable
 
         Assert.Equal((0, 0), (first.Code, second.Code));
         Assert.Equal(["_dev.dev.substrate.apps", "_dev.dev.substrate.database", "_dev.dev.substrate.group", "_dev.dev.substrate.logs", "_shared.shared.substrate.cosmos", "_shared.shared.substrate.group", "_shared.shared.substrate.workspace"], backend.Calls.Order().ToList());
-        var descriptor = (await jd.resolver.environment.EnvironmentParser.LoadAsync(dev)).Value!;
+        var descriptor = (await EnvironmentParser.LoadAsync(await Cli.ReadDocumentAsync(dev, CancellationToken.None), CancellationToken.None)).Value!;
         Assert.Equal(("dev", "southeastasia"), (descriptor.Name, descriptor.Region));
         Assert.Equal("cosmos-1", descriptor.Values["cosmos-account.name"]);
         Assert.Equal("db-dev", descriptor.Values["database.databaseName"]);
@@ -144,7 +145,7 @@ public sealed class EnvCliTests : IDisposable
         Assert.Equal((1, 0), (refused.Code, up.Code));
         Assert.Equal(0, refusedCalls);
         Assert.Contains($"{open}: approval: environment type 'stage' requires an 'approval' block", refused.Err);
-        var descriptor = (await jd.resolver.environment.EnvironmentParser.LoadAsync(stage)).Value!;
+        var descriptor = (await EnvironmentParser.LoadAsync(await Cli.ReadDocumentAsync(stage, CancellationToken.None), CancellationToken.None)).Value!;
         Assert.Equal(("stage", "stage"), (descriptor.Name, descriptor.Type));
         Assert.Equal(("dev", 1, true), (descriptor.Approval!.QualifiedOn, descriptor.Approval.Required, descriptor.Approval.SeparateFromDeployer));
         Assert.Equal(["00000000-0000-0000-0000-000000000000"], descriptor.Approval.Approvers);

@@ -22,7 +22,7 @@ public class GoldenSubstrateTests
     {
         var catalog = (await SeedCatalog.LoadAsync()).Value!;
         var definition = (await EnvironmentDefinitionFile.LoadAsync(await SourceFiles.ReadAsync(Path.Combine(AppContext.BaseDirectory, "samples", "environments", sample + ".yaml")), CancellationToken.None)).Value!;
-        var baseEnvironment = baseDescriptor is null ? null : (await EnvironmentParser.LoadAsync(Path.Combine(AppContext.BaseDirectory, "golden", baseDescriptor))).Value;
+        var baseEnvironment = baseDescriptor is null ? null : (await EnvironmentParser.LoadAsync(await SourceFiles.ReadAsync(Path.Combine(AppContext.BaseDirectory, "golden", baseDescriptor)), CancellationToken.None)).Value;
 
         var graph = Resolver.ResolveSubstrate(definition, sample + ".yaml", catalog, (definition with { Region = "region-1" }).Over(baseEnvironment), baseEnvironment);
 

@@ -156,11 +156,4 @@ public class EnvironmentParserTests
         var env = await Load(Valid);
         Assert.False(env.TryGet(path, out _));
     }
-
-    [Fact]
-    public async Task Missing_file_is_reported()
-    {
-        var result = await EnvironmentParser.LoadAsync(Path.Combine(Path.GetTempPath(), "jd-no-such-env.yaml"));
-        Assert.Contains("not found", Assert.Single(result.Errors).Message);
-    }
 }

@@ -10,14 +10,18 @@ namespace jd.orchestrator.usecases;
 public static class DeployRelease
 {
     /// <summary>Runs <paramref name="input"/>; nothing reaches the backend before every check of the start has passed.</summary>
-    /// <param name="input">The set or the promotion, the environment, the catalog and whether to only preview.</param>
+    /// <param name="input">The set, the environment, the catalog and whether to only preview.</param>
     /// <param name="connections">The records, the identity, the backend, the probe, the reader of live revisions, the clock and the templates.</param>
     /// <param name="progress">Told as each workload starts and as each of its nodes finishes.</param>
     /// <param name="cancellationToken">Cancels the run.</param>
-    /// <exception cref="ArgumentException">The input has both a set and a promotion, neither, or a promotion that previews.</exception>
-    public static async Task<DeployReleaseResult> RunAsync(DeployReleaseInput input, Connections connections, Action<Progress>? progress, CancellationToken cancellationToken)
+    public static Task<DeployReleaseResult> RunAsync(DeployReleaseInput input, Connections connections, Action<Progress>? progress, CancellationToken cancellationToken) =>
+        WalkAsync(input, null, connections, progress, cancellationToken);
+
+    // The run of input, or of the walk of a promotion that settled its principal and the hash of its set; only Promote passes one.
+    internal static async Task<DeployReleaseResult> WalkAsync(
+        DeployReleaseInput input, Promotion? promotion, Connections connections, Action<Progress>? progress, CancellationToken cancellationToken)
     {
-        var start = await ReleaseStart.StartAsync(input, connections, cancellationToken);
+        var start = await ReleaseStart.StartAsync(input, promotion, connections, cancellationToken);
         if (start.Run is not { } run)
         {
             return new(start.Errors, start.Problem, Outcome.Failed, null, null, [], null, null, null);

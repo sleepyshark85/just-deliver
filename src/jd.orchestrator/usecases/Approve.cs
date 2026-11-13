@@ -34,24 +34,13 @@ public static class Approve
             return Invalid(new MeaningInvalid(MeaningMaxLength));
         }
 
-        var loaded = await EnvironmentParser.LoadAsync(input.Environment, cancellationToken);
-        if (loaded.Value is not { } target)
+        var (gated, errors, refusal) = await Checks.GatedTargetAsync(input.Environment, connections, cancellationToken);
+        if (gated is null)
         {
-            return new ApproveResult(loaded.Errors, null, Outcome.Failed, null, null, 0, null);
+            return new ApproveResult(errors, refusal, Outcome.Failed, null, null, 0, null);
         }
 
-        if (target.Approval is not { } policy)
-        {
-            return Refused(new NotGated(target.Name));
-        }
-
-        // A bad credential stops here, before any record is read.
-        var (approver, identityRefusal) = await Checks.PrincipalAsync(connections, cancellationToken);
-        if (approver is null)
-        {
-            return Refused(identityRefusal!); // a credential that names no principal comes with its refusal
-        }
-
+        var (target, policy, approver) = gated;
         return await ApproveAsync(new Approval(input.Label, input.Meaning, target, policy, approver), connections, progress, cancellationToken);
     }
 

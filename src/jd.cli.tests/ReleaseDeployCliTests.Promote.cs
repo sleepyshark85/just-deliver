@@ -1,6 +1,5 @@
-using jd.core.identity;
+using System.Globalization;
 using jd.core.revisions;
-using jd.orchestrator.usecases;
 using Xunit;
 
 namespace jd.cli.tests;
@@ -10,6 +9,10 @@ namespace jd.cli.tests;
 public sealed partial class ReleaseDeployCliTests
 {
     private const string NoApproval = "20260101T000000000Z-approve.json";
+
+    // Stand-ins in a test's arguments for the paths known only when it runs: stage's descriptor and the catalog.
+    private const string StagePath = "<stage>";
+    private const string CatalogPath = "<catalog>";
 
     private Task<(int Code, string Out, string Err)> PromoteAsync(string stage, RecordingBackend? backend = null, string label = "1.0.0") =>
         RunAsync(backend, "promote", label, "--to", stage, "--catalog", Catalog);
@@ -148,8 +151,7 @@ public sealed partial class ReleaseDeployCliTests
 
         var stderr = await RefusedAsync(stage, "9.9.9");
 
-        Assert.Contains("jd: promote: release 9.9.9 cannot be promoted to 'stage':", stderr);
-        Assert.Contains("unknown label", stderr);
+        Assert.Equal("jd: promote: release 9.9.9 cannot be promoted to 'stage':\n  unknown label: there is no set.yaml for label 9.9.9 on dev.\n", stderr.ReplaceLineEndings("\n"));
     }
 
     [Fact]
@@ -212,8 +214,9 @@ public sealed partial class ReleaseDeployCliTests
 
         var stderr = await RefusedAsync(stage);
 
-        Assert.Contains($"jd: promote: ignored {NoApproval}: ", stderr);
-        Assert.Contains("  0 of 1 required approvals for 'stage' count.", stderr);
+        var lines = stderr.ReplaceLineEndings("\n").Split('\n');
+        Assert.StartsWith($"jd: promote: ignored {NoApproval}: ", lines[0], StringComparison.Ordinal);
+        Assert.Equal<string>(["jd: promote: release 1.0.0 cannot be promoted to 'stage':", "  0 of 1 required approvals for 'stage' count.", string.Empty], lines[1..]);
     }
 
     [Fact]
@@ -223,7 +226,7 @@ public sealed partial class ReleaseDeployCliTests
 
         var stderr = await RefusedAsync(Environment, identityAsked: 0);
 
-        Assert.Contains("jd: promote: environment 'dev' has no approval policy, so there is nothing to promote through.", stderr);
+        Assert.Equal("jd: promote: environment 'dev' has no approval policy, so there is nothing to promote through.\n", stderr.ReplaceLineEndings("\n"));
     }
 
     [Fact]
@@ -247,11 +250,7 @@ public sealed partial class ReleaseDeployCliTests
 
         var (code, stdout, stderr) = await PromoteAsync(stage, backend);
 
-        Assert.Equal(1, code);
-        Assert.Contains("jd: ARM_TENANT_ID is not set.", stderr);
-        Assert.DoesNotContain("unknown label", stderr, StringComparison.Ordinal);
-        Assert.DoesNotContain("cannot be promoted", stderr, StringComparison.Ordinal);
-        Assert.DoesNotContain("promoting", stdout, StringComparison.Ordinal);
+        Assert.Equal((1, string.Empty, "jd: ARM_TENANT_ID is not set.\n"), (code, stdout, stderr.ReplaceLineEndings("\n")));
         Assert.Empty(backend.Calls);
         Assert.Equal(1, _identity.Calls);
         Assert.Empty(StageFiles("*"));
@@ -268,18 +267,18 @@ public sealed partial class ReleaseDeployCliTests
     }
 
     [Fact]
-    public async Task The_walk_refuses_a_kept_set_whose_bytes_are_not_the_checked_ones_before_anything_is_deployed_or_kept()
+    public async Task The_walk_refuses_a_kept_set_whose_bytes_changed_after_the_check_before_anything_is_deployed_or_kept()
     {
         var stage = await ApprovedAsync();
         var backend = new RecordingBackend();
-        var changed = new Promotion(new DeployerIdentity("tenant-1", "client-1", Dave), "dev", "1.0.0", new string('0', 64));
+        var kept = Path.Combine(_records, "dev", "1.0.0", "set.yaml");
+        var judged = Sha256(kept);
 
-        var stderr = new StringWriter();
-        var code = await ReleaseDeployCli.PromoteAsync(
-            stage, Catalog, changed, new StringWriter(), stderr, Connections(backend), CancellationToken.None);
+        var (code, stdout, stderr) = await PromoteChangingTheKeptSetAsync(stage, backend, () => File.AppendAllText(kept, "# changed after the check\n"));
 
         Assert.Equal(1, code);
-        Assert.Equal($"jd: promote: the kept set 'dev/1.0.0/set.yaml' changed since it was checked (expected sha256 {new string('0', 64)}).{System.Environment.NewLine}", stderr.ToString());
+        Assert.Equal($"promoting 1.0.0 from dev (set sha256 {judged})\n", stdout.ReplaceLineEndings("\n"));
+        Assert.Equal($"jd: promote: the kept set 'dev/1.0.0/set.yaml' changed since it was checked (expected sha256 {judged}).\n", stderr.ReplaceLineEndings("\n"));
         Assert.Empty(backend.Calls);
         Assert.Empty(StageFiles("*-deploy.json"));
         Assert.DoesNotContain(StageFiles("*"), file => file.EndsWith("set.yaml", StringComparison.Ordinal));
@@ -290,50 +289,74 @@ public sealed partial class ReleaseDeployCliTests
     {
         var stage = await ApprovedAsync();
         var backend = new RecordingBackend();
-        var promotion = new Promotion(new DeployerIdentity("tenant-1", "client-1", Dave), "dev", "1.0.0", new string('0', 64));
         var kept = Path.Combine(_records, "dev", "1.0.0", "set.yaml");
-        File.Delete(kept); // removed between promote's check and its walk
+        var judged = Sha256(kept);
 
-        var stderr = new StringWriter();
-        var code = await ReleaseDeployCli.PromoteAsync(
-            stage, Catalog, promotion, new StringWriter(), stderr, Connections(backend), CancellationToken.None);
+        var (code, stdout, stderr) = await PromoteChangingTheKeptSetAsync(stage, backend, () => File.Delete(kept));
 
         Assert.Equal(2, code);
-        Assert.StartsWith("jd: ", stderr.ToString(), StringComparison.Ordinal);
-        Assert.Contains(kept, stderr.ToString(), StringComparison.Ordinal);
+        Assert.Equal($"promoting 1.0.0 from dev (set sha256 {judged})\n", stdout.ReplaceLineEndings("\n"));
+        Assert.Equal($"jd: Could not find file '{kept}'.\n", stderr.ReplaceLineEndings("\n"));
         Assert.Empty(backend.Calls);
         Assert.Empty(StageFiles("*-deploy.json"));
         Assert.DoesNotContain(StageFiles("*"), file => file.EndsWith("set.yaml", StringComparison.Ordinal));
     }
 
+    // A promotion whose kept set change() alters between promote's check and its walk: as `promoting` is printed, after the one and before the other.
+    private async Task<(int Code, string Out, string Err)> PromoteChangingTheKeptSetAsync(string stage, RecordingBackend backend, Action change)
+    {
+        var stdout = new OnLine(line =>
+        {
+            if (line.StartsWith("promoting ", StringComparison.Ordinal))
+            {
+                change();
+            }
+        });
+        var stderr = new StringWriter();
+        var code = await Cli.RunAsync(["promote", "1.0.0", "--to", stage, "--catalog", Catalog], stdout, stderr, CancellationToken.None, Connections(backend));
+        return (code, stdout.ToString(), stderr.ToString());
+    }
+
+    // Collects what is written, and tells act each line as it is written.
+    private sealed class OnLine(Action<string> act) : StringWriter(CultureInfo.InvariantCulture)
+    {
+        public override void WriteLine(string? value)
+        {
+            base.WriteLine(value);
+            act(value ?? string.Empty);
+        }
+    }
+
     [Theory]
-    [InlineData("promote")]
-    [InlineData("promote", "1.0.0", "2.0.0", "--to", "s.yaml", "--catalog", "c")]
-    [InlineData("promote", "../x", "--to", "s.yaml", "--catalog", "c")]
-    [InlineData("promote", "1.0.0", "--catalog", "c")]
-    [InlineData("promote", "1.0.0", "--to", "s.yaml")]
-    [InlineData("promote", "1.0.0", "--catalog", "c", "--to")]
-    public async Task Usage_errors_exit_2_print_the_usage_and_touch_no_identity_backend_or_record(params string[] args)
+    [InlineData("expected exactly one release label.", "promote")]
+    [InlineData("expected exactly one release label.", "promote", "1.0.0", "2.0.0", "--to", "s.yaml", "--catalog", "c")]
+    [InlineData("promote needs --to and --catalog.", "promote", "1.0.0", "--catalog", "c")]
+    [InlineData("promote needs --to and --catalog.", "promote", "1.0.0", "--to", "s.yaml")]
+    [InlineData("--to needs a value.", "promote", "1.0.0", "--catalog", "c", "--to")]
+    [InlineData("unknown option '--env'.", "promote", "1.0.0", "--to", "s.yaml", "--catalog", "c", "--env", "e.yaml")]
+    public async Task Usage_errors_exit_2_print_the_problem_and_the_usage_and_touch_no_identity_backend_or_record(string problem, params string[] args)
     {
         var backend = new RecordingBackend();
 
-        var (code, stdout, stderr) = await RunAsync(backend, args);
-
-        Assert.Equal(2, code);
-        Assert.Empty(stdout);
-        Assert.Contains("Usage:", stderr);
+        AssertUsageError(await RunAsync(backend, args), problem);
         Assert.Equal(0, _identity.Calls);
         Assert.Empty(backend.Calls);
         Assert.Empty(Directory.GetFileSystemEntries(_records));
     }
 
-    [Fact]
-    public async Task An_unknown_option_of_promote_is_named_in_the_usage_error()
+    // Security boundary: a label that cannot name a release is refused before the identity, the records or the backend is reached.
+    [Theory]
+    [InlineData("foo", "'foo' is not a release label (like 1.0.0 or 1.0.0-rc.1).")]
+    [InlineData("../x", "'../x' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.")]
+    public async Task A_label_that_cannot_name_a_release_is_a_usage_error_before_the_identity_or_any_record(string label, string problem)
     {
-        var (code, _, stderr) = await RunAsync(null, "promote", "1.0.0", "--to", "s.yaml", "--catalog", "c", "--env", "e.yaml");
+        var stage = await StageAsync();
+        var backend = new RecordingBackend();
 
-        Assert.Equal(2, code);
-        Assert.Contains("jd: unknown option '--env'.", stderr);
+        AssertUsageError(await RunAsync(backend, "promote", label, "--to", stage, "--catalog", Catalog), problem);
+        Assert.Equal(0, _identity.Calls);
+        Assert.Empty(backend.Calls);
+        Assert.Empty(Directory.GetFileSystemEntries(_records));
     }
 
     [Fact]
@@ -344,9 +367,67 @@ public sealed partial class ReleaseDeployCliTests
         var missingDescriptor = await RunAsync(null, "promote", "1.0.0", "--to", Path.Combine(_temp, "nope.yaml"), "--catalog", Catalog);
         var missingCatalog = await RunAsync(null, "promote", "1.0.0", "--to", stage, "--catalog", Path.Combine(_temp, "nope"));
 
-        Assert.Equal((2, 2), (missingDescriptor.Code, missingCatalog.Code));
-        Assert.Contains("nope.yaml", missingDescriptor.Err);
-        Assert.Contains("nope", missingCatalog.Err);
+        Assert.Equal((2, string.Empty, $"jd: cannot read '{Path.Combine(_temp, "nope.yaml")}': not found or not a file.\n"), (missingDescriptor.Code, missingDescriptor.Out, missingDescriptor.Err.ReplaceLineEndings("\n")));
+        Assert.Equal((2, string.Empty, $"jd: cannot read '{Path.Combine(_temp, "nope")}': not found or not a directory.\n"), (missingCatalog.Code, missingCatalog.Out, missingCatalog.Err.ReplaceLineEndings("\n")));
         Assert.Equal(0, _identity.Calls);
+    }
+
+    // Edge 1 (docs/architecture/application.md section 8): the label is the use case's to check, after the command has its options and its inputs
+    // exist, so a missing --to or an unreadable one is reported first; before, the label was.
+    [Fact]
+    public async Task A_missing_or_unreadable_target_is_reported_before_a_label_that_cannot_name_a_release()
+    {
+        var missing = Path.Combine(_temp, "nope.yaml");
+
+        var unreadable = await RunAsync(null, "promote", "../x", "--to", missing, "--catalog", Catalog);
+        var noTarget = await RunAsync(null, "promote", "../x", "--catalog", Catalog);
+
+        Assert.Equal((2, string.Empty, $"jd: cannot read '{missing}': not found or not a file.\n"), (unreadable.Code, unreadable.Out, unreadable.Err.ReplaceLineEndings("\n")));
+        AssertUsageError(noTarget, "promote needs --to and --catalog.");
+        Assert.Equal(0, _identity.Calls);
+    }
+
+    // Edge 2 (docs/architecture/application.md section 8): an I/O failure that escapes approve or promote before its walk (here: the records cannot be
+    // reached) is exit 2 with its message, as for every other command; before, it escaped jd as an unhandled exception.
+    [Theory]
+    [InlineData("promote", "1.0.0", "--to", StagePath, "--catalog", CatalogPath)]
+    [InlineData("approve", "1.0.0", "--env", StagePath, "--meaning", "ready")]
+    public async Task An_io_failure_before_the_walk_is_exit_2_with_its_message(params string[] line)
+    {
+        await DeployedAsync();
+        var stage = await StageAsync();
+        Act(Alice);
+        var args = line.Select(arg => arg switch { StagePath => stage, CatalogPath => Catalog, _ => arg }).ToArray();
+
+        var io = await RunWithAsync(Connections(null) with { Records = () => throw new IOException("the records cannot be read") }, args);
+        var access = await RunWithAsync(Connections(null) with { Records = () => throw new UnauthorizedAccessException("the records are not ours") }, args);
+
+        Assert.Equal((2, string.Empty, "jd: the records cannot be read\n"), (io.Code, io.Out, io.Err.ReplaceLineEndings("\n")));
+        Assert.Equal((2, string.Empty, "jd: the records are not ours\n"), (access.Code, access.Out, access.Err.ReplaceLineEndings("\n")));
+        Assert.Empty(StageFiles("*"));
+    }
+
+    // The edge of the catalog read (docs/architecture/application.md section 8): the CLI reads the catalog before the use case, so a catalog that exists but
+    // cannot be read is exit 2 with .NET's message before the identity is asked or the approvals are checked; before, it was read only at the walk.
+    [Fact]
+    public async Task A_catalog_that_exists_but_cannot_be_read_is_exit_2_before_the_identity_or_the_approvals()
+    {
+        await DeployedAsync();
+        var stage = await StageAsync();
+        var catalog = Path.Combine(_temp, "catalog");
+        CliTests.CopyDirectory(Catalog, catalog);
+        var unreadable = Path.Combine(catalog, "naming.yaml");
+        if (!TryRestrict(unreadable))
+        {
+            return;
+        }
+
+        var identityCalls = _identity.Calls;
+
+        var (code, stdout, stderr) = await RunAsync(null, "promote", "1.0.0", "--to", stage, "--catalog", catalog);
+
+        Assert.Equal((2, string.Empty, $"jd: Access to the path '{unreadable}' is denied.\n"), (code, stdout, stderr.ReplaceLineEndings("\n")));
+        Assert.Equal(identityCalls, _identity.Calls);
+        Assert.Empty(StageFiles("*"));
     }
 }

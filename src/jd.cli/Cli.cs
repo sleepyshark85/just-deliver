@@ -1,4 +1,3 @@
-using jd.core.identity;
 using jd.orchestrator;
 using jd.orchestrator.usecases;
 using jd.resolver;
@@ -81,18 +80,31 @@ internal static class Cli
             return ExitCodes.Success;
         }
 
-        return args.FirstOrDefault() switch
+        // A command that reads its inputs checks first that they exist, so an I/O failure that escapes one is a permission, read or write failure (a data
+        // directory that cannot be written, a file gone since); .NET's message names the file.
+        try
         {
-            ReleaseCommand => await ExitOnReadFailureAsync(() => ReleaseCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken), stderr),
+            return await DispatchAsync(args, stdout, stderr, connections, cancellationToken);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            stderr.WriteLine($"jd: {ex.Message}");
+            return ExitCodes.UsageError;
+        }
+    }
+
+    private static async Task<int> DispatchAsync(string[] args, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken) =>
+        args.FirstOrDefault() switch
+        {
+            ReleaseCommand => await ReleaseCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
             ApproveCommand => await ApproveCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
             PromoteCommand => await PromoteCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
-            EnvCommand => await ExitOnReadFailureAsync(() => EnvCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken), stderr),
-            ValidateCommand => await ExitOnReadFailureAsync(() => ValidateCli.RunAsync(args[1..], stdout, stderr, cancellationToken), stderr),
-            PreviewCommand or DeployCommand => await ExitOnReadFailureAsync(() => RunWorkloadAsync(args, connections, stdout, stderr, cancellationToken), stderr),
+            EnvCommand => await EnvCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
+            ValidateCommand => await ValidateCli.RunAsync(args[1..], stdout, stderr, cancellationToken),
+            PreviewCommand or DeployCommand => await RunWorkloadAsync(args, connections, stdout, stderr, cancellationToken),
             null => UsageProblem("no command given.", stderr),
             var unknown => UsageProblem($"unknown command '{unknown}'.", stderr),
         };
-    }
 
     // A command line jd cannot use: the problem, then the usage.
     private static int UsageProblem(string problem, TextWriter stderr)
@@ -100,21 +112,6 @@ internal static class Cli
         stderr.WriteLine($"jd: {problem}");
         stderr.Write(Usage);
         return ExitCodes.UsageError;
-    }
-
-    // A command that reads its inputs checks first that they exist, so an I/O failure that escapes it is a permission, read or write failure; .NET's message
-    // names the file.
-    internal static async Task<int> ExitOnReadFailureAsync(Func<Task<int>> command, TextWriter stderr)
-    {
-        try
-        {
-            return await command();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            stderr.WriteLine($"jd: {ex.Message}");
-            return ExitCodes.UsageError;
-        }
     }
 
     // preview and deploy: their arguments, then their inputs read as typed, then the use case.
@@ -211,20 +208,6 @@ internal static class Cli
         }
 
         return new SourceCatalog(directory, documents);
-    }
-
-    // The principal the run authenticates as; null, with the reason on stderr, when the credential is missing, malformed or refused.
-    internal static async Task<DeployerIdentity?> GetIdentityAsync(Connections connections, TextWriter stderr, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await connections.Identity().GetAsync(cancellationToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            stderr.WriteLine($"jd: {ex.Message}");
-            return null;
-        }
     }
 
     internal static void Print(IEnumerable<LoadError> errors, TextWriter writer)

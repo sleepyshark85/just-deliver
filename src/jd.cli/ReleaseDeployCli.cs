@@ -9,8 +9,8 @@ namespace jd.cli;
 
 /// <summary>
 /// <c>jd release deploy</c> and <c>jd release qualify</c>: read the set, the environment and the catalog, hand them to <see cref="DeployRelease"/> or
-/// <see cref="QualifyRelease"/>, and write the walk as it happens, then the summary, the IQ verdict and the record. Reading and output; the exit code
-/// from the <see cref="Outcome"/>.
+/// <see cref="QualifyRelease"/>, and write the walk as it happens, then the summary, the IQ verdict and the record; <c>jd promote</c> writes its walk
+/// the same way. Reading and output; the exit code from the <see cref="Outcome"/>.
 /// </summary>
 internal static class ReleaseDeployCli
 {
@@ -34,7 +34,7 @@ internal static class ReleaseDeployCli
         }
 
         return PrintDeploy(
-            await DeployRelease.RunAsync(new DeployReleaseInput(read.Set, read.Environment, read.Catalog, read.DryRun, null), connections, ShowWalk(stdout), cancellationToken),
+            await DeployRelease.RunAsync(new DeployReleaseInput(read.Set, read.Environment, read.Catalog, read.DryRun), connections, ShowWalk(stdout), cancellationToken),
             read.DryRun ? Previewed : DeployedOrUnchanged, Command(Kind.Deploy), stdout, stderr);
     }
 
@@ -74,18 +74,9 @@ internal static class ReleaseDeployCli
             options.DryRun);
     }
 
-    // The walk of `jd promote` on the target, below the gate that refuses a direct deploy: the target and the catalog promote checked exist, and what it
-    // settled. Its dispatch has no read-failure catch, so the walk has its own.
-    public static Task<int> PromoteAsync(
-        string environment, string catalog, Promotion promotion, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken) =>
-        Cli.ExitOnReadFailureAsync(
-            async () =>
-            {
-                var input = new DeployReleaseInput(
-                    null, await Cli.ReadDocumentAsync(environment, cancellationToken), await Cli.ReadCatalogAsync(catalog, cancellationToken), false, promotion);
-                return PrintDeploy(await DeployRelease.RunAsync(input, connections, ShowWalk(stdout), cancellationToken), DeployedOrUnchanged, Cli.PromoteCommand, stdout, stderr);
-            },
-            stderr);
+    // A walk that deploys, never a preview, as `jd promote` prints it; the refusals before it name command.
+    internal static int PrintDeploy(DeployReleaseResult result, string command, TextWriter stdout, TextWriter stderr) =>
+        PrintDeploy(result, DeployedOrUnchanged, command, stdout, stderr);
 
     // done words what the walk did with the workloads that succeeded.
     private static int PrintDeploy(DeployReleaseResult result, Func<ReleaseSummary, string> done, string command, TextWriter stdout, TextWriter stderr)
@@ -136,7 +127,7 @@ internal static class ReleaseDeployCli
     }
 
     // The walk's lines: a heading as each workload starts, then its nodes as they finish.
-    private static Action<Progress> ShowWalk(TextWriter stdout)
+    internal static Action<Progress> ShowWalk(TextWriter stdout)
     {
         var nodes = Cli.ShowWalk(stdout);
         return progress =>

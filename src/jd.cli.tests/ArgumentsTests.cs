@@ -9,7 +9,7 @@ public sealed class ArgumentsTests
     public void A_value_option_given_twice_is_the_last_one()
     {
         var (scanned, _) = Arguments.Scan(["w.yaml", "--env", "a.yaml", "--env", "b.yaml"]);
-        var (_, values, _) = Arguments.ScanLabel(["1.0.0", "--to", "a.yaml", "--to", "b.yaml"], "--to");
+        var (_, values, _) = Arguments.ScanOneLabel(["1.0.0", "--to", "a.yaml", "--to", "b.yaml"], "--to");
 
         Assert.Equal("b.yaml", scanned?.Environment);
         Assert.Equal("b.yaml", values["--to"]);

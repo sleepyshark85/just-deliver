@@ -3,16 +3,12 @@ using Newtonsoft.Json.Linq;
 namespace jd.resolver.environment;
 
 /// <summary>
-/// Builds an <see cref="EnvironmentDescriptor"/> from a descriptor file or text. Every problem is collected, so a descriptor can be fixed in one pass.
+/// Builds an <see cref="EnvironmentDescriptor"/> from a descriptor document or text. Every problem is collected, so a descriptor can be fixed in one pass.
 /// </summary>
 public static class EnvironmentParser
 {
     // Bridge: the kind read here until the environment is bound from its schema (S24c1).
     internal const string Kind = "Environment";
-
-    /// <summary>Loads the descriptor at <paramref name="path"/>; the value is set exactly when there are no errors.</summary>
-    public static async Task<LoadResult<EnvironmentDescriptor>> LoadAsync(string path, CancellationToken cancellationToken = default) =>
-        Build(await DocumentLoader.LoadFileAsync(path, "environment descriptor", [Kind], cancellationToken));
 
     /// <summary>Loads the descriptor <paramref name="environment"/> holds; its errors name the document as it is named. The value is set exactly when there are no errors.</summary>
     public static async Task<LoadResult<EnvironmentDescriptor>> LoadAsync(SourceDocument environment, CancellationToken cancellationToken) =>

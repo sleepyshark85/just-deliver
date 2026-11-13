@@ -1,5 +1,3 @@
-using jd.resolver.release;
-
 namespace jd.cli;
 
 /// <summary>
@@ -50,14 +48,6 @@ internal sealed record Arguments(IReadOnlyList<string> Positional, string? Envir
         }
 
         return scanned.Positional.Count == 1 ? (scanned.Positional[0], scanned.Values, string.Empty) : (null, scanned.Values, "expected exactly one release label.");
-    }
-
-    // TODO(S25f2): goes when jd promote's use case checks its label.
-    /// <summary>As <see cref="ScanOneLabel"/>, and the label is null, with the problem set, when it cannot name a release.</summary>
-    public static (string? Label, IReadOnlyDictionary<string, string> Values, string Problem) ScanLabel(string[] args, params string[] valueOptions)
-    {
-        var (label, values, problem) = ScanOneLabel(args, valueOptions);
-        return label is not null && ReleaseRecordFile.LabelProblem(label) is { } labelProblem ? (null, values, labelProblem) : (label, values, problem);
     }
 
     /// <summary>
