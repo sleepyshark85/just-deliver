@@ -255,6 +255,32 @@ public sealed class SchemaIndexTests
         Assert.Equal($"The map at $['m'] has {count} annotated value schemas; each would be read for every key at $['m'].*.", error.Message);
     }
 
+    // A part's keys are read by depth, one select map per depth (PartOwner.Select): sibling select maps are refused, nested ones are not.
+    [Fact]
+    public async Task Two_select_maps_at_one_depth_are_refused_naming_both()
+    {
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(Planted("doc.json", """
+            "properties": { "kind": { "enum": ["Thing"] },
+              "a": { "type": "object", "x-jd": { "select": "env.type" }, "additionalProperties": { "type": "object" } },
+              "b": { "type": "object", "x-jd": { "select": "requirement.class" }, "additionalProperties": { "type": "object" } } }
+            """)));
+
+        Assert.Equal("The select maps at $['a'] and $['b'] are at the same depth; a part's keys are read by depth.", error.Message);
+    }
+
+    [Fact]
+    public async Task A_select_map_inside_another_is_accepted()
+    {
+        var index = await BuildAsync(Planted("doc.json", """
+            "properties": { "kind": { "enum": ["Thing"] },
+              "a": { "type": "object", "x-jd": { "select": "env.type" }, "additionalProperties": { "type": "object", "properties": {
+                "b": { "type": "object", "x-jd": { "select": "requirement.class" }, "additionalProperties": { "x-jd": { "is": "part" } } } } } } }
+            """));
+
+        var part = Assert.Single(index.RolesOf("Thing"));
+        Assert.Equal(["$['a']", "$['a'].*['b']"], part.Selects.Select(select => select.Path));
+    }
+
     [Fact]
     public async Task A_map_with_one_annotated_value_schema_among_several_is_accepted()
     {

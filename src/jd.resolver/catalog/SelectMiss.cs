@@ -5,7 +5,7 @@ namespace jd.resolver.catalog;
 /// <param name="Value">The value no key equals.</param>
 /// <param name="Fallback">The map's fallback key; null when it has none.</param>
 /// <param name="Keys">The keys the map has.</param>
-public sealed record SelectMiss(string Map, string Value, string? Fallback, IReadOnlyList<string> Keys)
+internal sealed record SelectMiss(string Map, string Value, string? Fallback, IReadOnlyList<string> Keys)
 {
     /// <summary>The miss as a message about <paramref name="owner"/> (documents.md section 6).</summary>
     public string Message(string owner) =>

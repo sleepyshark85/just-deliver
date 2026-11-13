@@ -21,5 +21,5 @@ public sealed record Catalog(
     IReadOnlyDictionary<string, string> Roles)
 {
     /// <summary>The key of <see cref="Rollouts"/> for <paramref name="part"/> of <paramref name="runtime"/>: the runtime's name and the part's one selection key.</summary>
-    public static (string Runtime, string Key) RolloutKey(PartOwner runtime, Part part) => (runtime.Name, part.Keys.Single().Key);
+    internal static (string Runtime, string Key) RolloutKey(PartOwner runtime, Part part) => (runtime.Name, part.Keys.Single().Key);
 }

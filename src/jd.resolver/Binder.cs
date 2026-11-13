@@ -42,12 +42,13 @@ internal sealed class Binder(SchemaIndex index)
     }
 
     // The entry of the select map that encloses the part; the map is named after the field that holds it.
+    // Safe: a select annotation sits on a property's schema, so the map is that property's value and its parent is the property.
     private static SelectKey Key(JObject body, SelectField select, JToken part)
     {
         var maps = body.SelectTokens(select.Path).ToHashSet();
         var map = part.Ancestors().OfType<JObject>().First(maps.Contains);
         var entry = part.AncestorsAndSelf().OfType<JProperty>().First(property => property.Parent == map);
-        return new SelectKey(select.Role, entry.Name, select.Fallback, map.Parent is JProperty field ? field.Name : map.Path, map.Path);
+        return new SelectKey(select.Role, entry.Name, select.Fallback, ((JProperty)map.Parent!).Name, map.Path);
     }
 
     private static Node Node(Values values, JToken node)

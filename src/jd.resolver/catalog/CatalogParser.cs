@@ -83,9 +83,9 @@ public static class CatalogParser
         var binder = new Binder(index);
         var catalogs = OfKind(documents, CatalogKind);
         var components = Owners(binder, documents, ComponentKind, valid);
-        var runtimeDocuments = OfKind(documents, RuntimeKind).Where(valid.Contains).ToList();
-        var runtimes = Owners(binder, documents, RuntimeKind, valid);
-        var rollouts = runtimeDocuments.Zip(runtimes).SelectMany(runtime => runtime.Second.Parts.Select(part => ToRollout(runtime.First, runtime.Second, part))).ToList();
+        var boundRuntimes = Bound(binder, documents, RuntimeKind, valid);
+        var runtimes = boundRuntimes.Select(runtime => runtime.Owner).ToList();
+        var rollouts = boundRuntimes.SelectMany(runtime => runtime.Owner.Parts.Select(part => ToRollout(runtime.Document, runtime.Owner, part))).ToList();
         var shared = Owners(binder, documents, SharedResourceKind, valid);
         var policies = OfKind(documents, PolicyKind).Where(valid.Contains).Select(ToPolicy).ToList();
         var namingDocuments = OfKind(documents, NamingKind).Where(valid.Contains).ToList();
@@ -162,8 +162,11 @@ public static class CatalogParser
     private static List<Document> OfKind(List<Document> documents, string kind) => documents.Where(d => d.Kind == kind).ToList();
 
     // A valid document has the name its schema requires.
+    private static List<(Document Document, PartOwner Owner)> Bound(Binder binder, List<Document> documents, string kind, HashSet<Document> valid) =>
+        [.. OfKind(documents, kind).Where(valid.Contains).Select(document => (document, binder.Owner(document, NameOf(document) ?? string.Empty)))];
+
     private static List<PartOwner> Owners(Binder binder, List<Document> documents, string kind, HashSet<Document> valid) =>
-        [.. OfKind(documents, kind).Where(valid.Contains).Select(document => binder.Owner(document, NameOf(document) ?? string.Empty))];
+        [.. Bound(binder, documents, kind, valid).Select(bound => bound.Owner)];
 
     // A shared resource's document is its one part.
     private static Part Only(PartOwner shared) => shared.Parts[0];

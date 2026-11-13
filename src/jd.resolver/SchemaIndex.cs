@@ -165,10 +165,20 @@ internal sealed class SchemaIndex
         return new KindNames(Keyword(root, OneKeyword) is true, [.. defines], [.. refs]);
     }
 
-    private static List<SelectField> Selects(List<Field> fields) =>
-        fields.SelectMany(field => Keyword(field.Schema, SelectKeyword) is string role
+    // A part's keys are read by depth (PartOwner.Select), so two select maps at one depth are refused.
+    private static List<SelectField> Selects(List<Field> fields)
+    {
+        var selects = fields.SelectMany(field => Keyword(field.Schema, SelectKeyword) is string role
             ? [new SelectField(role, field.Path, Keyword(field.Schema, FallbackKeyword) as string)]
             : Array.Empty<SelectField>()).Distinct().ToList();
+        var level = selects.GroupBy(select => selects.Count(outer => select.Path.StartsWith($"{outer.Path}.*", StringComparison.Ordinal)));
+        if (level.FirstOrDefault(group => group.Count() > 1) is { } same)
+        {
+            throw new InvalidOperationException($"The select maps at {string.Join(" and ", same.Select(select => select.Path))} are at the same depth; a part's keys are read by depth.");
+        }
+
+        return selects;
+    }
 
     // Each role once per path, with what every subschema at that path says: the scope, the default, and the select maps whose entries the
     // path is in, outermost first.

@@ -15,7 +15,7 @@ public sealed record PartOwner(string Source, string Name, IReadOnlyList<string>
     /// after selecting, so a map keeps the entry the value names even when that entry has no part of the scope. The miss is set, and no part
     /// is, when a map has neither entry.
     /// </summary>
-    public (IReadOnlyList<Part> Parts, SelectMiss? Miss) Select(IReadOnlyDictionary<string, string> values, Func<string, bool> inScope)
+    internal (IReadOnlyList<Part> Parts, SelectMiss? Miss) Select(IReadOnlyDictionary<string, string> values, Func<string, bool> inScope)
     {
         IReadOnlyList<Part> selected = Parts;
         for (var depth = 0; selected.Where(part => part.Keys.Count > depth).ToList() is [var first, ..] level; depth++)

@@ -67,6 +67,19 @@ public class CatalogParserTests
         Assert.Equal("00000000-0000-0000-0000-000000000001", catalog.Roles["reader"]);
     }
 
+    // Each runtime's rollout is read from its own file.
+    [Fact]
+    public async Task Each_runtime_has_the_probe_its_own_file_declares()
+    {
+        const string nodes = "nodes:\n  runtime: { template: t/rt, config: {} }\n";
+        var other = TestCatalog.Runtime(nodes).Replace("name: container-app", "name: job-runner", StringComparison.Ordinal).Replace("path: /health", "path: /ready", StringComparison.Ordinal);
+        var result = await Parse(("catalog.yaml", CatalogFile), ("runtimes/a.yaml", TestCatalog.Runtime(nodes)), ("runtimes/b.yaml", other));
+
+        Assert.Empty(result.Errors);
+        var rollouts = Assert.IsType<Catalog>(result.Value).Rollouts;
+        Assert.Equal(("/health", "/ready"), (rollouts[("container-app", "default")].Probe.Path, rollouts[("job-runner", "default")].Probe.Path));
+    }
+
     [Fact]
     public async Task Unknown_kind_is_an_error_naming_the_file()
     {
@@ -178,6 +191,19 @@ public class CatalogParserTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal((file, "implementations.shared"), (error.File, error.Location));
+        Assert.Equal("'shared' is a shared-layer environment type; implementations are keyed by environment-layer types or 'default'.", error.Message);
+    }
+
+    // The parts of one implementation share its key: the key is reported once, not once per class.
+    [Fact]
+    public async Task An_implementation_keyed_by_a_shared_layer_type_with_two_classes_is_one_error()
+    {
+        const string part = "{ nodes: { db: { template: t/db, config: {} } }, exports: { endpoint: x } }";
+        var component = $"kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n  shared:\n    classes: {{ standard: {part}, isolated: {part} }}\n";
+        var result = await Parse(("catalog.yaml", CatalogFile.Replace("environmentTypes: {", "environmentTypes: { shared: { layer: shared },", StringComparison.Ordinal)), ("components/a.yaml", component));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("components/a.yaml", "implementations.shared"), (error.File, error.Location));
         Assert.Equal("'shared' is a shared-layer environment type; implementations are keyed by environment-layer types or 'default'.", error.Message);
     }
 
