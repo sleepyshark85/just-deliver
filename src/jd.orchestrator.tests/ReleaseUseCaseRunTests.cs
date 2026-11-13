@@ -142,13 +142,18 @@ public sealed class ReleaseUseCaseRunTests
         Assert.Equal(Assert.Single(RecordNames("deploy")), result.Record);
     }
 
+    public static TheoryData<Exception> Refusals => new()
+    {
+        new IOException("No space left on device."),
+        new UnauthorizedAccessException("No space left on device."),
+    };
+
     // Security boundary: a record that cannot be written fails the run, and what was deployed stays deployed.
     [Theory]
-    [InlineData(typeof(IOException))]
-    [InlineData(typeof(UnauthorizedAccessException))]
-    public async Task A_deploy_record_that_cannot_be_written_is_record_not_written_and_the_deployment_stays(Type refusal)
+    [MemberData(nameof(Refusals))]
+    public async Task A_deploy_record_that_cannot_be_written_is_record_not_written_and_the_deployment_stays(Exception refusal)
     {
-        _store = new RefusingRecords(_records, (Exception)Activator.CreateInstance(refusal, "No space left on device.")!);
+        _store = new RefusingRecords(_records, refusal);
 
         var result = await DeployAsync();
 
