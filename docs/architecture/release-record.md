@@ -41,7 +41,7 @@ verdicts it carries. Nothing in it is a secret and nothing in it is edited after
 | Field | Source today |
 |---|---|
 | `activity`, `startedAt`, `finishedAt` (UTC, to the second) | composition root, an injected `TimeProvider` |
-| `label`, set `createdAt`, `setSha256` (SHA-256 of `set.yaml`'s bytes) | `ReleaseSet`; the hash and the bytes are new: `ReleaseSetFile.LoadAsync` exposes the bytes it verified, so the hash and the copy come from one read |
+| `label`, set `createdAt`, `setSha256` (SHA-256 of `set.yaml`'s bytes) | `ReleaseSet`; the hash and the bytes are new: `ReleaseSetFile.ParseAsync` exposes the bytes it verified, so the hash and the copy come from one read |
 | per workload: `name`, `team`, `definitionSha256`, `dependsOn`, `image` (digest-pinned), deploy order | `ReleaseWorkload`, `ReleaseSet.Order` |
 | `environment`, `type` (`tier` in records written before S21a, still accepted), `region`, `catalogVersion` | `EnvironmentDescriptor`; `ResolvedGraph.CatalogVersion` (a version label, not a content hash) |
 | graph: nodes as `{id, template, stack, phase, hash}` and `graphSha256` of `GraphJson.Serialize` | `ResolvedGraph` |

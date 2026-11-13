@@ -15,8 +15,8 @@ internal static class ReleaseCli
 {
     private const string CreateCommand = "create";
     private const string ShowCommand = "show";
-    private const string DeployCommand = "deploy";
-    private const string QualifyCommand = "qualify";
+    internal const string DeployCommand = "deploy";
+    internal const string QualifyCommand = "qualify";
 
     private abstract record Options(string Input);
 

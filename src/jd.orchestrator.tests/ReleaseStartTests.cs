@@ -1,10 +1,10 @@
 using System.Security.Cryptography;
+using System.Text;
 using jd.core.identity;
 using jd.core.records;
 using jd.core.revisions;
 using jd.orchestrator.usecases;
 using jd.resolver;
-using jd.resolver.graph;
 using jd.resolver.tests;
 using Xunit;
 using static jd.orchestrator.tests.WorkloadUseCaseTests;
@@ -39,13 +39,6 @@ public sealed class ReleaseStartTests
         public Task<DeployerIdentity> GetAsync(CancellationToken cancellationToken) => Failure is null ? Task.FromResult(Deployer) : throw Failure;
     }
 
-    private sealed class FitAll(FakeBackend backend) : ITemplates
-    {
-        public string GetContent(string templateName) => backend.GetContent(templateName);
-
-        public IReadOnlyList<LoadError> Check(ResolvedGraph graph) => [];
-    }
-
     private T Build<T>(string factory, Func<T> build)
     {
         _built.Add(factory);
@@ -59,7 +52,7 @@ public sealed class ReleaseStartTests
         () => Build("backend", () => (jd.core.bp.IBackEndProvider)_backend),
         () => Build("probe", () => (IRevisionProbe)new FakeProbe(_backend.Log)),
         () => Build("time", () => TimeProvider.System),
-        _ => Build("templates", () => (ITemplates)new FitAll(_backend)));
+        part => Build("templates", () => new RecordingConnections(_backend).With().Templates(part)));
 
     // The bytes of a set of the one workload of WorkloadUseCaseTests, as release create writes them; the workload's requirement can be renamed.
     private static async Task<byte[]> SetAsync(string requirement = "thing")
@@ -68,9 +61,12 @@ public sealed class ReleaseStartTests
             new CreateReleaseInput(
                 Document("r.manifest.yaml", Manifest),
                 (reference, _) => Task.FromResult((reference, (ReadOnlyMemory<byte>?)Document(reference, Workload.Replace("- type: thing", $"- type: {requirement}", StringComparison.Ordinal)).Content))),
-            new Connections(null!, null!, null!, null!, null!, () => TimeProvider.System, null!),
+            new Connections(
+                () => throw new NotSupportedException(), () => throw new NotSupportedException(), () => throw new NotSupportedException(),
+                () => throw new NotSupportedException(), () => throw new NotSupportedException(), () => TimeProvider.System, _ => throw new NotSupportedException()),
             CancellationToken.None);
-        return created.Document!.Value.ToArray();
+        Assert.NotNull(created.Document);
+        return created.Document.Value.ToArray();
     }
 
     private static ReleaseStartInput Given(byte[] set, string environment = Dev, bool preview = false) =>
@@ -190,10 +186,10 @@ public sealed class ReleaseStartTests
     [Fact]
     public async Task A_label_the_records_cannot_use_is_refused_with_the_records_words()
     {
-        var set = (await SetAsync()).AsSpan().ToArray();
-        var text = System.Text.Encoding.UTF8.GetString(set).Replace("label: 1.0.0", "label: 1.0.0-rc..1", StringComparison.Ordinal);
+        var set = await SetAsync();
+        var text = Encoding.UTF8.GetString(set).Replace("label: 1.0.0", "label: 1.0.0-rc..1", StringComparison.Ordinal);
 
-        var result = await StartAsync(Given(System.Text.Encoding.UTF8.GetBytes(text)));
+        var result = await StartAsync(Given(Encoding.UTF8.GetBytes(text)));
 
         Assert.Equal(new RecordingRefused("'1.0.0-rc..1' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'."), result.Problem);
         Assert.Empty(_records.Files);
@@ -320,7 +316,8 @@ public sealed class ReleaseStartTests
         var input = new ReleaseStartInput(
             hasSet ? new SourceDocument(SetName, await SetAsync()) : null, Document(EnvironmentName, Dev), Catalog, preview, promotes ? new Promotion(Deployer, "dev", "1.0.0", "x") : null);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => StartAsync(input));
+        var bug = await Assert.ThrowsAsync<ArgumentException>(() => StartAsync(input));
+        Assert.Equal("input", bug.ParamName);
         Assert.Empty(_built);
     }
 }

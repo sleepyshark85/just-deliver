@@ -13,8 +13,6 @@ namespace jd.cli;
 /// </summary>
 internal static class ReleaseDeployCli
 {
-    private const string DeployCommand = "release deploy";
-
     private sealed record Options(string Set, string Environment, string Catalog, bool DryRun, bool Qualify);
 
     // args are the arguments after "release deploy" or "release qualify" (qualify).
@@ -54,7 +52,7 @@ internal static class ReleaseDeployCli
             {
                 var input = new ReleaseStartInput(
                     null, await Cli.ReadDocumentAsync(environment, cancellationToken), await Cli.ReadCatalogAsync(catalog, cancellationToken), false, promotion);
-                return await StartAsync(input, DeployCommand, connections, stderr, cancellationToken) is { } run
+                return await StartAsync(input, Cli.PromoteCommand, connections, stderr, cancellationToken) is { } run
                     ? await DeployAsync(run, false, stdout, stderr, cancellationToken)
                     : ExitCodes.Failure;
             },
@@ -170,7 +168,7 @@ internal static class ReleaseDeployCli
             + (notStarted.Count == 0 ? "0 not started." : $"{notStarted.Count.ToString(CultureInfo.InvariantCulture)} not started ({string.Join(", ", notStarted)}).");
     }
 
-    private static string Command(bool qualify) => qualify ? "release qualify" : DeployCommand;
+    private static string Command(bool qualify) => $"{Cli.ReleaseCommand} {(qualify ? ReleaseCli.QualifyCommand : ReleaseCli.DeployCommand)}";
 
     private static (Options? Options, string Problem) Parse(string[] args, bool qualify)
     {

@@ -279,7 +279,7 @@ public sealed partial class ReleaseDeployCliTests
             stage, Catalog, changed, new StringWriter(), stderr, Connections(backend), CancellationToken.None);
 
         Assert.Equal(1, code);
-        Assert.Contains("changed since it was checked", stderr.ToString());
+        Assert.Equal($"jd: promote: the kept set 'dev/1.0.0/set.yaml' changed since it was checked (expected sha256 {new string('0', 64)}).{System.Environment.NewLine}", stderr.ToString());
         Assert.Empty(backend.Calls);
         Assert.Empty(StageFiles("*-deploy.json"));
         Assert.DoesNotContain(StageFiles("*"), file => file.EndsWith("set.yaml", StringComparison.Ordinal));
