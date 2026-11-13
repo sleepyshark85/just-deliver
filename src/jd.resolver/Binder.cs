@@ -61,12 +61,14 @@ internal sealed class Binder(SchemaIndex index)
     private static Part ReadPart(Values values, RoleField field, JToken part)
     {
         var exports = values.Nearest(Roles.PartExports, part) as JObject;
+        var reads = values.Nearest(Roles.PartReads, part);
         return new Part
         {
             Location = part.Path,
             Scope = field.Scope ?? Text(values.Nearest(Roles.PartScope, part)),
             Keys = [.. field.Selects.Select(select => ReadKey(values.Body, select, part))],
-            Reads = Strings(values.Nearest(Roles.PartReads, part)),
+            Reads = Strings(reads),
+            ReadsLocation = reads?.Path ?? part.Path,
             Nodes = Entries(values.Nearest(Roles.PartNodes, part)).ToDictionary(node => node.Name, node => ReadNode(values, node.Value)),
             Exports = Entries(exports).ToDictionary(export => export.Name, export => Text(export.Value)),
             ExportsLocation = exports?.Path ?? part.Path,

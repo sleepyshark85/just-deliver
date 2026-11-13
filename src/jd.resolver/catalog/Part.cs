@@ -18,6 +18,9 @@ public sealed record Part
     /// <summary>The shared resources the part may read as <c>${&lt;name&gt;.&lt;export&gt;}</c>.</summary>
     public required IReadOnlyList<string> Reads { get; init; }
 
+    /// <summary>Where <see cref="Reads"/> is in the file, which may be its owner's; the part's own <see cref="Location"/> when it reads none.</summary>
+    public required string ReadsLocation { get; init; }
+
     /// <summary>The nodes, by name.</summary>
     public required IReadOnlyDictionary<string, Node> Nodes { get; init; }
 
