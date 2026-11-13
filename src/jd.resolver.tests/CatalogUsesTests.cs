@@ -252,6 +252,18 @@ public class CatalogUsesTests
         Assert.Equal(message, error.Message);
     }
 
+    // A class reads the environment part of its own implementation, not one another implementation has.
+    [Fact]
+    public async Task A_class_reads_only_the_environment_part_of_its_own_implementation()
+    {
+        var stage = "  stage:\n    environment: { nodes: { db: { template: t/db, config: {} } }, exports: { databaseName: x } }\n"
+            + "    classes:\n      standard: { nodes: { node: { template: t/x, config: {} } }, exports: { endpoint: x } }\n";
+        var error = SingleError(await Parse(("c.yaml", Component(config: "{ database: '${alpha-db.databaseName}' }") + stage)));
+
+        Assert.Equal(("c.yaml", $"{TestCatalog.PartPath}.nodes.node.config.database"), (error.File, error.Location));
+        Assert.Equal("'alpha-db.databaseName': component 'alpha-db' has no environment part in this implementation.", error.Message);
+    }
+
     [Fact]
     public async Task An_export_read_in_an_export_must_be_declared()
     {

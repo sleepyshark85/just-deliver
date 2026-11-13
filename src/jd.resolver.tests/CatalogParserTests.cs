@@ -143,6 +143,18 @@ public class CatalogParserTests
         Assert.Null(result.Value);
     }
 
+    // Locations are the document's JSON paths: a key that is not a plain name is written in brackets.
+    [Fact]
+    public async Task A_location_under_a_key_with_a_dot_writes_the_key_in_brackets()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile),
+            ("components/a.yaml", TestCatalog.Component("alpha-db", "[endpoint]", "nodes:\n  db:\n    template: t/db\n    config: {}\nexports: {}\n", className: "big.one")));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("components/a.yaml", "implementations.default.classes['big.one'].exports"), (error.File, error.Location));
+        Assert.Equal("must export exactly the contract of component 'alpha-db' (endpoint); missing endpoint.", error.Message);
+    }
+
     [Theory]
     [InlineData("components/a.yaml")]
     [InlineData("runtimes/r.yaml")]

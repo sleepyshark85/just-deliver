@@ -114,7 +114,7 @@ public sealed partial class LiteralGuardTests
 
     private static readonly Dictionary<string, string[]> S24d = new()
     {
-        ["jd.resolver/catalog/Catalog.cs"] = ["class", "environmentType", "kind", "runtime", "template", "type"],
+        ["jd.resolver/catalog/MatchCriteria.cs"] = ["class", "environmentType", "kind", "runtime", "template", "type"],
         ["jd.resolver/catalog/CatalogParser.cs"] = ["default", "match", "match.kind", "match.runtime", "name", "reason", "require", "set"],
         ["jd.resolver/policies/PolicyApplier.cs"] = ["default", "set"],
     };

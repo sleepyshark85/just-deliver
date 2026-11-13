@@ -105,7 +105,7 @@ public static class CatalogParser
         CheckUses(sharedByName, layers, errors);
         var readers = Readers(layers, shared, components, runtimes);
         CheckNodeNames(readers, errors);
-        CheckReads(readers, sharedByName, kinds, errors);
+        CheckReads(readers, sharedByName.ToDictionary(s => s.Key, s => Only(s.Value).Exports), kinds, errors);
         CheckScopeNodeNames(readers, sharedByName.Keys, errors);
         CheckGrants(readers, grantTargets, errors);
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
@@ -247,7 +247,7 @@ public static class CatalogParser
     {
         Reader Read(string kind, PartOwner owner, Part part) => layers.Contains(part.Scope)
             ? new Reader(kind, owner, part, part.Scope, OwnEnvironment: null)
-            : new Reader(kind, owner, part, Layer: null, owner.Parts.FirstOrDefault(other => layers.Contains(other.Scope) && other.Keys.Count > 0 && part.Keys.Take(other.Keys.Count).SequenceEqual(other.Keys)));
+            : new Reader(kind, owner, part, Layer: null, owner.Parts.FirstOrDefault(other => layers.Contains(other.Scope) && part.Keys.Take(other.Keys.Count).SequenceEqual(other.Keys)));
         return
         [
             .. shared.Select(s => Read(SharedResourceKind, s, Only(s))),
@@ -279,7 +279,8 @@ public static class CatalogParser
 
     // Every root a part reads is one of its own nodes, a reserved root, a shared resource in its uses or (a class part) its own
     // component, and <name>.<export> names a declared export.
-    private static void CheckReads(List<Reader> readers, Dictionary<string, PartOwner> shared, Dictionary<string, string> kinds, List<LoadError> errors)
+    private static void CheckReads(
+        List<Reader> readers, Dictionary<string, IReadOnlyDictionary<string, string>> sharedExports, Dictionary<string, string> kinds, List<LoadError> errors)
     {
         foreach (var reader in readers)
         {
@@ -294,7 +295,7 @@ public static class CatalogParser
                     var root = segments[0];
                     var kind = kinds.GetValueOrDefault(root);
                     var reads = reader.Part.Reads.Contains(root);
-                    var exports = reads ? shared.GetValueOrDefault(root) is { } resource ? Only(resource).Exports : null : root == reader.OwnComponent ? reader.OwnEnvironment?.Exports : null;
+                    var exports = reads ? sharedExports.GetValueOrDefault(root) : root == reader.OwnComponent ? reader.OwnEnvironment?.Exports : null;
                     var problem =
                         root == ExpressionEvaluator.EnvNamespace && !(segments.Length == 2 && EnvironmentDescriptor.ReservedKeys.Contains(segments[1]))
                             ? ExpressionEvaluator.EnvLimit(path)
