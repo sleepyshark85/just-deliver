@@ -260,7 +260,7 @@ Records written before stay readable either way: the schemas keep accepting `tie
 
 ## 6. Errors
 
-- Every error stays `file: location: message` (`LoadError`). Schema errors keep today's location extraction (`LoadError.FromSchema`).
+- Every error stays `file: location: message` (`LoadError`). Schema errors take their location from the validator's error path (`SchemaIndex`).
 - **Locations come from the index**: the binder records where each concept value was read (`implementations.default.classes.standard`,
   `requires[0]`), so no check builds a location from field names (Appendix A, "Locations and messages").
 - **A rule that is data carries its message as data**: a subschema with `message` reports that text with the location; a `ref` failure reads

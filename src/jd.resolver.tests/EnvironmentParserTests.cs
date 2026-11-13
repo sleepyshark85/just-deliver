@@ -108,6 +108,22 @@ public class EnvironmentParserTests
         Assert.StartsWith("schema violation: AdditionalPropertiesNotValid: #/values.logAnalytics", error.Message);
     }
 
+    // A dotted key does not hide a bad leaf beside it (documents.md section 6), and the mapping it sits in is not also reported as a string that
+    // is not one: of the failed anyOf, only the branch with the message counts.
+    [Fact]
+    public async Task A_dotted_key_and_a_bad_leaf_beside_it_are_both_reported()
+    {
+        var result = await Parse(Valid.Replace("logAnalytics: { id: /law/id }", "logAnalytics: { \"a.b\": x, d: 5 }"));
+
+        const string leaf = "#/values.logAnalytics.d";
+        Assert.Equal(
+            [
+                ("values.logAnalytics.d", $"schema violation: AdditionalPropertiesNotValid: {leaf} {{ NotAnyOf: {leaf} {{ StringExpected: {leaf} }} {{ ObjectExpected: {leaf} }} }}"),
+                ("values.logAnalytics['a.b']", DottedKeyMessage),
+            ],
+            result.Errors.Select(error => (error.Location, error.Message)));
+    }
+
     [Fact]
     public async Task Invalid_yaml_is_reported()
     {

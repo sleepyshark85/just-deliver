@@ -16,7 +16,7 @@ public sealed class SchemaIndexTests
 
     private static (string Name, string Text) Planted(string name, string body) => (name, $$"""{ "$id": "https://test/{{name}}", {{body}} }""");
 
-    private static Task<SchemaIndex> BuildAsync(params (string Name, string Text)[] planted) => SchemaIndex.BuildAsync([.. Meta, .. planted], CancellationToken.None);
+    private static Task<SchemaIndex> BuildAsync(params (string Name, string Text)[] planted) => SchemaIndex.BuildAsync([.. Meta, .. planted]);
 
     private static Document Of(string kind, string body) => new("f.yaml", kind, JObject.Parse(body));
 
@@ -51,6 +51,22 @@ public sealed class SchemaIndexTests
             Planted("a.json", """ "properties": { "kind": { "enum": ["Thing"] } } """), Planted("b.json", """ "properties": { "kind": { "enum": ["Other", "Thing"] } } """)));
 
         Assert.Equal("Schemas 'a.json' and 'b.json' both declare kind 'Thing'.", error.Message);
+    }
+
+    [Fact]
+    public async Task Two_schemas_with_the_same_id_are_refused_naming_both()
+    {
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(Planted("same.json", "\"title\": \"a\""), ("b.json", """{ "$id": "https://test/same.json" }""")));
+
+        Assert.Equal("Schemas 'same.json' and 'b.json' both have the $id 'https://test/same.json'.", error.Message);
+    }
+
+    [Fact]
+    public async Task A_schema_without_an_id_is_refused_naming_it()
+    {
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(("doc.json", """{ "properties": { "kind": { "enum": ["Thing"] } } }""")));
+
+        Assert.Equal("Schema 'doc.json' has no $id.", error.Message);
     }
 
     [Fact]
@@ -101,6 +117,27 @@ public sealed class SchemaIndexTests
         Assert.Equal([new LoadError("f.yaml", "a", "a starts with x."), new LoadError("f.yaml", "b", "schema violation: PatternMismatch: #/b")], errors);
     }
 
+    // Of a failed anyOf or oneOf, the branch carrying a message is the one the value was meant for: its causes are reported, with and without
+    // a message, and the other branches failing is not a problem of its own.
+    [Theory]
+    [InlineData("anyOf")]
+    [InlineData("oneOf")]
+    public async Task Of_a_failed_choice_only_the_branch_with_a_message_is_reported(string keyword)
+    {
+        var index = await BuildAsync(Planted("doc.json", $$"""
+            "properties": {
+              "kind": { "enum": ["Thing"] },
+              "a": { "{{keyword}}": [
+                { "type": "string" },
+                { "type": "object", "required": ["c"], "additionalProperties": { "not": {}, "x-jd": { "message": "no other key." } }, "properties": { "c": {} } }
+              ] } }
+            """));
+
+        var errors = index.Validate(Of("Thing", """{ "kind": "Thing", "a": { "b": 1 } }"""));
+
+        Assert.Equal([new LoadError("f.yaml", "a.c", "schema violation: PropertyRequired: #/a.c"), new LoadError("f.yaml", "a.b", "no other key.")], errors);
+    }
+
     [Fact]
     public async Task Every_x_jd_keyword_used_as_the_meta_schema_says_is_accepted()
     {
@@ -144,6 +181,7 @@ public sealed class SchemaIndexTests
     [InlineData("""{ "match": "requirement.tier" }""", "x-jd.match", "not a role; the roles are the closed list of docs/architecture/documents.md Appendix B.")]
     [InlineData("""{ "ref": "templates" }""", "x-jd.ref", "not a namespace; the namespaces are listed in docs/architecture/documents.md Appendix B.")]
     [InlineData("""{ "define": "templates" }""", "x-jd.define", "not a namespace; the namespaces are listed in docs/architecture/documents.md Appendix B.")]
+    [InlineData("""{ "define": [] }""", "x-jd.define", "not a namespace; the namespaces are listed in docs/architecture/documents.md Appendix B.")]
     public async Task An_unknown_keyword_role_or_namespace_is_refused_with_the_meta_schemas_message(string annotations, string location, string message)
     {
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(Planted("doc.json", $$""" "properties": { "a": { "x-jd": {{annotations}} } } """)));
@@ -162,17 +200,20 @@ public sealed class SchemaIndexTests
         Assert.Equal($"The meta-schema refuses: doc.json: properties.a.x-jd.define: {message}; doc.json: properties.a.x-jd.define[1]: {message}", error.Message);
     }
 
+    // A subschema or an x-jd keyword whose value is outside its form: the meta-schema carries no message for these, so the validator's text.
     [Theory]
-    [InlineData("""{ "scope": "tenant" }""", "x-jd.scope")]
-    [InlineData("""{ "one": false }""", "x-jd.one")]
-    [InlineData("""{ "fallback": "" }""", "x-jd.fallback")]
-    [InlineData("""{ "message": "" }""", "x-jd.message")]
-    [InlineData("""{ "message": 1 }""", "x-jd.message")]
-    public async Task A_keyword_with_a_value_outside_its_form_is_refused_with_the_validators_text(string annotations, string location)
+    [InlineData("5", "ObjectExpected: #/properties.a")]
+    [InlineData("""{ "x-jd": "owner" }""", "ObjectExpected: #/properties.a.x-jd")]
+    [InlineData("""{ "x-jd": { "scope": "tenant" } }""", "NotAnyOf: #/properties.a.x-jd.scope")]
+    [InlineData("""{ "x-jd": { "one": false } }""", "NotInEnumeration: #/properties.a.x-jd.one")]
+    [InlineData("""{ "x-jd": { "fallback": "" } }""", "StringTooShort: #/properties.a.x-jd.fallback")]
+    [InlineData("""{ "x-jd": { "message": "" } }""", "StringTooShort: #/properties.a.x-jd.message")]
+    [InlineData("""{ "x-jd": { "message": 1 } }""", "StringExpected: #/properties.a.x-jd.message")]
+    public async Task A_subschema_or_keyword_value_outside_its_form_is_refused_with_the_validators_text(string schema, string violation)
     {
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(Planted("doc.json", $$""" "properties": { "a": { "x-jd": {{annotations}} } } """)));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(Planted("doc.json", $$""" "properties": { "a": {{schema}} } """)));
 
-        Assert.StartsWith("The meta-schema refuses: doc.json: properties.a: schema violation: ", error.Message);
-        Assert.Contains($"#/properties.a.{location}", error.Message);
+        Assert.StartsWith("The meta-schema refuses: doc.json: properties.a: schema violation: AdditionalPropertiesNotValid: #/properties.a ", error.Message);
+        Assert.Contains(violation, error.Message);
     }
 }
