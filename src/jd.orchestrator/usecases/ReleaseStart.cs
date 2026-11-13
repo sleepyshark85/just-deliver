@@ -62,8 +62,7 @@ internal static class ReleaseStart
     private static async Task<(Checked? Run, IReadOnlyList<LoadError> Errors, Problem? Problem)> CheckAsync(
         DeployReleaseInput input, Promotion? promotion, Connections connections, CancellationToken cancellationToken)
     {
-        var set = input.Set;
-        var setResult = await ReleaseSetFile.ParseAsync(set, cancellationToken);
+        var setResult = await ReleaseSetFile.ParseAsync(input.Set, cancellationToken);
         var catalogResult = await CatalogParser.ParseAsync(input.Catalog, cancellationToken);
         var environmentResult = await EnvironmentParser.LoadAsync(input.Environment, cancellationToken);
         if (setResult.Set is not { } release || catalogResult.Value is not { } catalog || environmentResult.Value is not { } environment)
@@ -85,11 +84,11 @@ internal static class ReleaseStart
         // The promotion judged the hash of the kept set; the bytes read now are the ones deployed, so they must be those.
         if (promotion is not null && ReleaseHash.Of(setResult.Bytes.Span) != promotion.SetSha256)
         {
-            return (null, [], new KeptSetChanged(set.Name, promotion.SetSha256));
+            return (null, [], new KeptSetChanged(input.Set.Name, promotion.SetSha256));
         }
 
         // Everything is resolved and checked before anything is created.
-        var (graphs, errors) = await ReleaseResolver.ResolveAsync(set.Name, release, catalog, environment, cancellationToken);
+        var (graphs, errors) = await ReleaseResolver.ResolveAsync(input.Set.Name, release, catalog, environment, cancellationToken);
         if (errors.Count > 0)
         {
             return (null, errors, null);

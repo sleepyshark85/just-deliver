@@ -1,5 +1,4 @@
 using jd.resolver;
-using jd.resolver.environment;
 using jd.resolver.release;
 
 namespace jd.orchestrator.usecases;
@@ -24,24 +23,13 @@ public static class Promote
             return new([], new LabelInvalid(labelProblem), Outcome.InvalidInput, null, null, null);
         }
 
-        var loaded = await EnvironmentParser.LoadAsync(input.Target, cancellationToken);
-        if (loaded.Value is not { } target)
+        var (gated, errors, refusal) = await Checks.GatedTargetAsync(input.Target, connections, cancellationToken);
+        if (gated is null)
         {
-            return new(loaded.Errors, null, Outcome.Failed, null, null, null);
+            return new(errors, refusal, Outcome.Failed, null, null, null);
         }
 
-        if (target.Approval is not { } policy)
-        {
-            return Refused(new NotGated(target.Name));
-        }
-
-        // A bad credential stops here, before any record is read.
-        var (principal, identityRefusal) = await Checks.PrincipalAsync(connections, cancellationToken);
-        if (principal is null)
-        {
-            return Refused(identityRefusal!); // a credential that names no principal comes with its refusal
-        }
-
+        var (target, policy, principal) = gated;
         var records = connections.Records();
         var decision = await PromotionCheck.CheckAsync(records, target, input.Label, cancellationToken);
         foreach (var ignored in decision.IgnoredApprovals)
@@ -51,7 +39,7 @@ public static class Promote
 
         if (decision.SetSha256 is not { } setSha256 || !decision.MayPromote)
         {
-            return Refused(new NotPromotable(input.Label, target.Name, decision.Reasons));
+            return new([], new NotPromotable(input.Label, target.Name, decision.Reasons), Outcome.Failed, null, null, null);
         }
 
         progress?.Invoke(new Promoting(input.Label, policy.QualifiedOn, setSha256));
@@ -64,6 +52,4 @@ public static class Promote
             new DeployReleaseInput(kept, input.Target, input.Catalog, false), new Promotion(principal, setSha256), connections, progress, cancellationToken);
         return new([], null, release.Outcome, target, setSha256, release);
     }
-
-    private static PromoteResult Refused(Problem problem) => new([], problem, Outcome.Failed, null, null, null);
 }

@@ -41,6 +41,28 @@ public static class Checks
         }
     }
 
+    /// <summary>
+    /// The gated environment <paramref name="descriptor"/> describes, its policy and the principal, named before any record is read; or the descriptor's
+    /// errors, or the refusal (<see cref="NotGated"/>, <see cref="IdentityRefused"/>). Approve's and promote's steps after their plain values.
+    /// </summary>
+    internal static async Task<(GatedTarget? Target, IReadOnlyList<LoadError> Errors, Problem? Refusal)> GatedTargetAsync(
+        SourceDocument descriptor, Connections connections, CancellationToken cancellationToken)
+    {
+        var loaded = await EnvironmentParser.LoadAsync(descriptor, cancellationToken);
+        if (loaded.Value is not { } environment)
+        {
+            return (null, loaded.Errors, null);
+        }
+
+        if (environment.Approval is not { } policy)
+        {
+            return (null, [], new NotGated(environment.Name));
+        }
+
+        var (principal, identityRefusal) = await PrincipalAsync(connections, cancellationToken);
+        return principal is null ? (null, [], identityRefusal) : (new GatedTarget(environment, policy, principal), [], null);
+    }
+
     /// <summary>The templates of <paramref name="catalog"/>'s templates part, and every way <paramref name="graphs"/> do not fit them, each once.</summary>
     public static (ITemplates Templates, IReadOnlyList<LoadError> Misfits) Templates(SourceCatalog catalog, IEnumerable<ResolvedGraph> graphs, Connections connections)
     {

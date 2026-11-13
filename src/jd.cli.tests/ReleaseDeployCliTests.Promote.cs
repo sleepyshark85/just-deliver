@@ -10,6 +10,10 @@ public sealed partial class ReleaseDeployCliTests
 {
     private const string NoApproval = "20260101T000000000Z-approve.json";
 
+    // Stand-ins in a test's arguments for the paths known only when it runs: stage's descriptor and the catalog.
+    private const string StagePath = "<stage>";
+    private const string CatalogPath = "<catalog>";
+
     private Task<(int Code, string Out, string Err)> PromoteAsync(string stage, RecordingBackend? backend = null, string label = "1.0.0") =>
         RunAsync(backend, "promote", label, "--to", stage, "--catalog", Catalog);
 
@@ -386,20 +390,44 @@ public sealed partial class ReleaseDeployCliTests
     // Edge 2 (docs/architecture/application.md section 8): an I/O failure that escapes approve or promote before its walk (here: the records cannot be
     // reached) is exit 2 with its message, as for every other command; before, it escaped jd as an unhandled exception.
     [Theory]
-    [InlineData("promote")]
-    [InlineData("approve")]
-    public async Task An_io_failure_before_the_walk_is_exit_2_with_its_message(string command)
+    [InlineData("promote", "1.0.0", "--to", StagePath, "--catalog", CatalogPath)]
+    [InlineData("approve", "1.0.0", "--env", StagePath, "--meaning", "ready")]
+    public async Task An_io_failure_before_the_walk_is_exit_2_with_its_message(params string[] line)
     {
         await DeployedAsync();
         var stage = await StageAsync();
         Act(Alice);
-        string[] args = command == "promote" ? ["promote", "1.0.0", "--to", stage, "--catalog", Catalog] : ["approve", "1.0.0", "--env", stage, "--meaning", "ready"];
+        var args = line.Select(arg => arg switch { StagePath => stage, CatalogPath => Catalog, _ => arg }).ToArray();
 
         var io = await RunWithAsync(Connections(null) with { Records = () => throw new IOException("the records cannot be read") }, args);
         var access = await RunWithAsync(Connections(null) with { Records = () => throw new UnauthorizedAccessException("the records are not ours") }, args);
 
         Assert.Equal((2, string.Empty, "jd: the records cannot be read\n"), (io.Code, io.Out, io.Err.ReplaceLineEndings("\n")));
         Assert.Equal((2, string.Empty, "jd: the records are not ours\n"), (access.Code, access.Out, access.Err.ReplaceLineEndings("\n")));
+        Assert.Empty(StageFiles("*"));
+    }
+
+    // The edge of the catalog read (docs/architecture/application.md section 8): the CLI reads the catalog before the use case, so a catalog that exists but
+    // cannot be read is exit 2 with .NET's message before the identity is asked or the approvals are checked; before, it was read only at the walk.
+    [Fact]
+    public async Task A_catalog_that_exists_but_cannot_be_read_is_exit_2_before_the_identity_or_the_approvals()
+    {
+        await DeployedAsync();
+        var stage = await StageAsync();
+        var catalog = Path.Combine(_temp, "catalog");
+        CliTests.CopyDirectory(Catalog, catalog);
+        var unreadable = Path.Combine(catalog, "naming.yaml");
+        if (!TryRestrict(unreadable))
+        {
+            return;
+        }
+
+        var identityCalls = _identity.Calls;
+
+        var (code, stdout, stderr) = await RunAsync(null, "promote", "1.0.0", "--to", stage, "--catalog", catalog);
+
+        Assert.Equal((2, string.Empty, $"jd: Access to the path '{unreadable}' is denied.\n"), (code, stdout, stderr.ReplaceLineEndings("\n")));
+        Assert.Equal(identityCalls, _identity.Calls);
         Assert.Empty(StageFiles("*"));
     }
 }
