@@ -16,11 +16,11 @@ public static class EnvironmentTypeCheck
         if (!catalog.EnvironmentTypes.TryGetValue(type, out var declared))
         {
             var known = string.Join(", ", catalog.EnvironmentTypes.Keys.Order(StringComparer.Ordinal));
-            return [new LoadError(file, environment.Locations[Roles.EnvironmentType], $"'{type}' is not an environment type of the catalog (declared: {known}).")];
+            return [new LoadError(file, environment.Location(Roles.EnvironmentType), $"'{type}' is not an environment type of the catalog (declared: {known}).")];
         }
 
         // Absent, the block is located by the field that would hold it, which is also how the message names it.
-        var block = environment.Locations[Roles.EnvironmentApproval];
+        var block = environment.Location(Roles.EnvironmentApproval);
         return declared.Approval && environment.Approval is null
             ? [new LoadError(file, block, $"environment type '{type}' requires an '{block}' block; an environment of this type cannot be ungated.")]
             : [];

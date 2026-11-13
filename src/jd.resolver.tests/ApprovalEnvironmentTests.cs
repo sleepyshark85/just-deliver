@@ -99,6 +99,17 @@ public class ApprovalEnvironmentTests
         Assert.Equal("'protected' is not an environment type of the catalog (declared: dev, prod, shared, stage).", error.Message);
     }
 
+    [Fact]
+    public async Task An_environment_built_in_code_is_checked_with_an_empty_location()
+    {
+        var environment = new EnvironmentDescriptor("dev", "region-1", "protected", new Dictionary<string, string>(), [], null);
+
+        var error = Assert.Single(EnvironmentTypeCheck.Check(await SeedCatalogAsync(), environment, "env.yaml"));
+
+        Assert.Equal(("env.yaml", string.Empty), (error.File, error.Location));
+        Assert.Equal("'protected' is not an environment type of the catalog (declared: dev, prod, shared, stage).", error.Message);
+    }
+
     [Theory]
     [InlineData("required: 1", "required: 3", "approval.required")] // more than the one approver listed
     [InlineData("qualifiedOn: dev", "qualifiedOn: stage", "approval.qualifiedOn")] // its own name

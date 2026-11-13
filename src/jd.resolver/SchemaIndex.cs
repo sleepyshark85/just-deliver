@@ -229,11 +229,7 @@ internal sealed class SchemaIndex
             at.Select(field => Keyword(field.Schema, ScopeKeyword)).OfType<string>().FirstOrDefault(),
             at.Select(field => field.Schema.Default).FirstOrDefault(value => value is not null) is { } value ? JToken.FromObject(value) : null,
             [.. selects.Where(select => at.Key.StartsWith($"{select.Path}.*", StringComparison.Ordinal))],
-            PropertyName(at.Key)))).ToList();
-
-    // The property a path ends in: Walk writes each as ['<name>'].
-    private static string? PropertyName(string path) =>
-        path.EndsWith("']", StringComparison.Ordinal) ? path[(path.LastIndexOf("['", StringComparison.Ordinal) + 2)..^2] : null;
+            at.Select(field => field.Name).FirstOrDefault(name => name is not null)))).ToList();
 
     // Every subschema of a kind with the path (JSONPath) of the values it describes: a property adds its name, a map's subschema stands for
     // each of its values and a list's for each item, and a reference or a branch describes the same values as its parent. A recursive schema
@@ -243,7 +239,7 @@ internal sealed class SchemaIndex
     {
         var fields = new List<Field>();
         var repeated = new HashSet<JsonSchema>();
-        Walk(root, "$", [], fields, repeated);
+        Walk(root, "$", null, [], fields, repeated);
         if (fields.FirstOrDefault(field => Binds(field.Schema) && field.Within.Overlaps(repeated)) is { } recursive)
         {
             throw new InvalidOperationException($"The annotation at {recursive.Path} is in a recursive schema, so it would be read at its first level only.");
@@ -252,7 +248,7 @@ internal sealed class SchemaIndex
         return fields;
     }
 
-    private static void Walk(JsonSchema schema, string path, ImmutableHashSet<JsonSchema> outer, List<Field> fields, HashSet<JsonSchema> repeated)
+    private static void Walk(JsonSchema schema, string path, string? name, ImmutableHashSet<JsonSchema> outer, List<Field> fields, HashSet<JsonSchema> repeated)
     {
         if (outer.Contains(schema))
         {
@@ -261,17 +257,17 @@ internal sealed class SchemaIndex
         }
 
         var within = outer.Add(schema);
-        fields.Add(new Field(schema, path, within));
-        foreach (var (name, property) in schema.Properties)
+        fields.Add(new Field(schema, path, name, within));
+        foreach (var (propertyName, property) in schema.Properties)
         {
-            Walk(property, $"{path}['{name}']", within, fields, repeated);
+            Walk(property, $"{path}['{propertyName}']", propertyName, within, fields, repeated);
         }
 
         var annotatedValues = 0;
         foreach (var value in schema.PatternProperties.Values.Append(schema.AdditionalPropertiesSchema).OfType<JsonSchema>())
         {
             var first = fields.Count;
-            Walk(value, $"{path}.*", within, fields, repeated);
+            Walk(value, $"{path}.*", null, within, fields, repeated);
             annotatedValues += fields.Skip(first).Any(field => Binds(field.Schema)) ? 1 : 0;
         }
 
@@ -282,12 +278,12 @@ internal sealed class SchemaIndex
 
         foreach (var item in new[] { schema.Item }.OfType<JsonSchema>())
         {
-            Walk(item, $"{path}[*]", within, fields, repeated);
+            Walk(item, $"{path}[*]", null, within, fields, repeated);
         }
 
         foreach (var same in schema.AllOf.Concat(schema.AnyOf).Concat(schema.OneOf).Append(schema.Reference).OfType<JsonSchema>())
         {
-            Walk(same, path, within, fields, repeated);
+            Walk(same, path, name, within, fields, repeated);
         }
     }
 
@@ -313,8 +309,9 @@ internal sealed class SchemaIndex
         }
     }
 
-    // A subschema of a kind, the path (JSONPath) of the values it describes, and the subschemas it is in, itself included.
-    private sealed record Field(JsonSchema Schema, string Path, ImmutableHashSet<JsonSchema> Within);
+    // A subschema of a kind, the path (JSONPath) of the values it describes, the property that path ends in (null for a map's value, a list's item
+    // and the root), and the subschemas it is in, itself included.
+    private sealed record Field(JsonSchema Schema, string Path, string? Name, ImmutableHashSet<JsonSchema> Within);
 
     // Resolves a reference to another shipped schema by its $id, never from disk or the network.
     private sealed class ShippedReferences(JsonSchema root, Dictionary<string, string> texts)

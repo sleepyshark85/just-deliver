@@ -57,7 +57,7 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
         // Workloads deploy in the last layer, so an earlier layer offers them nothing: they deploy on an environment, which reads it as its base.
         var offers = catalog.EnvironmentTypes[environment.Type].Layer != catalog.Layers[^1] ? [] : environment.Offers;
         // The descriptor's kind is the one kind that binds the deployed values.
-        var kind = (await SchemaIndex.Shipped).KindsBinding(Roles.EnvironmentValues).Single();
+        var kind = EnvironmentParser.DescriptorKinds(await SchemaIndex.Shipped).Single();
         var document = new JObject
         {
             [DocumentLoader.KindField] = kind,

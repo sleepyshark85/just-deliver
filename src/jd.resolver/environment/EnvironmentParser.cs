@@ -14,7 +14,7 @@ public static class EnvironmentParser
     public static async Task<LoadResult<EnvironmentDescriptor>> LoadDefinitionAsync(SourceDocument definition, CancellationToken cancellationToken)
     {
         var index = await SchemaIndex.Shipped;
-        var definitions = index.KindsBinding(Roles.EnvironmentName).Except(index.KindsBinding(Roles.EnvironmentValues)).ToList();
+        var definitions = index.KindsBinding(Roles.EnvironmentName).Except(DescriptorKinds(index)).ToList();
         return Build(index, await DocumentLoader.LoadAsync(definition.Name, definition.Text(), definitions, cancellationToken));
     }
 
@@ -26,8 +26,11 @@ public static class EnvironmentParser
     public static async Task<LoadResult<EnvironmentDescriptor>> ParseAsync(string source, string content, CancellationToken cancellationToken = default)
     {
         var index = await SchemaIndex.Shipped;
-        return Build(index, await DocumentLoader.LoadAsync(source, content, index.KindsBinding(Roles.EnvironmentValues), cancellationToken));
+        return Build(index, await DocumentLoader.LoadAsync(source, content, DescriptorKinds(index), cancellationToken));
     }
+
+    /// <summary>The kinds of environment descriptor: the kinds whose schema binds <see cref="Roles.EnvironmentValues"/>, which an environment definition has none of.</summary>
+    internal static IReadOnlyList<string> DescriptorKinds(SchemaIndex index) => index.KindsBinding(Roles.EnvironmentValues);
 
     private static LoadResult<EnvironmentDescriptor> Build(SchemaIndex index, LoadResult<Document> loaded)
     {
@@ -58,12 +61,12 @@ public static class EnvironmentParser
 
         if (approval.QualifiedOn == environment.Name)
         {
-            yield return new LoadError(source, environment.Locations[Roles.ApprovalQualifiedOn], $"'{environment.Name}' cannot be qualified on itself; name the environment whose records must show the set qualified.");
+            yield return new LoadError(source, environment.Location(Roles.ApprovalQualifiedOn), $"'{environment.Name}' cannot be qualified on itself; name the environment whose records must show the set qualified.");
         }
 
         if (approval.Required > approval.Approvers.Count)
         {
-            yield return new LoadError(source, environment.Locations[Roles.ApprovalRequired], $"{approval.Required} approvers are required but only {approval.Approvers.Count} are listed; the policy could never be met.");
+            yield return new LoadError(source, environment.Location(Roles.ApprovalRequired), $"{approval.Required} approvers are required but only {approval.Approvers.Count} are listed; the policy could never be met.");
         }
     }
 }

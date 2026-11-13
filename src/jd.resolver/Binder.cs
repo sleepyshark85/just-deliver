@@ -59,7 +59,8 @@ internal sealed class Binder(SchemaIndex index)
 
     /// <summary>
     /// The environment <paramref name="document"/> is, a definition or a descriptor, by the <c>env.*</c> roles: its values as dot paths, its
-    /// approval policy when it holds the block (the <c>approval.*</c> roles), and where each role of its kind was read.
+    /// approval policy when it holds the block (the <c>approval.*</c> roles), and where each role of its kind was read (the roles of an absent block
+    /// are located by their leaf names).
     /// </summary>
     public EnvironmentDescriptor ReadEnvironment(Document document)
     {
@@ -83,12 +84,13 @@ internal sealed class Binder(SchemaIndex index)
 
     private Values ValuesOf(Document document) => new(document.Body, index.RolesOf(document.Kind));
 
-    // The schema requires every field of the block, so no fallback applies.
+    // The count and the flag have no fallback: a default of 0 or false would silently weaken the gate if a binding were lost. Safe to read them
+    // so: the schema requires every field of the block when it is present, so a schema-valid document holds both, and the cast throws on a lost one.
     private static ApprovalPolicy ReadApproval(Values values, JObject block) => new(
         Text(values.Nearest(Roles.ApprovalQualifiedOn, block)),
-        (int?)values.Nearest(Roles.ApprovalRequired, block) ?? 0,
+        (int)values.Nearest(Roles.ApprovalRequired, block)!,
         Strings(values.Nearest(Roles.ApprovalApprovers, block)),
-        (bool?)values.Nearest(Roles.ApprovalSeparate, block) ?? false);
+        (bool)values.Nearest(Roles.ApprovalSeparate, block)!);
 
     // Nested mappings of strings as one value per dot path; the schema refuses a key with a dot, so each dot path is one value (concept 3).
     private static IEnumerable<KeyValuePair<string, string>> Flatten(JToken? mapping, string prefix) =>

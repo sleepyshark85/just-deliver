@@ -17,10 +17,13 @@ public sealed record EnvironmentDescriptor(
     ApprovalPolicy? Approval)
 {
     /// <summary>
-    /// Where each role of the document's kind was read, by role (<see cref="Roles"/>); a field the document leaves out is located by its name.
-    /// Empty for an environment not read from a document, which no rule that locates an error is given.
+    /// Where the binder read each role of the document's kind, by role (<see cref="Roles"/>); a role the document leaves out is located by its
+    /// property name, and a nested role (one in the approval block, which is absent) by its own leaf name. Read through <see cref="Location"/>.
     /// </summary>
     internal IReadOnlyDictionary<string, string> Locations { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>Where <paramref name="role"/> was read (<see cref="Locations"/>); empty when the environment was not bound from a document.</summary>
+    internal string Location(string role) => Locations.GetValueOrDefault(role, string.Empty);
 
     /// <summary>The environment a definition is resolved in: the definition's own name, region, type, offers and approval policy, and the base descriptor's values.</summary>
     public EnvironmentDescriptor Over(EnvironmentDescriptor? baseDescriptor) => this with { Values = baseDescriptor?.Values ?? new Dictionary<string, string>() };

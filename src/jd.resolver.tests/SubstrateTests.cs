@@ -178,6 +178,18 @@ public class SubstrateTests
         Assert.All(none, e => Assert.Contains("but there is no base descriptor", e.Message));
     }
 
+    // An environment built in code was read from no document, so none of its roles has a location: it resolves, and an error it causes is located by nothing.
+    [Fact]
+    public async Task An_environment_built_in_code_resolves_and_its_errors_have_an_empty_location()
+    {
+        var environment = new EnvironmentDescriptor("dev", Region, "dev", new Dictionary<string, string>(), ["container-app", "database"], null);
+
+        var graph = Resolver.ResolveSubstrate("definition.yaml", await CatalogAsync(), environment, null);
+
+        Assert.Equal(["cosmos-account", "log-analytics", "shared-group"], graph.Errors.Select(e => e.Message.Split('\'')[1]).ToList());
+        Assert.All(graph.Errors, e => Assert.Equal(("definition.yaml", string.Empty), (e.File, e.Location)));
+    }
+
     [Fact]
     public async Task A_part_the_base_already_has_is_refused()
     {
