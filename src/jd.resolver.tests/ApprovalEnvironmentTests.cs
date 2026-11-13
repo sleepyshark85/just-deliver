@@ -84,7 +84,7 @@ public class ApprovalEnvironmentTests
         foreach (var error in new[] { Assert.Single(EnvironmentTypeCheck.Check(catalog, descriptor, "env.yaml")), Assert.Single(EnvironmentTypeCheck.Check(catalog, definition, "env.yaml")) })
         {
             Assert.Equal(("env.yaml", "approval"), (error.File, error.Location));
-            Assert.Contains("environment type 'stage' requires an 'approval' block", error.Message);
+            Assert.Equal("environment type 'stage' requires an 'approval' block; an environment of this type cannot be ungated.", error.Message);
         }
     }
 
@@ -109,6 +109,25 @@ public class ApprovalEnvironmentTests
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
         Assert.Equal(("env.yaml", location), (error.File, error.Location));
+    }
+
+    // The definition is checked by the same loader as the descriptor (before S24c1, only when the composer re-read it).
+    [Theory]
+    [InlineData("required: 1", "required: 3", "approval.required", "3 approvers are required but only 1 are listed; the policy could never be met.")]
+    [InlineData("qualifiedOn: dev", "qualifiedOn: stage", "approval.qualifiedOn", "'stage' cannot be qualified on itself; name the environment whose records must show the set qualified.")]
+    public async Task A_policy_that_cannot_be_met_or_names_its_own_environment_is_reported_with_its_text_in_the_descriptor_and_the_definition(
+        string original, string replacement, string location, string message)
+    {
+        var block = Block.Replace(original, replacement, StringComparison.Ordinal);
+
+        var descriptor = await EnvironmentParser.ParseAsync("env.yaml", Descriptor(approval: block));
+        var definition = await LoadDefinitionAsync(Definition(approval: block));
+
+        var inDescriptor = Assert.Single(descriptor.Errors);
+        var inDefinition = Assert.Single(definition.Errors);
+        Assert.Equal(("env.yaml", location, message), (inDescriptor.File, inDescriptor.Location, inDescriptor.Message));
+        Assert.Equal(("definition.yaml", location, message), (inDefinition.File, inDefinition.Location, inDefinition.Message));
+        Assert.Null(definition.Value);
     }
 
     [Theory]

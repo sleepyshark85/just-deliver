@@ -38,16 +38,27 @@ public class EnvironmentParserTests
         Assert.Equal(["container-app"], env.Offers);
     }
 
+    // Reachable from any descriptor jd reads (a hand-written base, or a composed one whose part is named so), so the check is live (S24c1).
     [Theory]
-    [InlineData("name")]
-    [InlineData("region")]
-    [InlineData("type")]
-    public async Task Reserved_key_in_values_is_rejected(string key)
+    [InlineData("name", "x")]
+    [InlineData("region", "x")]
+    [InlineData("type", "x")]
+    [InlineData("name", "{ id: x }")]
+    [InlineData("type", "{}")]
+    public async Task Reserved_key_in_values_is_rejected(string key, string value)
     {
-        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", $"  resourceGroup: rg-test\n  {key}: x"));
+        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", $"  resourceGroup: rg-test\n  {key}: {value}"));
         var error = Assert.Single(result.Errors);
-        Assert.Equal($"values.{key}", error.Location);
+        Assert.Equal(($"values.{key}", $"'{key}' is reserved for the top-level field and cannot be a value."), (error.Location, error.Message));
         Assert.Null(result.Value);
+    }
+
+    [Fact]
+    public async Task A_reserved_name_deeper_in_values_is_a_value_like_any_other()
+    {
+        var env = await Load(Valid.Replace("logAnalytics: { id: /law/id }", "logAnalytics: { name: law, deeper: { type: x } }"));
+
+        Assert.Equal(("law", "x"), (env.Values["logAnalytics.name"], env.Values["logAnalytics.deeper.type"]));
     }
 
     [Fact]
