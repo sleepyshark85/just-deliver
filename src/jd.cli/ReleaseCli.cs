@@ -49,7 +49,8 @@ internal static class ReleaseCli
         return options switch
         {
             CreateOptions create => await CreateAsync(create, connections, stdout, stderr, cancellationToken),
-            _ => await ShowAsync(options.Input, stdout, stderr, cancellationToken),
+            ShowOptions show => await ShowAsync(show.Set, stdout, stderr, cancellationToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(args), options, "not a release create or show."),
         };
     }
 
