@@ -63,7 +63,7 @@ public partial class TemplateLibraryTests
     {
         var library = SeedTemplates();
 
-        Assert.Empty(library.Errors);
+        Assert.Empty(library.Check(Graph([])));
         foreach (var file in Directory.EnumerateFiles(Templates, "Pulumi.yaml", SearchOption.AllDirectories))
         {
             var text = await File.ReadAllTextAsync(file);
@@ -221,9 +221,8 @@ public partial class TemplateLibraryTests
     {
         var library = TemplateLibrary.Parse([("t/broken", yaml), ("t/a", "name: a\n")]);
 
-        var error = Assert.Single(library.Errors);
+        var error = Assert.Single(library.Check(Graph([])));
         Assert.Equal(("t/broken/Pulumi.yaml", string.Empty, message), (error.File, error.Location, error.Message));
-        Assert.Equal([error], library.Check(Graph([])));
         Assert.Throws<KeyNotFoundException>(() => library.GetContent("t/broken"));
         Assert.Equal("name: a\n", library.GetContent("t/a"));
     }

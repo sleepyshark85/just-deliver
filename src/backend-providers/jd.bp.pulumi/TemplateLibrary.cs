@@ -34,9 +34,6 @@ public sealed class TemplateLibrary : ITemplateStore
     /// <summary>What a template declares: its inputs, those without a default, and its outputs.</summary>
     private sealed record TemplateInterface(IReadOnlySet<string> Inputs, IReadOnlySet<string> RequiredInputs, IReadOnlySet<string> Outputs);
 
-    /// <summary>Templates that could not be read, each with its file; <see cref="Check"/> repeats them.</summary>
-    public IReadOnlyList<LoadError> Errors => _loadErrors;
-
     /// <summary>The library of <paramref name="sources"/>: each template's name (<c>azure/log-analytics</c>) and the text of its <see cref="TemplateFile"/>.</summary>
     public static TemplateLibrary Parse(IEnumerable<(string Name, string Yaml)> sources)
     {
@@ -78,7 +75,7 @@ public sealed class TemplateLibrary : ITemplateStore
     public string GetContent(string templateName) =>
         _content.TryGetValue(templateName, out var content) ? content : throw new KeyNotFoundException($"template '{templateName}' is not in the template library.");
 
-    /// <summary>Every way the graph does not fit the library, with node id, template and key; empty when it fits.</summary>
+    /// <summary>Every way the graph does not fit the library, with node id, template and key; empty when it fits. It starts with the templates that could not be read, each with its file.</summary>
     public IReadOnlyList<LoadError> Check(ResolvedGraph graph)
     {
         var errors = new List<LoadError>(_loadErrors);
