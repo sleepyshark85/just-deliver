@@ -4,6 +4,7 @@
   "title": "just-deliver catalog part",
   "description": "Nodes and the exports evaluated from them: the shape components, runtimes and shared resources share (docs/architecture/documents.md section 2, concept 3). Not a document kind: the catalog kinds refer to its definitions.",
   "type": "object",
+  "x-jd": { "is": "part" },
   "additionalProperties": false,
   "required": ["nodes"],
   "properties": {
@@ -14,6 +15,7 @@
     "nodes": {
       "description": "Graph nodes by name; the name is how other expressions refer to the node, and part of graph node ids and backend stack names.",
       "type": "object",
+      "x-jd": { "is": "part.nodes" },
       "minProperties": 1,
       "patternProperties": { "^[a-z]([a-z0-9-]*[a-z0-9])?$": { "$ref": "#/definitions/node" } },
       "additionalProperties": {
@@ -27,20 +29,22 @@
       "additionalProperties": false,
       "required": ["template", "config"],
       "properties": {
-        "template": { "description": "Template reference, relative to the catalog's templates directory.", "type": "string", "minLength": 1 },
-        "kind": { "description": "create (default) or grant. Grants are surfaced in the approval diff.", "enum": ["create", "grant"], "default": "create" },
-        "config": { "description": "Template configuration. Values are any YAML scalar or map, kept as written.", "type": "object" }
+        "template": { "description": "Template reference, relative to the catalog's templates directory.", "type": "string", "minLength": 1, "x-jd": { "is": "node.template" } },
+        "kind": { "description": "create (default) or grant. Grants are surfaced in the approval diff.", "enum": ["create", "grant"], "default": "create", "x-jd": { "is": "node.kind" } },
+        "config": { "description": "Template configuration. Values are any YAML scalar or map, kept as written.", "type": "object", "x-jd": { "is": "node.config" } }
       }
     },
     "exports": {
       "description": "Export name -> expression producing it.",
       "type": "object",
+      "x-jd": { "is": "part.exports" },
       "additionalProperties": { "type": "string", "minLength": 1 }
     },
     "layer": {
       "$comment": "The listed order is the deploy order: shared before environment (documents.md Appendix B, role layer).",
       "description": "A `jd env up` layer: `shared` is deployed once by the shared layer, `environment` once per environment.",
-      "enum": ["shared", "environment"]
+      "enum": ["shared", "environment"],
+      "x-jd": { "is": "layer" }
     }
   }
 }

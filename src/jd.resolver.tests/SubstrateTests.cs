@@ -205,7 +205,24 @@ public class SubstrateTests
 
         var error = Assert.Single(Errors(Offering("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog));
 
-        Assert.Equal(("offers[1]", "component 'cache' has no implementation for environment type 'dev' and no 'default' implementation."), (error.Location, error.Message));
+        Assert.Equal(("offers[1]", "component 'cache' has no implementations entry for 'dev' and no 'default' entry (keys: stage)."), (error.Location, error.Message));
+    }
+
+    // The implementation is selected first and its parts kept by scope after: an exact key without an environment part deploys none, though
+    // the fallback has one; with no exact key the fallback's is deployed.
+    [Theory]
+    [InlineData("dev", new string[0])]
+    [InlineData("stage", new[] { "c" })]
+    public async Task An_environment_deploys_the_environment_part_of_the_implementation_its_type_selects(string key, string[] cache)
+    {
+        const string classes = "    classes:\n      standard: { nodes: { s: { template: t/s, config: {} } }, exports: { host: x } }\n";
+        var catalog = await SeedCatalogWithAsync(("components/cache.yaml",
+            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n"
+            + $"  default:\n    environment: {{ nodes: {{ c: {{ template: t/c, config: {{ k: 1 }} }} }} }}\n{classes}  {key}:\n{classes}"));
+
+        var (graph, _) = await PrepareAsync(Offering("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog);
+
+        Assert.Equal(cache, graph.Nodes.Where(n => n.Provenance.Values.Any(p => p.Source == "components/cache.yaml")).Select(n => n.Name));
     }
 
     [Fact]

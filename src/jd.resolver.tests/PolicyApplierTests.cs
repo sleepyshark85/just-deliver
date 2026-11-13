@@ -235,7 +235,7 @@ public class PolicyApplierTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal("requires[0]", error.Location);
-        Assert.Contains("class 'premium'", error.Message);
+        Assert.Contains("classes entry for 'premium'", error.Message);
     }
 
     [Fact]

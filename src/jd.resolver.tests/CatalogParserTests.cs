@@ -51,20 +51,33 @@ public class CatalogParserTests
         Assert.Equal([("dev", false), ("stage", true)], catalog.EnvironmentTypes.Select(t => (t.Key, t.Value.Approval)).OrderBy(t => t.Key, StringComparer.Ordinal));
         var component = Assert.Single(catalog.Components).Value;
         Assert.Equal(("alpha-db", "components/a.yaml"), (component.Name, component.Source));
-        Assert.Equal(["endpoint"], component.Exports);
-        var part = Assert.Single(Assert.Single(component.Implementations, i => i.Key == "default").Value.Classes, c => c.Key == "standard").Value;
+        Assert.Equal(["endpoint"], component.Contract);
+        var part = TestCatalog.PartAt(component, "implementations.default.classes.standard");
         Assert.Equal(NodeKind.Create, part.Nodes["db"].Kind);
         Assert.Equal(1, (int)part.Nodes["db"].Config["size"]);
         Assert.Equal("${db.endpoint}", part.Exports["endpoint"]);
         var runtime = Assert.Single(catalog.Runtimes).Value;
-        var implementation = Assert.Single(runtime.Implementations, i => i.Key == "default").Value;
-        Assert.Equal(("container-app", "runtimes/r.yaml", TestCatalog.Probe, TestCatalog.Release), (runtime.Name, runtime.Source, implementation.Probe, implementation.Release));
+        var implementation = TestCatalog.PartAt(runtime, "implementations.default");
+        Assert.Equal(("container-app", "runtimes/r.yaml", (TestCatalog.Probe, TestCatalog.Release)), (runtime.Name, runtime.Source, catalog.Rollouts[("container-app", "default")]));
         Assert.Equal("t/runtime", implementation.Nodes["runtime"].Template);
         var policy = Assert.Single(catalog.Policies);
         Assert.Equal("alpha-db", policy.Require);
         Assert.True(policy.Set.ContainsKey("runtime.b"));
         Assert.Equal(20, catalog.Naming["thing"].MaxLength);
         Assert.Equal("00000000-0000-0000-0000-000000000001", catalog.Roles["reader"]);
+    }
+
+    // Each runtime's rollout is read from its own file.
+    [Fact]
+    public async Task Each_runtime_has_the_probe_its_own_file_declares()
+    {
+        const string nodes = "nodes:\n  runtime: { template: t/rt, config: {} }\n";
+        var other = TestCatalog.Runtime(nodes).Replace("name: container-app", "name: job-runner", StringComparison.Ordinal).Replace("path: /health", "path: /ready", StringComparison.Ordinal);
+        var result = await Parse(("catalog.yaml", CatalogFile), ("runtimes/a.yaml", TestCatalog.Runtime(nodes)), ("runtimes/b.yaml", other));
+
+        Assert.Empty(result.Errors);
+        var rollouts = Assert.IsType<Catalog>(result.Value).Rollouts;
+        Assert.Equal(("/health", "/ready"), (rollouts[("container-app", "default")].Probe.Path, rollouts[("job-runner", "default")].Probe.Path));
     }
 
     [Fact]
@@ -143,6 +156,18 @@ public class CatalogParserTests
         Assert.Null(result.Value);
     }
 
+    // Locations are the document's JSON paths: a key that is not a plain name is written in brackets.
+    [Fact]
+    public async Task A_location_under_a_key_with_a_dot_writes_the_key_in_brackets()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile),
+            ("components/a.yaml", TestCatalog.Component("alpha-db", "[endpoint]", "nodes:\n  db:\n    template: t/db\n    config: {}\nexports: {}\n", className: "big.one")));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("components/a.yaml", "implementations.default.classes['big.one'].exports"), (error.File, error.Location));
+        Assert.Equal("must export exactly the contract of component 'alpha-db' (endpoint); missing endpoint.", error.Message);
+    }
+
     [Theory]
     [InlineData("components/a.yaml")]
     [InlineData("runtimes/r.yaml")]
@@ -166,6 +191,19 @@ public class CatalogParserTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal((file, "implementations.shared"), (error.File, error.Location));
+        Assert.Equal("'shared' is a shared-layer environment type; implementations are keyed by environment-layer types or 'default'.", error.Message);
+    }
+
+    // The parts of one implementation share its key: the key is reported once, not once per class.
+    [Fact]
+    public async Task An_implementation_keyed_by_a_shared_layer_type_with_two_classes_is_one_error()
+    {
+        const string part = "{ nodes: { db: { template: t/db, config: {} } }, exports: { endpoint: x } }";
+        var component = $"kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n  shared:\n    classes: {{ standard: {part}, isolated: {part} }}\n";
+        var result = await Parse(("catalog.yaml", CatalogFile.Replace("environmentTypes: {", "environmentTypes: { shared: { layer: shared },", StringComparison.Ordinal)), ("components/a.yaml", component));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("components/a.yaml", "implementations.shared"), (error.File, error.Location));
         Assert.Equal("'shared' is a shared-layer environment type; implementations are keyed by environment-layer types or 'default'.", error.Message);
     }
 

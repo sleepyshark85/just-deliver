@@ -6,7 +6,7 @@ namespace jd.resolver.tests;
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
-        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b1, S24b2, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
+        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b1b, S24b2, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
 
     private static IEnumerable<(string File, string Literal)> Entries(Dictionary<string, string[]> group) =>
         group.SelectMany(entry => entry.Value.Select(literal => (entry.Key, literal)));
@@ -28,9 +28,15 @@ public sealed partial class LiteralGuardTests
             "type", "workload", "workloads",
         ],
         ["jd.resolver/DocumentLoader.cs"] = ["kind"], // the bootstrap field
+        // the role names the engine reads (Appendix B), like the expression roots
+        ["jd.resolver/Roles.cs"] =
+        [
+            "contract", "env.type", "layer", "node.config", "node.kind", "node.template", "part.exports", "part.nodes", "part.scope", "requirement.class",
+            "runtime.part",
+        ],
         ["jd.resolver/expansion/ConfigWalker.cs"] = ["workload.variables"], // the fn::entries source (Appendix A: concept 4)
         // the annotation keyword and the annotations it reads (each named once); JSON Schema's own keyword
-        ["jd.resolver/SchemaIndex.cs"] = ["define", "fallback", "message", "one", "properties", "ref", "x-jd"],
+        ["jd.resolver/SchemaIndex.cs"] = ["define", "fallback", "is", "message", "one", "properties", "ref", "scope", "select", "x-jd"],
         ["jd.resolver/expressions/BuiltIns.cs"] = ["hash", "id", "name", "workload"], // name() and its placeholders
         ["jd.resolver/expressions/ExpressionEvaluator.cs"] = ["image", "name", "port", "runtime", "team", "workload"], // expression roots
         ["jd.resolver/graph/ConfigJson.cs"] = ["name"], // an fn::entries item
@@ -57,30 +63,23 @@ public sealed partial class LiteralGuardTests
         ["jd.azure/ArmCredentials.cs"] = ["is"], // "X is not set"; 'is' is also an x-jd keyword
     };
 
-    private static readonly Dictionary<string, string[]> S24b1 = new()
+    private static readonly Dictionary<string, string[]> S24b1b = new()
     {
-        ["jd.resolver/catalog/Catalog.cs"] = ["default"],
         ["jd.resolver/catalog/CatalogParser.cs"] =
         [
-            ".allowed", "allowed", "approval", "classes", "config", "environment", "environmentTypes", "exports", "implementations", "kind", "layer",
-            "maxLength", "nodes", "pattern", "roles", "rules", "rules.", "scope", "targets", "template", "version",
+            ".allowed", "allowed", "approval", "environmentTypes", "layer", "maxLength", "pattern", "roles", "rules", "rules.", "targets", "version",
         ],
-        ["jd.resolver/expansion/Expander.cs"] = [".classes.", ".config", ".environment.", ".exports.", "implementations.", "nodes."],
     };
 
     private static readonly Dictionary<string, string[]> S24b2 = new()
     {
-        ["jd.resolver/catalog/CatalogParser.cs"] = [".environment.", "uses"],
+        ["jd.resolver/catalog/CatalogParser.cs"] = ["uses"],
     };
 
     private static readonly Dictionary<string, string[]> S24b3 = new()
     {
         ["backend-providers/jd.bp.pulumi/TemplateLibrary.cs"] = ["exports.", "template"],
-        ["jd.resolver/catalog/CatalogParser.cs"] =
-        [
-            ".classes", ".classes.", ".config.", ".exports", ".exports.", ".nodes.", ".probe.intervalSeconds", ".template", "exports.",
-            "implementations.", "nodes.",
-        ],
+        ["jd.resolver/catalog/CatalogParser.cs"] = [".probe.intervalSeconds", ".template"],
         ["jd.resolver/graph/ExportValues.cs"] = ["exports."],
         ["jd.resolver/graph/GraphBuilder.cs"] = ["exports."],
     };
@@ -115,7 +114,7 @@ public sealed partial class LiteralGuardTests
 
     private static readonly Dictionary<string, string[]> S24d = new()
     {
-        ["jd.resolver/catalog/Catalog.cs"] = ["class", "environmentType", "kind", "runtime", "template", "type"],
+        ["jd.resolver/catalog/MatchCriteria.cs"] = ["class", "environmentType", "kind", "runtime", "template", "type"],
         ["jd.resolver/catalog/CatalogParser.cs"] = ["default", "match", "match.kind", "match.runtime", "name", "reason", "require", "set"],
         ["jd.resolver/policies/PolicyApplier.cs"] = ["default", "set"],
     };

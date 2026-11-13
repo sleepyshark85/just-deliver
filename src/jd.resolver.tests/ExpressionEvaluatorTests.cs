@@ -307,9 +307,9 @@ public class ExpressionEvaluatorTests
         Assert.NotNull(catalog);
         var workload = YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
-        var part = catalog.Components["database"].Implementations["default"].Classes["standard"];
-        var monitoring = catalog.Components["monitoring"].Implementations["default"].Classes["standard"];
-        var runtime = Assert.Single(catalog.Runtimes).Value.Implementations["default"];
+        var part = TestCatalog.PartAt(catalog.Components["database"], "implementations.default.classes.standard");
+        var monitoring = TestCatalog.PartAt(catalog.Components["monitoring"], "implementations.default.classes.standard");
+        var runtime = TestCatalog.PartAt(Assert.Single(catalog.Runtimes).Value, "implementations.default");
         var nodeNames = part.Nodes.Keys.Concat(monitoring.Nodes.Keys).ToHashSet();
         var strings = part.Nodes.Values.Concat(monitoring.Nodes.Values).Concat(runtime.Nodes.Values).SelectMany(n => n.Config.Values)
             .Select(t => t.ToString())

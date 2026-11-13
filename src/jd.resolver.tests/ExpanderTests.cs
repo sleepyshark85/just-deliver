@@ -79,7 +79,7 @@ public class ExpanderTests
     }
 
     [Fact]
-    public async Task No_implementation_for_the_environment_type_and_no_default_is_an_error_naming_the_component_and_the_type()
+    public async Task No_implementation_for_the_environment_type_and_no_default_is_a_select_miss_naming_the_component_the_map_the_type_and_the_keys()
     {
         var catalog = await LoadAsync(Sqldb(key: "stage"));
 
@@ -87,12 +87,12 @@ public class ExpanderTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[0]"), (error.File, error.Location));
-        Assert.Equal("requirement 'orders': component 'sqldb' has no implementation for environment type 'dev' and no 'default' implementation.", error.Message);
+        Assert.Equal("requirement 'orders': component 'sqldb' has no implementations entry for 'dev' and no 'default' entry (keys: stage).", error.Message);
         Assert.Empty(result.Requirements);
     }
 
     [Fact]
-    public async Task A_class_the_component_lacks_is_an_error_naming_the_component_the_class_and_the_environment_type()
+    public async Task A_class_the_component_lacks_is_a_select_miss_naming_the_component_the_map_the_class_and_the_keys()
     {
         var catalog = await LoadAsync(Sqldb());
 
@@ -100,7 +100,7 @@ public class ExpanderTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[0]"), (error.File, error.Location));
-        Assert.Equal("requirement 'orders': component 'sqldb' has no class 'isolated' for environment type 'dev' (classes: standard).", error.Message);
+        Assert.Equal("requirement 'orders': component 'sqldb' has no classes entry for 'isolated' (keys: standard).", error.Message);
         Assert.Empty(result.Requirements);
     }
 
@@ -202,13 +202,13 @@ public class ExpanderTests
     }
 
     [Fact]
-    public async Task No_runtime_implementation_for_the_environment_type_and_no_default_is_an_error_naming_the_runtime_and_the_type()
+    public async Task No_runtime_implementation_for_the_environment_type_and_no_default_is_a_select_miss_naming_the_runtime_the_map_and_the_type()
     {
         var result = await ExpandRuntimeAsync("  image: i\n  ports:\n    - port: 80\n", "dev", TestCatalog.Runtime(RuntimeNodes, "stage"));
 
         var error = Assert.Single(result.Errors);
         Assert.Null(result.Runtime);
-        Assert.Equal("runtime 'container-app' has no implementation for environment type 'dev' and no 'default' implementation.", error.Message);
+        Assert.Equal("runtime 'container-app' has no implementations entry for 'dev' and no 'default' entry (keys: stage).", error.Message);
     }
 
     [Fact]
