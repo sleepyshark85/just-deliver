@@ -71,7 +71,7 @@
       "x-jd": { "message": "not a role; the roles are the closed list of docs/architecture/documents.md Appendix B." }
     },
     "namespace": {
-      "enum": ["part-owner", "component", "shared-resource", "runtime", "policy", "environment-type", "naming-kind", "role", "grant-template", "environment"],
+      "enum": ["part owner", "component", "shared resource", "runtime", "policy", "environment type", "naming kind", "role", "grant template", "environment"],
       "x-jd": { "message": "not a namespace; the namespaces are listed in docs/architecture/documents.md Appendix B." }
     }
   }

@@ -13,7 +13,7 @@
   ],
   "properties": {
     "kind": { "enum": ["Policy"] },
-    "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$" },
+    "name": { "type": "string", "x-jd": { "define": "policy" }, "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$" },
     "reason": {
       "description": "Why the policy exists; shown to teams asking why a setting has its value.",
       "type": "string",
@@ -27,7 +27,7 @@
       "properties": {
         "type": { "type": "string" },
         "class": { "type": "string" },
-        "environmentType": { "description": "The environment's type, as the catalog declares it.", "type": "string" },
+        "environmentType": { "description": "The environment's type, as the catalog declares it.", "type": "string", "x-jd": { "ref": "environment type" } },
         "kind": { "type": "string" },
         "runtime": { "type": "string" },
         "template": { "type": "string" }
@@ -46,6 +46,7 @@
     "require": {
       "description": "A component every workload this policy matches must require (any id, any class); only with 'kind: runtime'. A policy never adds nodes.",
       "type": "string",
+      "x-jd": { "ref": "component" },
       "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$"
     }
   }

@@ -8,17 +8,19 @@
   "required": ["kind", "name", "description", "implementations"],
   "properties": {
     "kind": { "enum": ["Runtime"] },
-    "name": { "description": "Same pattern as a component name.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
+    "name": { "description": "Same pattern as a component name.", "type": "string", "x-jd": { "define": ["part owner", "runtime"] }, "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
     "description": { "description": "What the runtime gives a team.", "type": "string", "minLength": 1 },
     "uses": {
       "description": "The shared resources its nodes may read as ${<name>.<export>} (checked by the resolver).",
       "type": "array",
+      "x-jd": { "ref": "shared resource" },
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 }
     },
     "implementations": {
       "description": "Environment type (declared in the Catalog file) or 'default' -> implementation. An environment uses its type's implementation, else 'default'.",
       "type": "object",
+      "x-jd": { "ref": "environment type", "fallback": "default" },
       "minProperties": 1,
       "additionalProperties": { "$ref": "#/definitions/implementation" }
     }

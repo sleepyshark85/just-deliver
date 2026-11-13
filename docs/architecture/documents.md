@@ -97,10 +97,10 @@ read the concept records instead of today's types: same algorithms, reads adjust
 ```jsonc
 { "x-jd": { "is": "owner" }, "properties": {
     "kind":    { "enum": ["Component"] },
-    "name":    { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$", "x-jd": { "define": ["part-owner", "component"] } },
+    "name":    { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$", "x-jd": { "define": ["part owner", "component"] } },
     "exports": { "type": "array", "items": { "type": "string" }, "x-jd": { "is": "contract" } },
-    "uses":    { "type": "array", "items": { "type": "string" }, "x-jd": { "is": "part.reads", "ref": "shared-resource" } },
-    "implementations": { "type": "object", "x-jd": { "select": "env.type", "fallback": "default", "ref": "environment-type" },
+    "uses":    { "type": "array", "items": { "type": "string" }, "x-jd": { "is": "part.reads", "ref": "shared resource" } },
+    "implementations": { "type": "object", "x-jd": { "select": "env.type", "fallback": "default", "ref": "environment type" },
       "additionalProperties": { "properties": {
         "environment": { "$ref": "part.schema.json", "x-jd": { "scope": "environment" } },
         "classes": { "type": "object", "x-jd": { "select": "requirement.class" },
@@ -121,7 +121,7 @@ read the concept records instead of today's types: same algorithms, reads adjust
 and lets it read `cosmos-account` because `part.reads` names it. `sharedresource.schema.json` binds `scope` as `is: part.scope` with
 `$ref: part.schema.json#/definitions/layer`; `catalog.schema.json` binds each environment type's `layer` the same way. The runtime schema
 binds its implementation's part as `is: runtime.part`, its `probe` and `release` fields as `probe.*` / `rollout.*`; `grants.yaml`'s
-`targets` is `define: grant-template` (its keys) with each value `is: grant.target-input`.
+`targets` is `define: grant template` (its keys) with each value `is: grant.target-input`.
 
 ### Annotated: one environment definition (`schemas/environment-definition.schema.json`, excerpt)
 
@@ -129,8 +129,8 @@ binds its implementation's part as `is: runtime.part`, its `probe` and `release`
 { "properties": {
     "name":     { "x-jd": { "is": "env.name", "define": "environment" } },
     "region":   { "x-jd": { "is": "env.region" } },
-    "type":     { "x-jd": { "is": "env.type", "ref": "environment-type" } },
-    "offers":   { "x-jd": { "is": "env.offers", "ref": "part-owner" } },
+    "type":     { "x-jd": { "is": "env.type", "ref": "environment type" } },
+    "offers":   { "x-jd": { "is": "env.offers", "ref": "part owner" } },
     "approval": { "$ref": "approval.schema.json", "x-jd": { "is": "env.approval" } } } }   // one copy; today also in environment.schema.json
 // approval.schema.json: qualifiedOn approval.qualified-on, required approval.required, approvers approval.approvers,
 // separateFromDeployer approval.separate. environment.schema.json (the descriptor) binds the same roles plus values as env.values.
@@ -510,5 +510,5 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 
 The `layer` role's value set is ordered: the `enum`'s listed order is the deploy order (`shared` before `environment`); the definition says so in a `$comment`.
 
-Namespaces (`define`/`ref`): `part-owner`, `component`, `shared-resource`, `runtime`, `policy`,
-`environment-type`, `naming-kind`, `role`, `grant-template`, `environment`.
+Namespaces (`define`/`ref`), spelled as the error messages read them ("'x' is not a <namespace> in the catalog"): `part owner`, `component`, `shared resource`, `runtime`, `policy`,
+`environment type`, `naming kind`, `role`, `grant template`, `environment`.
