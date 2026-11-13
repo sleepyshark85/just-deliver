@@ -220,15 +220,20 @@ internal sealed class SchemaIndex
         return selects;
     }
 
-    // Each role once per path, with what every subschema at that path says: the scope, the default, and the select maps whose entries the
-    // path is in, outermost first.
+    // Each role once per path, with what every subschema at that path says: the scope, the default, the select maps whose entries the path
+    // is in, outermost first, and the property it ends in.
     private static List<RoleField> RoleFields(List<Field> fields, List<SelectField> selects) =>
         fields.GroupBy(field => field.Path).SelectMany(at => at.Select(field => Keyword(field.Schema, IsKeyword)).OfType<string>().Distinct().Select(role => new RoleField(
             role,
             at.Key,
             at.Select(field => Keyword(field.Schema, ScopeKeyword)).OfType<string>().FirstOrDefault(),
             at.Select(field => field.Schema.Default).FirstOrDefault(value => value is not null) is { } value ? JToken.FromObject(value) : null,
-            [.. selects.Where(select => at.Key.StartsWith($"{select.Path}.*", StringComparison.Ordinal))]))).ToList();
+            [.. selects.Where(select => at.Key.StartsWith($"{select.Path}.*", StringComparison.Ordinal))],
+            PropertyName(at.Key)))).ToList();
+
+    // The property a path ends in: Walk writes each as ['<name>'].
+    private static string? PropertyName(string path) =>
+        path.EndsWith("']", StringComparison.Ordinal) ? path[(path.LastIndexOf("['", StringComparison.Ordinal) + 2)..^2] : null;
 
     // Every subschema of a kind with the path (JSONPath) of the values it describes: a property adds its name, a map's subschema stands for
     // each of its values and a list's for each item, and a reference or a branch describes the same values as its parent. A recursive schema

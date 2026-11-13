@@ -1,4 +1,3 @@
-using jd.resolver.environment;
 using jd.resolver.expressions;
 using Newtonsoft.Json.Linq;
 
@@ -83,7 +82,7 @@ internal static class ReadRules
         var root = segments[0];
         if (root == ExpressionEvaluator.EnvNamespace)
         {
-            return segments is [_, var field] && EnvironmentDescriptor.ReservedKeys.Contains(field) ? null : ExpressionEvaluator.EnvLimit(path);
+            return segments is [_, var field] && ExpressionEvaluator.EnvFields.Contains(field) ? null : ExpressionEvaluator.EnvLimit(path);
         }
 
         if (ExpressionEvaluator.ReservedRoots.Contains(root) || reader.Part.Nodes.ContainsKey(root))

@@ -78,7 +78,7 @@ public sealed class DocumentLoaderTests : IDisposable
     [Fact]
     public async Task A_descriptor_given_as_a_definition_is_refused()
     {
-        var result = await EnvironmentDefinitionFile.LoadAsync(await SourceFiles.ReadAsync(Write("dev.env.yaml", Descriptor)), CancellationToken.None);
+        var result = await EnvironmentParser.LoadDefinitionAsync(await SourceFiles.ReadAsync(Write("dev.env.yaml", Descriptor)), CancellationToken.None);
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
@@ -90,7 +90,7 @@ public sealed class DocumentLoaderTests : IDisposable
     {
         var workload = Write("workload.yaml", await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
 
-        var result = await EnvironmentDefinitionFile.LoadAsync(await SourceFiles.ReadAsync(workload), CancellationToken.None);
+        var result = await EnvironmentParser.LoadDefinitionAsync(await SourceFiles.ReadAsync(workload), CancellationToken.None);
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);

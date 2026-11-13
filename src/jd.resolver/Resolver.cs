@@ -20,11 +20,11 @@ public static class Resolver
     /// <summary>
     /// Resolves what an environment definition's offers reach in its type's layer through the same engine. The definition is the owner:
     /// its name, prefixed with <c>@</c> (so no workload can share ids, stacks or <c>name()</c> hashes), stands for the workload, its team is
-    /// empty, and it has no runtime, so workload-scope policies do not apply. <paramref name="baseDescriptor"/> holds the parts deployed before.
+    /// empty, and it has no runtime, so workload-scope policies do not apply. <paramref name="environment"/> is the definition resolved over
+    /// <paramref name="baseDescriptor"/> (<see cref="EnvironmentDescriptor.Over"/>), which holds the parts deployed before.
     /// </summary>
-    public static ResolvedGraph ResolveSubstrate(
-        EnvironmentDefinition definition, string definitionFile, Catalog catalog, EnvironmentDescriptor environment, EnvironmentDescriptor? baseDescriptor) =>
-        Build(new Expander(catalog, environment).ExpandEnvironment(definition, definitionFile, baseDescriptor), catalog, environment);
+    public static ResolvedGraph ResolveSubstrate(string definitionFile, Catalog catalog, EnvironmentDescriptor environment, EnvironmentDescriptor? baseDescriptor) =>
+        Build(new Expander(catalog, environment).ExpandEnvironment(definitionFile, baseDescriptor), catalog, environment);
 
     private static ResolvedGraph Build(ExpansionResult expansion, Catalog catalog, EnvironmentDescriptor environment) =>
         new GraphBuilder(environment, catalog.GrantTargets).Build(new PolicyApplier(catalog, environment).Apply(expansion));

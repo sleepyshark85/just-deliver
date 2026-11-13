@@ -1,77 +1,69 @@
+using jd.resolver.expressions;
 using Newtonsoft.Json.Linq;
 
 namespace jd.resolver.environment;
 
 /// <summary>
-/// Builds an <see cref="EnvironmentDescriptor"/> from a descriptor document or text. Every problem is collected, so a descriptor can be fixed in one pass.
+/// Loads an environment definition or descriptor into an <see cref="EnvironmentDescriptor"/> through the binder. A descriptor is a document whose
+/// kind binds <see cref="Roles.EnvironmentValues"/>; a definition, one whose kind binds the environment's name but no values. The catalog's rules
+/// are checked when the environment is resolved (<see cref="EnvironmentTypeCheck"/>). Every problem is collected, so a document can be fixed in one pass.
 /// </summary>
 public static class EnvironmentParser
 {
-    // Bridge: the kind read here until the environment is bound from its schema (S24c1).
-    internal const string Kind = "Environment";
+    /// <summary>Loads the definition <paramref name="definition"/> holds; its errors name the document as it is named. The value is set exactly when there are no errors.</summary>
+    public static async Task<LoadResult<EnvironmentDescriptor>> LoadDefinitionAsync(SourceDocument definition, CancellationToken cancellationToken)
+    {
+        var index = await SchemaIndex.Shipped;
+        var definitions = index.KindsBinding(Roles.EnvironmentName).Except(index.KindsBinding(Roles.EnvironmentValues)).ToList();
+        return Build(index, await DocumentLoader.LoadAsync(definition.Name, definition.Text(), definitions, cancellationToken));
+    }
 
     /// <summary>Loads the descriptor <paramref name="environment"/> holds; its errors name the document as it is named. The value is set exactly when there are no errors.</summary>
-    public static async Task<LoadResult<EnvironmentDescriptor>> LoadAsync(SourceDocument environment, CancellationToken cancellationToken) =>
-        Build(await DocumentLoader.LoadAsync(environment.Name, environment.Text(), [Kind], cancellationToken));
+    public static Task<LoadResult<EnvironmentDescriptor>> LoadAsync(SourceDocument environment, CancellationToken cancellationToken) =>
+        ParseAsync(environment.Name, environment.Text(), cancellationToken);
 
     /// <summary>Builds a descriptor from its text; <paramref name="source"/> names it in errors.</summary>
-    public static async Task<LoadResult<EnvironmentDescriptor>> ParseAsync(string source, string content, CancellationToken cancellationToken = default) =>
-        Build(await DocumentLoader.LoadAsync(source, content, [Kind], cancellationToken));
-
-    private static LoadResult<EnvironmentDescriptor> Build(LoadResult<Document> loaded)
+    public static async Task<LoadResult<EnvironmentDescriptor>> ParseAsync(string source, string content, CancellationToken cancellationToken = default)
     {
-        if (loaded.Value is not { Source: var source, Body: var body })
+        var index = await SchemaIndex.Shipped;
+        return Build(index, await DocumentLoader.LoadAsync(source, content, index.KindsBinding(Roles.EnvironmentValues), cancellationToken));
+    }
+
+    private static LoadResult<EnvironmentDescriptor> Build(SchemaIndex index, LoadResult<Document> loaded)
+    {
+        if (loaded.Value is not { } document)
         {
             return new LoadResult<EnvironmentDescriptor>(null, loaded.Errors);
         }
 
-        // The schema guarantees these exist and have these shapes.
-        var valuesNode = (JObject)body["values"]!;
-        var errors = new List<LoadError>();
-        foreach (var reserved in EnvironmentDescriptor.ReservedKeys.Where(valuesNode.ContainsKey))
-        {
-            errors.Add(new LoadError(source, $"values.{reserved}", $"'{reserved}' is reserved for the top-level field and cannot be a value."));
-        }
-
-        var values = new Dictionary<string, string>();
-        Flatten(valuesNode, string.Empty, values);
-        var name = (string)body["name"]!;
-        var approval = body["approval"] is { } block ? ApprovalPolicy.FromJson(block) : null;
-        errors.AddRange(approval is null ? [] : CheckApproval(approval, name, source));
-        return errors.Count > 0
-            ? new LoadResult<EnvironmentDescriptor>(null, errors)
-            : new LoadResult<EnvironmentDescriptor>(
-                new EnvironmentDescriptor(name, (string)body["region"]!, (string)body["type"]!, values, body["offers"]!.ToObject<List<string>>()!, approval), errors);
+        var binder = new Binder(index);
+        var environment = binder.ReadEnvironment(document);
+        List<LoadError> errors = [.. CheckReserved(binder.ReadValue(document, Roles.EnvironmentValues), document.Source), .. CheckApproval(environment, document.Source)];
+        return new LoadResult<EnvironmentDescriptor>(errors.Count == 0 ? environment : null, errors);
     }
 
-    // What the schema cannot say: the policy must refer to another environment and be satisfiable.
-    private static IEnumerable<LoadError> CheckApproval(ApprovalPolicy approval, string environment, string source)
+    // A top-level value may not take the name of a field env.* reads (ExpressionEvaluator.EnvFields); each is located at the value.
+    private static IEnumerable<LoadError> CheckReserved(JToken? values, string source) =>
+        from field in values is JObject mapping ? ExpressionEvaluator.EnvFields.Select(field => mapping.Property(field, StringComparison.Ordinal)) : []
+        where field is not null
+        select new LoadError(source, field.Value.Path, $"'{field.Name}' is reserved for the top-level field and cannot be a value.");
+
+    // What the schema cannot say: the policy must refer to another environment and be satisfiable (concept 11).
+    private static IEnumerable<LoadError> CheckApproval(EnvironmentDescriptor environment, string source)
     {
-        if (approval.QualifiedOn == environment)
+        if (environment.Approval is not { } approval)
         {
-            yield return new LoadError(source, "approval.qualifiedOn", $"'{environment}' cannot be qualified on itself; name the environment whose records must show the set qualified.");
+            yield break;
+        }
+
+        if (approval.QualifiedOn == environment.Name)
+        {
+            yield return new LoadError(source, environment.Locations[Roles.ApprovalQualifiedOn], $"'{environment.Name}' cannot be qualified on itself; name the environment whose records must show the set qualified.");
         }
 
         if (approval.Required > approval.Approvers.Count)
         {
-            yield return new LoadError(source, "approval.required", $"{approval.Required} approvers are required but only {approval.Approvers.Count} are listed; the policy could never be met.");
-        }
-    }
-
-    // Values are nested mappings of strings, so every leaf is a string; the schema refuses a key with a dot, so each dot path is one value.
-    private static void Flatten(JObject node, string prefix, Dictionary<string, string> into)
-    {
-        foreach (var property in node.Properties())
-        {
-            var path = prefix.Length == 0 ? property.Name : $"{prefix}.{property.Name}";
-            if (property.Value is JObject child)
-            {
-                Flatten(child, path, into);
-            }
-            else
-            {
-                into[path] = (string)property.Value!;
-            }
+            yield return new LoadError(source, environment.Locations[Roles.ApprovalRequired], $"{approval.Required} approvers are required but only {approval.Approvers.Count} are listed; the policy could never be met.");
         }
     }
 }

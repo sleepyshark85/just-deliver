@@ -3,22 +3,26 @@ using jd.resolver.catalog;
 namespace jd.resolver.environment;
 
 /// <summary>
-/// The catalog's rules for an environment definition's or descriptor's <c>type</c> (docs/architecture/components.md section 2): the type is
-/// declared, and a type with <c>approval: true</c> carries the approval block (security boundary 13). The block is what gates, not the type.
+/// The catalog's rules for an environment's type (docs/architecture/components.md section 2): the type is declared, and a gated type's
+/// environment carries the approval block (security boundary 13). The block is what gates, not the type. The type is another document set's
+/// name, so this stays code (docs/architecture/documents.md section 2, concept 11); the locations and the block's field come from the binding.
 /// </summary>
 public static class EnvironmentTypeCheck
 {
-    /// <summary>Every way <paramref name="type"/> and <paramref name="approval"/> break the catalog's rules, located in <paramref name="file"/>; empty when they keep them.</summary>
-    public static IReadOnlyList<LoadError> Check(Catalog catalog, string type, ApprovalPolicy? approval, string file)
+    /// <summary>Every way <paramref name="environment"/> breaks the catalog's rules, located in <paramref name="file"/>; empty when it keeps them.</summary>
+    public static IReadOnlyList<LoadError> Check(Catalog catalog, EnvironmentDescriptor environment, string file)
     {
+        var type = environment.Type;
         if (!catalog.EnvironmentTypes.TryGetValue(type, out var declared))
         {
             var known = string.Join(", ", catalog.EnvironmentTypes.Keys.Order(StringComparer.Ordinal));
-            return [new LoadError(file, "type", $"'{type}' is not an environment type of the catalog (declared: {known}).")];
+            return [new LoadError(file, environment.Locations[Roles.EnvironmentType], $"'{type}' is not an environment type of the catalog (declared: {known}).")];
         }
 
-        return declared.Approval && approval is null
-            ? [new LoadError(file, "approval", $"environment type '{type}' requires an 'approval' block; an environment of this type cannot be ungated.")]
+        // Absent, the block is located by the field that would hold it, which is also how the message names it.
+        var block = environment.Locations[Roles.EnvironmentApproval];
+        return declared.Approval && environment.Approval is null
+            ? [new LoadError(file, block, $"environment type '{type}' requires an '{block}' block; an environment of this type cannot be ungated.")]
             : [];
     }
 }

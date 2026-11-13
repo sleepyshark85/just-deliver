@@ -18,7 +18,7 @@ public static class EnvUp
     /// <param name="cancellationToken">Cancels the run.</param>
     public static async Task<EnvUpResult> RunAsync(EnvUpInput input, Connections connections, Action<Progress>? progress, CancellationToken cancellationToken)
     {
-        var definitionResult = await EnvironmentDefinitionFile.LoadAsync(input.Definition, cancellationToken);
+        var definitionResult = await EnvironmentParser.LoadDefinitionAsync(input.Definition, cancellationToken);
         var catalogResult = await CatalogLoader.LoadAsync(input.Catalog, cancellationToken);
         var baseResult = input.Base is null ? null : await EnvironmentParser.LoadAsync(input.Base, cancellationToken);
         if (definitionResult.Value is not { } definition || catalogResult.Value is not { } catalog || baseResult is { Value: null })
@@ -40,14 +40,14 @@ public static class EnvUp
             return Failed(typeErrors);
         }
 
-        var graph = Resolver.ResolveSubstrate(definition, input.Definition.Name, catalog, environment, baseDescriptor);
+        var graph = Resolver.ResolveSubstrate(input.Definition.Name, catalog, environment, baseDescriptor);
         if (graph.Errors.Count > 0)
         {
             return Failed(graph.Errors);
         }
 
         // The descriptor with its values still pending: what it can tell before the walk.
-        var composer = new DescriptorComposer(definition, input.Definition.Name, catalog, environment, graph);
+        var composer = new DescriptorComposer(input.Definition.Name, catalog, environment, graph);
         var dryRun = await composer.ComposeAsync(null, cancellationToken);
         if (dryRun.Errors.Count > 0)
         {

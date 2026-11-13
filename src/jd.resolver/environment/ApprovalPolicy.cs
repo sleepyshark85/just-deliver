@@ -5,8 +5,8 @@ using Newtonsoft.Json.Serialization;
 namespace jd.resolver.environment;
 
 /// <summary>
-/// Who may approve a release set for a gated environment and how many must (docs/architecture/approvals.md section 3). Literal data:
-/// the <c>approval</c> block of an environment definition and descriptor (schemas/environment.schema.json). The two rules are pure;
+/// Who may approve a release set for a gated environment and how many must (docs/architecture/approvals.md section 3), bound from the
+/// <c>approval.*</c> roles of an environment's approval block (schemas/approval.schema.json). The two rules are pure;
 /// they take the principals' object ids, which whoever reads the records supplies. Ids compare without regard to case.
 /// </summary>
 /// <param name="QualifiedOn">The environment whose records must show the set qualified.</param>
@@ -17,10 +17,7 @@ public sealed record ApprovalPolicy(string QualifiedOn, int Required, IReadOnlyL
 {
     private static readonly JsonSerializer CamelCase = JsonSerializer.Create(new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver() });
 
-    /// <summary>The policy of a block that passed the schema.</summary>
-    internal static ApprovalPolicy FromJson(JToken block) => block.ToObject<ApprovalPolicy>(CamelCase)!;
-
-    /// <summary>The block as the schema writes it.</summary>
+    /// <summary>The block as the schema writes it. Bridge: the descriptor writer's until the binder writes the descriptor (S24f).</summary>
     internal JObject ToJson() => JObject.FromObject(this, CamelCase);
 
     /// <summary>Whether <paramref name="approver"/>'s approval may count: listed in <see cref="Approvers"/>, and not among <paramref name="deployers"/> when they must be separate.</summary>

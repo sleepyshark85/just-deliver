@@ -130,30 +130,4 @@ public class EnvironmentParserTests
         var result = await Parse("kind: [unclosed");
         Assert.Contains("not valid YAML", Assert.Single(result.Errors).Message);
     }
-
-    [Fact]
-    public async Task Lookup_resolves_reserved_keys_from_top_level_fields()
-    {
-        var env = await Load(Valid);
-        Assert.True(env.TryGet("name", out var name));
-        Assert.Equal("test-env", name);
-        Assert.True(env.TryGet("region", out var region));
-        Assert.Equal("testregion", region);
-        Assert.True(env.TryGet("type", out var type));
-        Assert.Equal("dev", type);
-    }
-
-    // env.* reads only the top-level fields; a part's exports are read as ${<part>.<export>} (security boundary 4).
-    [Theory]
-    [InlineData("resourceGroup")]
-    [InlineData("cosmos.accountId")]
-    [InlineData("unknown")]
-    [InlineData("cosmos.unknown")]
-    [InlineData("cosmos")]
-    [InlineData("values.resourceGroup")]
-    public async Task Lookup_of_an_unknown_path_is_not_found(string path)
-    {
-        var env = await Load(Valid);
-        Assert.False(env.TryGet(path, out _));
-    }
 }

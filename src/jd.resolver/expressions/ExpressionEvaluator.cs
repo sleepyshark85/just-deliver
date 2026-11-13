@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using jd.resolver.environment;
 
 namespace jd.resolver.expressions;
 
@@ -24,6 +23,14 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     private const string WorkloadTeamField = "team";
     private const string WorkloadImageField = "image";
     private const string WorkloadPortField = "port";
+
+    // The environment's fields env.* reads, and no other (security boundary 4): roots of the grammar, bound from the env.* roles.
+    private const string EnvNameField = "name";
+    private const string EnvRegionField = "region";
+    private const string EnvTypeField = "type";
+
+    /// <summary>The fields <c>env.*</c> reads, in the order the env.* limit lists them.</summary>
+    internal static readonly IReadOnlyList<string> EnvFields = [EnvNameField, EnvRegionField, EnvTypeField];
 
     private static readonly Dictionary<string, (int Min, int Max)> Arity = new()
     {
@@ -70,7 +77,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
 
     /// <summary>The env.* limit as the loader and the evaluator report it.</summary>
     internal static string EnvLimit(string path) =>
-        $"'{path}' is not an environment field; env.* reads only {string.Join(", ", EnvironmentDescriptor.ReservedKeys.Select(k => $"{EnvNamespace}.{k}"))}; read a deployed part's export as ${{<name>.<export>}} through uses.";
+        $"'{path}' is not an environment field; env.* reads only {string.Join(", ", EnvFields.Select(k => $"{EnvNamespace}.{k}"))}; read a deployed part's export as ${{<name>.<export>}} through uses.";
 
     /// <summary>The grant target rule, as the loader and the graph builder report it.</summary>
     internal static string GrantTargetRule(string input) =>
@@ -273,7 +280,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
             case EnvNamespace:
                 // Only the environment's own fields: a part's exports are read through uses as ${<name>.<export>}, so env.* cannot skip
                 // the uses and grant target checks (security boundary 4).
-                if (segments.Length == 2 && context.Environment.TryGet(segments[1], out var envValue))
+                if (segments.Length == 2 && EnvField(segments[1]) is { } envValue)
                 {
                     return Known(envValue);
                 }
@@ -338,6 +345,15 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
                 return Await(new Reference(ReferenceKind.Node, segments[0], segments[1]));
         }
     }
+
+    // The environment's field env.<field> reads; null for any other.
+    private string? EnvField(string field) => field switch
+    {
+        EnvNameField => context.Environment.Name,
+        EnvRegionField => context.Environment.Region,
+        EnvTypeField => context.Environment.Type,
+        _ => null,
+    };
 
     // A part of this run is read by evaluating its export in place, so the read becomes the node references it is made of
     // (docs/architecture/components.md section 2); the catalog loader keeps uses acyclic, so this ends. Any other part was deployed

@@ -1,4 +1,5 @@
 using jd.resolver.catalog;
+using jd.resolver.environment;
 using Newtonsoft.Json.Linq;
 
 namespace jd.resolver;
@@ -56,7 +57,44 @@ internal sealed class Binder(SchemaIndex index)
     public IReadOnlyDictionary<string, string> ReadGrantTargets(Document document) =>
         ValuesOf(document).Every(Roles.GrantTargetInput).ToDictionary(KeyOf, Text);
 
+    /// <summary>
+    /// The environment <paramref name="document"/> is, a definition or a descriptor, by the <c>env.*</c> roles: its values as dot paths, its
+    /// approval policy when it holds the block (the <c>approval.*</c> roles), and where each role of its kind was read.
+    /// </summary>
+    public EnvironmentDescriptor ReadEnvironment(Document document)
+    {
+        var values = ValuesOf(document);
+        JToken? Read(string role) => values.Nearest(role, document.Body);
+        return new EnvironmentDescriptor(
+            Text(Read(Roles.EnvironmentName)),
+            Text(Read(Roles.EnvironmentRegion)),
+            Text(Read(Roles.EnvironmentType)),
+            new Dictionary<string, string>(Flatten(Read(Roles.EnvironmentValues), string.Empty)),
+            Strings(Read(Roles.EnvironmentOffers)),
+            Read(Roles.EnvironmentApproval) is JObject block ? ReadApproval(values, block) : null)
+        {
+            Locations = index.RolesOf(document.Kind).DistinctBy(field => field.Role)
+                .ToDictionary(field => field.Role, field => values.Every(field.Role).FirstOrDefault()?.Path ?? field.Name ?? string.Empty),
+        };
+    }
+
+    /// <summary>The value of <paramref name="role"/> held at the root of <paramref name="document"/>, for a rule on its raw shape; null when it holds none.</summary>
+    public JToken? ReadValue(Document document, string role) => ValuesOf(document).Nearest(role, document.Body);
+
     private Values ValuesOf(Document document) => new(document.Body, index.RolesOf(document.Kind));
+
+    // The schema requires every field of the block, so no fallback applies.
+    private static ApprovalPolicy ReadApproval(Values values, JObject block) => new(
+        Text(values.Nearest(Roles.ApprovalQualifiedOn, block)),
+        (int?)values.Nearest(Roles.ApprovalRequired, block) ?? 0,
+        Strings(values.Nearest(Roles.ApprovalApprovers, block)),
+        (bool?)values.Nearest(Roles.ApprovalSeparate, block) ?? false);
+
+    // Nested mappings of strings as one value per dot path; the schema refuses a key with a dot, so each dot path is one value (concept 3).
+    private static IEnumerable<KeyValuePair<string, string>> Flatten(JToken? mapping, string prefix) =>
+        Entries(mapping).SelectMany(entry => entry.Value is JObject
+            ? Flatten(entry.Value, $"{prefix}{entry.Name}.")
+            : [KeyValuePair.Create(prefix + entry.Name, Text(entry.Value))]);
 
     private static Part ReadPart(Values values, RoleField field, JToken part)
     {

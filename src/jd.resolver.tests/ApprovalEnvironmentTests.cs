@@ -19,8 +19,8 @@ public class ApprovalEnvironmentTests
     private static string Definition(string type = "stage", string? approval = Block) =>
         $"kind: EnvironmentDefinition\nname: stage\nregion: region-1\ntype: {type}\noffers: [database]\n{approval}";
 
-    private static Task<LoadResult<EnvironmentDefinition>> LoadDefinitionAsync(string text) =>
-        EnvironmentDefinitionFile.LoadAsync(new SourceDocument("definition.yaml", Encoding.UTF8.GetBytes(text)), CancellationToken.None);
+    private static Task<LoadResult<EnvironmentDescriptor>> LoadDefinitionAsync(string text) =>
+        EnvironmentParser.LoadDefinitionAsync(new SourceDocument("definition.yaml", Encoding.UTF8.GetBytes(text)), CancellationToken.None);
 
     private static async Task<Catalog> SeedCatalogAsync() => (await SeedCatalog.LoadAsync()).Value!;
 
@@ -71,7 +71,7 @@ public class ApprovalEnvironmentTests
     {
         var descriptor = (await EnvironmentParser.ParseAsync("env.yaml", Descriptor(type, withApproval ? Block : string.Empty))).Value!;
 
-        Assert.Empty(EnvironmentTypeCheck.Check(await SeedCatalogAsync(), descriptor.Type, descriptor.Approval, "env.yaml"));
+        Assert.Empty(EnvironmentTypeCheck.Check(await SeedCatalogAsync(), descriptor, "env.yaml"));
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class ApprovalEnvironmentTests
         var descriptor = (await EnvironmentParser.ParseAsync("env.yaml", Descriptor(approval: string.Empty))).Value!;
         var definition = (await LoadDefinitionAsync(Definition(approval: string.Empty))).Value!;
 
-        foreach (var error in new[] { Assert.Single(EnvironmentTypeCheck.Check(catalog, descriptor.Type, descriptor.Approval, "env.yaml")), Assert.Single(EnvironmentTypeCheck.Check(catalog, definition.Type, definition.Approval, "env.yaml")) })
+        foreach (var error in new[] { Assert.Single(EnvironmentTypeCheck.Check(catalog, descriptor, "env.yaml")), Assert.Single(EnvironmentTypeCheck.Check(catalog, definition, "env.yaml")) })
         {
             Assert.Equal(("env.yaml", "approval"), (error.File, error.Location));
             Assert.Contains("environment type 'stage' requires an 'approval' block", error.Message);
@@ -91,7 +91,9 @@ public class ApprovalEnvironmentTests
     [Fact]
     public async Task An_undeclared_type_is_an_error_naming_the_type_and_the_declared_ones_even_with_a_policy()
     {
-        var error = Assert.Single(EnvironmentTypeCheck.Check(await SeedCatalogAsync(), "protected", new ApprovalPolicy("dev", 1, [Approver], true), "env.yaml"));
+        var descriptor = (await EnvironmentParser.ParseAsync("env.yaml", Descriptor(type: "protected"))).Value!;
+
+        var error = Assert.Single(EnvironmentTypeCheck.Check(await SeedCatalogAsync(), descriptor, "env.yaml"));
 
         Assert.Equal(("env.yaml", "type"), (error.File, error.Location));
         Assert.Equal("'protected' is not an environment type of the catalog (declared: dev, prod, shared, stage).", error.Message);
