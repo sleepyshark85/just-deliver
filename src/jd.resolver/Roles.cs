@@ -42,6 +42,33 @@ internal static class Roles
     /// <summary>The layers, as an <c>enum</c> whose listed order is the deploy order.</summary>
     public const string Layer = "layer";
 
+    /// <summary>The catalog's version, recorded with every deployment.</summary>
+    public const string CatalogVersion = "catalog.version";
+
+    /// <summary>A declared environment type's layer; the object holding it is the type, named by the key it is held under.</summary>
+    public const string EnvironmentTypeLayer = "environment-type.layer";
+
+    /// <summary>Whether an environment of a declared type must carry an approval block.</summary>
+    public const string EnvironmentTypeGated = "environment-type.gated";
+
+    /// <summary>The naming rules, by the resource kind <c>name()</c> is given.</summary>
+    public const string NamingRules = "naming.rules";
+
+    /// <summary>A naming rule's pattern, with the placeholders <c>name()</c> fills.</summary>
+    public const string NamingPattern = "naming.pattern";
+
+    /// <summary>A naming rule's longest legal name.</summary>
+    public const string NamingMaxLength = "naming.max-length";
+
+    /// <summary>A naming rule's legal characters, as a regex character class.</summary>
+    public const string NamingAllowed = "naming.allowed";
+
+    /// <summary>The role definitions, by the name <c>${role.&lt;name&gt;}</c> reads.</summary>
+    public const string RoleDefinitions = "roles";
+
+    /// <summary>The input naming a grant template's target, by the template it is held under.</summary>
+    public const string GrantTargetInput = "grant.target-input";
+
     /// <summary>The environment's type, which selects an implementation.</summary>
     public const string EnvironmentType = "env.type";
 

@@ -12,7 +12,8 @@
     "version": {
       "description": "Catalog version, recorded next to the definition SHA of every deployment.",
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "x-jd": { "is": "catalog.version" }
     },
     "environmentTypes": {
       "description": "The environment types, declared once: an environment definition or descriptor of any other type is an error. Names use the requirement-type pattern; `default` is not a type (docs/architecture/components.md section 2).",
@@ -26,8 +27,8 @@
           "additionalProperties": false,
           "required": ["layer"],
           "properties": {
-            "layer": { "description": "Which `jd env up` layer an environment of this type is: `shared` deploys the `scope: shared` resources, `environment` the `scope: environment` resources and the offered components' environment parts. Implementations are keyed by `environment` types only.", "$ref": "part.schema.json#/definitions/layer" },
-            "approval": { "description": "true: an environment of this type must carry an `approval` block, so it cannot be written ungated. Any type may carry one; the block is what gates.", "type": "boolean" }
+            "layer": { "description": "Which `jd env up` layer an environment of this type is: `shared` deploys the `scope: shared` resources, `environment` the `scope: environment` resources and the offered components' environment parts. Implementations are keyed by `environment` types only.", "$ref": "part.schema.json#/definitions/layer", "x-jd": { "is": "environment-type.layer" } },
+            "approval": { "description": "true: an environment of this type must carry an `approval` block, so it cannot be written ungated. Any type may carry one; the block is what gates.", "type": "boolean", "x-jd": { "is": "environment-type.gated" } }
           }
         }
       }

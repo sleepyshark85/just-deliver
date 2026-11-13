@@ -565,6 +565,33 @@ public class CatalogParserTests
         Assert.Contains(message, error.Message);
     }
 
+    // The location is the document path of the value, so a kind whose key holds a JSONPath special character is bracket-quoted.
+    [Fact]
+    public async Task Naming_allowed_of_a_kind_with_a_special_character_is_located_with_a_bracketed_key()
+    {
+        const string naming = "kind: Naming\nrules:\n  a/b:\n    pattern: \"{id}\"\n    maxLength: 20\n    allowed: \"[a-z]\"\n";
+        var result = await Parse(("catalog.yaml", CatalogFile), ("naming.yaml", naming));
+
+        Assert.Equal(
+            [new LoadError("naming.yaml", "rules['a/b'].allowed", "'[a-z]' must allow every hash digit 0-9a-f; it rejects 0123456789.")],
+            result.Errors);
+    }
+
+    // The define rule keeps the first file's rule; the second's allowed characters are still checked, in its own file.
+    [Fact]
+    public async Task Naming_allowed_is_checked_in_a_second_file_that_rules_the_same_kind()
+    {
+        const string naming = "kind: Naming\nrules:\n  thing:\n    pattern: \"{id}\"\n    maxLength: 20\n    allowed: \"{0}\"\n";
+        var result = await Parse(("catalog.yaml", CatalogFile), ("n1.yaml", naming.Replace("{0}", "[a-z0-9]", StringComparison.Ordinal)), ("n2.yaml", naming.Replace("{0}", "[a-z]", StringComparison.Ordinal)));
+
+        Assert.Equal(
+            [
+                new LoadError("n2.yaml", "rules.thing", "'thing' is already declared in n1.yaml."),
+                new LoadError("n2.yaml", "rules.thing.allowed", "'[a-z]' must allow every hash digit 0-9a-f; it rejects 0123456789."),
+            ],
+            result.Errors);
+    }
+
     [Fact]
     public async Task Schema_invalid_catalog_file_still_counts_as_the_catalog()
     {

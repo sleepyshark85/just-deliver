@@ -11,7 +11,7 @@
     "rules": {
       "description": "Resource kind (the argument of name()) -> rule.",
       "type": "object",
-      "x-jd": { "define": "naming kind" },
+      "x-jd": { "define": "naming kind", "is": "naming.rules" },
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",
@@ -21,13 +21,15 @@
           "pattern": {
             "description": "Name template. Placeholders: {workload} workload name, {id} requirement id, {env} environment name, {hash} short deterministic hash used to keep the name within maxLength and unique.",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-jd": { "is": "naming.pattern" }
           },
-          "maxLength": { "description": "Longest legal name.", "type": "integer", "minimum": 1 },
+          "maxLength": { "description": "Longest legal name.", "type": "integer", "minimum": 1, "x-jd": { "is": "naming.max-length" } },
           "allowed": {
             "description": "Regex character class of legal characters, for example [a-z0-9-]. Must accept every hex digit 0-9a-f, because the hash is appended after filtering.",
             "type": "string",
-            "pattern": "^\\[.+\\]$"
+            "pattern": "^\\[.+\\]$",
+            "x-jd": { "is": "naming.allowed" }
           }
         }
       }
