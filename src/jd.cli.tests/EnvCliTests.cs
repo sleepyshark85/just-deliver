@@ -378,7 +378,7 @@ public sealed class EnvCliTests : IDisposable
 
         Assert.Equal(2, code);
         Assert.Contains($"jd: The file '{path}' already exists.", stderr, StringComparison.Ordinal);
-        Assert.Equal("someone else's file", File.ReadAllText(path));
+        Assert.Equal("someone else's file", await File.ReadAllTextAsync(path));
     }
 
     private static bool CanRead(string path)
