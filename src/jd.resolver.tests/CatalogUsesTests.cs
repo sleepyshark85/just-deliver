@@ -88,6 +88,19 @@ public class CatalogUsesTests
         Assert.Equal(("c.yaml", "name"), (component.File, component.Location));
     }
 
+    // A component named resource or role could never be read: ${resource.<id>.<export>} and ${role.<name>} always mean the roots.
+    [Theory]
+    [InlineData("resource")]
+    [InlineData("role")]
+    public async Task A_component_named_like_a_root_is_refused(string name)
+    {
+        var error = SingleError(await Parse(("c.yaml", Component(name: name))));
+
+        Assert.Equal(
+            ("c.yaml", "name", $"'{name}' is a reserved root of expressions (env, resource, role, runtime, workload); choose another name."),
+            (error.File, error.Location, error.Message));
+    }
+
     [Theory]
     [InlineData("c.yaml")]
     [InlineData("r.yaml")]
@@ -185,11 +198,13 @@ public class CatalogUsesTests
 
     // Boundary 4: env.* reads only the environment's own fields, so it cannot read a part past uses; every part kind is checked.
     [Theory]
-    [InlineData("s.yaml", "nodes.n-cosmos-account.config.group", "{ group: '${env.shared-group.name}' }", null, null)]
-    [InlineData("c.yaml", TestCatalog.PartPath + ".nodes.node.config.account", null, "{ account: \"${guid(env.cosmos-account.id)}\" }", null)]
-    [InlineData("c.yaml", TestCatalog.PartPath + ".nodes.node.config.account", null, "{ account: '${env.region.name}' }", null)]
-    [InlineData("r.yaml", "implementations.default.nodes.runtime.config.group", null, null, "{ group: '${env.apps-env.id}' }")]
-    public async Task Env_other_than_name_region_and_type_is_a_load_error(string file, string location, string? shared, string? component, string? runtime)
+    [InlineData("s.yaml", "nodes.n-cosmos-account.config.group", "{ group: '${env.shared-group.name}' }", null, null, "env.shared-group.name")]
+    [InlineData("c.yaml", TestCatalog.PartPath + ".nodes.node.config.account", null, "{ account: \"${guid(env.cosmos-account.id)}\" }", null, "env.cosmos-account.id")]
+    [InlineData("c.yaml", TestCatalog.PartPath + ".nodes.node.config.account", null, "{ account: '${env.region.name}' }", null, "env.region.name")]
+    [InlineData("r.yaml", "implementations.default.nodes.runtime.config.group", null, null, "{ group: '${env.apps-env.id}' }", "env.apps-env.id")]
+    [InlineData("s.yaml", "nodes.n-cosmos-account.config.x", "{ x: '${env.offers}' }", null, null, "env.offers")]
+    [InlineData("s.yaml", "nodes.n-cosmos-account.config.x", "{ x: '${env.values}' }", null, null, "env.values")]
+    public async Task Env_other_than_name_region_and_type_is_a_load_error(string file, string location, string? shared, string? component, string? runtime, string path)
     {
         var error = SingleError(await Parse(
             ("s.yaml", Shared("cosmos-account", config: shared ?? "{ v: '${env.name}-${env.region}-${env.type}' }")),
@@ -197,7 +212,8 @@ public class CatalogUsesTests
             ("r.yaml", Runtime("[]", runtime ?? "{}"))));
 
         Assert.Equal((file, location), (error.File, error.Location));
-        Assert.Contains("env.* reads only env.name, env.region, env.type; read a deployed part's export as ${<name>.<export>} through uses.", error.Message);
+        Assert.Equal(
+            $"'{path}' is not an environment field; env.* reads only env.name, env.region, env.type; read a deployed part's export as ${{<name>.<export>}} through uses.", error.Message);
     }
 
     // Every part kind is checked: a shared resource, an environment part, a class part (config and exports, inside a function call) and the runtime.
@@ -229,6 +245,63 @@ public class CatalogUsesTests
         Assert.Equal("'beta-db.databaseName' reads another component or runtime; a part reads only its own nodes, what it uses and, in a class, its own component.", error.Message);
     }
 
+    // A name declared as both a shared resource and a component is a duplicate-name error; a part that reads it without uses is told it reads a component.
+    [Fact]
+    public async Task A_name_declared_as_shared_resource_and_component_is_a_duplicate_and_a_component_read()
+    {
+        var result = await Parse(
+            ("a.yaml", Shared("beta-db")),
+            ("b.yaml", Component(name: "beta-db")),
+            ("c.yaml", Component(config: "{ database: '${beta-db.id}' }")));
+
+        Assert.Null(result.Value);
+        Assert.Equal(
+            [
+                ("b.yaml", "name", "'beta-db' is already declared in a.yaml."),
+                ("c.yaml", $"{TestCatalog.PartPath}.nodes.node.config.database",
+                    "'beta-db.id' reads another component or runtime; a part reads only its own nodes, what it uses and, in a class, its own component."),
+            ],
+            result.Errors.Select(e => (e.File, e.Location, e.Message)).Order().ToList());
+    }
+
+    [Fact]
+    public async Task A_class_part_cannot_read_a_runtime()
+    {
+        var error = SingleError(await Parse(("r.yaml", Runtime("[]", "{}")), ("c.yaml", Component(config: "{ app: '${container-app.fqdn}' }"))));
+
+        Assert.Equal(("c.yaml", $"{TestCatalog.PartPath}.nodes.node.config.app"), (error.File, error.Location));
+        Assert.Equal("'container-app.fqdn' reads another component or runtime; a part reads only its own nodes, what it uses and, in a class, its own component.", error.Message);
+    }
+
+    // Only a component has parts that read it: a runtime's own name is no root of its part.
+    [Fact]
+    public async Task A_runtime_cannot_read_itself()
+    {
+        var error = SingleError(await Parse(("r.yaml", Runtime("[]", "{ app: '${container-app.fqdn}' }"))));
+
+        Assert.Equal(("r.yaml", "implementations.default.nodes.runtime.config.app"), (error.File, error.Location));
+        Assert.Equal("'container-app.fqdn' reads another component or runtime; a part reads only its own nodes, what it uses and, in a class, its own component.", error.Message);
+    }
+
+    // The read rules see only parts whose file passed its schema: a name declared by a failed file reads as an unknown root, beside that file's
+    // own error.
+    [Theory]
+    [InlineData("components/b.yaml", "beta-db")]
+    [InlineData("shared/g.yaml", "shared-group")]
+    public async Task A_read_of_a_name_whose_file_failed_its_schema_is_an_unknown_root(string file, string name)
+    {
+        var failed = (file.StartsWith("shared/", StringComparison.Ordinal) ? Shared(name) : Component(name: name)).Replace("description: d\n", string.Empty, StringComparison.Ordinal);
+        var result = await Parse((file, failed), ("c.yaml", Component(config: $"{{ other: '${{{name}.id}}' }}")));
+
+        Assert.Null(result.Value);
+        Assert.Equal(2, result.Errors.Count);
+        Assert.Equal(file, result.Errors[0].File);
+        Assert.Equal(
+            ("c.yaml", $"{TestCatalog.PartPath}.nodes.node.config.other",
+                $"'{name}.id' reads unknown root '{name}'; expected a node of this part (node), a name in uses, 'alpha-db', or one of env, resource, role, runtime, workload."),
+            (result.Errors[1].File, result.Errors[1].Location, result.Errors[1].Message));
+    }
+
     [Fact]
     public async Task An_environment_part_cannot_read_its_own_component()
     {
@@ -242,6 +315,7 @@ public class CatalogUsesTests
     [Theory]
     [InlineData("{ group: '${shared-group.nmae}' }", null, "'shared-group.nmae': 'shared-group' exports name, location.")]
     [InlineData("{ group: '${shared-group.name.first}' }", null, "'shared-group.name.first': 'shared-group' exports name, location.")]
+    [InlineData("{ group: '${shared-group.first.name}' }", null, "'shared-group.first.name': 'shared-group' exports name, location.")]
     [InlineData("{ database: '${alpha-db.databaseId}' }", "{ nodes: { db: { template: t/db, config: {} } }, exports: { databaseName: x } }", "'alpha-db.databaseId': 'alpha-db' exports databaseName.")]
     [InlineData("{ database: '${alpha-db.databaseName}' }", null, "'alpha-db.databaseName': component 'alpha-db' has no environment part in this implementation.")]
     public async Task A_read_export_must_be_declared(string config, string? environment, string message)

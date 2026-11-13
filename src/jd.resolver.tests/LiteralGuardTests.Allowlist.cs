@@ -6,7 +6,7 @@ namespace jd.resolver.tests;
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
-        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b2, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
+        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
 
     private static IEnumerable<(string File, string Literal)> Entries(Dictionary<string, string[]> group) =>
         group.SelectMany(entry => entry.Value.Select(literal => (entry.Key, literal)));
@@ -61,11 +61,6 @@ public sealed partial class LiteralGuardTests
     private static readonly Dictionary<string, string[]> ProseFalsePositives = new()
     {
         ["jd.azure/ArmCredentials.cs"] = ["is"], // "X is not set"; 'is' is also an x-jd keyword
-    };
-
-    private static readonly Dictionary<string, string[]> S24b2 = new()
-    {
-        ["jd.resolver/catalog/CatalogParser.cs"] = ["uses"],
     };
 
     private static readonly Dictionary<string, string[]> S24b3 = new()

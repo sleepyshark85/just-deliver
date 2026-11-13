@@ -74,6 +74,7 @@ public sealed class BinderTests
         Assert.Equal("workload", any.Scope);
         Assert.Equal([new SelectKey("env.type", "any", "any", "variants", "variants")], any.Keys);
         Assert.Equal(["base"], any.Reads);
+        Assert.Equal("needs", any.ReadsLocation);
         var a = Assert.Single(any.Nodes, node => node.Key == "a").Value;
         Assert.Equal(("t/a", NodeKind.Create, "variants.any.bits.a", "variants.any.bits.a.settings"), (a.Template, a.Kind, a.Location, a.ConfigLocation));
         Assert.Equal(1, (int)Assert.Single(a.Config, entry => entry.Key == "k").Value);
@@ -83,11 +84,24 @@ public sealed class BinderTests
         var dev = owner.Parts[1];
         Assert.Equal([new SelectKey("env.type", "dev", "any", "variants", "variants")], dev.Keys);
         Assert.Equal(["own"], dev.Reads);
+        Assert.Equal("variants.dev.needs", dev.ReadsLocation);
         var b = Assert.Single(dev.Nodes, node => node.Key == "b").Value;
         Assert.Equal(("t/b", NodeKind.Grant, "variants.dev.bits.b"), (b.Template, b.Kind, b.ConfigLocation));
         Assert.Empty(b.Config);
         Assert.Empty(dev.Exports);
         Assert.Equal("variants.dev", dev.ExportsLocation);
+    }
+
+    // A part reading nothing is located at itself, as one without exports is.
+    [Fact]
+    public async Task A_part_that_reads_nothing_has_its_reads_located_at_the_part()
+    {
+        var document = new Document("g.yaml", "Gizmo", JObject.Parse("""{ "kind": "Gizmo", "variants": { "any": { "bits": { "a": { "tpl": "t/a" } } } } }"""));
+
+        var part = Assert.Single((await BinderAsync()).ReadOwner(document, "g").Parts);
+
+        Assert.Empty(part.Reads);
+        Assert.Equal("variants.any", part.ReadsLocation);
     }
 
     // A type is each object holding a layer, named by its key; one holding no gate is not gated. A rule holding no maximum or allowed characters
