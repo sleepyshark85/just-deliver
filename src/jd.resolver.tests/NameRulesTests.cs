@@ -101,6 +101,18 @@ public sealed class NameRulesTests
             errors);
     }
 
+    // The declared names are listed in order, not in the order the files define them.
+    [Fact]
+    public async Task The_declared_names_of_a_reference_error_are_listed_sorted_whatever_order_they_are_defined_in()
+    {
+        var errors = await CheckAsync(
+            Of("single.yaml", """{ "kind": "Single" }"""),
+            Of("a.yaml", """{ "kind": "Thing", "name": "b" }"""),
+            Of("b.yaml", """{ "kind": "Thing", "name": "a", "uses": ["x"] }"""));
+
+        Assert.Equal([new LoadError("b.yaml", "uses", "'x' is not a widget in the shelf (declared: a, b).")], errors);
+    }
+
     [Fact]
     public async Task A_one_kind_with_no_document_is_an_error_about_the_set_and_each_extra_document_one_naming_the_first()
     {

@@ -395,10 +395,10 @@ Class: **(a)** moves to data; **(b)** an external protocol, an adapter constant 
 | `catalog/CatalogParser.cs:16-25` | the eight kind names | a | S24a1: from the schemas |
 | `catalog/CatalogParser.cs:28-35` | retired kinds; removed field `add` | a | S24a2: deleted (choice 3) |
 | `catalog/CatalogParser.cs:39` | node-name pattern | a | S24a2: schema |
-| `catalog/CatalogParser.cs:82,84,85,108,124` | `rules`, `roles`, `targets`, `environmentTypes`, `approval`, `layer`, `version` | a | S24a3, S24b1 |
+| `catalog/CatalogParser.cs:82,84,85,108,124` | `rules`, `roles`, `targets`, `environmentTypes`, `approval`, `layer`, `version` | a | S24b1 (the `S24b1` group of the guard allowlist; S24a3 moved the name checks, not these reads) |
 | `catalog/CatalogParser.cs:157,159` | the `kind` key | c | bootstrap |
 | `catalog/CatalogParser.cs:182` | schema file from the kind | a | S24a1 |
-| `catalog/CatalogParser.cs:204` | `name` of named kinds | a | S24a3: `define` |
+| `catalog/CatalogParser.cs:204` | `name` of named kinds | a | S24d (the `S24d` group of the guard allowlist; S24a3 moved the name checks to `define`, the field is still read) |
 | `catalog/CatalogParser.cs:248-251` | the runtime node, the rollout inputs it must not set | c / a | S24b3 (rule c), fields S24e |
 | `catalog/CatalogParser.cs:550` | hex digits a naming rule must allow | c | concept 4 |
 | `catalog/CatalogParser.cs:600-651` | `To*`: every field of every catalog kind | a | S24b1, S24d, S24e |
