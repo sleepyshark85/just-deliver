@@ -32,6 +32,9 @@ public sealed class EnvCliTests : IDisposable
 
         public List<string> Calls { get; } = [];
 
+        /// <summary>How many times the run's backend factory built this backend.</summary>
+        public int Built { get; set; }
+
         /// <summary>The output name that comes back as a secret from every deploy.</summary>
         public string? SecretOutput { get; set; }
 
@@ -51,7 +54,14 @@ public sealed class EnvCliTests : IDisposable
     {
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var code = await Cli.RunAsync(["env", .. args], stdout, stderr, CancellationToken.None, Composition.Connect(name => variables?.GetValueOrDefault(name)) with { Backend = () => backend });
+        var code = await Cli.RunAsync(["env", .. args], stdout, stderr, CancellationToken.None, Composition.Connect(name => variables?.GetValueOrDefault(name)) with
+        {
+            Backend = () =>
+            {
+                backend.Built++;
+                return backend;
+            },
+        });
         return (code, stdout.ToString(), stderr.ToString());
     }
 
@@ -129,7 +139,8 @@ public sealed class EnvCliTests : IDisposable
         Assert.Equal(["_stage.stage.substrate.apps", "_stage.stage.substrate.database", "_stage.stage.substrate.group", "_stage.stage.substrate.logs"], backend.Calls.Order().ToList());
     }
 
-    // The catalog declares the types (docs/architecture/components.md section 2): the definition's and the base's are checked before anything is created.
+    // The catalog declares the types (docs/architecture/components.md section 2): the definition's and the base's are checked before anything is
+    // created, and each error names its file as typed (here relative to the working directory).
     [Fact]
     public async Task Up_of_an_undeclared_type_or_on_a_base_of_one_creates_nothing_and_names_the_type_and_the_declared_ones()
     {
@@ -137,19 +148,21 @@ public sealed class EnvCliTests : IDisposable
         var shared = Path.Combine(_temp, "shared.env.yaml");
         await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", shared);
         backend.Calls.Clear();
-        var gold = Path.Combine(_temp, "gold.yaml");
+        backend.Built = 0;
+        var gold = Path.GetRelativePath(System.Environment.CurrentDirectory, Path.Combine(_temp, "gold.yaml"));
         await File.WriteAllTextAsync(gold, (await File.ReadAllTextAsync(Dev)).Replace("type: dev", "type: gold", StringComparison.Ordinal));
-        var goldBase = Path.Combine(_temp, "gold.env.yaml");
+        var goldBase = Path.GetRelativePath(System.Environment.CurrentDirectory, Path.Combine(_temp, "gold.env.yaml"));
         await File.WriteAllTextAsync(goldBase, (await File.ReadAllTextAsync(shared)).Replace("type: shared", "type: gold", StringComparison.Ordinal));
 
         var definition = await RunAsync(backend, null, "up", gold, "--catalog", Catalog, "--base", shared, "--out", Path.Combine(_temp, "a.env.yaml"));
         var onBase = await RunAsync(backend, null, "up", Dev, "--catalog", Catalog, "--base", goldBase, "--out", Path.Combine(_temp, "b.env.yaml"));
 
-        Assert.Equal((1, 1), (definition.Code, onBase.Code));
-        Assert.Empty(backend.Calls);
         const string Error = "type: 'gold' is not an environment type of the catalog (declared: dev, prod, shared, stage).";
-        Assert.Contains($"{gold}: {Error}", definition.Err);
-        Assert.Contains($"{goldBase}: {Error}", onBase.Err);
+        Assert.False(Path.IsPathRooted(gold) || Path.IsPathRooted(goldBase));
+        Assert.Equal((1, string.Empty, $"{gold}: {Error}{System.Environment.NewLine}"), definition);
+        Assert.Equal((1, string.Empty, $"{goldBase}: {Error}{System.Environment.NewLine}"), onBase);
+        Assert.Empty(backend.Calls);
+        Assert.Equal(0, backend.Built);
     }
 
     [Fact]
@@ -167,19 +180,30 @@ public sealed class EnvCliTests : IDisposable
     }
 
     [Fact]
-    public async Task An_existing_output_is_refused_before_anything_is_created_unless_forced()
+    public async Task An_existing_output_without_force_exits_2_before_anything_is_built_and_keeps_the_file()
     {
         var backend = new OutputBackend();
         var path = Path.Combine(_temp, "out.yaml");
         await File.WriteAllTextAsync(path, "old");
 
         var refused = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", path);
+
+        Assert.Equal((2, string.Empty, $"jd: '{path}' already exists; pass --force to overwrite it.{System.Environment.NewLine}"), refused);
+        Assert.Equal(0, backend.Built);
+        Assert.Equal("old", await File.ReadAllTextAsync(path));
+    }
+
+    [Fact]
+    public async Task Force_overwrites_an_existing_output_with_the_whole_descriptor()
+    {
+        var backend = new OutputBackend();
+        var path = Path.Combine(_temp, "out.yaml");
+        await File.WriteAllTextAsync(path, new string('x', 10_000)); // longer than the descriptor: an overwrite that does not truncate leaves a tail
+
         var forced = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", path, "--force");
 
-        Assert.Equal(2, refused.Code);
-        Assert.Contains("already exists", refused.Err);
-        Assert.Equal(0, forced.Code);
-        Assert.StartsWith("kind: Environment", await File.ReadAllTextAsync(path));
+        Assert.Equal((0, $"{path}: environment shared (southeastasia, shared) written.{System.Environment.NewLine}", string.Empty), (forced.Code, forced.Out[forced.Out.IndexOf(path, StringComparison.Ordinal)..], forced.Err));
+        Assert.Equal(await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "golden", "shared.env.yaml")), await File.ReadAllBytesAsync(path));
         Assert.Equal(3, backend.Calls.Count);
     }
 
@@ -237,13 +261,95 @@ public sealed class EnvCliTests : IDisposable
     }
 
     [Theory]
-    [InlineData("sideways")]
-    [InlineData("up")]
-    public async Task Usage_problems_exit_with_2(string command)
+    [InlineData("env needs a command: up.")]
+    [InlineData("unknown env command 'sideways'.", "sideways")]
+    [InlineData("unknown env command '--force'.", "--force", "up")]
+    [InlineData("expected exactly one definition file.", "up")]
+    [InlineData("expected exactly one definition file.", "up", "a.yaml", "b.yaml", "--catalog", "c", "--out", "o.yaml")]
+    [InlineData("env up needs --catalog and --out.", "up", "a.yaml", "--out", "o.yaml")]
+    [InlineData("env up needs --catalog and --out.", "up", "a.yaml", "--catalog", "c")]
+    [InlineData("--catalog needs a value.", "up", "a.yaml", "--out", "o.yaml", "--catalog")]
+    [InlineData("--out needs a value.", "up", "a.yaml", "--catalog", "c", "--out")]
+    [InlineData("--base needs a value.", "up", "a.yaml", "--catalog", "c", "--out", "o.yaml", "--base")]
+    [InlineData("unknown option '--env'.", "up", "a.yaml", "--env", "e.yaml", "--catalog", "c", "--out", "o.yaml")]
+    public async Task Usage_errors_exit_2_and_print_the_problem_and_the_usage(string problem, params string[] args)
     {
-        var (code, _, err) = await RunAsync(new OutputBackend(), null, command);
+        var usage = new StringWriter();
+        await Cli.RunAsync(["--help"], usage, TextWriter.Null);
+        var backend = new OutputBackend();
+
+        var result = await RunAsync(backend, null, args);
+
+        Assert.Equal((2, string.Empty, $"jd: {problem}{System.Environment.NewLine}{usage}"), result);
+        Assert.Equal(0, backend.Built);
+    }
+
+    // Each input is checked in turn, the definition, then the base, then the catalog, before anything is read.
+    [Theory]
+    [InlineData("definition", "cannot read '{missing}': not found or not a file.")]
+    [InlineData("base", "cannot read '{missing}': not found or not a file.")]
+    [InlineData("catalog", "cannot read '{missing}': not found or not a directory.")]
+    public async Task A_missing_input_exits_2_naming_it_before_anything_is_built(string role, string problem)
+    {
+        var backend = new OutputBackend();
+        var missing = Path.Combine(_temp, "missing");
+        string Or(string name, string present) => role == name ? missing : present;
+
+        var result = await RunAsync(backend, null, "up", Or("definition", Dev), "--catalog", Or("catalog", Catalog), "--base", Or("base", Shared), "--out", Path.Combine(_temp, "out.yaml"));
+
+        Assert.Equal((2, string.Empty, $"jd: {problem.Replace("{missing}", missing, StringComparison.Ordinal)}{System.Environment.NewLine}"), result);
+        Assert.Equal(0, backend.Built);
+    }
+
+    [Fact]
+    public async Task A_definition_the_process_cannot_read_exits_2_with_the_path()
+    {
+        var path = Path.Combine(_temp, "locked.yaml");
+        await File.WriteAllTextAsync(path, await File.ReadAllTextAsync(Shared));
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        File.SetUnixFileMode(path, UnixFileMode.None);
+        if (CanRead(path))
+        {
+            return; // Running as a user that ignores file permissions (root).
+        }
+
+        var backend = new OutputBackend();
+
+        var (code, stdout, stderr) = await RunAsync(backend, null, "up", path, "--catalog", Catalog, "--out", Path.Combine(_temp, "out.yaml"));
+
+        Assert.Equal((2, string.Empty), (code, stdout));
+        Assert.StartsWith("jd: ", stderr, StringComparison.Ordinal);
+        Assert.Contains(path, stderr, StringComparison.Ordinal);
+        Assert.Equal(0, backend.Built);
+    }
+
+    // The output is written after the walk: a directory that is not there is reported as a usage error, as today.
+    [Fact]
+    public async Task An_output_that_cannot_be_written_exits_2_with_the_path()
+    {
+        var path = Path.Combine(_temp, "no-such-directory", "out.yaml");
+
+        var (code, _, stderr) = await RunAsync(new OutputBackend(), null, "up", Shared, "--catalog", Catalog, "--out", path);
 
         Assert.Equal(2, code);
-        Assert.Contains("jd:", err);
+        Assert.StartsWith("jd: ", stderr, StringComparison.Ordinal);
+        Assert.Contains(path, stderr, StringComparison.Ordinal);
+    }
+
+    private static bool CanRead(string path)
+    {
+        try
+        {
+            File.ReadAllBytes(path);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 }
