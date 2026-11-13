@@ -31,7 +31,6 @@ public sealed partial class ThinCliTests
         ["jd.cli.PromoteCli"] =
         [
             "jd.orchestrator.usecases.Connections.get_Records",
-            "jd.orchestrator.usecases.Promotion..ctor",
             "jd.resolver.LoadResult`1.get_Errors",
             "jd.resolver.LoadResult`1.get_Value",
             "jd.resolver.environment.EnvironmentParser.LoadAsync",
@@ -41,35 +40,9 @@ public sealed partial class ThinCliTests
             "jd.resolver.release.PromotionDecision.get_Reasons",
             "jd.resolver.release.PromotionDecision.get_SetSha256",
         ],
-        // The release run's start is a use-case step its command calls until S25e2; the walk, IQ and the record are the command's until then.
-        ["jd.cli.ReleaseDeployCli"] =
-        [
-            "jd.orchestrator.IqCheck.get_Failure",
-            "jd.orchestrator.IqCheck.get_Passed",
-            "jd.orchestrator.IqCheck.get_Workload",
-            "jd.orchestrator.IqResult.get_Checks",
-            "jd.orchestrator.IqResult.get_Passed",
-            "jd.orchestrator.Orchestrator.DeployReleaseAsync",
-            "jd.orchestrator.Qualifier.QualifyAsync",
-            "jd.orchestrator.ReleaseRecordBuilder.Build",
-            "jd.orchestrator.ReleaseRecordBuilder.BuildQualify",
-            "jd.orchestrator.WorkloadRun.get_Run",
-            "jd.orchestrator.WorkloadRun.get_Workload",
-            "jd.orchestrator.usecases.Recording.get_Identity",
-            "jd.orchestrator.usecases.Recording.get_Qualifier",
-            "jd.orchestrator.usecases.Recording.get_Records",
-            "jd.orchestrator.usecases.Recording.get_SetSha256",
-            "jd.orchestrator.usecases.ReleaseStart.StartAsync",
-            "jd.orchestrator.usecases.ReleaseStartInput..ctor",
-            "jd.orchestrator.usecases.ReleaseStartResult.get_Errors",
-            "jd.orchestrator.usecases.ReleaseStartResult.get_Problem",
-            "jd.orchestrator.usecases.ReleaseStartResult.get_Run",
-            "jd.orchestrator.usecases.StartedRelease.Deconstruct",
-            "jd.resolver.release.ReleaseRecordFile.WriteAsync",
-        ],
     };
 
-    // R2 today: the commands that build the records or the identity from the factories, or write the record of a started release run, so name the ports.
+    // R2 today: the commands that build the records or the identity from the factories, so name the ports.
     private static readonly Dictionary<string, string[]> R2Allowlist = new()
     {
         ["jd.cli.Cli"] =
@@ -77,10 +50,6 @@ public sealed partial class ThinCliTests
             "jd.core.identity.IDeployerIdentity",
         ],
         ["jd.cli.PromoteCli"] =
-        [
-            "jd.core.records.IRecordStore",
-        ],
-        ["jd.cli.ReleaseDeployCli"] =
         [
             "jd.core.records.IRecordStore",
         ],

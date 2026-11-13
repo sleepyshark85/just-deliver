@@ -55,7 +55,7 @@ public sealed class ReleaseStartTests
         part => Build("templates", () => new RecordingConnections(_backend).With().Templates(part)));
 
     // The bytes of a set of the one workload of WorkloadUseCaseTests, as release create writes them; the workload's requirement can be renamed.
-    private static async Task<byte[]> SetAsync(string requirement = "thing")
+    internal static async Task<byte[]> SetAsync(string requirement = "thing")
     {
         var created = await CreateRelease.RunAsync(
             new CreateReleaseInput(
@@ -69,13 +69,13 @@ public sealed class ReleaseStartTests
         return created.Document.Value.ToArray();
     }
 
-    private static ReleaseStartInput Given(byte[] set, string environment = Dev, bool preview = false) =>
+    private static DeployReleaseInput Given(byte[] set, string environment = Dev, bool preview = false) =>
         new(new SourceDocument(SetName, set), Document(EnvironmentName, environment), Catalog, preview, null);
 
-    private static ReleaseStartInput Promoting(string sha256, string environment = Dev + Approval) =>
+    private static DeployReleaseInput Promoting(string sha256, string environment = Dev + Approval) =>
         new(null, Document(EnvironmentName, environment), Catalog, false, new Promotion(Deployer, "dev", "1.0.0", sha256));
 
-    private Task<ReleaseStartResult> StartAsync(ReleaseStartInput input) => ReleaseStart.StartAsync(input, Connections(), CancellationToken.None);
+    private Task<ReleaseStartResult> StartAsync(DeployReleaseInput input) => ReleaseStart.StartAsync(input, Connections(), CancellationToken.None);
 
     private static string Hash(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 
@@ -255,7 +255,7 @@ public sealed class ReleaseStartTests
         var catalog = new SourceCatalog("cat", [.. Catalog.Documents, Document("components/oops.yaml", "kind: Component\nname: oops\ndescription: d\n")]);
 
         var result = await ReleaseStart.StartAsync(
-            new ReleaseStartInput(Document(SetName, "kind: Nothing\n"), Document(EnvironmentName, "kind: Environment\n"), catalog, false, null), Connections(), CancellationToken.None);
+            new DeployReleaseInput(Document(SetName, "kind: Nothing\n"), Document(EnvironmentName, "kind: Environment\n"), catalog, false, null), Connections(), CancellationToken.None);
 
         Assert.Equal(
             [
@@ -313,7 +313,7 @@ public sealed class ReleaseStartTests
     [MemberData(nameof(Malformed))]
     public async Task An_input_with_both_a_set_and_a_promotion_neither_or_a_previewed_promotion_is_a_bug(bool hasSet, bool promotes, bool preview)
     {
-        var input = new ReleaseStartInput(
+        var input = new DeployReleaseInput(
             hasSet ? new SourceDocument(SetName, await SetAsync()) : null, Document(EnvironmentName, Dev), Catalog, preview, promotes ? new Promotion(Deployer, "dev", "1.0.0", "x") : null);
 
         var bug = await Assert.ThrowsAsync<ArgumentException>(() => StartAsync(input));

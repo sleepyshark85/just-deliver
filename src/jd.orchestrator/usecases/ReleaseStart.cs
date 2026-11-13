@@ -12,9 +12,9 @@ namespace jd.orchestrator.usecases;
 /// The start <c>release deploy</c> and <c>release qualify</c> share (docs/architecture/application.md sections 5 and 8), in this order: the set, the
 /// catalog and the environment loaded; the environment's type checked; the gate; a promotion's kept set re-hashed; every workload resolved and checked
 /// against the templates; for a recorded run the principal named, then the set kept; then the backend, the orchestrator and the qualifier built
-/// together, before any backend call. Its command calls it until S25e2 makes it the step of their use cases.
+/// together, before any backend call. The first step of <see cref="DeployRelease"/> and <see cref="QualifyRelease"/>.
 /// </summary>
-public static class ReleaseStart
+internal static class ReleaseStart
 {
     // A run whose documents loaded and passed every check: the set and its exact bytes, the catalog, the environment, each workload's graph and the
     // templates they fit.
@@ -28,7 +28,7 @@ public static class ReleaseStart
     /// <param name="connections">The records, the identity, the backend, the probe, the reader of live revisions, the clock and the templates.</param>
     /// <param name="cancellationToken">Cancels the start.</param>
     /// <exception cref="ArgumentException">The input has both a set and a promotion, neither, or a promotion that previews.</exception>
-    public static async Task<ReleaseStartResult> StartAsync(ReleaseStartInput input, Connections connections, CancellationToken cancellationToken)
+    public static async Task<ReleaseStartResult> StartAsync(DeployReleaseInput input, Connections connections, CancellationToken cancellationToken)
     {
         if ((input.Set is null) == (input.Promotion is null) || (input.Promotion is not null && input.Preview))
         {
@@ -62,7 +62,7 @@ public static class ReleaseStart
     // The set (a promotion's: the kept one), the catalog and the environment loaded and checked, every workload resolved and fitted to the templates;
     // or the errors, or the refusal, that stop the run.
     private static async Task<(Checked? Run, IReadOnlyList<LoadError> Errors, Problem? Problem)> CheckAsync(
-        ReleaseStartInput input, IRecordStore? records, Connections connections, CancellationToken cancellationToken)
+        DeployReleaseInput input, IRecordStore? records, Connections connections, CancellationToken cancellationToken)
     {
         // StartAsync checked the input: a promotion has the records, and a run without one has its set.
         var set = input.Promotion is { } promoted ? await KeptSetAsync(records!, promoted, cancellationToken) : input.Set!;
