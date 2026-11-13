@@ -60,23 +60,6 @@ public sealed partial class ThinCliTests
             "jd.resolver.release.PromotionDecision.get_Reasons",
             "jd.resolver.release.PromotionDecision.get_SetSha256",
         ],
-        ["jd.cli.ReleaseCli"] =
-        [
-            "jd.resolver.release.ReleaseBuilder.BuildAsync",
-            "jd.resolver.release.ReleaseSet.get_CreatedAt",
-            "jd.resolver.release.ReleaseSet.get_Label",
-            "jd.resolver.release.ReleaseSet.get_Order",
-            "jd.resolver.release.ReleaseSet.get_Workloads",
-            "jd.resolver.release.ReleaseSetFile.LoadAsync",
-            "jd.resolver.release.ReleaseSetFile.WriteAsync",
-            "jd.resolver.release.ReleaseSetResult.get_Errors",
-            "jd.resolver.release.ReleaseSetResult.get_Set",
-            "jd.resolver.release.ReleaseWorkload.get_DefinitionSha256",
-            "jd.resolver.release.ReleaseWorkload.get_DependsOn",
-            "jd.resolver.release.ReleaseWorkload.get_Image",
-            "jd.resolver.release.ReleaseWorkload.get_Name",
-            "jd.resolver.release.ReleaseWorkload.get_Team",
-        ],
         ["jd.cli.ReleaseDeployCli"] =
         [
             "jd.core.records.IRecordStore.ReadAsync",
@@ -111,8 +94,6 @@ public sealed partial class ThinCliTests
             "jd.resolver.release.ReleaseRecordFile.KeptSetName",
             "jd.resolver.release.ReleaseRecordFile.WriteAsync",
             "jd.resolver.release.ReleaseResolver.ResolveAsync",
-            "jd.resolver.release.ReleaseSet.get_Label",
-            "jd.resolver.release.ReleaseSet.get_Order",
             "jd.resolver.release.ReleaseSetFile.LoadAsync",
             "jd.resolver.release.ReleaseSetFile.ParseAsync",
             "jd.resolver.release.ReleaseSetResult.get_Bytes",
@@ -158,17 +139,10 @@ public sealed partial class ThinCliTests
             "System.IO.File.Exists",
             "System.IO.File.ReadAllTextAsync",
         ],
-        ["jd.resolver.release.ReleaseBuilder"] =
-        [
-            "System.IO.File.Exists",
-            "System.IO.File.ReadAllBytesAsync",
-            "System.IO.Path.GetFullPath",
-        ],
         ["jd.resolver.release.ReleaseSetFile"] =
         [
             "System.IO.File.Exists",
             "System.IO.File.ReadAllBytesAsync",
-            "System.IO.FileStream..ctor",
         ],
     };
 }

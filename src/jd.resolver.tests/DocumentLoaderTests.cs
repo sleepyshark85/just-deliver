@@ -160,7 +160,7 @@ public sealed class DocumentLoaderTests : IDisposable
     [Fact]
     public async Task A_manifest_given_as_a_release_set_is_refused()
     {
-        var result = await ReleaseSetFile.ParseAsync("set.yaml", Encoding.UTF8.GetBytes("kind: ReleaseManifest\nlabel: v1\nworkloads: []\n"));
+        var result = await ReleaseSetFile.ParseAsync(new SourceDocument("set.yaml", Encoding.UTF8.GetBytes("kind: ReleaseManifest\nlabel: v1\nworkloads: []\n")));
 
         Assert.Null(result.Set);
         var error = Assert.Single(result.Errors);
@@ -172,7 +172,7 @@ public sealed class DocumentLoaderTests : IDisposable
     {
         var set = Write("set.yaml", "kind: ReleaseSet\nlabel: v1\ncreatedAt: 2026-01-01T00:00:00Z\nworkloads: []\n");
 
-        var result = await ReleaseBuilder.BuildAsync(set, DateTimeOffset.UnixEpoch);
+        var result = await ReleaseTests.BuildFileAsync(set, DateTimeOffset.UnixEpoch);
 
         Assert.Null(result.Set);
         var error = Assert.Single(result.Errors);

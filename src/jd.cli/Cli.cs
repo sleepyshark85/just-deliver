@@ -15,7 +15,7 @@ internal static class Cli
     internal const string ValidateCommand = "validate";
     private const string PreviewCommand = "preview";
     private const string DeployCommand = "deploy";
-    private const string ReleaseCommand = "release";
+    internal const string ReleaseCommand = "release";
     private const string ApproveCommand = "approve";
     private const string PromoteCommand = "promote";
     internal const string EnvCommand = "env";
@@ -83,7 +83,7 @@ internal static class Cli
 
         return args.FirstOrDefault() switch
         {
-            ReleaseCommand => await ReleaseCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
+            ReleaseCommand => await ExitOnReadFailureAsync(() => ReleaseCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken), stderr),
             ApproveCommand => await ApproveCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
             PromoteCommand => await PromoteCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken),
             EnvCommand => await ExitOnReadFailureAsync(() => EnvCli.RunAsync(args[1..], stdout, stderr, connections, cancellationToken), stderr),

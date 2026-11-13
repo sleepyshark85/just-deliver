@@ -7,9 +7,9 @@ namespace jd.resolver.release;
 /// <summary>
 /// One workload going into a release set.
 /// </summary>
-/// <param name="File">Names the definition in its errors: the definition file when creating, the release set when loading.</param>
+/// <param name="File">Names the definition in its errors: the name its reader gave when creating, the release set when loading.</param>
 /// <param name="Location">Prefix for locations inside the definition: empty for a definition file, <c>workloads[i].definition</c> in a release set.</param>
-/// <param name="Sha256">Lowercase hex SHA-256 over the exact bytes of the definition file.</param>
+/// <param name="Sha256">Lowercase hex SHA-256 over the exact bytes of the definition.</param>
 /// <param name="Definition">The definition text as decoded from those bytes (a byte order mark is kept, so it re-encodes to them).</param>
 /// <param name="DependsOn">Names of workloads that deploy first.</param>
 internal sealed record WorkloadSource(string File, string Location, string Sha256, string Definition, IReadOnlyList<string> DependsOn);
@@ -30,48 +30,46 @@ public static class ReleaseBuilder
     // Strict, so a byte sequence that is not UTF-8 is an error and not a silent replacement character.
     private static readonly UTF8Encoding StrictUtf8 = new(false, throwOnInvalidBytes: true);
 
-    /// <summary>Builds the set the manifest at <paramref name="manifestPath"/> describes, from the definitions it names.</summary>
-    public static async Task<ReleaseSetResult> BuildAsync(string manifestPath, DateTimeOffset createdAt, CancellationToken cancellationToken = default)
+    /// <summary>Builds the set <paramref name="manifest"/> describes, from the definitions it names, each read through <paramref name="definitions"/>.</summary>
+    public static async Task<ReleaseSetResult> BuildAsync(SourceDocument manifest, DocumentReader definitions, DateTimeOffset createdAt, CancellationToken cancellationToken)
     {
-        var loaded = await DocumentLoader.LoadFileAsync(manifestPath, "release manifest", [ManifestKind], cancellationToken);
-        if (loaded.Value is not { Body: var manifest })
+        var loaded = await DocumentLoader.LoadAsync(manifest.Name, manifest.Text(), [ManifestKind], cancellationToken);
+        if (loaded.Value is not { Body: var body })
         {
             return new ReleaseSetResult(null, loaded.Errors);
         }
 
-        // A manifest path has a file name and so a directory; the schema guarantees the shapes read below.
-        var directory = Path.GetDirectoryName(Path.GetFullPath(manifestPath))!;
+        // The schema guarantees the shapes read below.
         var errors = new List<LoadError>();
         var sources = new List<WorkloadSource>();
-        var entries = manifest["workloads"]!;
+        var entries = body["workloads"]!;
         for (var i = 0; i < entries.Count(); i++)
         {
-            var path = Path.Combine(directory, (string)entries[i]!["definition"]!);
-            if (!File.Exists(path))
+            var (name, content) = await definitions((string)entries[i]!["definition"]!, cancellationToken);
+            if (content is not { } bytes)
             {
-                errors.Add(new LoadError(manifestPath, $"workloads[{i}].definition", $"workload definition '{path}' not found."));
+                errors.Add(new LoadError(manifest.Name, $"workloads[{i}].definition", $"workload definition '{name}' not found."));
                 continue;
             }
 
-            var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
             string text;
             try
             {
-                text = StrictUtf8.GetString(bytes);
+                text = StrictUtf8.GetString(bytes.Span);
             }
             catch (DecoderFallbackException)
             {
-                errors.Add(new LoadError(path, string.Empty, "not valid UTF-8."));
+                errors.Add(new LoadError(name, string.Empty, "not valid UTF-8."));
                 continue;
             }
 
             var dependsOn = entries[i]!["dependsOn"]?.Select(t => (string)t!).ToList() ?? [];
-            sources.Add(new WorkloadSource(path, string.Empty, ReleaseHash.Of(bytes), text, dependsOn));
+            sources.Add(new WorkloadSource(name, string.Empty, ReleaseHash.Of(bytes.Span), text, dependsOn));
         }
 
         return errors.Count > 0
             ? new ReleaseSetResult(null, errors)
-            : await ComposeAsync(manifestPath, (string)manifest["label"]!, createdAt, sources, cancellationToken);
+            : await ComposeAsync(manifest.Name, (string)body["label"]!, createdAt, sources, cancellationToken);
     }
 
     /// <summary>

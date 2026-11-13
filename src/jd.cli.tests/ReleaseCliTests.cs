@@ -52,6 +52,28 @@ public sealed class ReleaseCliTests : IDisposable
         Assert.Equal(before, await File.ReadAllTextAsync(output));
     }
 
+    // The up-front check cannot see an --out that appears while the set is built (here, when the clock is read); writing must still refuse it.
+    [Fact]
+    public async Task An_output_that_appears_while_the_set_is_built_is_not_overwritten()
+    {
+        var output = Path.Combine(_temp, "set.yaml");
+        var connections = Composition.Connect(_ => null) with
+        {
+            Time = () =>
+            {
+                File.WriteAllText(output, "someone else's file");
+                return TimeProvider.System;
+            },
+        };
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+
+        var code = await Cli.RunAsync(["release", "create", Manifest, "--out", output], stdout, stderr, CancellationToken.None, connections);
+
+        Assert.Equal((2, string.Empty, $"jd: The file '{output}' already exists.{System.Environment.NewLine}"), (code, stdout.ToString(), stderr.ToString()));
+        Assert.Equal("someone else's file", await File.ReadAllTextAsync(output));
+    }
+
     // The reference is resolved beside the manifest and printed as resolved, not normalised.
     [Theory]
     [InlineData("ghost.yaml")]
