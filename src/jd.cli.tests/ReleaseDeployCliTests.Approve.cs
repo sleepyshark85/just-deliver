@@ -161,7 +161,6 @@ public sealed partial class ReleaseDeployCliTests
     [Theory]
     [InlineData("expected exactly one release label.")]
     [InlineData("approve needs --env.", "1.0.0")]
-    [InlineData(MeaningProblem, "1.0.0", "--env", "e.yaml")]
     [InlineData("approve needs --env.", "1.0.0", "--meaning", "m")]
     [InlineData("expected exactly one release label.", "--env", "e.yaml", "--meaning", "m")]
     [InlineData("expected exactly one release label.", "1.0.0", "2.0.0", "--env", "e.yaml", "--meaning", "m")]
@@ -184,6 +183,21 @@ public sealed partial class ReleaseDeployCliTests
         var result = await RunAsync(null, "approve", "1.0.0", "--env", stage);
 
         AssertUsageError(result, MeaningProblem);
+        Assert.Equal(0, _identity.Calls);
+    }
+
+    // Edge 1 of docs/architecture/application.md section 8: the label and the meaning are the use case's to check, after the command has checked that
+    // --env can be read, so a descriptor that cannot be read is reported first (before S25f1, the label or the meaning was).
+    [Theory]
+    [InlineData("foo", "m")]
+    [InlineData("1.0.0", "")]
+    public async Task A_descriptor_that_cannot_be_read_is_reported_before_a_label_or_meaning_that_is_refused(string label, string meaning)
+    {
+        var absent = Path.Combine(_temp, "absent.yaml");
+
+        var result = await ApproveAsync(absent, meaning, label);
+
+        Assert.Equal((2, string.Empty, $"jd: cannot read '{absent}': not found or not a file.\n"), (result.Code, result.Out, result.Err.ReplaceLineEndings("\n")));
         Assert.Equal(0, _identity.Calls);
     }
 

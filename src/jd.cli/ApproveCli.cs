@@ -1,32 +1,17 @@
 using System.Globalization;
-using jd.core.identity;
-using jd.core.records;
 using jd.orchestrator.usecases;
-using jd.resolver.environment;
-using jd.resolver.release;
 
 namespace jd.cli;
 
 /// <summary>
-/// <c>jd approve</c>: records that the principal of the credential approves the kept set of a label for a gated environment (docs/architecture/approvals.md
-/// section 4). Everything is checked before the one write, so a refusal leaves nothing behind. Wiring and output only; exit codes as <see cref="Cli"/>.
+/// <c>jd approve</c>: reads the descriptor named on the command line, hands the label, the descriptor and the meaning to <see cref="Approve"/>, and
+/// prints what it did or why it refused (docs/architecture/approvals.md section 4). Parsing, reading, formatting; no rules.
 /// </summary>
 internal static class ApproveCli
 {
-    private const int Success = 0;
-    private const int Invalid = 1;
-    private const int UsageError = 2;
-
-    private const string EnvOption = "--env";
     private const string MeaningOption = "--meaning";
 
-    // The schema's maxLength for a meaning (schemas/approval-record.schema.json).
-    private const int MeaningMaxLength = 500;
-
     private sealed record Options(string Label, string Environment, string Meaning);
-
-    // What an approval is checked against: the gated environment, its policy and where the records are.
-    private sealed record Request(Options Options, EnvironmentDescriptor Target, ApprovalPolicy Policy, IRecordStore Records);
 
     // args are the arguments after "approve".
     public static async Task<int> RunAsync(
@@ -37,114 +22,78 @@ internal static class ApproveCli
         {
             stderr.WriteLine($"jd: {problem}");
             stderr.Write(Cli.Usage);
-            return UsageError;
+            return ExitCodes.UsageError;
         }
 
         if (Arguments.Unreadable(options.Environment, null, null) is { } unreadable)
         {
             stderr.WriteLine($"jd: {unreadable}");
-            return UsageError;
+            return ExitCodes.UsageError;
         }
 
-        var loaded = await EnvironmentParser.LoadAsync(options.Environment, cancellationToken);
-        if (loaded.Value is not { } target)
+        var environment = await Cli.ReadDocumentAsync(options.Environment, cancellationToken);
+        var result = await Approve.RunAsync(new ApproveInput(options.Label, environment, options.Meaning), connections, ShowIgnored(stderr), cancellationToken);
+        Cli.Print(result.Errors, stderr);
+        if (result.Problem is { } refusal)
         {
-            Cli.Print(loaded.Errors, stderr);
-            return Invalid;
+            stderr.WriteLine(Refusal(refusal));
         }
 
-        if (target.Approval is not { } policy)
+        if (result.Outcome is Outcome.InvalidInput)
         {
-            stderr.WriteLine($"jd: approve: environment '{target.Name}' has no approval policy, so there is nothing to approve.");
-            return Invalid;
+            stderr.Write(Cli.Usage);
         }
 
-        // A bad credential stops here, before any record is read.
-        return await Cli.GetIdentityAsync(connections, stderr, cancellationToken) is { } principal
-            ? await ApproveAsync(new Request(options, target, policy, connections.Records()), principal, connections.Time(), stdout, stderr, cancellationToken)
-            : Invalid;
+        if (result is { Environment: { Approval: { } policy } target, Record: { } record })
+        {
+            stdout.WriteLine($"approved {options.Label} for {target.Name} ({Number(result.Counted)} of {Number(policy.Required)})");
+            stdout.WriteLine($"record: {record}");
+        }
+
+        return ExitCodes.Of(result.Outcome);
     }
 
-    private static async Task<int> ApproveAsync(Request request, DeployerIdentity principal, TimeProvider time, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    // Each approval file the use case skipped, as it skips it.
+    private static Action<Progress> ShowIgnored(TextWriter stderr) => progress =>
     {
-        var (options, target, policy, records) = request;
-        var label = options.Label;
-        var qualification = await QualificationReader.ReadAsync(records, policy.QualifiedOn, label, cancellationToken);
-        if (qualification.SetSha256 is not { } setSha256)
+        if (progress is Ignored ignored)
         {
-            // The reason says whether the label is unknown or its records cannot be read.
-            stderr.WriteLine($"jd: approve: cannot approve {label}: {string.Join("; ", qualification.Reasons)}");
-            return Invalid;
+            stderr.WriteLine($"jd: {Cli.ApproveCommand}: ignored {ignored.What}");
         }
+    };
 
-        if (!qualification.Qualified)
-        {
-            stderr.WriteLine($"jd: approve: release {label} is not qualified on {policy.QualifiedOn}:");
-            foreach (var reason in qualification.Reasons)
-            {
-                stderr.WriteLine($"  {reason}");
-            }
+    // The words of a refusal, around the problem's values.
+    private static string Refusal(Problem problem) => problem switch
+    {
+        LabelInvalid invalid => $"jd: {invalid.Reason}",
+        MeaningInvalid invalid => $"jd: {Cli.ApproveCommand} needs {MeaningOption} <text>: 1 to {Number(invalid.MaxLength)} characters, no control characters.",
+        NotGated notGated => $"jd: {Cli.ApproveCommand}: environment '{notGated.Environment}' has no approval policy, so there is nothing to approve.",
+        IdentityRefused refused => $"jd: {refused.Reason}",
+        UnknownLabel unknown => $"jd: {Cli.ApproveCommand}: cannot approve {unknown.Label}: {string.Join("; ", unknown.Reasons)}",
+        NotQualified notQualified => string.Join(
+            Environment.NewLine,
+            [$"jd: {Cli.ApproveCommand}: release {notQualified.Label} is not qualified on {notQualified.QualifiedOn}:", .. notQualified.Reasons.Select(reason => $"  {reason}")]),
+        NotApprover notApprover => $"jd: {Cli.ApproveCommand}: principal {notApprover.Approver} is not listed in the approvers of '{notApprover.Environment}'.",
+        NotSeparate notSeparate =>
+            $"jd: {Cli.ApproveCommand}: principal {notSeparate.Approver} deployed {notSeparate.Label} on {notSeparate.QualifiedOn}, and '{notSeparate.Environment}' requires approvers separate from the deployer.",
+        AlreadyApproved repeated => $"jd: {Cli.ApproveCommand}: principal {repeated.Approver} already approved {repeated.Label} for '{repeated.Environment}'.",
+        RecordNotWritten notWritten => $"jd: {Cli.ApproveCommand}: the approval could not be written: {notWritten.Reason} If the file already exists, run the command again.",
+        _ => throw new ArgumentOutOfRangeException(nameof(problem), problem, "not a refusal an approval meets."),
+    };
 
-            return Invalid;
-        }
+    private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
 
-        var approver = principal.ObjectId;
-        var refusal = !policy.Counts(approver, []) ? $"principal {approver} is not listed in the approvers of '{target.Name}'."
-            : !policy.Counts(approver, qualification.Deployers) ? $"principal {approver} deployed {label} on {policy.QualifiedOn}, and '{target.Name}' requires approvers separate from the deployer."
-            : null;
-        if (refusal is not null)
-        {
-            stderr.WriteLine($"jd: approve: {refusal}");
-            return Invalid;
-        }
-
-        var reading = await ApprovalRecord.ReadAsync(records, target, label, setSha256, cancellationToken);
-        foreach (var ignored in reading.Ignored)
-        {
-            stderr.WriteLine($"jd: approve: ignored {ignored}");
-        }
-
-        var earlier = reading.Approvers;
-        if (earlier.Contains(approver, StringComparer.OrdinalIgnoreCase))
-        {
-            stderr.WriteLine($"jd: approve: principal {approver} already approved {label} for '{target.Name}'.");
-            return Invalid;
-        }
-
-        var approvedAt = time.GetUtcNow();
-        var json = ApprovalRecord.Build(target, label, setSha256, principal, options.Meaning, approvedAt);
-        string path;
-        try
-        {
-            path = await ReleaseRecordFile.WriteAsync(records, target.Name, label, approvedAt, ReleaseRecordFile.ApproveActivity, json, cancellationToken);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            stderr.WriteLine($"jd: approve: the approval could not be written: {ex.Message} If the file already exists, run the command again.");
-            return Invalid;
-        }
-
-        var counted = earlier.Count(id => policy.Counts(id, qualification.Deployers)) + 1;
-        stdout.WriteLine($"approved {label} for {target.Name} ({counted.ToString(CultureInfo.InvariantCulture)} of {policy.Required.ToString(CultureInfo.InvariantCulture)})");
-        stdout.WriteLine($"record: {path}");
-        return Success;
-    }
-
+    // A missing meaning is passed on as none, which the use case refuses as it refuses an empty one.
     private static (Options? Options, string Problem) Parse(string[] args)
     {
-        var (label, values, problem) = Arguments.ScanLabel(args, EnvOption, MeaningOption);
+        var (label, values, problem) = Arguments.ScanOneLabel(args, Arguments.EnvOption, MeaningOption);
         if (label is null)
         {
             return (null, problem);
         }
 
-        if (!values.TryGetValue(EnvOption, out var environment))
-        {
-            return (null, $"approve needs {EnvOption}.");
-        }
-
-        return !values.TryGetValue(MeaningOption, out var meaning) || meaning.Length is 0 or > MeaningMaxLength || meaning.Any(char.IsControl)
-            ? (null, $"approve needs {MeaningOption} <text>: 1 to {MeaningMaxLength.ToString(CultureInfo.InvariantCulture)} characters, no control characters.")
-            : (new Options(label, environment, meaning), string.Empty);
+        return values.TryGetValue(Arguments.EnvOption, out var environment)
+            ? (new Options(label, environment, values.GetValueOrDefault(MeaningOption, string.Empty)), string.Empty)
+            : (null, $"{Cli.ApproveCommand} needs {Arguments.EnvOption}.");
     }
 }
