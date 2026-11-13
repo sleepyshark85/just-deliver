@@ -41,9 +41,13 @@ public sealed class EnvCliTests : IDisposable
         /// <summary>The stack whose deploy fails.</summary>
         public string? FailOn { get; set; }
 
+        /// <summary>Runs inside every deploy: what happens to the world while the walk is in progress.</summary>
+        public Action? DuringDeploy { get; set; }
+
         public Task<DeploymentResult> DeployAsync(DeploymentPackage package, CancellationToken cancellationToken)
         {
             Calls.Add(package.StackName);
+            DuringDeploy?.Invoke();
             if (package.StackName == FailOn)
             {
                 throw new InvalidOperationException("provider exploded");
@@ -361,6 +365,20 @@ public sealed class EnvCliTests : IDisposable
         Assert.Equal(2, code);
         Assert.StartsWith("jd: ", stderr, StringComparison.Ordinal);
         Assert.Contains(path, stderr, StringComparison.Ordinal);
+    }
+
+    // The up-front check cannot see an --out that appears during the walk; writing must still refuse to overwrite it without --force.
+    [Fact]
+    public async Task An_output_that_appears_during_the_walk_is_not_overwritten_without_force()
+    {
+        var path = Path.Combine(_temp, "out.yaml");
+        var backend = new OutputBackend { DuringDeploy = () => File.WriteAllText(path, "someone else's file") };
+
+        var (code, _, stderr) = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", path);
+
+        Assert.Equal(2, code);
+        Assert.Contains($"jd: The file '{path}' already exists.", stderr, StringComparison.Ordinal);
+        Assert.Equal("someone else's file", File.ReadAllText(path));
     }
 
     private static bool CanRead(string path)

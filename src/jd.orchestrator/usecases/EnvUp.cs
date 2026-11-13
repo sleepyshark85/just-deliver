@@ -29,8 +29,12 @@ public static class EnvUp
         // The definition's type, and the base's, must be the catalog's; a gated type's environment cannot be written without its block.
         var baseDescriptor = baseResult?.Value;
         var environment = definition.Over(baseDescriptor);
-        var typeErrors = Checks.EnvironmentType(catalog, environment, input.Definition.Name)
-            .Concat(input.Base is { } baseDocument && baseDescriptor is not null ? Checks.EnvironmentType(catalog, baseDescriptor, baseDocument.Name) : []).ToList();
+        var typeErrors = Checks.EnvironmentType(catalog, environment, input.Definition.Name).ToList();
+        if (input.Base is { } baseDocument && baseDescriptor is not null)
+        {
+            typeErrors.AddRange(Checks.EnvironmentType(catalog, baseDescriptor, baseDocument.Name));
+        }
+
         if (typeErrors.Count > 0)
         {
             return Failed(typeErrors);

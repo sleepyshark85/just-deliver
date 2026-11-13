@@ -175,7 +175,7 @@ internal static class Cli
         return ExitCodes.Of(result.Outcome);
     }
 
-    // The walk's lines as each node finishes; neither jd deploy nor jd env up prints a line when a workload starts.
+    // The walk's lines as each node finishes; jd deploy prints no line when a workload starts (jd env up has no workloads).
     internal static Action<Progress> ShowWalk(TextWriter stdout) => progress =>
     {
         if (progress is NodeFinished finished)
