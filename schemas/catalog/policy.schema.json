@@ -13,7 +13,7 @@
   ],
   "properties": {
     "kind": { "enum": ["Policy"] },
-    "name": { "type": "string", "x-jd": { "define": "policy" }, "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$" },
+    "name": { "type": "string", "x-jd": { "define": "policy", "is": "policy.name" }, "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$" },
     "reason": {
       "description": "Why the policy exists; shown to teams asking why a setting has its value.",
       "type": "string",

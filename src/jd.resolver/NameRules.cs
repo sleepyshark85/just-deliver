@@ -21,6 +21,21 @@ internal static class NameRules
         return [.. errors, .. clashes, .. Ref(index, set.Name, named.Where(set.Valid.Contains), defined)];
     }
 
+    /// <summary>The names <paramref name="document"/> defines, each with its location, in the order its kind's fields define them.</summary>
+    public static IEnumerable<(string Location, string Name)> Defined(SchemaIndex index, Document document) =>
+        index.NamesOf(document.Kind).Defines.Select(field => field.Path).Distinct().SelectMany(path => Names(document.Body, path));
+
+    /// <summary>
+    /// Every name <paramref name="documents"/> define that is one of <paramref name="roots"/>, the reserved roots of expressions: a part named so
+    /// could never be read, since <c>${env.x}</c> always means the environment. Documents that failed their schema are checked too.
+    /// </summary>
+    public static IReadOnlyList<LoadError> CheckReserved(SchemaIndex index, IEnumerable<Document> documents, IReadOnlySet<string> roots) =>
+        [.. from document in documents
+            from defined in Defined(index, document)
+            where roots.Contains(defined.Name)
+            select new LoadError(document.Source, defined.Location,
+                $"'{defined.Name}' is a reserved root of expressions ({string.Join(", ", roots.Order(StringComparer.Ordinal))}); choose another name.")];
+
     // Exactly one document of each one kind: none is an error unless an unreadable file might have been it. The extra documents, and the errors.
     private static (List<Document> Extras, List<LoadError> Errors) One(SchemaIndex index, DocumentSet set, List<Document> documents)
     {

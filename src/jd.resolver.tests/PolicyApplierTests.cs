@@ -32,7 +32,7 @@ public class PolicyApplierTests
     private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string type = "dev", bool expectExpansionErrors = false)
     {
         var files = BaseFiles.Concat(policies).Append(TestCatalog.RuntimeFile).Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
-        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
+        var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
         var expansion = new Expander(loaded.Value!, Env(type)).Expand(workload, "workload.yaml");
@@ -318,7 +318,7 @@ public class PolicyApplierTests
     {
         var files = BaseFiles.Concat([Policy("pol", "{ template: t/n }", "set: { nested.deep: 1 }\ndefault: { list: [1] }\n")])
             .Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
-        var catalog = (await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]))).Value!;
+        var catalog = (await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]))).Value!;
         var before = JsonConvert.SerializeObject(catalog);
         var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\nrequires:\n  - type: sqldb\n");
         var expansion = new Expander(catalog, Env()).Expand(workload, "workload.yaml");

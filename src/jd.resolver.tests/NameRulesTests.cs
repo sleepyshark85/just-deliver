@@ -5,7 +5,7 @@ namespace jd.resolver.tests;
 
 // The name rules know no namespace, kind or field (docs/architecture/documents.md section 3): a planted meta-schema declares a namespace of its
 // own, planted schemas annotate fields with it wherever a subschema can stand, and the rules check documents of those kinds with no C# change.
-// The shipped catalog's names are tested through the loader (CatalogParserTests, CatalogUsesTests).
+// The shipped catalog's names are tested through the loader (CatalogLoaderTests, CatalogUsesTests).
 public sealed class NameRulesTests
 {
     private const string Kinds = """
