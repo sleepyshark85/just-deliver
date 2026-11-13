@@ -6,7 +6,7 @@ namespace jd.resolver.tests;
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
-        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24a3, S24b1, S24b2, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
+        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b1, S24b2, S24b3, S24c1, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
 
     private static IEnumerable<(string File, string Literal)> Entries(Dictionary<string, string[]> group) =>
         group.SelectMany(entry => entry.Value.Select(literal => (entry.Key, literal)));
@@ -57,18 +57,13 @@ public sealed partial class LiteralGuardTests
         ["jd.azure/ArmCredentials.cs"] = ["is"], // "X is not set"; 'is' is also an x-jd keyword
     };
 
-    private static readonly Dictionary<string, string[]> S24a3 = new()
-    {
-        ["jd.resolver/catalog/CatalogParser.cs"] = [".allowed", "allowed", "maxLength", "pattern", "roles", "rules", "rules.", "targets"],
-    };
-
     private static readonly Dictionary<string, string[]> S24b1 = new()
     {
         ["jd.resolver/catalog/Catalog.cs"] = ["default"],
         ["jd.resolver/catalog/CatalogParser.cs"] =
         [
-            "approval", "classes", "config", "environment", "environmentTypes", "exports", "implementations", "kind", "layer", "nodes", "scope",
-            "template", "version",
+            ".allowed", "allowed", "approval", "classes", "config", "environment", "environmentTypes", "exports", "implementations", "kind", "layer",
+            "maxLength", "nodes", "pattern", "roles", "rules", "rules.", "scope", "targets", "template", "version",
         ],
         ["jd.resolver/expansion/Expander.cs"] = [".classes.", ".config", ".environment.", ".exports.", "implementations.", "nodes."],
     };
