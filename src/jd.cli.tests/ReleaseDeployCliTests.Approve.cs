@@ -64,13 +64,18 @@ public sealed partial class ReleaseDeployCliTests
         return true;
     }
 
-    private void AssertRefused(int code, string stderr, string cause)
+    // A refusal: exit 1, exactly these lines on stderr, nothing on stdout and no approval file.
+    private void AssertRefused((int Code, string Out, string Err) result, params string[] lines)
     {
-        Assert.Equal(1, code);
-        Assert.Contains($"jd: approve: ", stderr);
-        Assert.Contains(cause, stderr);
+        Assert.Equal((1, string.Empty, string.Concat(lines.Select(line => line + "\n"))), (result.Code, result.Out, result.Err.ReplaceLineEndings("\n")));
         Assert.Empty(ApprovalFiles);
     }
+
+    // A usage error: exit 2, the problem and the usage on stderr, nothing on stdout.
+    private static void AssertUsageError((int Code, string Out, string Err) result, string problem) =>
+        Assert.Equal((2, string.Empty, $"jd: {problem}\n{Cli.Usage}"), (result.Code, result.Out, result.Err.ReplaceLineEndings("\n")));
+
+    private const string MeaningProblem = "approve needs --meaning <text>: 1 to 500 characters, no control characters.";
 
     [Fact]
     public async Task An_approval_writes_one_record_in_the_targets_directory_naming_the_ports_principal_the_kept_set_and_the_meaning()
@@ -133,10 +138,9 @@ public sealed partial class ReleaseDeployCliTests
         var stage = await StageAsync();
         var calls = _identity.Calls;
 
-        var (code, _, stderr) = await ApproveAsync(stage, meaning);
+        var result = await ApproveAsync(stage, meaning);
 
-        Assert.Equal(2, code);
-        Assert.Contains("--meaning <text>: 1 to 500 characters, no control characters", stderr);
+        AssertUsageError(result, MeaningProblem);
         Assert.Empty(ApprovalFiles);
         Assert.Equal(calls, _identity.Calls);
     }
@@ -148,39 +152,68 @@ public sealed partial class ReleaseDeployCliTests
         var stage = await StageAsync();
         Act(Alice);
 
-        Assert.Equal(2, (await ApproveAsync(stage, new string('m', 501))).Code);
+        AssertUsageError(await ApproveAsync(stage, new string('m', 501)), MeaningProblem);
         Assert.Empty(ApprovalFiles);
         Assert.Equal(0, (await ApproveAsync(stage, new string('m', 500))).Code);
         Assert.Single(ApprovalFiles);
     }
 
     [Theory]
-    [InlineData]
-    [InlineData("1.0.0")]
-    [InlineData("1.0.0", "--env", "e.yaml")]
-    [InlineData("1.0.0", "--meaning", "m")]
-    [InlineData("--env", "e.yaml", "--meaning", "m")]
-    [InlineData("1.0.0", "2.0.0", "--env", "e.yaml", "--meaning", "m")]
-    [InlineData("1.0.0", "--env", "e.yaml", "--meaning", "m", "--catalog", "c")]
-    [InlineData("1.0.0", "--env", "e.yaml", "--meaning")]
-    [InlineData("1.0.0", "--env")]
-    public async Task Usage_errors_exit_2_and_print_the_usage_before_anything_is_read(params string[] args)
+    [InlineData("expected exactly one release label.")]
+    [InlineData("approve needs --env.", "1.0.0")]
+    [InlineData("approve needs --env.", "1.0.0", "--meaning", "m")]
+    [InlineData("expected exactly one release label.", "--env", "e.yaml", "--meaning", "m")]
+    [InlineData("expected exactly one release label.", "1.0.0", "2.0.0", "--env", "e.yaml", "--meaning", "m")]
+    [InlineData("unknown option '--catalog'.", "1.0.0", "--env", "e.yaml", "--meaning", "m", "--catalog", "c")]
+    [InlineData("--meaning needs a value.", "1.0.0", "--env", "e.yaml", "--meaning")]
+    [InlineData("--env needs a value.", "1.0.0", "--env")]
+    public async Task Usage_errors_exit_2_and_print_the_usage_before_anything_is_read(string problem, params string[] args)
     {
-        var (code, _, stderr) = await RunAsync(null, ["approve", .. args]);
+        var result = await RunAsync(null, ["approve", .. args]);
 
-        Assert.Equal(2, code);
-        Assert.Contains("Usage:", stderr);
+        AssertUsageError(result, problem);
         Assert.Equal(0, _identity.Calls);
     }
 
     [Fact]
-    public async Task An_unknown_option_is_named_in_the_usage_error()
+    public async Task A_missing_meaning_is_a_usage_error_before_anything_is_read()
     {
-        var (code, _, stderr) = await RunAsync(null, "approve", "1.0.0", "--env", "e.yaml", "--meaning", "m", "--bogus");
+        var stage = await StageAsync();
 
-        Assert.Equal(2, code);
-        Assert.Contains("jd: unknown option '--bogus'.", stderr);
+        var result = await RunAsync(null, "approve", "1.0.0", "--env", stage);
+
+        AssertUsageError(result, MeaningProblem);
+        Assert.Equal(0, _identity.Calls);
     }
+
+    // Edge 1 of docs/architecture/application.md section 8: the label and the meaning are the use case's to check, after the command has checked that
+    // --env can be read, so a descriptor that cannot be read is reported first (before S25f1, the label or the meaning was).
+    [Theory]
+    [InlineData("foo", "m")]
+    [InlineData("1.0.0", "")]
+    public async Task A_descriptor_that_cannot_be_read_is_reported_before_a_label_or_meaning_that_is_refused(string label, string meaning)
+    {
+        var absent = Path.Combine(_temp, "absent.yaml");
+
+        var result = await ApproveAsync(absent, meaning, label);
+
+        Assert.Equal((2, string.Empty, $"jd: cannot read '{absent}': not found or not a file.\n"), (result.Code, result.Out, result.Err.ReplaceLineEndings("\n")));
+        Assert.Equal(0, _identity.Calls);
+    }
+
+    // Edge 1 again: a label that is refused, met together with a missing --env, reports the missing --env (before S25f1, the label was reported).
+    [Fact]
+    public async Task A_missing_env_is_reported_before_a_label_that_is_refused()
+    {
+        var result = await RunAsync(null, "approve", "foo");
+
+        AssertUsageError(result, "approve needs --env.");
+        Assert.Equal(0, _identity.Calls);
+    }
+
+    [Fact]
+    public async Task An_unknown_option_is_named_in_the_usage_error() =>
+        AssertUsageError(await RunAsync(null, "approve", "1.0.0", "--env", "e.yaml", "--meaning", "m", "--bogus"), "unknown option '--bogus'.");
 
     [Fact]
     public async Task A_descriptor_that_cannot_be_read_is_exit_2_and_one_that_is_not_valid_is_exit_1()
@@ -189,31 +222,29 @@ public sealed partial class ReleaseDeployCliTests
         var invalid = Path.Combine(_temp, "invalid.yaml");
         await File.WriteAllTextAsync(invalid, "kind: Environment\n");
 
-        var (missingCode, _, missing) = await ApproveAsync(absent);
-        var (invalidCode, _, error) = await ApproveAsync(invalid);
+        var missing = await ApproveAsync(absent);
+        var error = await ApproveAsync(invalid);
 
-        Assert.Equal(2, missingCode);
-        Assert.Contains($"cannot read '{absent}'", missing);
-        Assert.Equal(1, invalidCode);
-        Assert.Contains("invalid.yaml", error);
+        Assert.Equal((2, string.Empty, $"jd: cannot read '{absent}': not found or not a file.\n"), (missing.Code, missing.Out, missing.Err.ReplaceLineEndings("\n")));
+        Assert.Equal(
+            (1, string.Empty, string.Concat(new[] { "name", "region", "type", "offers", "values" }.Select(field => $"{invalid}: {field}: schema violation: PropertyRequired: #/{field}\n"))),
+            (error.Code, error.Out, error.Err.ReplaceLineEndings("\n")));
         Assert.Equal(0, _identity.Calls);
     }
 
     [Theory]
-    [InlineData("../1.0.0", "cannot name a directory")]
-    [InlineData("a/b", "cannot name a directory")]
-    [InlineData("a\\b", "cannot name a directory")]
-    [InlineData("1.0.0-a..b", "cannot name a directory")]
-    [InlineData("1.0.0\n", "is not a release label")]
-    [InlineData("foo", "is not a release label")]
-    [InlineData(".", "is not a release label")]
+    [InlineData("../1.0.0", "'../1.0.0' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.")]
+    [InlineData("a/b", "'a/b' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.")]
+    [InlineData("a\\b", "'a\\b' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.")]
+    [InlineData("1.0.0-a..b", "'1.0.0-a..b' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.")]
+    [InlineData("1.0.0\n", "'1.0.0\n' is not a release label (like 1.0.0 or 1.0.0-rc.1).")]
+    [InlineData("foo", "'foo' is not a release label (like 1.0.0 or 1.0.0-rc.1).")]
+    [InlineData(".", "'.' is not a release label (like 1.0.0 or 1.0.0-rc.1).")]
     public async Task A_label_that_is_not_label_shaped_is_a_usage_error_before_the_descriptor_the_records_and_the_credential(string label, string expected)
     {
-        var (code, _, stderr) = await ApproveAsync(Environment, label: label); // an ungated descriptor: only the label can be what is refused
+        var result = await ApproveAsync(Environment, label: label); // an ungated descriptor: only the label can be what is refused
 
-        Assert.Equal(2, code);
-        Assert.Contains(expected, stderr);
-        Assert.Contains("Usage:", stderr);
+        AssertUsageError(result, expected);
         Assert.Equal(0, _identity.Calls);
         Assert.Empty(Directory.GetFileSystemEntries(_records));
     }
@@ -224,9 +255,9 @@ public sealed partial class ReleaseDeployCliTests
         await DeployedAsync();
         var calls = _identity.Calls;
 
-        var (code, _, stderr) = await ApproveAsync(Environment);
+        var result = await ApproveAsync(Environment);
 
-        AssertRefused(code, stderr, "environment 'dev' has no approval policy");
+        AssertRefused(result, "jd: approve: environment 'dev' has no approval policy, so there is nothing to approve.");
         Assert.Equal(calls, _identity.Calls);
         Assert.False(Directory.Exists(Path.Combine(_records, "stage")));
     }
@@ -237,9 +268,9 @@ public sealed partial class ReleaseDeployCliTests
         var stage = await StageAsync();
         Act(Alice);
 
-        var (code, _, stderr) = await ApproveAsync(stage);
+        var result = await ApproveAsync(stage);
 
-        AssertRefused(code, stderr, "cannot approve 1.0.0: unknown label");
+        AssertRefused(result, "jd: approve: cannot approve 1.0.0: unknown label: there is no set.yaml for label 1.0.0 on dev.");
         Assert.False(Directory.Exists(Path.Combine(_records, "stage")));
     }
 
@@ -254,11 +285,9 @@ public sealed partial class ReleaseDeployCliTests
             return;
         }
 
-        var (code, _, stderr) = await ApproveAsync(stage);
+        var result = await ApproveAsync(stage);
 
-        AssertRefused(code, stderr, "cannot approve 1.0.0: ");
-        Assert.Contains("cannot be read", stderr);
-        Assert.DoesNotContain("unknown label", stderr, StringComparison.Ordinal);
+        AssertRefused(result, $"jd: approve: cannot approve 1.0.0: the records of label 1.0.0 on dev cannot be read: Access to the path '{Path.Combine(_records, "dev", "1.0.0", "set.yaml")}' is denied.");
     }
 
     [Fact]
@@ -269,11 +298,9 @@ public sealed partial class ReleaseDeployCliTests
         var stage = await StageAsync();
         Act(Alice);
 
-        var (code, _, stderr) = await ApproveAsync(stage);
+        var result = await ApproveAsync(stage);
 
-        AssertRefused(code, stderr, "release 1.0.0 is not qualified on dev:");
-        Assert.Contains("  IQ of the newest record (", stderr);
-        Assert.DoesNotContain("unknown label", stderr, StringComparison.Ordinal);
+        AssertRefused(result, "jd: approve: release 1.0.0 is not qualified on dev:", "  IQ of the newest record (20261017T080001000Z-deploy.json) is failed.");
     }
 
     [Fact]
@@ -283,9 +310,9 @@ public sealed partial class ReleaseDeployCliTests
         var stage = await StageAsync(approvers: [Alice]);
         Act(Carol);
 
-        var (code, _, stderr) = await ApproveAsync(stage);
+        var result = await ApproveAsync(stage);
 
-        AssertRefused(code, stderr, $"principal {Carol} is not listed in the approvers of 'stage'.");
+        AssertRefused(result, $"jd: approve: principal {Carol} is not listed in the approvers of 'stage'.");
     }
 
     [Fact]
@@ -294,9 +321,9 @@ public sealed partial class ReleaseDeployCliTests
         await DeployedAsync(deployer: Alice);
         var strict = await StageAsync(separate: true);
 
-        var (code, _, stderr) = await ApproveAsync(strict);
+        var result = await ApproveAsync(strict);
 
-        AssertRefused(code, stderr, $"principal {Alice} deployed 1.0.0 on dev, and 'stage' requires approvers separate from the deployer.");
+        AssertRefused(result, $"jd: approve: principal {Alice} deployed 1.0.0 on dev, and 'stage' requires approvers separate from the deployer.");
         Assert.Equal(0, (await ApproveAsync(await StageAsync(separate: false))).Code);
         Assert.Single(ApprovalFiles);
     }
@@ -309,12 +336,11 @@ public sealed partial class ReleaseDeployCliTests
         Act(Alice);
 
         var (first, firstOut, _) = await ApproveAsync(stage);
-        var (again, _, stderr) = await ApproveAsync(stage);
+        var (again, againOut, stderr) = await ApproveAsync(stage);
 
         Assert.Equal(0, first);
         Assert.Contains("approved 1.0.0 for stage (1 of 2)", firstOut);
-        Assert.Equal(1, again);
-        Assert.Contains($"principal {Alice} already approved 1.0.0 for 'stage'.", stderr);
+        Assert.Equal((1, string.Empty, $"jd: approve: principal {Alice} already approved 1.0.0 for 'stage'.\n"), (again, againOut, stderr.ReplaceLineEndings("\n")));
         Assert.Single(ApprovalFiles);
         Act(Bob);
         var (second, secondOut, _) = await ApproveAsync(stage);
@@ -331,10 +357,9 @@ public sealed partial class ReleaseDeployCliTests
         Place("20260101T000000000Z-approve.json", Alice.ToUpperInvariant());
         Act(Alice);
 
-        var (code, _, stderr) = await ApproveAsync(stage);
+        var (code, stdout, stderr) = await ApproveAsync(stage);
 
-        Assert.Equal(1, code);
-        Assert.Contains("already approved", stderr);
+        Assert.Equal((1, string.Empty, $"jd: approve: principal {Alice} already approved 1.0.0 for 'stage'.\n"), (code, stdout, stderr.ReplaceLineEndings("\n")));
         Assert.Single(ApprovalFiles);
     }
 
@@ -361,12 +386,9 @@ public sealed partial class ReleaseDeployCliTests
         var stage = await StageAsync(); // no label was ever deployed: reading the records would say "unknown label"
         _identity.Failure = new InvalidOperationException("ARM_TENANT_ID is not set.");
 
-        var (code, _, stderr) = await ApproveAsync(stage);
+        var result = await ApproveAsync(stage);
 
-        Assert.Equal(1, code);
-        Assert.Contains("jd: ARM_TENANT_ID is not set.", stderr);
-        Assert.DoesNotContain("unknown label", stderr, StringComparison.Ordinal);
-        Assert.Empty(ApprovalFiles);
+        AssertRefused(result, "jd: ARM_TENANT_ID is not set.");
     }
 
     [Fact]
@@ -379,11 +401,13 @@ public sealed partial class ReleaseDeployCliTests
         var existing = Path.Combine(StageDirectory, "20261017T080000000Z-approve.json");
         Place(Path.GetFileName(existing), Alice, "old bytes");
 
-        var (code, _, stderr) = await ApproveAsync(stage);
+        var (code, stdout, stderr) = await ApproveAsync(stage);
 
-        Assert.Equal(1, code);
-        Assert.Contains("the approval could not be written", stderr);
-        Assert.Contains("run the command again", stderr);
+        Assert.Equal(
+            (1, string.Empty,
+                "jd: approve: ignored 20261017T080000000Z-approve.json: cannot be read: Unexpected character encountered while parsing value: o. Path '', line 0, position 0.\n"
+                + $"jd: approve: the approval could not be written: The file '{existing}' already exists. If the file already exists, run the command again.\n"),
+            (code, stdout, stderr.ReplaceLineEndings("\n")));
         Assert.Equal("old bytes", await File.ReadAllTextAsync(existing));
         Assert.Single(ApprovalFiles);
     }
@@ -401,8 +425,10 @@ public sealed partial class ReleaseDeployCliTests
 
         Assert.Equal(0, code);
         Assert.Contains("approved 1.0.0 for stage (1 of 1)", stdout);
-        Assert.Contains("jd: approve: ignored 20260101T000000000Z-approve.json: cannot be read: ", stderr);
-        Assert.Contains("jd: approve: ignored notes-approve.json: is not named <time>-approve.json", stderr);
+        Assert.Equal(
+            "jd: approve: ignored 20260101T000000000Z-approve.json: cannot be read: Unexpected character encountered while parsing value: n. Path '', line 0, position 0.\n"
+            + "jd: approve: ignored notes-approve.json: is not named <time>-approve.json with a time like 20261017T030405123Z.\n",
+            stderr.ReplaceLineEndings("\n"));
         Assert.Equal(3, ApprovalFiles.Length);
     }
 

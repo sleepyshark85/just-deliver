@@ -16,7 +16,7 @@ internal static class Cli
     private const string PreviewCommand = "preview";
     private const string DeployCommand = "deploy";
     internal const string ReleaseCommand = "release";
-    private const string ApproveCommand = "approve";
+    internal const string ApproveCommand = "approve";
     internal const string PromoteCommand = "promote";
     internal const string EnvCommand = "env";
     private const string HelpOption = "--help";

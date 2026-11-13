@@ -133,6 +133,18 @@ public class CatalogUsesTests
         Assert.Equal("'env-group' is environment scope; a shared-scope resource uses only shared-scope ones, since the shared layer is deployed first.", error.Message);
     }
 
+    // The scope is one of the part schema's layers, spelled as listed: the schema refuses any other value before the code reads it as a layer.
+    [Theory]
+    [InlineData("tenant")]
+    [InlineData("Shared")]
+    [InlineData("'0'")]
+    public async Task A_scope_that_is_not_a_layer_is_a_schema_violation(string scope)
+    {
+        var error = SingleError(await Parse(("s.yaml", Shared("shared-group", scope: scope))));
+
+        Assert.Equal(("s.yaml", "scope", "schema violation: NotInEnumeration: #/scope"), (error.File, error.Location, error.Message));
+    }
+
     // Allowed: environment -> shared, environment; component and runtime -> any.
     [Fact]
     public async Task The_allowed_scope_directions_load()
@@ -280,8 +292,8 @@ public class CatalogUsesTests
         var environment = SingleError(await Parse(("c.yaml", Component(environment: "{ nodes: { Bad_Name: { template: t/db, config: {} } }, exports: {} }"))));
 
         Assert.Equal(("s.yaml", "nodes.Bad_Name"), (shared.File, shared.Location));
-        Assert.StartsWith("'Bad_Name' is not a valid node name;", shared.Message);
-        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.Bad_Name"), (environment.File, environment.Location));
+        Assert.Equal(CatalogParserTests.NodeNameMessage, shared.Message);
+        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.Bad_Name", CatalogParserTests.NodeNameMessage), (environment.File, environment.Location, environment.Message));
     }
 
     [Theory]
