@@ -1,5 +1,6 @@
 using jd.core.identity;
 using jd.core.revisions;
+using jd.orchestrator.usecases;
 using Xunit;
 
 namespace jd.cli.tests;
@@ -271,7 +272,7 @@ public sealed partial class ReleaseDeployCliTests
     {
         var stage = await ApprovedAsync();
         var backend = new RecordingBackend();
-        var changed = new ReleaseDeployCli.Promotion(new DeployerIdentity("tenant-1", "client-1", Dave), "dev", "1.0.0", new string('0', 64));
+        var changed = new Promotion(new DeployerIdentity("tenant-1", "client-1", Dave), "dev", "1.0.0", new string('0', 64));
 
         var stderr = new StringWriter();
         var code = await ReleaseDeployCli.PromoteAsync(
