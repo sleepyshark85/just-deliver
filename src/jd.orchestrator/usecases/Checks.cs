@@ -1,3 +1,4 @@
+using jd.core.identity;
 using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
@@ -23,6 +24,22 @@ public static class Checks
     /// reads the block, not the type. Run before the identity, the records or the backend is touched; a preview creates nothing, so it is not asked.
     /// </summary>
     public static Gated? Gate(EnvironmentDescriptor environment) => environment.Approval is null ? null : new Gated(environment.Name);
+
+    /// <summary>
+    /// The principal of the credential, named before any record is read or written; or, when the credential cannot name one, the refusal: exactly one of the
+    /// two is null.
+    /// </summary>
+    public static async Task<(DeployerIdentity? Principal, IdentityRefused? Refusal)> PrincipalAsync(Connections connections, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await connections.Identity().GetAsync(cancellationToken), null);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return (null, new IdentityRefused(ex.Message));
+        }
+    }
 
     /// <summary>The templates of <paramref name="catalog"/>'s templates part, and every way <paramref name="graphs"/> do not fit them, each once.</summary>
     public static (ITemplates Templates, IReadOnlyList<LoadError> Misfits) Templates(SourceCatalog catalog, IEnumerable<ResolvedGraph> graphs, Connections connections)

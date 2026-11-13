@@ -113,14 +113,10 @@ internal static class ReleaseStart
     private static async Task<(Kept? Kept, Problem? Refusal)> KeepAsync(
         IRecordStore records, DeployerIdentity? known, Checked run, Connections connections, CancellationToken cancellationToken)
     {
-        DeployerIdentity principal;
-        try
+        var (principal, identityRefusal) = known is null ? await Checks.PrincipalAsync(connections, cancellationToken) : (known, null);
+        if (principal is null)
         {
-            principal = known ?? await connections.Identity().GetAsync(cancellationToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return (null, new IdentityRefused(ex.Message));
+            return (null, identityRefusal);
         }
 
         try

@@ -7,26 +7,6 @@ public sealed partial class ThinCliTests
     // identity, the records and the clock.
     private static readonly Dictionary<string, string[]> R1Allowlist = new()
     {
-        ["jd.cli.ApproveCli"] =
-        [
-            "jd.core.identity.DeployerIdentity.get_ObjectId",
-            "jd.orchestrator.usecases.Connections.get_Records",
-            "jd.orchestrator.usecases.Connections.get_Time",
-            "jd.resolver.LoadResult`1.get_Errors",
-            "jd.resolver.LoadResult`1.get_Value",
-            "jd.resolver.environment.ApprovalPolicy.Counts",
-            "jd.resolver.environment.EnvironmentParser.LoadAsync",
-            "jd.resolver.release.ApprovalReading.get_Approvers",
-            "jd.resolver.release.ApprovalReading.get_Ignored",
-            "jd.resolver.release.ApprovalRecord.Build",
-            "jd.resolver.release.ApprovalRecord.ReadAsync",
-            "jd.resolver.release.Qualification.get_Deployers",
-            "jd.resolver.release.Qualification.get_Qualified",
-            "jd.resolver.release.Qualification.get_Reasons",
-            "jd.resolver.release.Qualification.get_SetSha256",
-            "jd.resolver.release.QualificationReader.ReadAsync",
-            "jd.resolver.release.ReleaseRecordFile.WriteAsync",
-        ],
         ["jd.cli.Arguments"] =
         [
             "jd.resolver.release.ReleaseRecordFile.LabelProblem",
@@ -65,10 +45,6 @@ public sealed partial class ThinCliTests
     // R2 today: the commands that build the records or the identity from the factories, so name the ports.
     private static readonly Dictionary<string, string[]> R2Allowlist = new()
     {
-        ["jd.cli.ApproveCli"] =
-        [
-            "jd.core.records.IRecordStore",
-        ],
         ["jd.cli.Cli"] =
         [
             "jd.core.identity.IDeployerIdentity",
