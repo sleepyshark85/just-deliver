@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.References;
@@ -10,18 +11,29 @@ namespace jd.resolver;
 /// against the meta-schema, a reference to another resolves by that schema's <c>$id</c>, and each document kind maps to the schema that declares
 /// it in its <c>kind</c> property's <c>enum</c>. A schema that declares no kind is a shared part the others refer to; no kind or schema name is
 /// spelled in code. The schemas ship with jd, so a schema without an <c>$id</c> or one the meta-schema refuses, an <c>$id</c> or a kind declared
-/// twice, or a reference to no schema is a mistake in jd, not in a user's file: building throws <see cref="InvalidOperationException"/>.
+/// twice, or a reference to no schema is a mistake in jd, not in a user's file: building throws <see cref="InvalidOperationException"/>. Per kind,
+/// the index also keeps the fields its <c>x-jd</c> annotations name: those that define names, those that refer to them, and whether the kind has
+/// exactly one document (<see cref="NamesOf"/>).
 /// </summary>
 internal sealed class SchemaIndex
 {
     // The annotation keyword and the one annotation the validator reads (documents.md section 3); the meta-schema is named after the keyword.
     private const string Annotation = "x-jd";
     private const string MessageKeyword = "message";
+    private const string DefineKeyword = "define";
+    private const string RefKeyword = "ref";
+    private const string FallbackKeyword = "fallback";
+    private const string OneKeyword = "one";
     private const string MetaSchemaName = $"schemas/{Annotation}.schema.json";
 
     private readonly Dictionary<string, JsonSchema> _byKind;
+    private readonly Dictionary<string, KindNames> _names;
 
-    private SchemaIndex(Dictionary<string, JsonSchema> byKind) => _byKind = byKind;
+    private SchemaIndex(Dictionary<string, JsonSchema> byKind)
+    {
+        _byKind = byKind;
+        _names = byKind.ToDictionary(entry => entry.Key, entry => Annotated(entry.Value));
+    }
 
     /// <summary>The schemas jd ships, built once for the process; no caller's cancellation applies to a build every caller shares.</summary>
     public static Task<SchemaIndex> Shipped { get; } = BuildAsync(ReadAll().ToList());
@@ -29,6 +41,9 @@ internal sealed class SchemaIndex
     /// <summary>Validates <paramref name="document"/> against the schema of its kind, which must be one the schemas declare.</summary>
     public IReadOnlyList<LoadError> Validate(Document document) =>
         _byKind[document.Kind].Validate(document.Body).SelectMany(error => Errors(document.Source, error)).ToList();
+
+    /// <summary>The name annotations of <paramref name="kind"/>, which must be one the schemas declare.</summary>
+    public KindNames NamesOf(string kind) => _names[kind];
 
     /// <summary>Builds the index from <paramref name="schemas"/>, each a name (for errors) and its text; the meta-schema is among them.</summary>
     internal static async Task<SchemaIndex> BuildAsync(IReadOnlyList<(string Name, string Text)> schemas)
@@ -107,11 +122,48 @@ internal sealed class SchemaIndex
     // The validator's paths read "#/<dotted.path>"; the location is the dotted path.
     private static string Location(ValidationError error) => error.Path?.TrimStart('#').Trim('/') ?? string.Empty;
 
-    private static string? Message(JsonSchema? schema) =>
+    private static string? Message(JsonSchema? schema) => Keyword(schema, MessageKeyword) as string;
+
+    private static object? Keyword(JsonSchema? schema, string keyword) =>
         schema?.ExtensionData is { } data && data.TryGetValue(Annotation, out var value) && value is IDictionary<string, object?> annotations
-            && annotations.TryGetValue(MessageKeyword, out var message)
-            ? message as string
+            && annotations.TryGetValue(keyword, out var found)
+            ? found
             : null;
+
+    private static KindNames Annotated(JsonSchema root)
+    {
+        var located = Located(root, "$", []).ToList();
+        // define takes one namespace or a list of them (the meta-schema's two forms).
+        var defines = located.SelectMany(field => (Keyword(field.Schema, DefineKeyword) switch
+        {
+            string single => [single],
+            IEnumerable<object> list => list.OfType<string>(),
+            _ => [],
+        }).Select(space => new NameField(space, field.Path, Fallback: null)));
+        var refs = located.SelectMany(field => Keyword(field.Schema, RefKeyword) is string space
+            ? [new NameField(space, field.Path, Keyword(field.Schema, FallbackKeyword) as string)]
+            : Array.Empty<NameField>());
+        return new KindNames(Keyword(root, OneKeyword) is true, [.. defines], [.. refs]);
+    }
+
+    // Every subschema of a kind with the path (JSONPath) of the values it describes: a property adds its name, a map's subschema stands for
+    // each of its values and a list's for each item, and a reference or a branch describes the same values as its parent. A recursive schema
+    // (a value holding values of its own shape, such as a descriptor's values) is walked down to where it repeats: below that, its values have
+    // no end of paths, so a field annotated there is read only at its first level.
+    private static IEnumerable<(JsonSchema Schema, string Path)> Located(JsonSchema schema, string path, ImmutableHashSet<JsonSchema> outer)
+    {
+        if (outer.Contains(schema))
+        {
+            return [];
+        }
+
+        var within = outer.Add(schema);
+        return schema.Properties.SelectMany(property => Located(property.Value, $"{path}['{property.Key}']", within))
+            .Concat(schema.PatternProperties.Values.Append(schema.AdditionalPropertiesSchema).OfType<JsonSchema>().SelectMany(value => Located(value, $"{path}.*", within)))
+            .Concat(new[] { schema.Item }.OfType<JsonSchema>().SelectMany(item => Located(item, $"{path}[*]", within)))
+            .Concat(schema.AllOf.Concat(schema.AnyOf).Concat(schema.OneOf).Append(schema.Reference).OfType<JsonSchema>().SelectMany(same => Located(same, path, within)))
+            .Prepend((schema, path));
+    }
 
     // Every resource of the assembly is a schema: jd.resolver.csproj embeds nothing else.
     private static IEnumerable<(string Name, string Text)> ReadAll()

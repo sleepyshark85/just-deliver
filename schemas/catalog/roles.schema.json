@@ -10,6 +10,7 @@
     "kind": { "enum": ["Roles"] },
     "roles": {
       "type": "object",
+      "x-jd": { "define": "role" },
       "minProperties": 1,
       "additionalProperties": {
         "type": "string",

@@ -8,12 +8,13 @@
   "required": ["kind", "name", "description", "scope", "nodes", "exports"],
   "properties": {
     "kind": { "enum": ["SharedResource"] },
-    "name": { "description": "Same pattern as a component name; how other parts read it.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
+    "name": { "description": "Same pattern as a component name; how other parts read it.", "type": "string", "x-jd": { "define": ["part owner", "shared resource"] }, "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
     "description": { "description": "What the resource is for.", "type": "string", "minLength": 1 },
     "scope": { "description": "The layer that deploys it.", "$ref": "part.schema.json#/definitions/layer" },
     "uses": {
       "description": "The shared resources this one reads. A shared-scope resource uses only shared-scope ones; no cycles (checked by the resolver).",
       "type": "array",
+      "x-jd": { "ref": "shared resource" },
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 }
     },
