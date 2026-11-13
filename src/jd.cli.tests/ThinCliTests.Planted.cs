@@ -139,6 +139,26 @@ namespace jd.cli.tests
                 findings.Select(f => f.Message).Order(StringComparer.Ordinal));
         }
 
+        // jd's own Approve: its command code may build the input and read the result, the progress and the problem; the label, the descriptor, the
+        // qualification, the approver and the record are the use case's.
+        [Fact]
+        public void R1_names_the_approve_command_and_member_that_reach_past_the_approve_use_case()
+        {
+            var findings = R1(Planted, Only(typeof(planted.ApproveCommand)), UseCaseSurface(UseCases(typeof(Connections))));
+
+            Assert.Equal(
+                [
+                    "jd.cli.tests.planted.ApproveCommand.ChecksTheLabel reaches jd.resolver.release.ReleaseRecordFile.LabelProblem",
+                    "jd.cli.tests.planted.ApproveCommand.CountsTheApprover reaches jd.resolver.environment.ApprovalPolicy.Counts",
+                    "jd.cli.tests.planted.ApproveCommand.LoadsTheDescriptor reaches jd.resolver.environment.EnvironmentParser.LoadAsync",
+                    "jd.cli.tests.planted.ApproveCommand.ReadsTheQualification reaches jd.orchestrator.usecases.Connections.get_Records",
+                    "jd.cli.tests.planted.ApproveCommand.ReadsTheQualification reaches jd.resolver.release.QualificationReader.ReadAsync",
+                    "jd.cli.tests.planted.ApproveCommand.WritesTheRecord reaches jd.orchestrator.usecases.Connections.get_Records",
+                    "jd.cli.tests.planted.ApproveCommand.WritesTheRecord reaches jd.resolver.release.ReleaseRecordFile.WriteAsync",
+                ],
+                findings.Select(f => f.Message).Order(StringComparer.Ordinal));
+        }
+
         // jd's release run start: a refusal's values are the problem's to read, but loading, the gate, the re-hash, resolving, keeping the set and
         // building the backend are the step's, and the step itself is reached only through today's allowlist (it is no use case).
         [Fact]
@@ -341,6 +361,29 @@ namespace jd.cli.tests.planted
         public static object SerializesTheSet(ReleaseSet set) => ReleaseSetFile.Serialize(set);
 
         public static object ReadsTheClock(Connections connections) => connections.Time();
+    }
+
+    internal static class ApproveCommand
+    {
+        private static readonly SourceDocument Document = new("x", "kind: Environment"u8.ToArray());
+
+        public static async Task<string> ApprovesAsync(Connections connections)
+        {
+            var lines = new List<string>();
+            var result = await Approve.RunAsync(new ApproveInput("1.0.0", Document, "m"), connections, p => lines.Add(p is Ignored i ? i.What : string.Empty), CancellationToken.None);
+            return $"{result.Environment?.Approval?.Required}{result.Counted}{result.Record}{(result.Problem as NotSeparate)?.QualifiedOn}{string.Concat(lines)}";
+        }
+
+        public static string? ChecksTheLabel() => ReleaseRecordFile.LabelProblem("1.0.0");
+
+        public static object LoadsTheDescriptor() => EnvironmentParser.LoadAsync(Document, CancellationToken.None);
+
+        public static object ReadsTheQualification(Connections connections) => QualificationReader.ReadAsync(connections.Records(), "dev", "1.0.0");
+
+        public static bool CountsTheApprover(ApprovalPolicy policy) => policy.Counts("x", []);
+
+        public static object WritesTheRecord(Connections connections) =>
+            ReleaseRecordFile.WriteAsync(connections.Records(), "stage", "1.0.0", DateTimeOffset.UnixEpoch, ReleaseRecordFile.ApproveActivity, "{}");
     }
 
     internal static class ReleaseDeployCommand
