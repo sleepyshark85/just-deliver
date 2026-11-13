@@ -1,5 +1,6 @@
 using System.Reflection.Metadata;
 using jd.core.records;
+using jd.orchestrator;
 using jd.orchestrator.usecases;
 using jd.resolver;
 using jd.resolver.catalog;
@@ -139,23 +140,64 @@ namespace jd.cli.tests
                 findings.Select(f => f.Message).Order(StringComparer.Ordinal));
         }
 
-        // jd's release run start: a refusal's values are the problem's to read, but loading, the gate, the re-hash, resolving, keeping the set and
-        // building the backend are the step's, and the step itself is reached only through today's allowlist (it is no use case).
+        // jd's own Approve: its command code may build the input and read the result, the progress and the problem; the label, the descriptor, the
+        // qualification, the approver and the record are the use case's.
         [Fact]
-        public void R1_names_the_release_deploy_command_and_member_that_run_the_start_itself()
+        public void R1_names_the_approve_command_and_member_that_reach_past_the_approve_use_case()
+        {
+            var findings = R1(Planted, Only(typeof(planted.ApproveCommand)), UseCaseSurface(UseCases(typeof(Connections))));
+
+            Assert.Equal(
+                [
+                    "jd.cli.tests.planted.ApproveCommand.ChecksTheLabel reaches jd.resolver.release.ReleaseRecordFile.LabelProblem",
+                    "jd.cli.tests.planted.ApproveCommand.CountsTheApprover reaches jd.resolver.environment.ApprovalPolicy.Counts",
+                    "jd.cli.tests.planted.ApproveCommand.LoadsTheDescriptor reaches jd.resolver.environment.EnvironmentParser.LoadAsync",
+                    "jd.cli.tests.planted.ApproveCommand.ReadsTheQualification reaches jd.orchestrator.usecases.Connections.get_Records",
+                    "jd.cli.tests.planted.ApproveCommand.ReadsTheQualification reaches jd.resolver.release.QualificationReader.ReadAsync",
+                    "jd.cli.tests.planted.ApproveCommand.WritesTheRecord reaches jd.orchestrator.usecases.Connections.get_Records",
+                    "jd.cli.tests.planted.ApproveCommand.WritesTheRecord reaches jd.resolver.release.ReleaseRecordFile.WriteAsync",
+                ],
+                findings.Select(f => f.Message).Order(StringComparer.Ordinal));
+        }
+
+        // jd's DeployRelease and QualifyRelease: a refusal's and a result's values are the command's to read, but loading, the gate, the re-hash,
+        // resolving, keeping the set, building the backend, the walk, IQ and the record are the use cases'.
+        [Fact]
+        public void R1_names_the_release_deploy_command_and_member_that_reach_past_the_deploy_and_qualify_use_cases()
         {
             var findings = R1(Planted, Only(typeof(planted.ReleaseDeployCommand)), UseCaseSurface(UseCases(typeof(Connections))));
 
             Assert.Equal(
                 [
                     "jd.cli.tests.planted.ReleaseDeployCommand.BuildsTheBackend reaches jd.orchestrator.usecases.Connections.get_Backend",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.BuildsTheRecord reaches jd.core.identity.DeployerIdentity..ctor",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.BuildsTheRecord reaches jd.orchestrator.ReleaseRecordBuilder.BuildQualify",
                     "jd.cli.tests.planted.ReleaseDeployCommand.ChecksTheGate reaches jd.orchestrator.usecases.Checks.Gate",
                     "jd.cli.tests.planted.ReleaseDeployCommand.KeepsTheSet reaches jd.resolver.release.ReleaseRecordFile.KeepSetAsync",
                     "jd.cli.tests.planted.ReleaseDeployCommand.LoadsTheSet reaches jd.resolver.release.ReleaseSetFile.ParseAsync",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.Qualifies reaches jd.orchestrator.Qualifier.QualifyAsync",
                     "jd.cli.tests.planted.ReleaseDeployCommand.RehashesTheKeptSet reaches jd.resolver.release.ReleaseHash.Of",
                     "jd.cli.tests.planted.ReleaseDeployCommand.Resolves reaches jd.resolver.release.ReleaseResolver.ResolveAsync",
-                    "jd.cli.tests.planted.ReleaseDeployCommand.StartsAsync reaches jd.orchestrator.usecases.ReleaseStart.StartAsync",
-                    "jd.cli.tests.planted.ReleaseDeployCommand.StartsAsync reaches jd.orchestrator.usecases.ReleaseStartInput..ctor",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.Walks reaches jd.orchestrator.Orchestrator.DeployReleaseAsync",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.WritesTheRecord reaches jd.resolver.release.ReleaseRecordFile.WriteAsync",
+                ],
+                findings.Select(f => f.Message).Order(StringComparer.Ordinal));
+        }
+
+        // jd's Promote: its command code may build the input and read the result, the progress and the problem; the label, the target, the principal,
+        // the qualification and the approvals are the use case's.
+        [Fact]
+        public void R1_names_the_promote_command_and_member_that_reach_past_the_promote_use_case()
+        {
+            var findings = R1(Planted, Only(typeof(planted.PromoteCommand)), UseCaseSurface(UseCases(typeof(Connections))));
+
+            Assert.Equal(
+                [
+                    "jd.cli.tests.planted.PromoteCommand.ChecksTheLabel reaches jd.resolver.release.ReleaseRecordFile.LabelProblem",
+                    "jd.cli.tests.planted.PromoteCommand.ChecksThePromotion reaches jd.orchestrator.usecases.Connections.get_Records",
+                    "jd.cli.tests.planted.PromoteCommand.ChecksThePromotion reaches jd.resolver.release.PromotionCheck.CheckAsync",
+                    "jd.cli.tests.planted.PromoteCommand.LoadsTheTarget reaches jd.resolver.environment.EnvironmentParser.LoadAsync",
+                    "jd.cli.tests.planted.PromoteCommand.NamesThePrincipal reaches jd.orchestrator.usecases.Connections.get_Identity",
                 ],
                 findings.Select(f => f.Message).Order(StringComparer.Ordinal));
         }
@@ -343,14 +385,45 @@ namespace jd.cli.tests.planted
         public static object ReadsTheClock(Connections connections) => connections.Time();
     }
 
+    internal static class ApproveCommand
+    {
+        private static readonly SourceDocument Document = new("x", "kind: Environment"u8.ToArray());
+
+        public static async Task<string> ApprovesAsync(Connections connections)
+        {
+            var lines = new List<string>();
+            var result = await Approve.RunAsync(new ApproveInput("1.0.0", Document, "m"), connections, p => lines.Add(p is Ignored i ? i.What : string.Empty), CancellationToken.None);
+            return $"{result.Environment?.Approval?.Required}{result.Counted}{result.Record}{(result.Problem as NotSeparate)?.QualifiedOn}{string.Concat(lines)}";
+        }
+
+        public static string? ChecksTheLabel() => ReleaseRecordFile.LabelProblem("1.0.0");
+
+        public static object LoadsTheDescriptor() => EnvironmentParser.LoadAsync(Document, CancellationToken.None);
+
+        public static object ReadsTheQualification(Connections connections) => QualificationReader.ReadAsync(connections.Records(), "dev", "1.0.0");
+
+        public static bool CountsTheApprover(ApprovalPolicy policy) => policy.Counts("x", []);
+
+        public static object WritesTheRecord(Connections connections) =>
+            ReleaseRecordFile.WriteAsync(connections.Records(), "stage", "1.0.0", DateTimeOffset.UnixEpoch, ReleaseRecordFile.ApproveActivity, "{}");
+    }
+
     internal static class ReleaseDeployCommand
     {
         private static readonly SourceDocument Document = new("x", "kind: ReleaseSet"u8.ToArray());
 
         public static string WordsTheRefusal(KeptSetChanged changed) => $"{changed.Set} {changed.ExpectedSha256}";
 
-        public static async Task<object> StartsAsync(Connections connections) =>
-            await ReleaseStart.StartAsync(new ReleaseStartInput(Document, Document, new SourceCatalog("c", []), false, null), connections, CancellationToken.None);
+        public static string WordsTheResult(DeployReleaseResult result) => $"{result.Summary?.NotStarted.Count} {result.Iq?.Passed} {result.Record}";
+
+        public static object Walks(Orchestrator orchestrator) => orchestrator.DeployReleaseAsync([], false, null, null, CancellationToken.None);
+
+        public static object Qualifies(Qualifier qualifier) => qualifier.QualifyAsync([], CancellationToken.None);
+
+        public static object BuildsTheRecord(ReleaseSet set, EnvironmentDescriptor environment, IqResult iq) =>
+            ReleaseRecordBuilder.BuildQualify(set, "x", environment, [], new("t", "c", "o"), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, iq);
+
+        public static object WritesTheRecord(IRecordStore records) => ReleaseRecordFile.WriteAsync(records, "dev", "1.0.0", DateTimeOffset.UnixEpoch, "deploy", "{}");
 
         public static object LoadsTheSet() => ReleaseSetFile.ParseAsync(Document);
 
@@ -363,6 +436,27 @@ namespace jd.cli.tests.planted
         public static object KeepsTheSet(IRecordStore records) => ReleaseRecordFile.KeepSetAsync(records, "dev", "1.0.0", "x"u8.ToArray());
 
         public static object BuildsTheBackend(Connections connections) => connections.Backend();
+    }
+
+    internal static class PromoteCommand
+    {
+        private static readonly SourceDocument Document = new("x", "kind: Environment"u8.ToArray());
+
+        public static async Task<string> PromotesAsync(Connections connections)
+        {
+            var lines = new List<string>();
+            var result = await Promote.RunAsync(
+                new PromoteInput("1.0.0", Document, new SourceCatalog("c", [Document])), connections, p => lines.Add(p is Promoting s ? s.From + s.SetSha256 : string.Empty), CancellationToken.None);
+            return $"{result.SetSha256}{result.Environment?.Approval?.QualifiedOn}{result.Release?.Summary?.Deployed}{(result.Problem as NotPromotable)?.Reasons.Count}{string.Concat(lines)}";
+        }
+
+        public static string? ChecksTheLabel() => ReleaseRecordFile.LabelProblem("1.0.0");
+
+        public static object LoadsTheTarget() => EnvironmentParser.LoadAsync(Document, CancellationToken.None);
+
+        public static object NamesThePrincipal(Connections connections) => connections.Identity();
+
+        public static object ChecksThePromotion(Connections connections, EnvironmentDescriptor target) => PromotionCheck.CheckAsync(connections.Records(), target, "1.0.0");
     }
 
     internal sealed class Store : IRecordStore

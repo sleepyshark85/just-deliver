@@ -10,6 +10,7 @@
     "kind": { "enum": ["Grants"] },
     "targets": {
       "type": "object",
+      "x-jd": { "define": "grant template" },
       "minProperties": 1,
       "additionalProperties": { "type": "string", "minLength": 1 }
     }

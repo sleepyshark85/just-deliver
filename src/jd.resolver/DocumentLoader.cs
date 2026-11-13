@@ -4,30 +4,18 @@ using YamlDotNet.Core;
 
 namespace jd.resolver;
 
-/// <summary>A file read as a document: where it came from, its kind and its tree (docs/architecture/documents.md section 2, concept 1).</summary>
+/// <summary>A source read as a document: where it came from, its kind and its tree (docs/architecture/documents.md section 2, concept 1).</summary>
 internal sealed record Document(string Source, string Kind, JObject Body);
 
 /// <summary>
-/// Reads files into <see cref="Document"/>s and validates each against the embedded schema that declares its kind. A caller names the kinds it
-/// accepts; any other kind is refused. Parsing and validating are separate steps, so a caller can refuse a document before its schema is applied.
+/// Reads YAML text, or a tree already read, into <see cref="Document"/>s and validates each against the embedded schema that declares its kind. A caller
+/// names the kinds it accepts; any other kind is refused. Parsing and validating are separate steps, so a caller can refuse a document before its schema
+/// is applied.
 /// </summary>
 public static class DocumentLoader
 {
     /// <summary>The one field read before a schema is known: it picks the schema. Public, so the writers of documents name it too.</summary>
     public const string KindField = "kind";
-
-    private static readonly YamlSchemaValidator Validator = new();
-
-    /// <summary>Loads and validates the YAML file at <paramref name="path"/>; <paramref name="what"/> names the file in the error when it does not exist.</summary>
-    internal static async Task<LoadResult<Document>> LoadFileAsync(string path, string what, IReadOnlyCollection<string> kinds, CancellationToken cancellationToken)
-    {
-        if (!File.Exists(path))
-        {
-            return new LoadResult<Document>(null, [new LoadError(path, string.Empty, $"{what} not found.")]);
-        }
-
-        return await LoadAsync(path, await File.ReadAllTextAsync(path, cancellationToken), kinds, cancellationToken);
-    }
 
     /// <summary>Parses and validates YAML text; <paramref name="source"/> names it in errors.</summary>
     internal static async Task<LoadResult<Document>> LoadAsync(string source, string text, IReadOnlyCollection<string> kinds, CancellationToken cancellationToken) =>
@@ -62,8 +50,7 @@ public static class DocumentLoader
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var result = await Validator.ValidateTokenAsync(EmbeddedSchemas.ByKind[document.Kind], document.Body);
-        return result.Errors.Select(e => LoadError.FromSchema(document.Source, e)).ToList();
+        return (await SchemaIndex.Shipped).Validate(document);
     }
 
     private static LoadResult<Document> Read(string source, JToken tree, IReadOnlyCollection<string> kinds)

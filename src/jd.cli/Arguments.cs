@@ -1,5 +1,3 @@
-using jd.resolver.release;
-
 namespace jd.cli;
 
 /// <summary>
@@ -37,10 +35,11 @@ internal sealed record Arguments(IReadOnlyList<string> Positional, string? Envir
     }
 
     /// <summary>
-    /// Reads the arguments of a command that takes one release label and the value options <paramref name="valueOptions"/> (<c>jd approve</c>, <c>jd promote</c>). The label is null,
-    /// with the problem set, when an option is unknown or lacks its value, or there is not exactly one label, or it cannot name a directory. A value given twice is the last one.
+    /// Reads the arguments of a command that takes one release label and the value options <paramref name="valueOptions"/>. The label is null, with the
+    /// problem set, when an option is unknown or lacks its value, or there is not exactly one label; whether it can name a release is its use case's.
+    /// A value given twice is the last one.
     /// </summary>
-    public static (string? Label, IReadOnlyDictionary<string, string> Values, string Problem) ScanLabel(string[] args, params string[] valueOptions)
+    public static (string? Label, IReadOnlyDictionary<string, string> Values, string Problem) ScanOneLabel(string[] args, params string[] valueOptions)
     {
         var (scanned, problem) = ScanOptions(args, valueOptions, []);
         if (scanned is null)
@@ -48,13 +47,7 @@ internal sealed record Arguments(IReadOnlyList<string> Positional, string? Envir
             return (null, new Dictionary<string, string>(), problem);
         }
 
-        if (scanned.Positional.Count != 1)
-        {
-            return (null, scanned.Values, "expected exactly one release label.");
-        }
-
-        var label = scanned.Positional[0];
-        return ReleaseRecordFile.LabelProblem(label) is { } labelProblem ? (null, scanned.Values, labelProblem) : (label, scanned.Values, string.Empty);
+        return scanned.Positional.Count == 1 ? (scanned.Positional[0], scanned.Values, string.Empty) : (null, scanned.Values, "expected exactly one release label.");
     }
 
     /// <summary>

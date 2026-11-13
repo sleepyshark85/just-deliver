@@ -97,10 +97,10 @@ read the concept records instead of today's types: same algorithms, reads adjust
 ```jsonc
 { "x-jd": { "is": "owner" }, "properties": {
     "kind":    { "enum": ["Component"] },
-    "name":    { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$", "x-jd": { "define": ["part-owner", "component"] } },
+    "name":    { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$", "x-jd": { "define": ["part owner", "component"] } },
     "exports": { "type": "array", "items": { "type": "string" }, "x-jd": { "is": "contract" } },
-    "uses":    { "type": "array", "items": { "type": "string" }, "x-jd": { "is": "part.reads", "ref": "shared-resource" } },
-    "implementations": { "type": "object", "x-jd": { "select": "env.type", "fallback": "default", "ref": "environment-type" },
+    "uses":    { "type": "array", "items": { "type": "string" }, "x-jd": { "is": "part.reads", "ref": "shared resource" } },
+    "implementations": { "type": "object", "x-jd": { "select": "env.type", "fallback": "default", "ref": "environment type" },
       "additionalProperties": { "properties": {
         "environment": { "$ref": "part.schema.json", "x-jd": { "scope": "environment" } },
         "classes": { "type": "object", "x-jd": { "select": "requirement.class" },
@@ -121,7 +121,7 @@ read the concept records instead of today's types: same algorithms, reads adjust
 and lets it read `cosmos-account` because `part.reads` names it. `sharedresource.schema.json` binds `scope` as `is: part.scope` with
 `$ref: part.schema.json#/definitions/layer`; `catalog.schema.json` binds each environment type's `layer` the same way. The runtime schema
 binds its implementation's part as `is: runtime.part`, its `probe` and `release` fields as `probe.*` / `rollout.*`; `grants.yaml`'s
-`targets` is `define: grant-template` (its keys) with each value `is: grant.target-input`.
+`targets` is `define: grant template` (its keys) with each value `is: grant.target-input`.
 
 ### Annotated: one environment definition (`schemas/environment-definition.schema.json`, excerpt)
 
@@ -129,8 +129,8 @@ binds its implementation's part as `is: runtime.part`, its `probe` and `release`
 { "properties": {
     "name":     { "x-jd": { "is": "env.name", "define": "environment" } },
     "region":   { "x-jd": { "is": "env.region" } },
-    "type":     { "x-jd": { "is": "env.type", "ref": "environment-type" } },
-    "offers":   { "x-jd": { "is": "env.offers", "ref": "part-owner" } },
+    "type":     { "x-jd": { "is": "env.type", "ref": "environment type" } },
+    "offers":   { "x-jd": { "is": "env.offers", "ref": "part owner" } },
     "approval": { "$ref": "approval.schema.json", "x-jd": { "is": "env.approval" } } } }   // one copy; today also in environment.schema.json
 // approval.schema.json: qualifiedOn approval.qualified-on, required approval.required, approvers approval.approvers,
 // separateFromDeployer approval.separate. environment.schema.json (the descriptor) binds the same roles plus values as env.values.
@@ -260,7 +260,7 @@ Records written before stay readable either way: the schemas keep accepting `tie
 
 ## 6. Errors
 
-- Every error stays `file: location: message` (`LoadError`). Schema errors keep today's location extraction (`LoadError.FromSchema`).
+- Every error stays `file: location: message` (`LoadError`). Schema errors take their location from the validator's error path (`SchemaIndex`).
 - **Locations come from the index**: the binder records where each concept value was read (`implementations.default.classes.standard`,
   `requires[0]`), so no check builds a location from field names (Appendix A, "Locations and messages").
 - **A rule that is data carries its message as data**: a subschema with `message` reports that text with the location; a `ref` failure reads
@@ -395,10 +395,10 @@ Class: **(a)** moves to data; **(b)** an external protocol, an adapter constant 
 | `catalog/CatalogParser.cs:16-25` | the eight kind names | a | S24a1: from the schemas |
 | `catalog/CatalogParser.cs:28-35` | retired kinds; removed field `add` | a | S24a2: deleted (choice 3) |
 | `catalog/CatalogParser.cs:39` | node-name pattern | a | S24a2: schema |
-| `catalog/CatalogParser.cs:82,84,85,108,124` | `rules`, `roles`, `targets`, `environmentTypes`, `approval`, `layer`, `version` | a | S24a3, S24b1 |
+| `catalog/CatalogParser.cs:82,84,85,108,124` | `rules`, `roles`, `targets`, `environmentTypes`, `approval`, `layer`, `version` | a | S24b1 (the `S24b1` group of the guard allowlist; S24a3 moved the name checks, not these reads) |
 | `catalog/CatalogParser.cs:157,159` | the `kind` key | c | bootstrap |
 | `catalog/CatalogParser.cs:182` | schema file from the kind | a | S24a1 |
-| `catalog/CatalogParser.cs:204` | `name` of named kinds | a | S24a3: `define` |
+| `catalog/CatalogParser.cs:204` | `name` of named kinds | a | S24d (the `S24d` group of the guard allowlist; S24a3 moved the name checks to `define`, the field is still read) |
 | `catalog/CatalogParser.cs:248-251` | the runtime node, the rollout inputs it must not set | c / a | S24b3 (rule c), fields S24e |
 | `catalog/CatalogParser.cs:550` | hex digits a naming rule must allow | c | concept 4 |
 | `catalog/CatalogParser.cs:600-651` | `To*`: every field of every catalog kind | a | S24b1, S24d, S24e |
@@ -510,5 +510,5 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 
 The `layer` role's value set is ordered: the `enum`'s listed order is the deploy order (`shared` before `environment`); the definition says so in a `$comment`.
 
-Namespaces (`define`/`ref`): `part-owner`, `component`, `shared-resource`, `runtime`, `policy`,
-`environment-type`, `naming-kind`, `role`, `grant-template`, `environment`.
+Namespaces (`define`/`ref`), spelled as the error messages read them ("'x' is not a <namespace> in the catalog"): `part owner`, `component`, `shared resource`, `runtime`, `policy`,
+`environment type`, `naming kind`, `role`, `grant template`, `environment`.

@@ -23,46 +23,6 @@ public sealed class DocumentLoaderTests : IDisposable
     }
 
     [Fact]
-    public void Every_embedded_schema_declares_its_kinds_and_the_workload_schema_is_one_of_them()
-    {
-        Assert.Equal(
-            ["ApprovalRecord", "Catalog", "Component", "Environment", "EnvironmentDefinition", "Grants", "Naming", "Policy", "ReleaseManifest", "ReleaseRecord",
-             "ReleaseSet", "Roles", "Runtime", "SharedResource", "Workload"],
-            EmbeddedSchemas.ByKind.Keys.Order(StringComparer.Ordinal));
-    }
-
-    [Fact]
-    public void Two_schemas_declaring_the_same_kind_are_refused_naming_both()
-    {
-        var error = Assert.Throws<InvalidOperationException>(() => EmbeddedSchemas.Index(
-            [("a.schema.json", """{ "properties": { "kind": { "enum": ["Thing"] } } }"""), ("b.schema.json", """{ "properties": { "kind": { "enum": ["Other", "Thing"] } } }""")]));
-
-        Assert.Equal("Schemas 'a.schema.json' and 'b.schema.json' both declare kind 'Thing'.", error.Message);
-    }
-
-    [Theory]
-    [InlineData("""{ "properties": { "name": { "type": "string" } } }""")]
-    [InlineData("""{ "properties": { "kind": { "type": "string" } } }""")]
-    [InlineData("""{ "properties": { "kind": { "enum": [] } } }""")]
-    public void A_schema_declaring_no_kind_is_refused_naming_it(string schema)
-    {
-        var error = Assert.Throws<InvalidOperationException>(() => EmbeddedSchemas.Index([("a.schema.json", """{ "properties": { "kind": { "enum": ["Thing"] } } }"""), ("b.schema.json", schema)]));
-
-        Assert.Equal("Schema 'b.schema.json' declares no kind: it needs a 'kind' property with an enum.", error.Message);
-    }
-
-    [Fact]
-    public void Each_declared_kind_maps_to_the_text_of_its_schema()
-    {
-        const string first = """{ "properties": { "kind": { "enum": ["Thing", "Other"] } } }""";
-        const string second = """{ "properties": { "kind": { "enum": ["Third"] } } }""";
-
-        var index = EmbeddedSchemas.Index([("a.schema.json", first), ("b.schema.json", second)]);
-
-        Assert.Equal(new Dictionary<string, string> { ["Thing"] = first, ["Other"] = first, ["Third"] = second }, index);
-    }
-
-    [Fact]
     public async Task A_kind_no_schema_declares_is_refused_naming_the_file()
     {
         var result = await DocumentLoader.LoadAsync("odd.yaml", "kind: Widget\nname: x\n", ["Environment"], CancellationToken.None);
@@ -184,7 +144,7 @@ public sealed class DocumentLoaderTests : IDisposable
     {
         var definition = Write("dev.env.yaml", "kind: EnvironmentDefinition\nname: dev\nregion: r1\ntype: dev\noffers: []\n");
 
-        var result = await EnvironmentParser.LoadAsync(definition);
+        var result = await EnvironmentParser.LoadAsync(await SourceFiles.ReadAsync(definition), CancellationToken.None);
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);

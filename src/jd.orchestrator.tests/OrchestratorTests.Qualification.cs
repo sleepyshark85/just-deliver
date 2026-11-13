@@ -33,13 +33,13 @@ public partial class OrchestratorTests
         // The key of the label's file name in the records.
         public static string Key(string name) => MemoryRecordStore.Key("dev", "1.0.0", name);
 
-        // A ledger whose label has its set.yaml, ready for records.
-        public static async Task<Ledger> CreateAsync()
+        // A ledger whose label has its set.yaml (the given bytes, or some that are no set), ready for records.
+        public static async Task<Ledger> CreateAsync(byte[]? kept = null)
         {
             var (_, graphs, passed) = await ReleaseRunAsync(new FakeBackend(), null, "shop", "cart");
             var (_, _, failed) = await ReleaseRunAsync(new FakeBackend { FailOn = "shop.dev.thing.group" }, null, "shop", "cart");
             var records = new MemoryRecordStore();
-            var (sha256, _) = await ReleaseRecordFile.KeepSetAsync(records, "dev", "1.0.0", "the set"u8.ToArray());
+            var (sha256, _) = await ReleaseRecordFile.KeepSetAsync(records, "dev", "1.0.0", kept ?? "the set"u8.ToArray());
             return new Ledger(records, sha256, graphs, passed, failed);
         }
 

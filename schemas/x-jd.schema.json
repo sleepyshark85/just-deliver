@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://just-deliver/schemas/x-jd.schema.json",
+  "title": "just-deliver schema annotations",
+  "description": "The meta-schema every schema jd ships is checked against (docs/architecture/documents.md section 3): the x-jd keywords, their roles and namespaces (Appendix B), and the draft-07 keywords the validator (NJsonSchema) ignores, refused so no rule relies on one. Not a document kind.",
+  "type": ["object", "boolean"],
+  "properties": {
+    "if": { "$ref": "#/definitions/ignored" },
+    "then": { "$ref": "#/definitions/ignored" },
+    "else": { "$ref": "#/definitions/ignored" },
+    "const": { "$ref": "#/definitions/ignored" },
+    "dependencies": { "$ref": "#/definitions/ignored" },
+    "propertyNames": { "$ref": "#/definitions/ignored" },
+    "contains": { "$ref": "#/definitions/ignored" },
+    "x-jd": { "$ref": "#/definitions/annotations" },
+    "properties": { "$ref": "#/definitions/schemas" },
+    "patternProperties": { "$ref": "#/definitions/schemas" },
+    "definitions": { "$ref": "#/definitions/schemas" },
+    "additionalProperties": { "$ref": "#" },
+    "items": { "$ref": "#" },
+    "not": { "$ref": "#" },
+    "allOf": { "$ref": "#/definitions/schemaList" },
+    "anyOf": { "$ref": "#/definitions/schemaList" },
+    "oneOf": { "$ref": "#/definitions/schemaList" }
+  },
+  "definitions": {
+    "ignored": {
+      "description": "A keyword the validator ignores: a rule written with it would silently not hold.",
+      "not": {},
+      "x-jd": { "message": "the validator (NJsonSchema) ignores this keyword; use enum for a fixed value, patternProperties with additionalProperties for key names, or a rule in code." }
+    },
+    "schemas": { "type": "object", "additionalProperties": { "$ref": "#" } },
+    "schemaList": { "type": "array", "items": { "$ref": "#" } },
+    "annotations": {
+      "type": "object",
+      "properties": {
+        "is": { "$ref": "#/definitions/role" },
+        "define": { "anyOf": [{ "$ref": "#/definitions/namespace" }, { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/namespace" } }] },
+        "ref": { "$ref": "#/definitions/namespace" },
+        "select": { "$ref": "#/definitions/role" },
+        "fallback": { "type": "string", "minLength": 1 },
+        "scope": { "anyOf": [{ "$ref": "catalog/part.schema.json#/definitions/layer" }, { "enum": ["workload"] }] },
+        "match": { "$ref": "#/definitions/role" },
+        "one": { "enum": [true] },
+        "message": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": {
+        "description": "Any other key: refused with this message.",
+        "not": {},
+        "x-jd": { "message": "not an x-jd keyword; the keywords are is, define, ref, select, fallback, scope, match, one and message." }
+      }
+    },
+    "role": {
+      "description": "The closed role list (documents.md Appendix B), by group.",
+      "enum": [
+        "owner", "part", "part.nodes", "part.exports", "part.reads", "part.scope", "node.template", "node.kind", "node.config", "contract",
+        "runtime.part", "grant.target-input", "naming.rules", "naming.pattern", "naming.max-length", "naming.allowed", "roles", "catalog.version",
+        "environment-type.layer", "environment-type.gated", "layer",
+        "env.name", "env.region", "env.type", "env.offers", "env.values", "env.approval",
+        "approval.qualified-on", "approval.required", "approval.approvers", "approval.separate",
+        "workload.name", "workload.team", "workload.image", "workload.port", "workload.variables",
+        "requirement", "requirement.type", "requirement.id", "requirement.class",
+        "policy.name", "policy.reason", "policy.scope", "policy.runtime", "policy.set", "policy.default", "policy.require",
+        "probe.path", "probe.expected-status", "probe.timeout", "probe.interval", "probe.scheme",
+        "rollout.suffix-input", "rollout.traffic-input", "rollout.traffic-output", "rollout.suffix-output", "rollout.revision-output",
+        "rollout.fqdn-output", "rollout.revision-key", "rollout.latest-key", "rollout.weight-key", "rollout.resource-id-output",
+        "rollout.suffix-prefix", "rollout.suffix-config-digits", "rollout.suffix-salt-digits", "rollout.full-weight",
+        "release.label", "release.created-at", "release.workloads", "release.definition", "release.definition-path",
+        "release.definition-sha256", "release.depends-on"
+      ],
+      "x-jd": { "message": "not a role; the roles are the closed list of docs/architecture/documents.md Appendix B." }
+    },
+    "namespace": {
+      "enum": ["part owner", "component", "shared resource", "runtime", "policy", "environment type", "naming kind", "role", "grant template", "environment"],
+      "x-jd": { "message": "not a namespace; the namespaces are listed in docs/architecture/documents.md Appendix B." }
+    }
+  }
+}

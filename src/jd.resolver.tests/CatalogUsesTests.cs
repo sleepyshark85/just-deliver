@@ -100,7 +100,7 @@ public class CatalogUsesTests
             ("r.yaml", Runtime(Uses("r.yaml"), "{}"))));
 
         Assert.Equal((file, "uses"), (error.File, error.Location));
-        Assert.Equal("'cosmos-acount' is not a shared resource in the catalog (shared resources: env-group, shared-group).", error.Message);
+        Assert.Equal("'cosmos-acount' is not a shared resource in the catalog (declared: env-group, shared-group).", error.Message);
     }
 
     // The second declaration is the one error: the checks that read shared resources by name use the first.
@@ -121,7 +121,7 @@ public class CatalogUsesTests
         var error = SingleError(await Parse(("c.yaml", Component()), ("r.yaml", Runtime("[]", "{}")), ("s.yaml", Shared("shared-group", uses: $"[{used}]"))));
 
         Assert.Equal(("s.yaml", "uses"), (error.File, error.Location));
-        Assert.Equal($"'{used}' is a component or runtime; uses lists shared resources only.", error.Message);
+        Assert.Equal($"'{used}' is not a shared resource in the catalog (declared: shared-group).", error.Message);
     }
 
     [Fact]
@@ -131,6 +131,18 @@ public class CatalogUsesTests
 
         Assert.Equal(("s.yaml", "uses"), (error.File, error.Location));
         Assert.Equal("'env-group' is environment scope; a shared-scope resource uses only shared-scope ones, since the shared layer is deployed first.", error.Message);
+    }
+
+    // The scope is one of the part schema's layers, spelled as listed: the schema refuses any other value before the code reads it as a layer.
+    [Theory]
+    [InlineData("tenant")]
+    [InlineData("Shared")]
+    [InlineData("'0'")]
+    public async Task A_scope_that_is_not_a_layer_is_a_schema_violation(string scope)
+    {
+        var error = SingleError(await Parse(("s.yaml", Shared("shared-group", scope: scope))));
+
+        Assert.Equal(("s.yaml", "scope", "schema violation: NotInEnumeration: #/scope"), (error.File, error.Location, error.Message));
     }
 
     // Allowed: environment -> shared, environment; component and runtime -> any.
@@ -280,8 +292,8 @@ public class CatalogUsesTests
         var environment = SingleError(await Parse(("c.yaml", Component(environment: "{ nodes: { Bad_Name: { template: t/db, config: {} } }, exports: {} }"))));
 
         Assert.Equal(("s.yaml", "nodes.Bad_Name"), (shared.File, shared.Location));
-        Assert.StartsWith("'Bad_Name' is not a valid node name;", shared.Message);
-        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.Bad_Name"), (environment.File, environment.Location));
+        Assert.Equal(CatalogParserTests.NodeNameMessage, shared.Message);
+        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.Bad_Name", CatalogParserTests.NodeNameMessage), (environment.File, environment.Location, environment.Message));
     }
 
     [Theory]

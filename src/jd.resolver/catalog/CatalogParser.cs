@@ -24,17 +24,8 @@ public static class CatalogParser
 
     private static readonly string[] Kinds = [CatalogKind, ComponentKind, RuntimeKind, SharedResourceKind, PolicyKind, NamingKind, RolesKind, GrantsKind];
 
-    // Kinds of earlier catalogs, and what replaced them (docs/architecture/components.md section 2).
-    private static readonly Dictionary<string, string> ReplacedKinds = new()
-    {
-        ["ResourceType"] = $"a {ComponentKind} file holds the type's contract (exports) beside its implementations",
-        ["Mapping"] = $"a {ComponentKind}'s implementations (per environment type, then class) replace a type's mappings, and a {RuntimeKind} file the runtime mapping",
-    };
-
-    // A policy field of earlier catalogs: a policy requires, it never adds (docs/architecture/components.md section 3).
-    private const string RemovedPolicyAdd = "add";
-
-    private static readonly Regex NodeNamePattern = new("^[a-z]([a-z0-9-]*[a-z0-9])?$", RegexOptions.CultureInvariant);
+    // What the name rules call the catalog in errors about it as a whole.
+    private const string SetName = "catalog";
 
     // One part, with what its config and exports may read besides its own nodes and the reserved roots: the shared resources in Uses and,
     // for a class part, its own component (OwnComponent) and that implementation's environment part. Prefix locates the part in its file;
@@ -79,47 +70,39 @@ public static class CatalogParser
             }
         }
 
+        // Names first (one Catalog, names unique, references declared); the checks below read the first of a duplicate name.
+        errors.AddRange(NameRules.Check(await SchemaIndex.Shipped, new DocumentSet(SetName, Kinds, documents, valid, unreadable)));
         var catalogs = OfKind(documents, CatalogKind);
-        var componentDocuments = OfKind(documents, ComponentKind);
-        var runtimeDocuments = OfKind(documents, RuntimeKind);
-        var sharedDocuments = OfKind(documents, SharedResourceKind);
-        var policyDocuments = OfKind(documents, PolicyKind);
-        var components = componentDocuments.Where(valid.Contains).Select(ToComponent).ToList();
-        var runtimes = runtimeDocuments.Where(valid.Contains).Select(ToRuntime).ToList();
-        var shared = sharedDocuments.Where(valid.Contains).Select(ToSharedResource).ToList();
-        var policies = policyDocuments.Where(valid.Contains).Select(ToPolicy).ToList();
+        var components = OfKind(documents, ComponentKind).Where(valid.Contains).Select(ToComponent).ToList();
+        var runtimes = OfKind(documents, RuntimeKind).Where(valid.Contains).Select(ToRuntime).ToList();
+        var shared = OfKind(documents, SharedResourceKind).Where(valid.Contains).Select(ToSharedResource).ToList();
+        var policies = OfKind(documents, PolicyKind).Where(valid.Contains).Select(ToPolicy).ToList();
         var namingDocuments = OfKind(documents, NamingKind).Where(valid.Contains).ToList();
-        var naming = Merge(namingDocuments, "rules", ToNamingRule, errors);
+        var naming = Merge(namingDocuments, "rules", ToNamingRule);
         CheckNamingAllowed(namingDocuments, errors);
-        var roles = Merge(OfKind(documents, RolesKind).Where(valid.Contains), "roles", role => (string?)role ?? string.Empty, errors);
-        var grantTargets = Merge(OfKind(documents, GrantsKind).Where(valid.Contains), "targets", Text, errors);
+        var roles = Merge(OfKind(documents, RolesKind).Where(valid.Contains), "roles", role => (string?)role ?? string.Empty);
+        var grantTargets = Merge(OfKind(documents, GrantsKind).Where(valid.Contains), "targets", Text);
 
-        // A file whose kind could not be read might have been the missing Catalog, so do not claim it is missing.
-        CheckSingleCatalog(catalogs, unreadable == 0, errors);
         // Shared resources, components and runtimes share one namespace: each is a root a part reads (${<name>.<export>}), a
         // requirement's type names a component, an environment will offer components and a runtime.
         // Files that failed their schema still count as declared, so their mistake is not reported again at each use.
         var named = documents.Where(d => d.Kind is ComponentKind or RuntimeKind or SharedResourceKind).ToList();
-        CheckUnique(named, errors);
         CheckReservedNames(named, errors);
         var kinds = named.SelectMany(d => NameOf(d) is { } name ? [(Name: name, d.Kind)] : Array.Empty<(string Name, string Kind)>())
             .DistinctBy(n => n.Name).ToDictionary(n => n.Name, n => n.Kind);
-        // A duplicate name is reported by CheckUnique; the checks below read the first.
         var sharedByName = shared.DistinctBy(s => s.Name).ToDictionary(s => s.Name);
-        CheckUses(sharedByName, components, runtimes, kinds, errors);
+        CheckUses(sharedByName, errors);
         var readers = Readers(shared, components, runtimes);
         CheckNodeNames(readers, errors);
         CheckReads(readers, sharedByName, kinds, errors);
         CheckScopeNodeNames(readers, sharedByName.Keys, errors);
         CheckGrants(readers, grantTargets, errors);
-        CheckUnique(policyDocuments, errors);
         // A missing or invalid Catalog is reported on its own; checking against its types too would only add noise.
         var environmentTypes = catalogs.FirstOrDefault() is { } first && valid.Contains(first)
             ? Map(first.Body["environmentTypes"]).ToDictionary(e => e.Key, e => new EnvironmentType((bool?)e.Value["approval"] ?? false, Enum.Parse<SharedScope>(Text(e.Value["layer"]), ignoreCase: true)))
             : null;
-        CheckEnvironmentTypes(components, runtimes, policies, environmentTypes, errors);
+        CheckSharedLayerKeys(components, runtimes, environmentTypes, errors);
         CheckPolicyScopes(policies, errors);
-        CheckPolicyRequires(policies, componentDocuments, errors);
         CheckPolicyPaths(policies, errors);
         CheckReleases(runtimes, errors);
         CheckSameClasses(components, errors);
@@ -155,20 +138,6 @@ public static class CatalogParser
             return null;
         }
 
-        if (ReplacedKinds.TryGetValue(document.Kind, out var replacement))
-        {
-            errors.Add(new LoadError(source.Name, DocumentLoader.KindField, $"kind '{document.Kind}' is no longer supported: {replacement}."));
-            return (document, false);
-        }
-
-        if (document.Kind == PolicyKind && document.Body.ContainsKey(RemovedPolicyAdd))
-        {
-            // One clear error instead of the schema's "not allowed"; the rest of the file is not checked until it is migrated.
-            errors.Add(new LoadError(source.Name, RemovedPolicyAdd,
-                "a policy can no longer add nodes: a workload declares what it gets in its 'requires'; use 'require: <component>' to make every workload the policy matches require one."));
-            return (document, false);
-        }
-
         // An unknown kind is refused here: readable, so not a missing Catalog, and no kind-specific check applies to it.
         var schemaErrors = await DocumentLoader.ValidateAsync(document, Kinds, cancellationToken);
         errors.AddRange(schemaErrors);
@@ -181,31 +150,7 @@ public static class CatalogParser
 
     // Valid documents have the shapes the schemas guarantee; invalid ones are only asked for what they may lack.
 
-    private static void CheckSingleCatalog(List<Document> catalogs, bool allFilesReadable, List<LoadError> errors)
-    {
-        if (catalogs.Count == 0 && allFilesReadable)
-        {
-            errors.Add(new LoadError("(catalog)", string.Empty, $"no file of kind {CatalogKind}; exactly one is required."));
-        }
-
-        foreach (var extra in catalogs.Skip(1))
-        {
-            errors.Add(new LoadError(extra.Source, DocumentLoader.KindField, $"a second {CatalogKind} file; exactly one is allowed (first: {catalogs[0].Source})."));
-        }
-    }
-
     private static string? NameOf(Document d) => d.Body["name"] is { Type: JTokenType.String } name ? (string?)name : null;
-
-    private static void CheckUnique(List<Document> documents, List<LoadError> errors)
-    {
-        foreach (var group in documents.Where(d => NameOf(d) is not null).GroupBy(d => NameOf(d)))
-        {
-            foreach (var duplicate in group.Skip(1))
-            {
-                errors.Add(new LoadError(duplicate.Source, "name", $"'{group.Key}' is already declared in {group.First().Source}."));
-            }
-        }
-    }
 
     // Inside one policy, a path and one of its sub-paths would make the result depend on application order.
     private static void CheckPolicyPaths(List<Policy> policies, List<LoadError> errors)
@@ -256,32 +201,16 @@ public static class CatalogParser
         }
     }
 
-    // uses names shared resources only (a component's parts are read through its contract), in a direction their deploy order allows:
-    // the shared layer is deployed before any environment, so a shared-scope resource cannot read an environment-scope one. No cycles,
-    // so reading a used resource's exports always ends.
-    private static void CheckUses(
-        Dictionary<string, SharedResource> shared, List<Component> components, List<Runtime> runtimes, Dictionary<string, string> kinds, List<LoadError> errors)
+    // uses names shared resources (the ref rule), in a direction their deploy order allows: the shared layer is deployed before any
+    // environment, so a shared-scope resource cannot read an environment-scope one; components and runtimes may use either. No cycles, so
+    // reading a used resource's exports always ends.
+    private static void CheckUses(Dictionary<string, SharedResource> shared, List<LoadError> errors)
     {
-        var declared = kinds.Where(k => k.Value == SharedResourceKind).Select(k => k.Key).Order(StringComparer.Ordinal).ToList();
-        var users = shared.Values.Select(s => (s.Source, s.Uses, Scope: (SharedScope?)s.Scope))
-            .Concat(components.Select(c => (c.Source, c.Uses, Scope: (SharedScope?)null)))
-            .Concat(runtimes.Select(r => (r.Source, r.Uses, Scope: (SharedScope?)null)));
-        foreach (var (source, uses, scope) in users)
+        foreach (var user in shared.Values.Where(s => s.Scope == SharedScope.Shared))
         {
-            foreach (var used in uses)
+            foreach (var used in user.Uses.Where(u => shared.GetValueOrDefault(u)?.Scope == SharedScope.Environment))
             {
-                var problem = kinds.GetValueOrDefault(used) switch
-                {
-                    SharedResourceKind => scope == SharedScope.Shared && shared.GetValueOrDefault(used)?.Scope == SharedScope.Environment
-                        ? $"'{used}' is environment scope; a shared-scope resource uses only shared-scope ones, since the shared layer is deployed first."
-                        : null,
-                    null => $"'{used}' is not a shared resource in the catalog (shared resources: {string.Join(", ", declared)}).",
-                    _ => $"'{used}' is a component or runtime; uses lists shared resources only.",
-                };
-                if (problem is not null)
-                {
-                    errors.Add(new LoadError(source, "uses", problem));
-                }
+                errors.Add(new LoadError(user.Source, "uses", $"'{used}' is environment scope; a shared-scope resource uses only shared-scope ones, since the shared layer is deployed first."));
             }
         }
 
@@ -304,9 +233,8 @@ public static class CatalogParser
             r.Source, $"implementations.{i.Key}.", r.Name, Scope: null, new Part(i.Value.Nodes, new Dictionary<string, string>()), r.Uses, OwnComponent: null, OwnEnvironment: null))),
     ];
 
-    // Node names become parts of graph node ids and backend stack names, so they are lowercase kebab (enforced here: the schema validator
-    // ignores the propertyNames keyword). A node may not take a name its part reads as a root, or one of the two would be unreachable;
-    // the runtime's own 'runtime' node is the reserved root.
+    // A node may not take a name its part reads as a root, or one of the two would be unreachable; the runtime's own 'runtime' node is the
+    // reserved root. The name's form is the part schema's.
     private static void CheckNodeNames(List<Reader> readers, List<LoadError> errors)
     {
         foreach (var reader in readers)
@@ -314,8 +242,7 @@ public static class CatalogParser
             foreach (var node in reader.Part.Nodes.Keys)
             {
                 var problem =
-                    !NodeNamePattern.IsMatch(node) ? $"'{node}' is not a valid node name; use lowercase letters, digits and hyphens, starting with a letter and not ending in a hyphen."
-                    : node == ExpressionEvaluator.RuntimeNode ? (reader.IsRuntime ? null : $"'{node}' is the runtime node, declared only by a {RuntimeKind}.")
+                    node == ExpressionEvaluator.RuntimeNode ? (reader.IsRuntime ? null : $"'{node}' is the runtime node, declared only by a {RuntimeKind}.")
                     : ExpressionEvaluator.ReservedRoots.Contains(node) || reader.Uses.Contains(node) || node == reader.OwnComponent ? $"'{node}' is a name this part reads as a root; rename the node."
                     : null;
                 if (problem is not null)
@@ -459,41 +386,16 @@ public static class CatalogParser
         }
     }
 
-    // A required component must exist, or no workload could satisfy the policy. A runtime is never required: every workload gets it.
-    // Component files that failed their schema still count, so their mistake is not reported a second time here.
-    private static void CheckPolicyRequires(List<Policy> policies, List<Document> componentDocuments, List<LoadError> errors)
+    // A shared-layer environment deploys no component part, so an implementation for its type would never be used. Whether a key is a declared
+    // type at all is the ref rule's.
+    private static void CheckSharedLayerKeys(
+        List<Component> components, List<Runtime> runtimes, Dictionary<string, EnvironmentType>? environmentTypes, List<LoadError> errors)
     {
-        var declared = componentDocuments.Select(NameOf).OfType<string>().ToHashSet();
-        foreach (var policy in policies.Where(p => p.Require is not null && !declared.Contains(p.Require)))
-        {
-            errors.Add(new LoadError(policy.Source, "require", $"'{policy.Require}' is not a component in the catalog (components: {string.Join(", ", declared.Order(StringComparer.Ordinal))})."));
-        }
-    }
-
-    // A policy match or an implementation keyed by a type nobody declared would load and never apply.
-    private static void CheckEnvironmentTypes(
-        List<Component> components, List<Runtime> runtimes, List<Policy> policies, Dictionary<string, EnvironmentType>? environmentTypes, List<LoadError> errors)
-    {
-        if (environmentTypes is null)
-        {
-            return;
-        }
-
         var keyed = components.SelectMany(c => c.Implementations.Keys.Select(k => (c.Source, Type: k)))
-            .Concat(runtimes.SelectMany(r => r.Implementations.Keys.Select(k => (r.Source, Type: k))))
-            .Where(i => i.Type != ImplementationKey.Default)
-            .Select(i => (i.Source, Location: $"implementations.{i.Type}", i.Type));
-        var matched = policies.Where(p => p.Match.Criteria.ContainsKey(MatchCriteria.EnvironmentTypeKey))
-            .Select(p => (p.Source, Location: $"match.{MatchCriteria.EnvironmentTypeKey}", Type: p.Match.Criteria[MatchCriteria.EnvironmentTypeKey]));
-        foreach (var (source, location, type) in keyed.Concat(matched).Where(e => !environmentTypes.ContainsKey(e.Type)))
+            .Concat(runtimes.SelectMany(r => r.Implementations.Keys.Select(k => (r.Source, Type: k))));
+        foreach (var (source, type) in keyed.Where(e => environmentTypes?.GetValueOrDefault(e.Type)?.Layer == SharedScope.Shared))
         {
-            errors.Add(new LoadError(source, location, $"'{type}' is not a declared environment type (declared: {string.Join(", ", environmentTypes.Keys.Order())})."));
-        }
-
-        // A shared-layer environment deploys no component part, so an implementation for its type would never be used.
-        foreach (var (source, location, type) in keyed.Where(e => environmentTypes.GetValueOrDefault(e.Type)?.Layer == SharedScope.Shared))
-        {
-            errors.Add(new LoadError(source, location, $"'{type}' is a shared-layer environment type; implementations are keyed by environment-layer types or '{ImplementationKey.Default}'."));
+            errors.Add(new LoadError(source, $"implementations.{type}", $"'{type}' is a shared-layer environment type; implementations are keyed by environment-layer types or '{ImplementationKey.Default}'."));
         }
     }
 
@@ -567,28 +469,9 @@ public static class CatalogParser
         }
     }
 
-    // Naming and Roles files are merged; the same key in two files is ambiguous, so it is an error.
-    private static Dictionary<string, T> Merge<T>(IEnumerable<Document> documents, string property, Func<JToken, T> convert, List<LoadError> errors)
-    {
-        var merged = new Dictionary<string, T>();
-        var origin = new Dictionary<string, string>();
-        foreach (var document in documents)
-        {
-            foreach (var entry in Map(document.Body[property]))
-            {
-                if (origin.TryGetValue(entry.Key, out var first))
-                {
-                    errors.Add(new LoadError(document.Source, $"{property}.{entry.Key}", $"already defined in {first}."));
-                    continue;
-                }
-
-                origin[entry.Key] = document.Source;
-                merged[entry.Key] = convert(entry.Value);
-            }
-        }
-
-        return merged;
-    }
+    // Naming, Roles and Grants files are merged; a key in two files is the define rule's error, and the first is kept.
+    private static Dictionary<string, T> Merge<T>(IEnumerable<Document> documents, string property, Func<JToken, T> convert) =>
+        documents.SelectMany(document => Map(document.Body[property])).DistinctBy(entry => entry.Key).ToDictionary(entry => entry.Key, entry => convert(entry.Value));
 
     private static Component ToComponent(Document d) => new(
         d.Source,

@@ -25,6 +25,7 @@ public class CatalogParserTests
     [InlineData("environmentTypes: { default: {} }\n", "catalog.yaml: environmentTypes.default: ")]
     [InlineData("environmentTypes: { Dev: {} }\n", "catalog.yaml: environmentTypes.Dev: ")]
     [InlineData("environmentTypes: { dev: { approval: \"yes\" } }\n", "BooleanExpected: #/environmentTypes.dev.approval")]
+    [InlineData("environmentTypes: { dev: { layer: tenant } }\n", "NotInEnumeration: #/environmentTypes.dev.layer")]
     public async Task Environment_types_are_required_and_well_formed(string declaration, string error)
     {
         var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: \"1\"\n" + declaration));
@@ -78,19 +79,6 @@ public class CatalogParserTests
         Assert.Null(result.Value);
     }
 
-    [Theory]
-    [InlineData("ResourceType", "a Component file holds the type's contract (exports) beside its implementations")]
-    [InlineData("Mapping", "a Component's implementations (per environment type, then class) replace a type's mappings, and a Runtime file the runtime mapping")]
-    public async Task An_old_kind_is_an_error_saying_what_replaced_it(string kind, string replacement)
-    {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("old.yaml", $"kind: {kind}\nname: alpha-db\n"));
-
-        var error = Assert.Single(result.Errors);
-        Assert.Equal(("old.yaml", "kind"), (error.File, error.Location));
-        Assert.Equal($"kind '{kind}' is no longer supported: {replacement}.", error.Message);
-        Assert.Null(result.Value);
-    }
-
     [Fact]
     public async Task Missing_kind_is_an_error()
     {
@@ -106,17 +94,16 @@ public class CatalogParserTests
     {
         var result = await Parse(("components/a.yaml", ComponentFile("alpha-db")));
 
-        Assert.Contains(result.Errors, e => e.Message.Contains("exactly one is required"));
+        Assert.Equal([new LoadError("(catalog)", string.Empty, "no file of kind Catalog; exactly one is required.")], result.Errors);
     }
 
+    // The second Catalog is one mistake: its environment types are not read as names declared a second time.
     [Fact]
     public async Task Duplicate_catalog_file_is_an_error_on_the_second_file()
     {
         var result = await Parse(("a.yaml", CatalogFile), ("b.yaml", CatalogFile));
 
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("b.yaml", error.File);
-        Assert.Contains("a.yaml", error.Message);
+        Assert.Equal([new LoadError("b.yaml", "kind", "a second Catalog file; exactly one is allowed (first: a.yaml).")], result.Errors);
     }
 
     [Theory]
@@ -166,7 +153,7 @@ public class CatalogParserTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal((file, "implementations.stagee"), (error.File, error.Location));
-        Assert.Equal("'stagee' is not a declared environment type (declared: dev, stage).", error.Message);
+        Assert.Equal("'stagee' is not an environment type in the catalog (declared: dev, stage).", error.Message);
     }
 
     [Theory]
@@ -215,7 +202,7 @@ public class CatalogParserTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("p.yaml", "match.environmentType"), (error.File, error.Location));
-        Assert.Contains("'stagee' is not a declared environment type (declared: dev, stage)", error.Message);
+        Assert.Equal("'stagee' is not an environment type in the catalog (declared: dev, stage).", error.Message);
     }
 
     [Fact]
@@ -282,24 +269,26 @@ public class CatalogParserTests
         Assert.Equal(("p.yaml", "set.runtime"), (error.File, error.Location));
     }
 
+    // The part schema's message (shared by every part kind), located at the node: a name with a dot in the validator's bracket form.
     [Theory]
-    [InlineData("Db")]
-    [InlineData("my_node")]
-    [InlineData("a-")]
-    [InlineData("1a")]
-    [InlineData("a.b")]
-    [InlineData("a@b")]
-    public async Task Node_names_in_components_and_runtimes_must_be_lowercase_kebab(string name)
+    [InlineData("Db", ".Db")]
+    [InlineData("my_node", ".my_node")]
+    [InlineData("a-", ".a-")]
+    [InlineData("1a", ".1a")]
+    [InlineData("a.b", "['a.b']")]
+    [InlineData("a@b", ".a@b")]
+    public async Task Node_names_in_components_and_runtimes_must_be_lowercase_kebab(string name, string located)
     {
         var component = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", TestCatalog.Component("alpha-db", "[]", $"nodes:\n  \"{name}\":\n    template: t/x\n    config: {{}}\n")));
         var runtime = await Parse(("catalog.yaml", CatalogFile), ("r.yaml", TestCatalog.Runtime($"nodes:\n  runtime:\n    template: t/x\n    config: {{}}\n  \"{name}\":\n    template: t/x\n    config: {{}}\n")));
 
         var componentError = Assert.Single(component.Errors);
-        Assert.Equal(("c.yaml", $"{TestCatalog.PartPath}.nodes.{name}"), (componentError.File, componentError.Location));
-        Assert.Contains("not a valid node name", componentError.Message);
+        Assert.Equal(("c.yaml", $"{TestCatalog.PartPath}.nodes{located}", NodeNameMessage), (componentError.File, componentError.Location, componentError.Message));
         var runtimeError = Assert.Single(runtime.Errors);
-        Assert.Equal(("r.yaml", $"implementations.default.nodes.{name}"), (runtimeError.File, runtimeError.Location));
+        Assert.Equal(("r.yaml", $"implementations.default.nodes{located}", NodeNameMessage), (runtimeError.File, runtimeError.Location, runtimeError.Message));
     }
+
+    internal const string NodeNameMessage = "not a valid node name; use lowercase letters, digits and hyphens, starting with a letter and not ending in a hyphen.";
 
     [Fact]
     public async Task Kebab_node_names_load()
@@ -307,6 +296,30 @@ public class CatalogParserTests
         var result = await Parse(("catalog.yaml", CatalogFile), ("r.yaml", TestCatalog.Runtime("nodes:\n  runtime:\n    template: t/x\n    config: {}\n  app-insights-2:\n    template: t/x\n    config: {}\n")));
 
         Assert.Empty(result.Errors);
+    }
+
+    // A refused node name does not hide the part's other problems (documents.md section 6): each is reported where it is, the one without a
+    // message in the validator's text.
+    [Theory]
+    [InlineData("nodes:\n  db:\n    config: {}\n", "nodes.db", "AdditionalPropertiesNotValid: #/implementations.default.classes.standard.nodes.db { PropertyRequired: #/implementations.default.classes.standard.nodes.db.template }")]
+    [InlineData("nodes:\n  db:\n    template: t/x\n    config: {}\nprobe: {}\n", "probe", "NoAdditionalPropertiesAllowed: #/implementations.default.classes.standard.probe")]
+    public async Task A_bad_node_name_is_reported_beside_the_parts_other_problems(string part, string location, string violation)
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", TestCatalog.Component("alpha-db", "[]", part.Replace("nodes:\n", "nodes:\n  Bad:\n    template: t/x\n    config: {}\n", StringComparison.Ordinal))));
+
+        Assert.Equal(
+            [new LoadError("c.yaml", $"{TestCatalog.PartPath}.nodes.Bad", NodeNameMessage), new LoadError("c.yaml", $"{TestCatalog.PartPath}.{location}", $"schema violation: {violation}")],
+            result.Errors.OrderBy(error => error.Location, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_part_without_nodes_is_a_schema_violation()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", TestCatalog.Component("alpha-db", "[]", "nodes: {}\nexports: {}\n")));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("c.yaml", "implementations.default"), (error.File, error.Location));
+        Assert.Contains($"TooFewProperties: #/{TestCatalog.PartPath}.nodes", error.Message);
     }
 
     private const string RuntimeHead = "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n";
@@ -390,18 +403,16 @@ public class CatalogParserTests
         Assert.Contains($"#/implementations.default.release.{name}", Assert.Single(blank.Errors).Message);
     }
 
-    // A policy requires, it never adds (docs/architecture/components.md section 3): an earlier policy's `add` gets one error saying what
-    // replaces it, not a schema violation, and the policy does not load.
+    // A policy requires, it never adds (docs/architecture/components.md section 3): the schema refuses an earlier policy's `add` like any field it
+    // does not declare, and the policy does not load.
     [Fact]
-    public async Task A_policy_with_add_is_an_error_saying_require_replaces_it()
+    public async Task A_policy_with_add_is_refused_by_the_schema()
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { kind: runtime }\nadd:\n  extra:\n    template: t/x\n    config: {}\n"));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", PolicyFile("pol-a") + "add:\n  extra:\n    template: t/x\n    config: {}\n"));
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("p.yaml", "add"), (error.File, error.Location));
-        Assert.Contains("can no longer add nodes", error.Message);
-        Assert.Contains("'require: <component>'", error.Message);
+        Assert.Equal(("p.yaml", "add", "schema violation: NoAdditionalPropertiesAllowed: #/add"), (error.File, error.Location, error.Message));
     }
 
     [Fact]
@@ -412,8 +423,9 @@ public class CatalogParserTests
 
         var error = Assert.Single(undeclared.Errors);
         Assert.Equal(("p.yaml", "require"), (error.File, error.Location));
-        Assert.Equal("'beta-db' is not a component in the catalog (components: alpha-db).", error.Message);
-        Assert.Equal(("p.yaml", "require"), (Assert.Single(runtime.Errors).File, Assert.Single(runtime.Errors).Location));
+        Assert.Equal("'beta-db' is not a component in the catalog (declared: alpha-db).", error.Message);
+        var notComponent = Assert.Single(runtime.Errors);
+        Assert.Equal(("p.yaml", "require", "'container-app' is not a component in the catalog (declared: alpha-db)."), (notComponent.File, notComponent.Location, notComponent.Message));
     }
 
     [Fact]
@@ -525,15 +537,25 @@ public class CatalogParserTests
         Assert.Contains("schema violation", error.Message);
     }
 
-    [Fact]
-    public async Task Same_naming_rule_or_role_in_two_files_is_an_error()
+    // Names that are a map's keys: YAML refuses a key twice in one file (Repeated_key_is_an_error), so a second definition is in another file.
+    [Theory]
+    [InlineData("kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n", "roles.reader", "reader")]
+    [InlineData("kind: Naming\nrules:\n  thing:\n    pattern: \"{id}\"\n    maxLength: 20\n    allowed: \"[a-z0-9]\"\n", "rules.thing", "thing")]
+    [InlineData("kind: Grants\ntargets: { t/g: scope }\n", "targets.t/g", "t/g")]
+    public async Task Same_naming_rule_role_or_grant_template_in_two_files_is_an_error(string file, string location, string name)
     {
-        const string role = "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n";
-        var result = await Parse(("catalog.yaml", CatalogFile), ("r1.yaml", role), ("r2.yaml", role));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("r1.yaml", file), ("r2.yaml", file));
 
-        var error = Assert.Single(result.Errors);
-        Assert.Equal("r2.yaml", error.File);
-        Assert.Equal("roles.reader", error.Location);
+        Assert.Equal([new LoadError("r2.yaml", location, $"'{name}' is already declared in r1.yaml.")], result.Errors);
+    }
+
+    // A policy that failed its schema is reported there; the component it requires is not reported as undeclared as well.
+    [Fact]
+    public async Task A_reference_in_a_file_that_failed_its_schema_is_not_checked()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", PolicyFile("pol-a").Replace("reason: because\n", string.Empty, StringComparison.Ordinal) + "require: beta-db\n"));
+
+        Assert.Equal(("p.yaml", "reason"), (Assert.Single(result.Errors).File, Assert.Single(result.Errors).Location));
     }
 
     [Fact]

@@ -4,6 +4,7 @@
   "title": "just-deliver catalog descriptor",
   "description": "Identifies the catalog and declares its environment types. The catalog is versioned as one unit and the version is recorded on every deployment. Exactly one file of this kind per catalog.",
   "type": "object",
+  "x-jd": { "one": true },
   "additionalProperties": false,
   "required": ["kind", "version", "environmentTypes"],
   "properties": {
@@ -16,6 +17,7 @@
     "environmentTypes": {
       "description": "The environment types, declared once: an environment definition or descriptor of any other type is an error. Names use the requirement-type pattern; `default` is not a type (docs/architecture/components.md section 2).",
       "type": "object",
+      "x-jd": { "define": "environment type" },
       "minProperties": 1,
       "additionalProperties": false,
       "patternProperties": {
@@ -24,7 +26,7 @@
           "additionalProperties": false,
           "required": ["layer"],
           "properties": {
-            "layer": { "description": "Which `jd env up` layer an environment of this type is: `shared` deploys the `scope: shared` resources, `environment` the `scope: environment` resources and the offered components' environment parts. Implementations are keyed by `environment` types only.", "enum": ["shared", "environment"] },
+            "layer": { "description": "Which `jd env up` layer an environment of this type is: `shared` deploys the `scope: shared` resources, `environment` the `scope: environment` resources and the offered components' environment parts. Implementations are keyed by `environment` types only.", "$ref": "part.schema.json#/definitions/layer" },
             "approval": { "description": "true: an environment of this type must carry an `approval` block, so it cannot be written ungated. Any type may carry one; the block is what gates.", "type": "boolean" }
           }
         }

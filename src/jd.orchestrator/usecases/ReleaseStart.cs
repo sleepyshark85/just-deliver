@@ -12,9 +12,9 @@ namespace jd.orchestrator.usecases;
 /// The start <c>release deploy</c> and <c>release qualify</c> share (docs/architecture/application.md sections 5 and 8), in this order: the set, the
 /// catalog and the environment loaded; the environment's type checked; the gate; a promotion's kept set re-hashed; every workload resolved and checked
 /// against the templates; for a recorded run the principal named, then the set kept; then the backend, the orchestrator and the qualifier built
-/// together, before any backend call. Its command calls it until S25e2 makes it the step of their use cases.
+/// together, before any backend call. The first step of <see cref="DeployRelease"/> and <see cref="QualifyRelease"/>.
 /// </summary>
-public static class ReleaseStart
+internal static class ReleaseStart
 {
     // A run whose documents loaded and passed every check: the set and its exact bytes, the catalog, the environment, each workload's graph and the
     // templates they fit.
@@ -24,22 +24,20 @@ public static class ReleaseStart
     private sealed record Kept(IRecordStore Records, DeployerIdentity Identity, string SetSha256);
 
     /// <summary>Starts the run of <paramref name="input"/>, or stops at the first refusal with nothing deployed.</summary>
-    /// <param name="input">The set or the promotion, the environment, the catalog and whether to only preview.</param>
+    /// <param name="input">The set (a promotion's: the kept one), the environment, the catalog and whether to only preview.</param>
+    /// <param name="promotion">
+    /// The promotion whose walk this is: the gate lets it through, its set must hash to the one it judged, and its principal is named already; null for
+    /// any other run.
+    /// </param>
     /// <param name="connections">The records, the identity, the backend, the probe, the reader of live revisions, the clock and the templates.</param>
     /// <param name="cancellationToken">Cancels the start.</param>
-    /// <exception cref="ArgumentException">The input has both a set and a promotion, neither, or a promotion that previews.</exception>
-    public static async Task<ReleaseStartResult> StartAsync(ReleaseStartInput input, Connections connections, CancellationToken cancellationToken)
+    public static async Task<ReleaseStartResult> StartAsync(DeployReleaseInput input, Promotion? promotion, Connections connections, CancellationToken cancellationToken)
     {
-        if ((input.Set is null) == (input.Promotion is null) || (input.Promotion is not null && input.Preview))
-        {
-            throw new ArgumentException("a release run starts from a set or from a promotion, and a promotion is never a preview.", nameof(input));
-        }
-
         // A preview deploys nothing, so it records nothing.
         var records = input.Preview ? null : connections.Records();
         var time = connections.Time();
         var started = time.GetUtcNow();
-        var (run, errors, problem) = await CheckAsync(input, records, connections, cancellationToken);
+        var (run, errors, problem) = await CheckAsync(input, promotion, connections, cancellationToken);
         if (run is null)
         {
             return new(errors, problem, null);
@@ -49,7 +47,7 @@ public static class ReleaseStart
         Kept? kept = null;
         if (records is not null)
         {
-            (kept, problem) = await KeepAsync(records, input.Promotion?.Principal, run, connections, cancellationToken);
+            (kept, problem) = await KeepAsync(records, promotion?.Principal, run, connections, cancellationToken);
             if (problem is not null)
             {
                 return Refused(problem);
@@ -59,14 +57,12 @@ public static class ReleaseStart
         return Connect(run, kept, connections, time, started);
     }
 
-    // The set (a promotion's: the kept one), the catalog and the environment loaded and checked, every workload resolved and fitted to the templates;
-    // or the errors, or the refusal, that stop the run.
+    // The set, the catalog and the environment loaded and checked, every workload resolved and fitted to the templates; or the errors, or the
+    // refusal, that stop the run.
     private static async Task<(Checked? Run, IReadOnlyList<LoadError> Errors, Problem? Problem)> CheckAsync(
-        ReleaseStartInput input, IRecordStore? records, Connections connections, CancellationToken cancellationToken)
+        DeployReleaseInput input, Promotion? promotion, Connections connections, CancellationToken cancellationToken)
     {
-        // StartAsync checked the input: a promotion has the records, and a run without one has its set.
-        var set = input.Promotion is { } promoted ? await KeptSetAsync(records!, promoted, cancellationToken) : input.Set!;
-        var setResult = await ReleaseSetFile.ParseAsync(set, cancellationToken);
+        var setResult = await ReleaseSetFile.ParseAsync(input.Set, cancellationToken);
         var catalogResult = await CatalogParser.ParseAsync(input.Catalog, cancellationToken);
         var environmentResult = await EnvironmentParser.LoadAsync(input.Environment, cancellationToken);
         if (setResult.Set is not { } release || catalogResult.Value is not { } catalog || environmentResult.Value is not { } environment)
@@ -80,19 +76,19 @@ public static class ReleaseStart
         }
 
         // A gated environment is deployed to only by promotion; this stops before the identity, the records or the backend is touched.
-        if (!input.Preview && input.Promotion is null && Checks.Gate(environment) is { } gated)
+        if (!input.Preview && promotion is null && Checks.Gate(environment) is { } gated)
         {
             return (null, [], gated);
         }
 
         // The promotion judged the hash of the kept set; the bytes read now are the ones deployed, so they must be those.
-        if (input.Promotion is { } promotion && ReleaseHash.Of(setResult.Bytes.Span) != promotion.SetSha256)
+        if (promotion is not null && ReleaseHash.Of(setResult.Bytes.Span) != promotion.SetSha256)
         {
-            return (null, [], new KeptSetChanged(set.Name, promotion.SetSha256));
+            return (null, [], new KeptSetChanged(input.Set.Name, promotion.SetSha256));
         }
 
         // Everything is resolved and checked before anything is created.
-        var (graphs, errors) = await ReleaseResolver.ResolveAsync(set.Name, release, catalog, environment, cancellationToken);
+        var (graphs, errors) = await ReleaseResolver.ResolveAsync(input.Set.Name, release, catalog, environment, cancellationToken);
         if (errors.Count > 0)
         {
             return (null, errors, null);
@@ -104,23 +100,15 @@ public static class ReleaseStart
 
     private static ReleaseStartResult Refused(Problem problem) => new([], problem, null);
 
-    // The set kept for the promoted label on the environment it was qualified on, named as the records name it.
-    private static async Task<SourceDocument> KeptSetAsync(IRecordStore records, Promotion promotion, CancellationToken cancellationToken) =>
-        new(ReleaseRecordFile.KeptSetName(promotion.QualifiedOn, promotion.Label), await records.ReadAsync(promotion.QualifiedOn, promotion.Label, ReleaseRecordFile.SetFileName, cancellationToken));
-
     // The principal (known already, for a promotion) and the kept set's hash; or why the run must not start: the principal cannot be named, the label
     // cannot name a place in the records, or it holds another set.
     private static async Task<(Kept? Kept, Problem? Refusal)> KeepAsync(
         IRecordStore records, DeployerIdentity? known, Checked run, Connections connections, CancellationToken cancellationToken)
     {
-        DeployerIdentity principal;
-        try
+        var (principal, identityRefusal) = known is null ? await Checks.PrincipalAsync(connections, cancellationToken) : (known, null);
+        if (principal is null)
         {
-            principal = known ?? await connections.Identity().GetAsync(cancellationToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return (null, new IdentityRefused(ex.Message));
+            return (null, identityRefusal);
         }
 
         try

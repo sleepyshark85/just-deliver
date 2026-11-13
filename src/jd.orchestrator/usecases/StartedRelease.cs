@@ -12,5 +12,5 @@ namespace jd.orchestrator.usecases;
 /// <param name="Recording">Where the run is recorded, and its qualifier; null exactly for a preview.</param>
 /// <param name="Time">The run's clock.</param>
 /// <param name="Started">When the run started.</param>
-public sealed record StartedRelease(
+internal sealed record StartedRelease(
     ReleaseSet Set, EnvironmentDescriptor Environment, IReadOnlyList<ResolvedGraph> Graphs, Orchestrator Orchestrator, Recording? Recording, TimeProvider Time, DateTimeOffset Started);

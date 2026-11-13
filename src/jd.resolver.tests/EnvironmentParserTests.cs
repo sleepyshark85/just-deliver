@@ -69,8 +69,8 @@ public class EnvironmentParserTests
     [Fact]
     public async Task Code_rule_errors_are_all_reported_together()
     {
-        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  type: x\n  a.b: c"));
-        Assert.Equal(["values.type", "values.a.b"], result.Errors.Select(e => e.Location));
+        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  type: x\n  region: y"));
+        Assert.Equal(["values.region", "values.type"], result.Errors.Select(e => e.Location));
     }
 
     [Fact]
@@ -78,16 +78,50 @@ public class EnvironmentParserTests
     {
         var result = await Parse(Valid.Replace("  resourceGroup: rg-test", "  resourceGroup: rg-test\n  cosmos.accountId: /other"));
         var error = Assert.Single(result.Errors);
-        Assert.Equal("values.cosmos.accountId", error.Location);
-        Assert.Contains("'.'", error.Message);
+        Assert.Equal(("values['cosmos.accountId']", DottedKeyMessage), (error.Location, error.Message));
         Assert.Null(result.Value);
     }
 
-    [Fact]
-    public async Task Dotted_key_in_a_nested_mapping_is_rejected()
+    // The schema's message, reported where the key is however deep it is nested (the validator ignores propertyNames, so the rule is
+    // patternProperties with a refusing additionalProperties).
+    private const string DottedKeyMessage = "keys must be non-empty and must not contain '.'; nest a mapping instead (a: { b: … }).";
+
+    [Theory]
+    [InlineData("logAnalytics: { \"a.b\": x }", "values.logAnalytics['a.b']")]
+    [InlineData("logAnalytics: { deeper: { \".b\": x } }", "values.logAnalytics.deeper['.b']")]
+    [InlineData("logAnalytics: { \"\": x }", "values.logAnalytics.")]
+    public async Task A_dotted_or_empty_key_in_a_nested_mapping_is_rejected_with_the_schema_message(string values, string location)
     {
-        var result = await Parse(Valid.Replace("logAnalytics: { id: /law/id }", "logAnalytics: { \"a.b\": x }"));
-        Assert.Equal("values.logAnalytics.a.b", Assert.Single(result.Errors).Location);
+        var result = await Parse(Valid.Replace("logAnalytics: { id: /law/id }", values));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal((location, DottedKeyMessage), (error.Location, error.Message));
+    }
+
+    [Fact]
+    public async Task A_leaf_that_is_neither_a_string_nor_a_mapping_reports_the_validators_text_not_the_key_message()
+    {
+        var result = await Parse(Valid.Replace("logAnalytics: { id: /law/id }", "logAnalytics: { id: [x] }"));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("values.logAnalytics", error.Location);
+        Assert.StartsWith("schema violation: AdditionalPropertiesNotValid: #/values.logAnalytics", error.Message);
+    }
+
+    // A dotted key does not hide a bad leaf beside it (documents.md section 6), and the mapping it sits in is not also reported as a string that
+    // is not one: of the failed anyOf, only the branch with the message counts.
+    [Fact]
+    public async Task A_dotted_key_and_a_bad_leaf_beside_it_are_both_reported()
+    {
+        var result = await Parse(Valid.Replace("logAnalytics: { id: /law/id }", "logAnalytics: { \"a.b\": x, d: 5 }"));
+
+        const string leaf = "#/values.logAnalytics.d";
+        Assert.Equal(
+            [
+                ("values.logAnalytics.d", $"schema violation: AdditionalPropertiesNotValid: {leaf} {{ NotAnyOf: {leaf} {{ StringExpected: {leaf} }} {{ ObjectExpected: {leaf} }} }}"),
+                ("values.logAnalytics['a.b']", DottedKeyMessage),
+            ],
+            result.Errors.Select(error => (error.Location, error.Message)));
     }
 
     [Fact]
@@ -121,12 +155,5 @@ public class EnvironmentParserTests
     {
         var env = await Load(Valid);
         Assert.False(env.TryGet(path, out _));
-    }
-
-    [Fact]
-    public async Task Missing_file_is_reported()
-    {
-        var result = await EnvironmentParser.LoadAsync(Path.Combine(Path.GetTempPath(), "jd-no-such-env.yaml"));
-        Assert.Contains("not found", Assert.Single(result.Errors).Message);
     }
 }
