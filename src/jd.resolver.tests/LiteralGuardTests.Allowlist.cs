@@ -66,7 +66,6 @@ public sealed partial class LiteralGuardTests
     private static readonly Dictionary<string, string[]> S24b3 = new()
     {
         ["backend-providers/jd.bp.pulumi/TemplateLibrary.cs"] = ["exports.", "template"],
-        ["jd.resolver/catalog/CatalogParser.cs"] = [".probe.intervalSeconds", ".template"],
         ["jd.resolver/graph/ExportValues.cs"] = ["exports."],
         ["jd.resolver/graph/GraphBuilder.cs"] = ["exports."],
     };

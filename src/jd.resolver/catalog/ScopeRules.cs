@@ -11,12 +11,14 @@ internal static class ScopeRules
     /// <summary>Every problem with what the shared resources, by name, read: a resource of a later one of <paramref name="layers"/>, or a cycle.</summary>
     public static IReadOnlyList<LoadError> CheckReadOrder(IReadOnlyList<string> layers, IReadOnlyDictionary<string, PartOwner> shared)
     {
+        // A shared resource is its one part.
         var order = layers.ToList();
         var later =
             from user in shared.Values
-            from part in user.Parts
+            let part = user.Parts[0]
             from used in part.Reads.Select(shared.GetValueOrDefault).OfType<PartOwner>()
-            from usedPart in used.Parts.Where(usedPart => order.IndexOf(usedPart.Scope) > order.IndexOf(part.Scope))
+            let usedPart = used.Parts[0]
+            where order.IndexOf(usedPart.Scope) > order.IndexOf(part.Scope)
             select new LoadError(user.Source, part.ReadsLocation,
                 $"'{used.Name}' is {usedPart.Scope} scope; a {part.Scope}-scope resource uses only {string.Join(" or ", layers.Take(order.IndexOf(part.Scope) + 1))}"
                 + $"-scope ones, since the {part.Scope} layer is deployed first.");
@@ -28,7 +30,6 @@ internal static class ScopeRules
             return [.. later];
         }
 
-        // A shared resource is its one part.
         var first = shared[cycle[0]];
         return [.. later, new LoadError(first.Source, first.Parts[0].ReadsLocation, $"uses cycle: {string.Join(" -> ", cycle)}.")];
     }

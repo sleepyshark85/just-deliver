@@ -55,7 +55,7 @@ internal static class ReadRules
     {
         if (name == ExpressionEvaluator.RuntimeNode)
         {
-            return reader.IsRuntime ? null : $"'{name}' is the runtime node, declared only by a Runtime.";
+            return reader.IsRuntime ? null : $"'{name}' is the runtime node, declared only by a runtime.";
         }
 
         var isRoot = ExpressionEvaluator.ReservedRoots.Contains(name) || reader.Part.Reads.Contains(name) || name == reader.OwnComponent;

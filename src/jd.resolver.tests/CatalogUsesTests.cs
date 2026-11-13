@@ -367,7 +367,7 @@ public class CatalogUsesTests
         var runtime = SingleError(await Parse(("s.yaml", Shared("cosmos-account", node: "runtime", exports: "{}"))));
 
         Assert.Equal(("s.yaml", "nodes.shared-group"), (used.File, used.Location));
-        Assert.Equal(("s.yaml", "nodes.runtime", "'runtime' is the runtime node, declared only by a Runtime."), (runtime.File, runtime.Location, runtime.Message));
+        Assert.Equal(("s.yaml", "nodes.runtime", "'runtime' is the runtime node, declared only by a runtime."), (runtime.File, runtime.Location, runtime.Message));
     }
 
     // The kebab rule covers every part kind; class parts and runtimes are covered in CatalogParserTests.

@@ -88,12 +88,14 @@ internal sealed class Binder(SchemaIndex index)
     private static Node ReadNode(Values values, JToken node)
     {
         var config = values.Nearest(Roles.NodeConfig, node) as JObject;
+        var template = values.Nearest(Roles.NodeTemplate, node);
         return new Node(
-            Text(values.Nearest(Roles.NodeTemplate, node)),
+            Text(template),
             Enum.Parse<NodeKind>(Text(values.Nearest(Roles.NodeKind, node)), ignoreCase: true),
             Entries(config).ToDictionary(entry => entry.Name, entry => entry.Value),
             node.Path,
-            config?.Path ?? node.Path);
+            config?.Path ?? node.Path,
+            template?.Path ?? node.Path);
     }
 
     // A rule without allowed characters is located where the rule is, as a node without config is.
