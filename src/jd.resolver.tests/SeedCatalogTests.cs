@@ -38,7 +38,7 @@ public class SeedCatalogTests
     [Fact]
     public async Task Templates_directory_is_not_loaded()
     {
-        var result = await CatalogParser.ParseAsync(new SourceCatalog("catalog",
+        var result = await CatalogLoader.LoadAsync(new SourceCatalog("catalog",
         [
             new("catalog.yaml", "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n"u8.ToArray()),
             new("templates/azure/Pulumi.yaml", "name: not-a-catalog-document\n"u8.ToArray()),

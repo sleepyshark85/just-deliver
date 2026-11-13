@@ -69,6 +69,9 @@ internal static class Roles
     /// <summary>The input naming a grant template's target, by the template it is held under.</summary>
     public const string GrantTargetInput = "grant.target-input";
 
+    /// <summary>A policy's name; the documents of a kind that binds it are policies.</summary>
+    public const string PolicyName = "policy.name";
+
     /// <summary>The environment's type, which selects an implementation.</summary>
     public const string EnvironmentType = "env.type";
 

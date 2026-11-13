@@ -36,7 +36,7 @@ public class ExpanderTests
     private static async Task<Catalog> LoadAsync(params string[] components)
     {
         var files = BaseFiles.Concat(components).Append(TestCatalog.RuntimeFile).Append(TestCatalog.GrantsFile).Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
-        var result = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
+        var result = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(result.Errors);
         return result.Value!;
     }
@@ -126,7 +126,7 @@ public class ExpanderTests
 
     private static async Task<Catalog> LoadWithoutRuntimeAsync(string[] files)
     {
-        var result = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. BaseFiles.Concat(files).Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)))]));
+        var result = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. BaseFiles.Concat(files).Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)))]));
         Assert.Empty(result.Errors);
         return result.Value!;
     }

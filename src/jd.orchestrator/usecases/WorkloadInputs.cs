@@ -21,7 +21,7 @@ internal sealed record WorkloadInputs(JObject Workload, string WorkloadName, Cat
             return new(null, loaded.Errors);
         }
 
-        var catalogResult = await CatalogParser.ParseAsync(catalog, cancellationToken);
+        var catalogResult = await CatalogLoader.LoadAsync(catalog, cancellationToken);
         var environmentResult = await EnvironmentParser.LoadAsync(environment, cancellationToken);
         if (catalogResult.Value is not { } parsed || environmentResult.Value is not { } descriptor)
         {

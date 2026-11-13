@@ -29,7 +29,7 @@ public class CatalogUsesTests
         + TestCatalog.RuntimeImplementation($"nodes:\n  runtime:\n    template: t/rt\n    config: {config}\n");
 
     private static Task<LoadResult<Catalog>> Parse(params (string Path, string Content)[] files) =>
-        CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files.Prepend(("catalog.yaml", CatalogFile)).Select(f => new SourceDocument(f.Item1, Encoding.UTF8.GetBytes(f.Item2)))]));
+        CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files.Prepend(("catalog.yaml", CatalogFile)).Select(f => new SourceDocument(f.Item1, Encoding.UTF8.GetBytes(f.Item2)))]));
 
     private static LoadError SingleError(LoadResult<Catalog> result)
     {
@@ -86,6 +86,18 @@ public class CatalogUsesTests
         Assert.Equal(("s.yaml", "name"), (shared.File, shared.Location));
         Assert.Equal($"'{name}' is a reserved root of expressions (env, resource, role, runtime, workload); choose another name.", shared.Message);
         Assert.Equal(("c.yaml", "name"), (component.File, component.Location));
+    }
+
+    // The name is checked even when the file fails its schema for another reason.
+    [Fact]
+    public async Task A_reserved_root_is_not_a_name_in_a_file_that_fails_its_schema()
+    {
+        var result = await Parse(("s.yaml", Shared("env").Replace("description: d\n", string.Empty, StringComparison.Ordinal)));
+
+        Assert.Null(result.Value);
+        Assert.Contains(("s.yaml", "name", "'env' is a reserved root of expressions (env, resource, role, runtime, workload); choose another name."),
+            result.Errors.Select(error => (error.File, error.Location, error.Message)));
+        Assert.Equal(2, result.Errors.Count);
     }
 
     // A component named resource or role could never be read: ${resource.<id>.<export>} and ${role.<name>} always mean the roots.
@@ -370,7 +382,7 @@ public class CatalogUsesTests
         Assert.Equal(("s.yaml", "nodes.runtime", "'runtime' is the runtime node, declared only by a runtime."), (runtime.File, runtime.Location, runtime.Message));
     }
 
-    // The kebab rule covers every part kind; class parts and runtimes are covered in CatalogParserTests.
+    // The kebab rule covers every part kind; class parts and runtimes are covered in CatalogLoaderTests.
     [Fact]
     public async Task Shared_resource_and_environment_part_node_names_must_be_lowercase_kebab()
     {
@@ -378,8 +390,8 @@ public class CatalogUsesTests
         var environment = SingleError(await Parse(("c.yaml", Component(environment: "{ nodes: { Bad_Name: { template: t/db, config: {} } }, exports: {} }"))));
 
         Assert.Equal(("s.yaml", "nodes.Bad_Name"), (shared.File, shared.Location));
-        Assert.Equal(CatalogParserTests.NodeNameMessage, shared.Message);
-        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.Bad_Name", CatalogParserTests.NodeNameMessage), (environment.File, environment.Location, environment.Message));
+        Assert.Equal(CatalogLoaderTests.NodeNameMessage, shared.Message);
+        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.Bad_Name", CatalogLoaderTests.NodeNameMessage), (environment.File, environment.Location, environment.Message));
     }
 
     [Theory]

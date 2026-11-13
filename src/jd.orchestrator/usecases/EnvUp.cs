@@ -19,7 +19,7 @@ public static class EnvUp
     public static async Task<EnvUpResult> RunAsync(EnvUpInput input, Connections connections, Action<Progress>? progress, CancellationToken cancellationToken)
     {
         var definitionResult = await EnvironmentDefinitionFile.LoadAsync(input.Definition, cancellationToken);
-        var catalogResult = await CatalogParser.ParseAsync(input.Catalog, cancellationToken);
+        var catalogResult = await CatalogLoader.LoadAsync(input.Catalog, cancellationToken);
         var baseResult = input.Base is null ? null : await EnvironmentParser.LoadAsync(input.Base, cancellationToken);
         if (definitionResult.Value is not { } definition || catalogResult.Value is not { } catalog || baseResult is { Value: null })
         {

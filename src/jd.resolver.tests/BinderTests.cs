@@ -6,7 +6,7 @@ namespace jd.resolver.tests;
 
 // The binder knows no kind or field (docs/architecture/documents.md section 3): a planted schema puts the part roles on fields of its own
 // names, and the binder fills a part owner from a document of that kind with no C# change. The shipped kinds are bound through the loader
-// (CatalogParserTests, SeedCatalogTests).
+// (CatalogLoaderTests, SeedCatalogTests).
 public sealed class BinderTests
 {
     private const string Gizmo = """

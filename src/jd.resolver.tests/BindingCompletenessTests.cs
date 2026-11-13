@@ -1,4 +1,3 @@
-using jd.resolver.catalog;
 using Xunit;
 
 namespace jd.resolver.tests;
@@ -25,7 +24,7 @@ public sealed class BindingCompletenessTests
     {
         var index = await PlantedAsync(schema, $"\"is\": \"{role}\"", "\"message\": \"unbound\"");
 
-        return Assert.Throws<InvalidOperationException>(() => index.CheckBindings(CatalogParser.RequiredBindings)).Message;
+        return Assert.Throws<InvalidOperationException>(() => index.CheckBindings()).Message;
     }
 
     [Fact]
@@ -33,7 +32,7 @@ public sealed class BindingCompletenessTests
     {
         var index = await SchemaIndex.Shipped;
 
-        index.CheckBindings(CatalogParser.RequiredBindings);
+        index.CheckBindings();
     }
 
     // The part schema holds the node roles for every kind with a part, so each kind is named.
@@ -52,12 +51,13 @@ public sealed class BindingCompletenessTests
             message);
     }
 
+    // The runtime is the kind that binds the runtime's part, so without it there is none.
     [Fact]
     public async Task A_runtime_that_does_not_bind_its_part_stops_jd()
     {
         var message = await UnboundAsync("schemas/catalog/runtime.schema.json", "runtime.part");
 
-        Assert.Equal("Schema 'schemas/catalog/runtime.schema.json' does not bind role 'runtime.part'.", message);
+        Assert.Equal("No schema binds role 'runtime.part'.", message);
     }
 
     [Fact]

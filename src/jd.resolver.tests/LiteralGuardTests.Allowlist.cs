@@ -32,7 +32,7 @@ public sealed partial class LiteralGuardTests
         ["jd.resolver/Roles.cs"] =
         [
             "catalog.version", "contract", "env.type", "environment-type.layer", "layer", "naming.allowed", "naming.pattern", "naming.rules", "node.config",
-            "node.kind", "node.template", "part.exports", "part.nodes", "part.scope", "requirement.class", "roles", "runtime.part",
+            "node.kind", "node.template", "part.exports", "part.nodes", "part.scope", "policy.name", "requirement.class", "roles", "runtime.part",
         ],
         ["jd.resolver/expansion/ConfigWalker.cs"] = ["workload.variables"], // the fn::entries source (Appendix A: concept 4)
         // the annotation keyword and the annotations it reads (each named once); JSON Schema's own keyword
@@ -105,13 +105,14 @@ public sealed partial class LiteralGuardTests
     private static readonly Dictionary<string, string[]> S24d = new()
     {
         ["jd.resolver/catalog/MatchCriteria.cs"] = ["class", "environmentType", "kind", "runtime", "template", "type"],
-        ["jd.resolver/catalog/CatalogParser.cs"] = ["default", "match", "match.kind", "match.runtime", "name", "reason", "require", "set"],
+        ["jd.resolver/catalog/Policy.cs"] = ["default", "match", "name", "reason", "require", "set"],
+        ["jd.resolver/catalog/PolicyRules.cs"] = ["default", "match", "match.kind", "match.runtime", "require", "set"],
         ["jd.resolver/policies/PolicyApplier.cs"] = ["default", "set"],
     };
 
     private static readonly Dictionary<string, string[]> S24e = new()
     {
-        ["jd.resolver/catalog/CatalogParser.cs"] =
+        ["jd.resolver/catalog/Rollout.cs"] =
         [
             "expectedStatus", "fqdnOutput", "intervalSeconds", "latestKey", "path", "probe", "release", "resourceIdOutput", "revisionKey",
             "revisionOutput", "suffixInput", "suffixOutput", "timeoutSeconds", "trafficInput", "trafficOutput", "weightKey",

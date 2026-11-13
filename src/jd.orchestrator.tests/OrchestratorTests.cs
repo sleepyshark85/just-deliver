@@ -75,7 +75,7 @@ public partial class OrchestratorTests
             }
             .Concat(policy.Length > 0 ? [policy] : [])
             .Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
-        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
+        var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: {workloadName}, team: crew }}\n{container}requires:\n{requires}");
         var graph = Resolver.Resolve(workload, "workload.yaml", loaded.Value!, Env);

@@ -63,7 +63,7 @@ internal static class ReleaseStart
         DeployReleaseInput input, Promotion? promotion, Connections connections, CancellationToken cancellationToken)
     {
         var setResult = await ReleaseSetFile.ParseAsync(input.Set, cancellationToken);
-        var catalogResult = await CatalogParser.ParseAsync(input.Catalog, cancellationToken);
+        var catalogResult = await CatalogLoader.LoadAsync(input.Catalog, cancellationToken);
         var environmentResult = await EnvironmentParser.LoadAsync(input.Environment, cancellationToken);
         if (setResult.Set is not { } release || catalogResult.Value is not { } catalog || environmentResult.Value is not { } environment)
         {

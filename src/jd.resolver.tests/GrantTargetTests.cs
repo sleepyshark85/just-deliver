@@ -32,7 +32,7 @@ public class GrantTargetTests
         + TestCatalog.RuntimeImplementation($"nodes:\n  runtime: {{ template: t/rt, config: {{}} }}\n{extraNodes}");
 
     private static Task<LoadResult<Catalog>> Parse(string component, string runtime = "", string sharedGroup = SharedGroup) =>
-        CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. new[]
+        CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. new[]
         {
             ("catalog.yaml", CatalogFile), ("grants.yaml", TestCatalog.GrantsFile), ("shared/a.yaml", sharedGroup), ("shared/b.yaml", CosmosAccount),
             ("c.yaml", component), ("r.yaml", runtime.Length > 0 ? runtime : Runtime()),
@@ -125,7 +125,7 @@ public class GrantTargetTests
     [Fact]
     public async Task A_template_listed_in_two_files_is_checked_against_the_first_files_input()
     {
-        var result = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. new[]
+        var result = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. new[]
         {
             ("catalog.yaml", CatalogFile), ("grants.yaml", TestCatalog.GrantsFile), ("grants2.yaml", "kind: Grants\ntargets: { t/g: target }\n"),
             ("shared/a.yaml", SharedGroup), ("shared/b.yaml", CosmosAccount), ("c.yaml", Component(Grant("'${container.scope}'"))), ("r.yaml", Runtime()),

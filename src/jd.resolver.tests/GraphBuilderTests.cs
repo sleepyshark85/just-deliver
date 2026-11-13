@@ -37,7 +37,7 @@ public class GraphBuilderTests
     {
         var component = TestCatalog.Component("sqldb", "[endpoint]", $"nodes:\n{nodes}exports:\n  endpoint: x\n");
         var files = BaseFiles.Append(component).Concat(policies).Append(TestCatalog.RuntimeFile).Append(TestCatalog.GrantsFile).Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
-        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
+        var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
         var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
         var applied = new PolicyApplier(loaded.Value!, Env).Apply(new Expander(loaded.Value!, Env).Expand(workload, "workload.yaml"));

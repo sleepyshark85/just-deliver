@@ -58,4 +58,18 @@ internal static class ScopeRules
                            $"node '{node.Name}' is also declared by '{first.Name}' ({first.Source}); node names are unique across the parts of one {scope.Key.Scope} scope.");
         return [.. shadowing, .. repeated];
     }
+
+    /// <summary>
+    /// Every implementation of <paramref name="owners"/> keyed by one of <paramref name="environmentTypes"/> of a layer before the last of
+    /// <paramref name="layers"/>: only an environment of the last layer deploys a component or runtime part, so it would never be used. Whether
+    /// a key is a declared type at all is the ref rule's.
+    /// </summary>
+    public static IReadOnlyList<LoadError> CheckImplementationKeys(
+        IEnumerable<PartOwner> owners, IReadOnlyDictionary<string, EnvironmentType> environmentTypes, IReadOnlyList<string> layers) =>
+        [.. from owner in owners
+            from key in owner.Parts.SelectMany(part => part.Keys).Where(key => key.Role == Roles.EnvironmentType).Distinct()
+            let layer = environmentTypes.GetValueOrDefault(key.Key)?.Layer
+            where layer is not null && layer != layers[^1]
+            select new LoadError(owner.Source, $"{key.MapLocation}.{key.Key}",
+                $"'{key.Key}' is a {layer}-layer environment type; {key.Map} are keyed by {layers[^1]}-layer types or '{key.Fallback}'.")];
 }

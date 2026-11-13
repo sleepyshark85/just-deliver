@@ -30,8 +30,16 @@ internal sealed class SchemaIndex
     private const string ScopeKeyword = "scope";
     private const string MetaSchemaName = $"schemas/{Annotation}.schema.json";
 
-    // The roles every part's nodes are read by: the security boundaries on nodes read them (binding completeness).
+    // Binding completeness (documents.md section 4): what a kind that binds the key role binds too, since a security boundary reads it: the nodes
+    // of every part (boundaries 1, 2, 3, 5, 6) and whether a declared environment type is gated (boundary 13).
     private static readonly string[] NodeRoles = [Roles.PartNodes, Roles.NodeKind, Roles.NodeTemplate, Roles.NodeConfig];
+
+    private static readonly Dictionary<string, string[]> Implied = new()
+    {
+        [Roles.Part] = NodeRoles,
+        [Roles.RuntimePart] = NodeRoles,
+        [Roles.EnvironmentTypeLayer] = [Roles.EnvironmentTypeGated],
+    };
 
     private readonly Dictionary<string, JsonSchema> _byKind;
     private readonly Dictionary<string, string> _schemaNames;
@@ -68,19 +76,19 @@ internal sealed class SchemaIndex
     public IReadOnlyList<string> Layers { get; }
 
     /// <summary>
-    /// Binding completeness (docs/architecture/documents.md section 4): a security boundary reads only what a schema binds, so every kind with a
-    /// part binds the node roles, a schema binds <see cref="Roles.Layer"/>, and each kind of <paramref name="required"/>, which must be one the
-    /// schemas declare, binds the roles given for it. A schema that does not is a mistake in jd: throws <see cref="InvalidOperationException"/>
-    /// naming every schema and role it misses.
+    /// Binding completeness (docs/architecture/documents.md section 4): a security boundary reads only what a schema binds, so a kind that binds a
+    /// part binds the node roles, a kind that declares environment types binds whether each is gated, a kind binds the runtime's part, and a schema
+    /// binds <see cref="Roles.Layer"/>. A schema that does not is a mistake in jd: throws <see cref="InvalidOperationException"/> naming every
+    /// schema and role it misses.
     /// </summary>
-    public void CheckBindings(IReadOnlyDictionary<string, IReadOnlyList<string>> required)
+    public void CheckBindings()
     {
-        var withParts = _roles.Keys.Where(kind => BindsRole(kind, Roles.Part) || BindsRole(kind, Roles.RuntimePart));
-        var unbound = withParts.SelectMany(kind => NodeRoles.Select(role => (Kind: kind, Role: role)))
-            .Concat(required.SelectMany(entry => entry.Value.Select(role => (Kind: entry.Key, Role: role))))
+        var unbound = Implied.SelectMany(entry => KindsBinding(entry.Key).SelectMany(kind => entry.Value.Select(role => (Kind: kind, Role: role))))
             .Where(binding => !BindsRole(binding.Kind, binding.Role))
             .Select(binding => $"Schema '{_schemaNames[binding.Kind]}' does not bind role '{binding.Role}'.")
+            .Distinct()
             .Order(StringComparer.Ordinal)
+            .Concat(KindsBinding(Roles.RuntimePart).Count == 0 ? [$"No schema binds role '{Roles.RuntimePart}'."] : Array.Empty<string>())
             .Concat(Layers.Count == 0 ? [$"No schema binds role '{Roles.Layer}'."] : Array.Empty<string>())
             .ToList();
         if (unbound.Count > 0)
@@ -88,6 +96,9 @@ internal sealed class SchemaIndex
             throw new InvalidOperationException(string.Join(" ", unbound));
         }
     }
+
+    /// <summary>The kinds whose schema binds <paramref name="role"/> (<c>is</c>).</summary>
+    public IReadOnlyList<string> KindsBinding(string role) => [.. _roles.Keys.Where(kind => BindsRole(kind, role))];
 
     private bool BindsRole(string kind, string role) => _roles[kind].Any(field => field.Role == role);
 

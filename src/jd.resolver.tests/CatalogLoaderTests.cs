@@ -4,7 +4,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-public class CatalogParserTests
+public class CatalogLoaderTests
 {
     private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
 
@@ -15,7 +15,7 @@ public class CatalogParserTests
         $"kind: Policy\nname: {name}\nreason: because\nmatch: {{ kind: runtime }}\nset: {{ runtime.b: 1 }}\n";
 
     private static Task<LoadResult<Catalog>> Parse(params (string Path, string Content)[] files) =>
-        CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files.Select(f => new SourceDocument(f.Path, Encoding.UTF8.GetBytes(f.Content)))]));
+        CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files.Select(f => new SourceDocument(f.Path, Encoding.UTF8.GetBytes(f.Content)))]));
 
     // The environment types (docs/architecture/components.md section 2): declared in the Catalog file, named like requirement types, `default`
     // excluded (the implementations' fallback key).
@@ -192,6 +192,18 @@ public class CatalogParserTests
         var error = Assert.Single(result.Errors);
         Assert.Equal((file, "implementations.shared"), (error.File, error.Location));
         Assert.Equal("'shared' is a shared-layer environment type; implementations are keyed by environment-layer types or 'default'.", error.Message);
+    }
+
+    // A catalog file that failed its schema is reported on its own: its types are not read, so no key is judged against them.
+    [Fact]
+    public async Task A_catalog_file_that_fails_its_schema_is_not_checked_against_its_types()
+    {
+        var catalog = CatalogFile.Replace("environmentTypes: {", "environmentTypes: { shared: { layer: shared },", StringComparison.Ordinal).Replace("version: \"1\"\n", string.Empty, StringComparison.Ordinal);
+        var result = await Parse(("catalog.yaml", catalog), ("components/a.yaml", ComponentFile("alpha-db", key: "shared")));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("catalog.yaml", error.File);
+        Assert.StartsWith("schema violation: PropertyRequired: #/version", error.Message, StringComparison.Ordinal);
     }
 
     // The parts of one implementation share its key: the key is reported once, not once per class.
