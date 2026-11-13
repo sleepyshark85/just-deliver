@@ -93,23 +93,46 @@ public partial class OrchestratorTests
 
     // Security boundary: the label and the meaning are refused before the descriptor is parsed or anything outside jd is built.
     [Theory]
-    [InlineData("foo", "ready", "'foo' is not a release label (like 1.0.0 or 1.0.0-rc.1).")]
-    [InlineData("../1.0.0", "ready", "'../1.0.0' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.")]
-    [InlineData("foo", "", "'foo' is not a release label (like 1.0.0 or 1.0.0-rc.1).")]
-    [InlineData("1.0.0", "", null)]
-    [InlineData("1.0.0", "a\nb", null)]
-    [InlineData("1.0.0", "a\u0085b", null)]
-    public async Task A_label_or_meaning_that_is_refused_is_invalid_input_before_the_descriptor_is_parsed(string label, string meaning, string? labelReason)
+    [InlineData("foo", "'foo' is not a release label (like 1.0.0 or 1.0.0-rc.1).")]
+    [InlineData("../1.0.0", "'../1.0.0' cannot name a directory of the release records: it is empty or contains '..', '/' or '\\'.")]
+    public async Task A_label_that_is_refused_is_invalid_input_before_the_descriptor_is_parsed(string label, string reason)
     {
         var approving = await ApprovingAsync(Alice);
 
-        var result = await approving.RunAsync("not: [a descriptor", label, meaning);
+        var result = await approving.RunAsync("not: [a descriptor", label);
 
-        Assert.Equal(Outcome.InvalidInput, result.Outcome);
-        Assert.Equal(labelReason is null ? new MeaningInvalid(500) : new LabelInvalid(labelReason), result.Problem);
+        Assert.Equal((Outcome.InvalidInput, (Problem?)new LabelInvalid(reason)), (result.Outcome, result.Problem));
         Assert.Empty(result.Errors);
         Assert.Empty(approving.Built);
         Assert.Empty(approving.Written);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("a\nb")]
+    [InlineData("a\u0085b")]
+    public async Task A_meaning_that_is_refused_is_invalid_input_before_the_descriptor_is_parsed(string meaning)
+    {
+        var approving = await ApprovingAsync(Alice);
+
+        var result = await approving.RunAsync("not: [a descriptor", meaning: meaning);
+
+        Assert.Equal((Outcome.InvalidInput, (Problem?)new MeaningInvalid(500)), (result.Outcome, result.Problem));
+        Assert.Empty(result.Errors);
+        Assert.Empty(approving.Built);
+        Assert.Empty(approving.Written);
+    }
+
+    // The label is checked before the meaning: with both refused, the label is the one reported.
+    [Fact]
+    public async Task A_label_and_a_meaning_that_are_both_refused_report_the_label()
+    {
+        var approving = await ApprovingAsync(Alice);
+
+        var result = await approving.RunAsync("not: [a descriptor", "foo", string.Empty);
+
+        Assert.Equal(
+            (Outcome.InvalidInput, (Problem?)new LabelInvalid("'foo' is not a release label (like 1.0.0 or 1.0.0-rc.1).")), (result.Outcome, result.Problem));
     }
 
     [Fact]
@@ -189,6 +212,36 @@ public partial class OrchestratorTests
         Assert.Equal(["IQ of the newest record (20261017T080100000Z-deploy.json) is failed."], notQualified.Reasons);
         Assert.Equal(Outcome.Failed, result.Outcome);
         Assert.Empty(approving.Written);
+    }
+
+    // The qualification is judged before the approver: an unlisted principal of a label that is not qualified is told so.
+    [Fact]
+    public async Task An_unlisted_principal_of_a_label_that_is_not_qualified_is_refused_as_not_qualified()
+    {
+        var approving = await ApprovingAsync(Dave, FailingIq);
+
+        var result = await approving.RunAsync(StageDescriptor());
+
+        Assert.Equal((Outcome.Failed, "1.0.0"), (result.Outcome, Assert.IsType<NotQualified>(result.Problem).Label));
+        Assert.Empty(approving.Written);
+    }
+
+    // The policy's refusal comes before the earlier approvals are read: no approval file is reported as ignored, and an earlier approval by the same
+    // principal does not turn the refusal into AlreadyApproved.
+    [Fact]
+    public async Task A_principal_the_policy_refuses_is_refused_before_the_earlier_approvals_are_read()
+    {
+        var ledger = await DeployedByCarolAsync(PassingIq);
+        await ApproveAsync(ledger, Carol, 2);
+        ledger.Records.Put(MemoryRecordStore.Key("stage", "1.0.0", "20261017T090300000Z-approve.json"), "not json");
+        var approving = new Approving(ledger, new FakeIdentity(Carol));
+        var before = approving.Written.ToList();
+
+        var result = await approving.RunAsync(StageDescriptor(separate: true));
+
+        Assert.Equal((Outcome.Failed, (Problem?)new NotSeparate(Carol, "1.0.0", "dev", "stage")), (result.Outcome, result.Problem));
+        Assert.Empty(approving.Progress);
+        Assert.Equal(before, approving.Written);
     }
 
     // Security boundary: only a listed principal may approve.

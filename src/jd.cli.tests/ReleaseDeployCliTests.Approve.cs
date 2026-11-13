@@ -201,6 +201,16 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal(0, _identity.Calls);
     }
 
+    // Edge 1 again: a label that is refused, met together with a missing --env, reports the missing --env (before S25f1, the label was reported).
+    [Fact]
+    public async Task A_missing_env_is_reported_before_a_label_that_is_refused()
+    {
+        var result = await RunAsync(null, "approve", "foo");
+
+        AssertUsageError(result, "approve needs --env.");
+        Assert.Equal(0, _identity.Calls);
+    }
+
     [Fact]
     public async Task An_unknown_option_is_named_in_the_usage_error() =>
         AssertUsageError(await RunAsync(null, "approve", "1.0.0", "--env", "e.yaml", "--meaning", "m", "--bogus"), "unknown option '--bogus'.");

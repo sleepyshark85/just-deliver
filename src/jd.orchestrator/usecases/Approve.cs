@@ -46,14 +46,10 @@ public static class Approve
         }
 
         // A bad credential stops here, before any record is read.
-        DeployerIdentity approver;
-        try
+        var (approver, identityRefusal) = await Checks.PrincipalAsync(connections, cancellationToken);
+        if (approver is null)
         {
-            approver = await connections.Identity().GetAsync(cancellationToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Refused(new IdentityRefused(ex.Message));
+            return Refused(identityRefusal!); // a credential that names no principal comes with its refusal
         }
 
         return await ApproveAsync(new Approval(input.Label, input.Meaning, target, policy, approver), connections, progress, cancellationToken);
