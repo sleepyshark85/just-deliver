@@ -110,7 +110,7 @@ public sealed partial class ThinCliTests
         ],
     };
 
-    // R3 today: the loaders that read the workload, the catalog, the descriptor and the release files from disk (the S25 slices hand them documents).
+    // R3 today: the path forms left, which read the descriptor from disk (DocumentLoader, until S25f2) and validate a file (YamlSchemaValidator, until S25g).
     private static readonly Dictionary<string, string[]> R3Allowlist = new()
     {
         ["jd.definitionvalidator.YamlSchemaValidator"] =
@@ -121,11 +121,6 @@ public sealed partial class ThinCliTests
         [
             "System.IO.File.Exists",
             "System.IO.File.ReadAllTextAsync",
-        ],
-        ["jd.resolver.release.ReleaseSetFile"] =
-        [
-            "System.IO.File.Exists",
-            "System.IO.File.ReadAllBytesAsync",
         ],
     };
 }

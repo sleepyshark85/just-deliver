@@ -53,19 +53,6 @@ public static class ReleaseSetFile
         return Encoding.UTF8.GetBytes(Serializer.Serialize(document));
     }
 
-    /// <summary>Reads the set at <paramref name="path"/>, as <see cref="ParseAsync"/> reads its bytes; the set is set exactly when there are no errors.</summary>
-    // TODO(S25e1): deleted when release deploy reads its set itself.
-    public static async Task<ReleaseSetResult> LoadAsync(string path, CancellationToken cancellationToken = default)
-    {
-        if (!File.Exists(path))
-        {
-            return new ReleaseSetResult(null, [new LoadError(path, string.Empty, "release set not found.")]);
-        }
-
-        // One read: the text parsed here and the bytes handed back are the same file content.
-        return await ParseAsync(new SourceDocument(path, await File.ReadAllBytesAsync(path, cancellationToken)), cancellationToken);
-    }
-
     /// <summary>Reads <paramref name="set"/>, its byte-order mark detected, and verifies it; errors name it. The result hands back its exact bytes.</summary>
     public static async Task<ReleaseSetResult> ParseAsync(SourceDocument set, CancellationToken cancellationToken = default)
     {
