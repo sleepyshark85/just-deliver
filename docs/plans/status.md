@@ -6,11 +6,11 @@
 ## Now
 
 - **Phase:** 1.5 — the code knows no file structure (user, 2026-10-19; design [documents.md](../architecture/documents.md), approved with every recommendation). Phases 0 and 1 done; the user ran the MVP by hand (2026-10-19).
-- **Next slice:** **S25e1b** ([application.md](../architecture/application.md) §10; **Azure gate**, moved from S25e1 by the split). S25a, S25b1, S25b2, S25c, S25d done. Order (user, 2026-10-19): S25a, b1, b2, c, d, e1, e2, f1, f2, g (thin CLI), then S24a2, a3, b1, b2, b3, c1, c2, d, e, f, g ([documents.md](../architecture/documents.md) §9); phase 1.5 ends with the Azure exit gate; then S22a (user, 2026-11-03). Azure gates inside: S25e1b (deletes `TemplateLibrary.LoadAsync`), S24e. User rules for every brief and review: no logic in jd.cli (jd becomes a hosted API with CLI and web clients); the code knows no file structure; every touched file at the full quality bar. Lead ruling (S25 design): an offline test edit under `src/backend-providers` triggers no Azure gate; a production edit there does.
+- **Next slice:** S25 track: **S25g** (application.md §10), once S25e1b merges; it needs a lead design call on the `DeployFormatter`/`PreviewFormatter` R1 entries. S24 track: **S24b1** (documents.md §9, binder and parts; carry-forward notes in the S24a3 log entry). Done 2026-11-13/14: S25c–S25f2 and S24a2–S24a3. The user asked for "max parallelism", so independent slices run in parallel worktrees.
 - **User decisions (2026-11-03), the S17 lead decisions:** `jd deploy` writes no record, kept for now — the user wants one consistent deployment, recorded alike through `jd deploy` and `jd release deploy`, later (roadmap, "Not on this track"); IQ failure exits 1 and leaves the deployment live, rollback in a later phase (E31, E32); `jd.azure` with its standards §1 exception accepted. ADRs 0001 and 0003 accepted (user asked the lead to accept those already decided); 0017 supersedes 0004 and 0018 supersedes 0013's first decision (both record the user's S21 choices); the rest stay Proposed.
 - **In progress:** —
 - **User decisions (2026-10-18):** phase 1 exit wording as proposed (roadmap); the one-time App Insights recreation (components.md §5, option a) accepted as the one exception to principle 13; Cosmos `disableLocalAuth: true` kept; the Log Analytics shared key accepted for now, its removal planned as a slice after phase 1 (below).
-- **Blocked:** —
+- **Blocked:** **S25e1b** (`mvp/s25e1b-template-library`, approved). It needs the Azure gate, which needs `~/.just-deliver/<subscription>.env`; the lead cannot read that file, so the user runs `tools/verify.sh --azure` on the branch. Then merge main into the branch and merge it.
 
 ## Slices
 
