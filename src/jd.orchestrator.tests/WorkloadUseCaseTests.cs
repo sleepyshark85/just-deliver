@@ -1,7 +1,6 @@
 using System.Text;
 using jd.orchestrator.usecases;
 using jd.resolver;
-using jd.resolver.graph;
 using Xunit;
 
 namespace jd.orchestrator.tests;
@@ -44,27 +43,12 @@ public sealed class WorkloadUseCaseTests
     ]);
 
     private readonly FakeBackend _backend = new();
-    private readonly List<string> _built = [];
 
     private static SourceDocument Document(string name, string text) => new(name, Encoding.UTF8.GetBytes(text));
 
-    // The backend factory and the templates factory record that they were called; the templates fit any graph unless given misfits.
-    private Connections Connections(params LoadError[] misfits) => new(
-        () => throw new NotSupportedException(),
-        () => throw new NotSupportedException(),
-        () => throw new NotSupportedException(),
-        () =>
-        {
-            _built.Add("backend");
-            return _backend;
-        },
-        () => new FakeProbe(_backend.Log),
-        () => TimeProvider.System,
-        part =>
-        {
-            _built.Add($"templates {part.Name} {string.Join(',', part.Documents.Select(d => d.Name))}");
-            return new FakeTemplates(_backend, misfits);
-        });
+    private readonly RecordingConnections _connections;
+
+    public WorkloadUseCaseTests() => _connections = new(_backend);
 
     private Task<DeployResult> DeployAsync(Connections connections, string environment = Environment, bool preview = false, List<Progress>? progress = null) =>
         Deploy.RunAsync(new DeployInput(Document(WorkloadName, Workload), Document(EnvironmentName, environment), Catalog, preview), connections, progress is null ? null : progress.Add, CancellationToken.None);
@@ -95,11 +79,11 @@ public sealed class WorkloadUseCaseTests
     {
         var progress = new List<Progress>();
 
-        var result = await DeployAsync(Connections(), progress: progress);
+        var result = await DeployAsync(_connections.With(), progress: progress);
 
         Assert.Equal(Outcome.Succeeded, result.Outcome);
         Assert.Null(result.Problem);
-        Assert.Equal(["templates cat/templates t/group/Pulumi.yaml", "backend"], _built);
+        Assert.Equal(["templates cat/templates t/group/Pulumi.yaml", "backend"], _connections.Built);
         Assert.Equal(["shop/dev/thing/group", "shop/dev/@workload/runtime"], result.Run?.Nodes.Select(n => n.NodeId));
         Assert.Equal([new WorkloadStarted("shop"), .. result.Run!.Nodes.Select(n => new NodeFinished(n))], progress);
     }
@@ -109,20 +93,20 @@ public sealed class WorkloadUseCaseTests
     {
         var progress = new List<Progress>();
 
-        var result = await DeployAsync(Connections(), Environment.Replace("type: dev", "type: stage") + Approval, progress: progress);
+        var result = await DeployAsync(_connections.With(), Environment.Replace("type: dev", "type: stage") + Approval, progress: progress);
 
         Assert.Equal(Outcome.Failed, result.Outcome);
         Assert.Equal(new Gated("dev"), result.Problem);
         Assert.Empty(result.Errors);
         Assert.Null(result.Run);
-        Assert.Empty(_built);
+        Assert.Empty(_connections.Built);
         Assert.Empty(progress);
     }
 
     [Fact]
     public async Task Deploy_refuses_an_environment_type_the_catalog_does_not_declare_with_nothing_built()
     {
-        var result = await DeployAsync(Connections(), Environment.Replace("type: dev", "type: prod"));
+        var result = await DeployAsync(_connections.With(), Environment.Replace("type: dev", "type: prod"));
 
         Assert.Equal(Outcome.Failed, result.Outcome);
         Assert.Null(result.Problem);
@@ -130,13 +114,13 @@ public sealed class WorkloadUseCaseTests
         Assert.Equal((EnvironmentName, "type"), (error.File, error.Location));
         Assert.Contains("'prod'", error.Message, StringComparison.Ordinal);
         Assert.Null(result.Run);
-        Assert.Empty(_built);
+        Assert.Empty(_connections.Built);
     }
 
     [Fact]
     public async Task A_preview_on_a_gated_environment_is_allowed_and_creates_nothing()
     {
-        var result = await DeployAsync(Connections(), Environment.Replace("type: dev", "type: stage") + Approval, preview: true);
+        var result = await DeployAsync(_connections.With(), Environment.Replace("type: dev", "type: stage") + Approval, preview: true);
 
         Assert.Equal(Outcome.Succeeded, result.Outcome);
         Assert.Null(result.Problem);
@@ -150,12 +134,12 @@ public sealed class WorkloadUseCaseTests
     {
         var misfit = new LoadError("shop/dev/thing/group", "template", "template 't/group' is not in the template library.");
 
-        var result = await DeployAsync(Connections(misfit, misfit));
+        var result = await DeployAsync(_connections.With(misfit, misfit));
 
         Assert.Equal(Outcome.Failed, result.Outcome);
         Assert.Equal([misfit], result.Errors);
         Assert.Null(result.Run);
-        Assert.Equal(["templates cat/templates t/group/Pulumi.yaml"], _built);
+        Assert.Equal(["templates cat/templates t/group/Pulumi.yaml"], _connections.Built);
         Assert.Empty(_backend.Calls);
     }
 
@@ -164,18 +148,10 @@ public sealed class WorkloadUseCaseTests
     {
         _backend.FailOn = "shop.dev.thing.group";
 
-        var result = await DeployAsync(Connections());
+        var result = await DeployAsync(_connections.With());
 
         Assert.Equal(Outcome.Failed, result.Outcome);
         Assert.Null(result.Problem);
         Assert.Equal(NodeOutcome.Failed, result.Run?.Nodes[^1].Outcome);
-    }
-
-    // Fits any graph unless given misfits, which every check repeats; the content is the backend's.
-    private sealed class FakeTemplates(FakeBackend backend, IReadOnlyList<LoadError> misfits) : ITemplates
-    {
-        public string GetContent(string templateName) => backend.GetContent(templateName);
-
-        public IReadOnlyList<LoadError> Check(ResolvedGraph graph) => misfits;
     }
 }

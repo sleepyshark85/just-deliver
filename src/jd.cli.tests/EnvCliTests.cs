@@ -38,9 +38,17 @@ public sealed class EnvCliTests : IDisposable
         /// <summary>The output name that comes back as a secret from every deploy.</summary>
         public string? SecretOutput { get; set; }
 
+        /// <summary>The stack whose deploy fails.</summary>
+        public string? FailOn { get; set; }
+
         public Task<DeploymentResult> DeployAsync(DeploymentPackage package, CancellationToken cancellationToken)
         {
             Calls.Add(package.StackName);
+            if (package.StackName == FailOn)
+            {
+                throw new InvalidOperationException("provider exploded");
+            }
+
             var outputs = ByNode[package.StackName[(package.StackName.LastIndexOf('.') + 1)..]].ToDictionary(o => o.Key, o => new ConfigEntry(o.Value, o.Key == SecretOutput));
             return Task.FromResult(new DeploymentResult { Outputs = outputs, Summary = new() { ["Create"] = 1 } });
         }
@@ -243,6 +251,21 @@ public sealed class EnvCliTests : IDisposable
         Assert.Contains("offers[1]: 'nosql' is not a component or runtime in the catalog.", unknown.Err);
         Assert.Contains("the offers reach shared resource 'cosmos-account', but there is no base descriptor", noBase.Err);
         Assert.Empty(backend.Calls);
+    }
+
+    [Fact]
+    public async Task A_failed_node_stops_the_walk_names_the_node_and_writes_nothing()
+    {
+        var backend = new OutputBackend { FailOn = "_shared.shared.substrate.workspace" };
+        var path = Path.Combine(_temp, "out.yaml");
+
+        var (code, stdout, stderr) = await RunAsync(backend, null, "up", Shared, "--catalog", Catalog, "--out", path);
+
+        Assert.Equal(1, code);
+        Assert.Equal($"jd: stopped at @shared/shared/substrate/workspace: provider exploded{System.Environment.NewLine}", stderr);
+        Assert.Contains("@shared/shared/substrate/workspace", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("written.", stdout, StringComparison.Ordinal);
+        Assert.False(File.Exists(path));
     }
 
     [Fact]

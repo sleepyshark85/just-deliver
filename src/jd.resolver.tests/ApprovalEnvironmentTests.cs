@@ -1,3 +1,4 @@
+using System.Text;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using Xunit;
@@ -18,12 +19,8 @@ public class ApprovalEnvironmentTests
     private static string Definition(string type = "stage", string? approval = Block) =>
         $"kind: EnvironmentDefinition\nname: stage\nregion: region-1\ntype: {type}\noffers: [database]\n{approval}";
 
-    private static async Task<LoadResult<EnvironmentDefinition>> LoadDefinitionAsync(string text)
-    {
-        var path = Path.Combine(Directory.CreateTempSubdirectory("jd-approval").FullName, "definition.yaml");
-        await File.WriteAllTextAsync(path, text);
-        return await EnvironmentDefinitionFile.LoadAsync(path);
-    }
+    private static Task<LoadResult<EnvironmentDefinition>> LoadDefinitionAsync(string text) =>
+        EnvironmentDefinitionFile.LoadAsync(new SourceDocument("definition.yaml", Encoding.UTF8.GetBytes(text)), CancellationToken.None);
 
     private static async Task<Catalog> SeedCatalogAsync() => (await SeedCatalog.LoadAsync()).Value!;
 

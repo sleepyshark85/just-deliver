@@ -17,10 +17,10 @@ public static class EnvironmentDefinitionFile
     // Bridge: the kind read here until the environment is bound from its schema (S24c1).
     private const string Kind = "EnvironmentDefinition";
 
-    /// <summary>Loads the definition at <paramref name="path"/>; the value is set exactly when there are no errors.</summary>
-    public static async Task<LoadResult<EnvironmentDefinition>> LoadAsync(string path, CancellationToken cancellationToken = default)
+    /// <summary>Loads the definition <paramref name="definition"/> holds; its errors name the document as it is named. The value is set exactly when there are no errors.</summary>
+    public static async Task<LoadResult<EnvironmentDefinition>> LoadAsync(SourceDocument definition, CancellationToken cancellationToken)
     {
-        var loaded = await DocumentLoader.LoadFileAsync(path, "environment definition", [Kind], cancellationToken);
+        var loaded = await DocumentLoader.LoadAsync(definition.Name, definition.Text(), [Kind], cancellationToken);
         if (loaded.Value is not { Body: var body })
         {
             return new LoadResult<EnvironmentDefinition>(null, loaded.Errors);
