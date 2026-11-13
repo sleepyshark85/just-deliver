@@ -367,4 +367,39 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal((2, string.Empty, $"jd: cannot read '{Path.Combine(_temp, "nope")}': not found or not a directory.\n"), (missingCatalog.Code, missingCatalog.Out, missingCatalog.Err.ReplaceLineEndings("\n")));
         Assert.Equal(0, _identity.Calls);
     }
+
+    // Edge 1 (docs/architecture/application.md section 8): the label is the use case's to check, after the command has its options and its inputs
+    // exist, so a missing --to or an unreadable one is reported first; before, the label was.
+    [Fact]
+    public async Task A_missing_or_unreadable_target_is_reported_before_a_label_that_cannot_name_a_release()
+    {
+        var missing = Path.Combine(_temp, "nope.yaml");
+
+        var unreadable = await RunAsync(null, "promote", "../x", "--to", missing, "--catalog", Catalog);
+        var noTarget = await RunAsync(null, "promote", "../x", "--catalog", Catalog);
+
+        Assert.Equal((2, string.Empty, $"jd: cannot read '{missing}': not found or not a file.\n"), (unreadable.Code, unreadable.Out, unreadable.Err.ReplaceLineEndings("\n")));
+        AssertUsageError(noTarget, "promote needs --to and --catalog.");
+        Assert.Equal(0, _identity.Calls);
+    }
+
+    // Edge 2 (docs/architecture/application.md section 8): an I/O failure that escapes approve or promote before its walk (here: the records cannot be
+    // reached) is exit 2 with its message, as for every other command; before, it escaped jd as an unhandled exception.
+    [Theory]
+    [InlineData("promote")]
+    [InlineData("approve")]
+    public async Task An_io_failure_before_the_walk_is_exit_2_with_its_message(string command)
+    {
+        await DeployedAsync();
+        var stage = await StageAsync();
+        Act(Alice);
+        string[] args = command == "promote" ? ["promote", "1.0.0", "--to", stage, "--catalog", Catalog] : ["approve", "1.0.0", "--env", stage, "--meaning", "ready"];
+
+        var io = await RunWithAsync(Connections(null) with { Records = () => throw new IOException("the records cannot be read") }, args);
+        var access = await RunWithAsync(Connections(null) with { Records = () => throw new UnauthorizedAccessException("the records are not ours") }, args);
+
+        Assert.Equal((2, string.Empty, "jd: the records cannot be read\n"), (io.Code, io.Out, io.Err.ReplaceLineEndings("\n")));
+        Assert.Equal((2, string.Empty, "jd: the records are not ours\n"), (access.Code, access.Out, access.Err.ReplaceLineEndings("\n")));
+        Assert.Empty(StageFiles("*"));
+    }
 }

@@ -144,7 +144,7 @@ public sealed class DocumentLoaderTests : IDisposable
     {
         var definition = Write("dev.env.yaml", "kind: EnvironmentDefinition\nname: dev\nregion: r1\ntype: dev\noffers: []\n");
 
-        var result = await EnvironmentParser.LoadAsync(definition);
+        var result = await EnvironmentParser.LoadAsync(await SourceFiles.ReadAsync(definition), CancellationToken.None);
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);

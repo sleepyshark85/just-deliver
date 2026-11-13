@@ -14,7 +14,7 @@ public static class QualifyRelease
     /// <param name="cancellationToken">Cancels the run.</param>
     public static async Task<QualifyReleaseResult> RunAsync(QualifyReleaseInput input, Connections connections, CancellationToken cancellationToken)
     {
-        var start = await ReleaseStart.StartAsync(new DeployReleaseInput(input.Set, input.Environment, input.Catalog, false, null), connections, cancellationToken);
+        var start = await ReleaseStart.StartAsync(new DeployReleaseInput(input.Set, input.Environment, input.Catalog, false), null, connections, cancellationToken);
         if (start.Run is not { } run)
         {
             return new(start.Errors, start.Problem, Outcome.Failed, null, null, null, null);

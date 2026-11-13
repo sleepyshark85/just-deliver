@@ -70,12 +70,14 @@ public sealed class ReleaseStartTests
     }
 
     private static DeployReleaseInput Given(byte[] set, string environment = Dev, bool preview = false) =>
-        new(new SourceDocument(SetName, set), Document(EnvironmentName, environment), Catalog, preview, null);
+        new(new SourceDocument(SetName, set), Document(EnvironmentName, environment), Catalog, preview);
 
-    private static DeployReleaseInput Promoting(string sha256, string environment = Dev + Approval) =>
-        new(null, Document(EnvironmentName, environment), Catalog, false, new Promotion(Deployer, "dev", "1.0.0", sha256));
+    private Task<ReleaseStartResult> StartAsync(DeployReleaseInput input) => ReleaseStart.StartAsync(input, null, Connections(), CancellationToken.None);
 
-    private Task<ReleaseStartResult> StartAsync(DeployReleaseInput input) => ReleaseStart.StartAsync(input, Connections(), CancellationToken.None);
+    // The walk of a promotion to the gated environment: the set kept on dev, as Promote names it, and the hash the promotion judged.
+    private Task<ReleaseStartResult> PromoteAsync(byte[] kept, string judged) =>
+        ReleaseStart.StartAsync(
+            new DeployReleaseInput(new SourceDocument(KeptSet, kept), Document(EnvironmentName, Dev + Approval), Catalog, false), new Promotion(Deployer, judged), Connections(), CancellationToken.None);
 
     private static string Hash(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 
@@ -158,7 +160,7 @@ public sealed class ReleaseStartTests
             },
         };
 
-        await ReleaseStart.StartAsync(Given(set), connections, CancellationToken.None);
+        await ReleaseStart.StartAsync(Given(set), null, connections, CancellationToken.None);
 
         Assert.True(keptFirst);
     }
@@ -213,7 +215,7 @@ public sealed class ReleaseStartTests
             LiveRevisions = Failing("live revisions", connections.LiveRevisions),
         };
 
-        var result = await ReleaseStart.StartAsync(Given(await SetAsync()), connections, CancellationToken.None);
+        var result = await ReleaseStart.StartAsync(Given(await SetAsync()), null, connections, CancellationToken.None);
 
         Assert.Equal<Problem?>(new ConnectionFailed($"the {failing} cannot be built."), result.Problem);
         Assert.Null(result.Run);
@@ -224,9 +226,8 @@ public sealed class ReleaseStartTests
     public async Task A_promotion_deploys_the_kept_set_as_its_principal_without_the_gate_or_the_identity()
     {
         var set = await SetAsync();
-        _records.Files[KeptSet] = set;
 
-        var result = await StartAsync(Promoting(Hash(set)));
+        var result = await PromoteAsync(set, Hash(set));
 
         Assert.Null(result.Problem);
         Assert.Equal((Deployer, Hash(set)), (result.Run?.Recording?.Identity, result.Run?.Recording?.SetSha256));
@@ -238,10 +239,9 @@ public sealed class ReleaseStartTests
     [Fact]
     public async Task A_kept_set_whose_bytes_changed_is_refused_before_it_is_resolved_naming_the_set_and_the_judged_hash()
     {
-        _records.Files[KeptSet] = await SetAsync("no-such-type");
         var judged = new string('0', 64);
 
-        var result = await StartAsync(Promoting(judged));
+        var result = await PromoteAsync(await SetAsync("no-such-type"), judged);
 
         Assert.Equal<Problem?>(new KeptSetChanged(KeptSet, judged), result.Problem);
         Assert.Null(result.Run);
@@ -255,7 +255,7 @@ public sealed class ReleaseStartTests
         var catalog = new SourceCatalog("cat", [.. Catalog.Documents, Document("components/oops.yaml", "kind: Component\nname: oops\ndescription: d\n")]);
 
         var result = await ReleaseStart.StartAsync(
-            new DeployReleaseInput(Document(SetName, "kind: Nothing\n"), Document(EnvironmentName, "kind: Environment\n"), catalog, false, null), Connections(), CancellationToken.None);
+            new DeployReleaseInput(Document(SetName, "kind: Nothing\n"), Document(EnvironmentName, "kind: Environment\n"), catalog, false), null, Connections(), CancellationToken.None);
 
         Assert.Equal(
             [
@@ -295,29 +295,10 @@ public sealed class ReleaseStartTests
         var misfit = new LoadError("shop/dev/thing/group", "template", "not in the library.");
         var connections = Connections() with { Templates = _ => new RecordingConnections(_backend).With(misfit).Templates(Catalog) };
 
-        var result = await ReleaseStart.StartAsync(Given(await SetAsync()), connections, CancellationToken.None);
+        var result = await ReleaseStart.StartAsync(Given(await SetAsync()), null, connections, CancellationToken.None);
 
         Assert.Equal([misfit], result.Errors);
         Assert.Null(result.Run);
         Assert.Equal(["records", "time"], _built);
-    }
-
-    public static TheoryData<bool, bool, bool> Malformed => new()
-    {
-        { true, true, false },
-        { false, false, false },
-        { false, true, true },
-    };
-
-    [Theory]
-    [MemberData(nameof(Malformed))]
-    public async Task An_input_with_both_a_set_and_a_promotion_neither_or_a_previewed_promotion_is_a_bug(bool hasSet, bool promotes, bool preview)
-    {
-        var input = new DeployReleaseInput(
-            hasSet ? new SourceDocument(SetName, await SetAsync()) : null, Document(EnvironmentName, Dev), Catalog, preview, promotes ? new Promotion(Deployer, "dev", "1.0.0", "x") : null);
-
-        var bug = await Assert.ThrowsAsync<ArgumentException>(() => StartAsync(input));
-        Assert.Equal("input", bug.ParamName);
-        Assert.Empty(_built);
     }
 }

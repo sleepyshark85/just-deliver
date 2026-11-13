@@ -1,80 +1,99 @@
 using jd.orchestrator.usecases;
-using jd.resolver.environment;
-using jd.resolver.release;
 
 namespace jd.cli;
 
 /// <summary>
-/// <c>jd promote</c>: deploys the set kept for a label on the policy's source environment to a gated environment (docs/architecture/approvals.md section 5). It judges
-/// the promotion from the records, then lets the release walk of <see cref="ReleaseDeployCli"/> deploy the kept bytes, so a promotion is deployed, recorded and
-/// qualified as a <c>release deploy</c> is. A refusal calls no backend and writes nothing. Wiring and output only; exit codes as <see cref="Cli"/>.
+/// <c>jd promote</c>: reads the target's descriptor and the catalog named on the command line, hands them and the label to <see cref="Promote"/>, and
+/// prints the walk as it happens, then what it did or why it refused (docs/architecture/approvals.md section 5). Parsing, reading, formatting; no rules.
 /// </summary>
 internal static class PromoteCli
 {
-    private const int Invalid = 1;
-    private const int UsageError = 2;
-
     private const string ToOption = "--to";
-    private const string CatalogOption = "--catalog";
+
+    private sealed record Options(string Label, string Target, string Catalog);
 
     // args are the arguments after "promote".
     public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
     {
-        var (label, values, problem) = Arguments.ScanLabel(args, ToOption, CatalogOption);
-        if (label is null || !values.TryGetValue(ToOption, out var to) || !values.TryGetValue(CatalogOption, out var catalog))
+        var (options, problem) = Parse(args);
+        if (options is null)
         {
-            stderr.WriteLine($"jd: {(label is null ? problem : $"promote needs {ToOption} and {CatalogOption}.")}");
+            stderr.WriteLine($"jd: {problem}");
             stderr.Write(Cli.Usage);
-            return UsageError;
+            return ExitCodes.UsageError;
         }
 
-        if (Arguments.Unreadable(to, null, catalog) is { } unreadable)
+        if (Arguments.Unreadable(options.Target, null, options.Catalog) is { } unreadable)
         {
             stderr.WriteLine($"jd: {unreadable}");
-            return UsageError;
+            return ExitCodes.UsageError;
         }
 
-        var loaded = await EnvironmentParser.LoadAsync(to, cancellationToken);
-        if (loaded.Value is not { } target)
+        var input = new PromoteInput(
+            options.Label, await Cli.ReadDocumentAsync(options.Target, cancellationToken), await Cli.ReadCatalogAsync(options.Catalog, cancellationToken));
+        var result = await Promote.RunAsync(input, connections, Show(stdout, stderr), cancellationToken);
+        if (result.Release is { } release)
         {
-            Cli.Print(loaded.Errors, stderr);
-            return Invalid;
+            return ReleaseDeployCli.PrintDeploy(release, Cli.PromoteCommand, stdout, stderr);
         }
 
-        if (target.Approval is not { } policy)
+        Cli.Print(result.Errors, stderr);
+        if (result.Problem is { } refusal)
         {
-            stderr.WriteLine($"jd: promote: environment '{target.Name}' has no approval policy, so there is nothing to promote through.");
-            return Invalid;
+            stderr.WriteLine(Refusal(refusal));
         }
 
-        // A bad credential stops here, before any record is read.
-        if (await Cli.GetIdentityAsync(connections, stderr, cancellationToken) is not { } principal)
+        if (result.Outcome is Outcome.InvalidInput)
         {
-            return Invalid;
+            stderr.Write(Cli.Usage);
         }
 
-        var records = connections.Records();
+        return ExitCodes.Of(result.Outcome);
+    }
 
-        // Nothing below this check runs unless the label is qualified and approved; the walk reads the kept bytes and refuses them unless they hash to the checked set.
-        var decision = await PromotionCheck.CheckAsync(records, target, label, cancellationToken);
-        foreach (var ignored in decision.IgnoredApprovals)
+    // The files skipped on stderr, and the start and the lines of the walk on stdout, as they happen.
+    private static Action<Progress> Show(TextWriter stdout, TextWriter stderr)
+    {
+        var walk = ReleaseDeployCli.ShowWalk(stdout);
+        return progress =>
         {
-            stderr.WriteLine($"jd: promote: ignored {ignored}");
-        }
-
-        if (decision.SetSha256 is not { } setSha256 || !decision.MayPromote)
-        {
-            stderr.WriteLine($"jd: promote: release {label} cannot be promoted to '{target.Name}':");
-            foreach (var reason in decision.Reasons)
+            switch (progress)
             {
-                stderr.WriteLine($"  {reason}");
+                case Ignored ignored:
+                    stderr.WriteLine($"jd: {Cli.PromoteCommand}: ignored {ignored.What}");
+                    break;
+                case Promoting promoting:
+                    stdout.WriteLine($"promoting {promoting.Label} from {promoting.From} (set sha256 {promoting.SetSha256})");
+                    break;
+                default:
+                    walk(progress);
+                    break;
             }
+        };
+    }
 
-            return Invalid;
+    // The words of a refusal before the walk, around the problem's values.
+    private static string Refusal(Problem problem) => problem switch
+    {
+        LabelInvalid invalid => $"jd: {invalid.Reason}",
+        NotGated notGated => $"jd: {Cli.PromoteCommand}: environment '{notGated.Environment}' has no approval policy, so there is nothing to promote through.",
+        IdentityRefused refused => $"jd: {refused.Reason}",
+        NotPromotable notPromotable => string.Join(
+            Environment.NewLine,
+            [$"jd: {Cli.PromoteCommand}: release {notPromotable.Label} cannot be promoted to '{notPromotable.Environment}':", .. notPromotable.Reasons.Select(reason => $"  {reason}")]),
+        _ => throw new ArgumentOutOfRangeException(nameof(problem), problem, "not a refusal a promotion meets before its walk."),
+    };
+
+    private static (Options? Options, string Problem) Parse(string[] args)
+    {
+        var (label, values, problem) = Arguments.ScanOneLabel(args, ToOption, Arguments.CatalogOption);
+        if (label is null)
+        {
+            return (null, problem);
         }
 
-        stdout.WriteLine($"promoting {label} from {policy.QualifiedOn} (set sha256 {setSha256})");
-        return await ReleaseDeployCli.PromoteAsync(
-            to, catalog, new Promotion(principal, policy.QualifiedOn, label, setSha256), stdout, stderr, connections, cancellationToken);
+        return values.TryGetValue(ToOption, out var target) && values.TryGetValue(Arguments.CatalogOption, out var catalog)
+            ? (new Options(label, target, catalog), string.Empty)
+            : (null, $"{Cli.PromoteCommand} needs {ToOption} and {Arguments.CatalogOption}.");
     }
 }

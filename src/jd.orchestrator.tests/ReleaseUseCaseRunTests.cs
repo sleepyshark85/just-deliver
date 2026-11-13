@@ -13,7 +13,7 @@ namespace jd.orchestrator.tests;
 // record written whether IQ passed or not, and what each use case decides (docs/architecture/application.md section 3).
 public sealed class ReleaseUseCaseRunTests
 {
-    private const string Image = "registry.example/shop@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    internal const string Image = "registry.example/shop@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     private const string FirstNode = "shop.dev.thing.group";
 
     // A deploy reports a change, and a preview of what it deployed none, so IQ passes unless a test says otherwise.
@@ -57,7 +57,7 @@ public sealed class ReleaseUseCaseRunTests
 
     private async Task<DeployReleaseResult> DeployAsync(bool preview = false, List<Progress>? progress = null) =>
         await DeployRelease.RunAsync(
-            new DeployReleaseInput(await SetAsync(), Document("envs/dev.yaml", WorkloadUseCaseTests.Environment), Catalog, preview, null), Connections(), progress is null ? null : progress.Add, CancellationToken.None);
+            new DeployReleaseInput(await SetAsync(), Document("envs/dev.yaml", WorkloadUseCaseTests.Environment), Catalog, preview), Connections(), progress is null ? null : progress.Add, CancellationToken.None);
 
     private async Task<QualifyReleaseResult> QualifyAsync() =>
         await QualifyRelease.RunAsync(new QualifyReleaseInput(await SetAsync(), Document("envs/dev.yaml", WorkloadUseCaseTests.Environment), Catalog), Connections(), CancellationToken.None);
@@ -133,7 +133,7 @@ public sealed class ReleaseUseCaseRunTests
         var connections = Connections() with { LiveRevisions = () => drifted };
 
         var result = await DeployRelease.RunAsync(
-            new DeployReleaseInput(await SetAsync(), Document("envs/dev.yaml", WorkloadUseCaseTests.Environment), Catalog, false, null), connections, null, CancellationToken.None);
+            new DeployReleaseInput(await SetAsync(), Document("envs/dev.yaml", WorkloadUseCaseTests.Environment), Catalog, false), connections, null, CancellationToken.None);
 
         Assert.Equal(Outcome.Failed, result.Outcome);
         Assert.False(result.Iq?.Passed);
@@ -215,7 +215,7 @@ public sealed class ReleaseUseCaseRunTests
     {
         var gated = Document("envs/dev.yaml", WorkloadUseCaseTests.Environment + Approval);
 
-        var deployed = await DeployRelease.RunAsync(new DeployReleaseInput(await SetAsync(), gated, Catalog, false, null), Connections(), null, CancellationToken.None);
+        var deployed = await DeployRelease.RunAsync(new DeployReleaseInput(await SetAsync(), gated, Catalog, false), Connections(), null, CancellationToken.None);
         var qualified = await QualifyRelease.RunAsync(new QualifyReleaseInput(await SetAsync(), gated, Catalog), Connections(), CancellationToken.None);
 
         Assert.Equal((new Gated("dev"), Outcome.Failed), (deployed.Problem, deployed.Outcome));
