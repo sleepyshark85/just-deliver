@@ -29,7 +29,8 @@ public sealed partial class LiteralGuardTests
         ],
         ["jd.resolver/DocumentLoader.cs"] = ["kind"], // the bootstrap field
         ["jd.resolver/expansion/ConfigWalker.cs"] = ["workload.variables"], // the fn::entries source (Appendix A: concept 4)
-        ["jd.resolver/SchemaIndex.cs"] = ["message", "properties", "x-jd"], // the annotation keyword and its one annotation read (named once); JSON Schema's own keyword
+        // the annotation keyword and the annotations it reads (each named once); JSON Schema's own keyword
+        ["jd.resolver/SchemaIndex.cs"] = ["define", "fallback", "message", "one", "properties", "ref", "x-jd"],
         ["jd.resolver/expressions/BuiltIns.cs"] = ["hash", "id", "name", "workload"], // name() and its placeholders
         ["jd.resolver/expressions/ExpressionEvaluator.cs"] = ["image", "name", "port", "runtime", "team", "workload"], // expression roots
         ["jd.resolver/graph/ConfigJson.cs"] = ["name"], // an fn::entries item
@@ -58,7 +59,7 @@ public sealed partial class LiteralGuardTests
 
     private static readonly Dictionary<string, string[]> S24a3 = new()
     {
-        ["jd.resolver/catalog/CatalogParser.cs"] = [".allowed", "allowed", "match.", "maxLength", "pattern", "roles", "rules", "rules.", "targets"],
+        ["jd.resolver/catalog/CatalogParser.cs"] = [".allowed", "allowed", "maxLength", "pattern", "roles", "rules", "rules.", "targets"],
     };
 
     private static readonly Dictionary<string, string[]> S24b1 = new()
