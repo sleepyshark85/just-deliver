@@ -28,11 +28,11 @@ public sealed class ReleaseUseCaseRunTests
         public Task<DeployerIdentity> GetAsync(CancellationToken cancellationToken) => Task.FromResult(new DeployerIdentity("tenant-1", "client-1", "object-1"));
     }
 
-    // Records that keep the set but refuse every record, as a full disk would.
-    private sealed class RefusingRecords(IRecordStore records) : IRecordStore
+    // Records that keep the set but refuse every record, as a full disk or a read-only mount would.
+    private sealed class RefusingRecords(IRecordStore records, Exception refusal) : IRecordStore
     {
         public Task<string> CreateAsync(string environment, string label, string name, ReadOnlyMemory<byte> content, CancellationToken cancellationToken) =>
-            name == "set.yaml" ? records.CreateAsync(environment, label, name, content, cancellationToken) : throw new IOException("No space left on device.");
+            name == "set.yaml" ? records.CreateAsync(environment, label, name, content, cancellationToken) : throw refusal;
 
         public Task<IReadOnlyList<string>> ListAsync(string environment, string label, CancellationToken cancellationToken) => records.ListAsync(environment, label, cancellationToken);
 
@@ -143,10 +143,12 @@ public sealed class ReleaseUseCaseRunTests
     }
 
     // Security boundary: a record that cannot be written fails the run, and what was deployed stays deployed.
-    [Fact]
-    public async Task A_deploy_record_that_cannot_be_written_is_record_not_written_and_the_deployment_stays()
+    [Theory]
+    [InlineData(typeof(IOException))]
+    [InlineData(typeof(UnauthorizedAccessException))]
+    public async Task A_deploy_record_that_cannot_be_written_is_record_not_written_and_the_deployment_stays(Type refusal)
     {
-        _store = new RefusingRecords(_records);
+        _store = new RefusingRecords(_records, (Exception)Activator.CreateInstance(refusal, "No space left on device.")!);
 
         var result = await DeployAsync();
 
@@ -193,7 +195,7 @@ public sealed class ReleaseUseCaseRunTests
     public async Task A_qualify_record_that_cannot_be_written_is_record_not_written()
     {
         await DeployAsync();
-        _store = new RefusingRecords(_records);
+        _store = new RefusingRecords(_records, new IOException("No space left on device."));
 
         var result = await QualifyAsync();
 

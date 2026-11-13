@@ -18,33 +18,60 @@ internal static class ReleaseDeployCli
     private const string DeployedWord = "deployed";
     private const string CheckedWord = "checked";
 
+    private enum Kind { Deploy, Qualify }
+
     private sealed record Options(string Set, string Environment, string Catalog, bool DryRun);
 
-    // args are the arguments after "release deploy" or "release qualify" (qualify).
-    public static async Task<int> RunAsync(string[] args, bool qualify, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
+    // What a command's arguments named, read.
+    private sealed record Inputs(SourceDocument Set, SourceDocument Environment, SourceCatalog Catalog, bool DryRun);
+
+    // args are the arguments after "release deploy".
+    public static async Task<int> DeployAsync(string[] args, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
     {
-        var (options, problem) = Parse(args, qualify);
+        if (await ReadAsync(args, Kind.Deploy, stderr, cancellationToken) is not { } read)
+        {
+            return ExitCodes.UsageError;
+        }
+
+        return PrintDeploy(
+            await DeployRelease.RunAsync(new DeployReleaseInput(read.Set, read.Environment, read.Catalog, read.DryRun, null), connections, ShowWalk(stdout), cancellationToken),
+            read.DryRun ? Previewed : DeployedOrUnchanged, Command(Kind.Deploy), stdout, stderr);
+    }
+
+    // args are the arguments after "release qualify".
+    public static async Task<int> QualifyAsync(string[] args, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
+    {
+        if (await ReadAsync(args, Kind.Qualify, stderr, cancellationToken) is not { } read)
+        {
+            return ExitCodes.UsageError;
+        }
+
+        return PrintQualify(
+            await QualifyRelease.RunAsync(new QualifyReleaseInput(read.Set, read.Environment, read.Catalog), connections, cancellationToken), Command(Kind.Qualify), stdout, stderr);
+    }
+
+    // The documents the arguments name, or null once a usage error is on stderr.
+    private static async Task<Inputs?> ReadAsync(string[] args, Kind kind, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var (options, problem) = Parse(args, kind);
         if (options is null)
         {
             stderr.WriteLine($"jd: {problem}");
             stderr.Write(Cli.Usage);
-            return ExitCodes.UsageError;
+            return null;
         }
 
         if (Arguments.Unreadable(options.Set, options.Environment, options.Catalog) is { } unreadable)
         {
             stderr.WriteLine($"jd: {unreadable}");
-            return ExitCodes.UsageError;
+            return null;
         }
 
-        var set = await Cli.ReadDocumentAsync(options.Set, cancellationToken);
-        var environment = await Cli.ReadDocumentAsync(options.Environment, cancellationToken);
-        var catalog = await Cli.ReadCatalogAsync(options.Catalog, cancellationToken);
-        return qualify
-            ? PrintQualify(await QualifyRelease.RunAsync(new QualifyReleaseInput(set, environment, catalog), connections, cancellationToken), Command(qualify), stdout, stderr)
-            : PrintDeploy(
-                await DeployRelease.RunAsync(new DeployReleaseInput(set, environment, catalog, options.DryRun, null), connections, ShowWalk(stdout), cancellationToken),
-                options.DryRun ? Previewed : DeployedOrUnchanged, Command(qualify), stdout, stderr);
+        return new(
+            await Cli.ReadDocumentAsync(options.Set, cancellationToken),
+            await Cli.ReadDocumentAsync(options.Environment, cancellationToken),
+            await Cli.ReadCatalogAsync(options.Catalog, cancellationToken),
+            options.DryRun);
     }
 
     // The walk of `jd promote` on the target, below the gate that refuses a direct deploy: the target and the catalog promote checked exist, and what it
@@ -162,11 +189,11 @@ internal static class ReleaseDeployCli
         return $"release {set.Label} on {environment.Name}: {done}, {summary.Failed.ToString(CultureInfo.InvariantCulture)} failed, {notStarted}";
     }
 
-    private static string Command(bool qualify) => $"{Cli.ReleaseCommand} {(qualify ? ReleaseCli.QualifyCommand : ReleaseCli.DeployCommand)}";
+    private static string Command(Kind kind) => $"{Cli.ReleaseCommand} {(kind is Kind.Qualify ? ReleaseCli.QualifyCommand : ReleaseCli.DeployCommand)}";
 
-    private static (Options? Options, string Problem) Parse(string[] args, bool qualify)
+    private static (Options? Options, string Problem) Parse(string[] args, Kind kind)
     {
-        var command = Command(qualify);
+        var command = Command(kind);
         var (scanned, problem) = Arguments.Scan(args);
         if (scanned is null)
         {
@@ -178,7 +205,7 @@ internal static class ReleaseDeployCli
             return (null, $"{command} has no {Arguments.JsonOption} option.");
         }
 
-        if (qualify && scanned.DryRun)
+        if (kind is Kind.Qualify && scanned.DryRun)
         {
             return (null, $"{command} has no {Arguments.PreviewOption} option; it never deploys.");
         }

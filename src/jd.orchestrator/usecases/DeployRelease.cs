@@ -27,15 +27,15 @@ public static class DeployRelease
         var runs = await run.Orchestrator.DeployReleaseAsync(
             run.Graphs, input.Preview, workload => progress?.Invoke(new WorkloadStarted(workload)), Walk.Reporting(progress), cancellationToken);
         var walked = run.Time.GetElapsedTime(walk);
-        var deployed = runs.All(r => r.Run.Succeeded);
+        var everyWorkloadSucceeded = runs.All(r => r.Run.Succeeded);
         if (run.Recording is not { } recording)
         {
             // A preview records nothing and qualifies nothing.
-            return Walked(run, runs, deployed ? Outcome.Succeeded : Outcome.Failed, null, (null, null));
+            return Walked(run, runs, everyWorkloadSucceeded ? Outcome.Succeeded : Outcome.Failed, null, (null, null));
         }
 
         // IQ runs only after every workload deployed; a failed IQ leaves the deployment as it is.
-        var iq = deployed ? await recording.Qualifier.QualifyAsync(run.Graphs, cancellationToken) : null;
+        var iq = everyWorkloadSucceeded ? await recording.Qualifier.QualifyAsync(run.Graphs, cancellationToken) : null;
         var written = await RunRecord.WriteAsync(
             run, recording, ReleaseRecordFile.DeployActivity,
             finished => ReleaseRecordBuilder.Build(run.Set, recording.SetSha256, run.Environment, run.Graphs, runs, recording.Identity, run.Started, finished, walked, iq),

@@ -77,7 +77,7 @@ input one to one. A use case checks its plain values first, before it loads any 
 | `env up` | `EnvUp` | `Definition`, `Catalog`, `Base: SourceDocument?` | `Run`, `Environment`, `Descriptor: ReadOnlyMemory<byte>?` |
 | `release create` | `CreateRelease` | `Manifest`, `Definitions: DocumentReader` | `Set: ReleaseSet?`, `Document: ReadOnlyMemory<byte>?` (the set file's bytes) |
 | `release show` | `ShowRelease` | `Set` | `Set`, `CreatedAt: string` (the document's own value, not presentation; *not in the brief's list; it validates the set, so it is a use case too*) |
-| `release deploy` | `DeployRelease` | `Set`, `Environment`, `Catalog`, `Preview` | `Environment`, `Set`, `Runs: IReadOnlyList<WorkloadRun>`, `NotStarted`, `Iq: IqResult?`, `Record: string?` |
+| `release deploy` | `DeployRelease` | `Set`, `Environment`, `Catalog`, `Preview` | `Environment`, `Set`, `Runs: IReadOnlyList<WorkloadRun>`, `Summary: ReleaseSummary?` (the counts and `NotStarted`), `Iq: IqResult?`, `Record: string?` |
 | `release qualify` | `QualifyRelease` | `Set`, `Environment`, `Catalog` | `Environment`, `Set`, `Iq`, `Record` |
 | `approve` | `Approve` | `Label`, `Environment`, `Meaning` | `Environment`, `Approver`, `Counted`, `Record` |
 | `promote` | `Promote` | `Label`, `Target`, `Catalog` | `Environment`, `SetSha256`, `Release: DeployReleaseResult?` |
