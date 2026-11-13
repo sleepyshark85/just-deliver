@@ -88,16 +88,16 @@ internal sealed class SchemaIndex
     private static IEnumerable<LoadError> Errors(string file, ValidationError error) => error switch
     {
         _ when Message(error.Schema) is { } message => [new LoadError(file, Location(error), message)],
-        ChildSchemaValidationError child when Annotated(child) => Causes(child).SelectMany(cause => Errors(file, cause)),
+        ChildSchemaValidationError child when CarriesMessage(child) => Causes(child).SelectMany(cause => Errors(file, cause)),
         _ => [new LoadError(file, Location(error), $"schema violation: {Detail(error)}")],
     };
 
-    private static bool Annotated(ValidationError error) =>
-        Message(error.Schema) is not null || error is ChildSchemaValidationError child && child.Errors.Values.Any(causes => causes.Any(Annotated));
+    private static bool CarriesMessage(ValidationError error) =>
+        Message(error.Schema) is not null || error is ChildSchemaValidationError child && child.Errors.Values.Any(causes => causes.Any(CarriesMessage));
 
     private static IEnumerable<ValidationError> Causes(ChildSchemaValidationError error) =>
         error.Kind is ValidationErrorKind.NotAnyOf or ValidationErrorKind.NotOneOf
-            ? error.Errors.Values.Where(branch => branch.Any(Annotated)).SelectMany(branch => branch)
+            ? error.Errors.Values.Where(branch => branch.Any(CarriesMessage)).SelectMany(branch => branch)
             : error.Errors.Values.SelectMany(causes => causes);
 
     // The validator's text with its nested causes, on one line.
