@@ -25,6 +25,7 @@ public class CatalogParserTests
     [InlineData("environmentTypes: { default: {} }\n", "catalog.yaml: environmentTypes.default: ")]
     [InlineData("environmentTypes: { Dev: {} }\n", "catalog.yaml: environmentTypes.Dev: ")]
     [InlineData("environmentTypes: { dev: { approval: \"yes\" } }\n", "BooleanExpected: #/environmentTypes.dev.approval")]
+    [InlineData("environmentTypes: { dev: { layer: tenant } }\n", "NotInEnumeration: #/environmentTypes.dev.layer")]
     public async Task Environment_types_are_required_and_well_formed(string declaration, string error)
     {
         var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: \"1\"\n" + declaration));
@@ -75,19 +76,6 @@ public class CatalogParserTests
         Assert.Equal("odd.yaml", error.File);
         Assert.Equal("kind", error.Location);
         Assert.Contains("unknown kind 'Widget'", error.Message);
-        Assert.Null(result.Value);
-    }
-
-    [Theory]
-    [InlineData("ResourceType", "a Component file holds the type's contract (exports) beside its implementations")]
-    [InlineData("Mapping", "a Component's implementations (per environment type, then class) replace a type's mappings, and a Runtime file the runtime mapping")]
-    public async Task An_old_kind_is_an_error_saying_what_replaced_it(string kind, string replacement)
-    {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("old.yaml", $"kind: {kind}\nname: alpha-db\n"));
-
-        var error = Assert.Single(result.Errors);
-        Assert.Equal(("old.yaml", "kind"), (error.File, error.Location));
-        Assert.Equal($"kind '{kind}' is no longer supported: {replacement}.", error.Message);
         Assert.Null(result.Value);
     }
 
@@ -282,24 +270,26 @@ public class CatalogParserTests
         Assert.Equal(("p.yaml", "set.runtime"), (error.File, error.Location));
     }
 
+    // The part schema's message (shared by every part kind), located at the node: a name with a dot in the validator's bracket form.
     [Theory]
-    [InlineData("Db")]
-    [InlineData("my_node")]
-    [InlineData("a-")]
-    [InlineData("1a")]
-    [InlineData("a.b")]
-    [InlineData("a@b")]
-    public async Task Node_names_in_components_and_runtimes_must_be_lowercase_kebab(string name)
+    [InlineData("Db", ".Db")]
+    [InlineData("my_node", ".my_node")]
+    [InlineData("a-", ".a-")]
+    [InlineData("1a", ".1a")]
+    [InlineData("a.b", "['a.b']")]
+    [InlineData("a@b", ".a@b")]
+    public async Task Node_names_in_components_and_runtimes_must_be_lowercase_kebab(string name, string located)
     {
         var component = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", TestCatalog.Component("alpha-db", "[]", $"nodes:\n  \"{name}\":\n    template: t/x\n    config: {{}}\n")));
         var runtime = await Parse(("catalog.yaml", CatalogFile), ("r.yaml", TestCatalog.Runtime($"nodes:\n  runtime:\n    template: t/x\n    config: {{}}\n  \"{name}\":\n    template: t/x\n    config: {{}}\n")));
 
         var componentError = Assert.Single(component.Errors);
-        Assert.Equal(("c.yaml", $"{TestCatalog.PartPath}.nodes.{name}"), (componentError.File, componentError.Location));
-        Assert.Contains("not a valid node name", componentError.Message);
+        Assert.Equal(("c.yaml", $"{TestCatalog.PartPath}.nodes{located}", NodeNameMessage), (componentError.File, componentError.Location, componentError.Message));
         var runtimeError = Assert.Single(runtime.Errors);
-        Assert.Equal(("r.yaml", $"implementations.default.nodes.{name}"), (runtimeError.File, runtimeError.Location));
+        Assert.Equal(("r.yaml", $"implementations.default.nodes{located}", NodeNameMessage), (runtimeError.File, runtimeError.Location, runtimeError.Message));
     }
+
+    internal const string NodeNameMessage = "not a valid node name; use lowercase letters, digits and hyphens, starting with a letter and not ending in a hyphen.";
 
     [Fact]
     public async Task Kebab_node_names_load()
@@ -307,6 +297,30 @@ public class CatalogParserTests
         var result = await Parse(("catalog.yaml", CatalogFile), ("r.yaml", TestCatalog.Runtime("nodes:\n  runtime:\n    template: t/x\n    config: {}\n  app-insights-2:\n    template: t/x\n    config: {}\n")));
 
         Assert.Empty(result.Errors);
+    }
+
+    // A refused node name does not hide the part's other problems (documents.md section 6): each is reported where it is, the one without a
+    // message in the validator's text.
+    [Theory]
+    [InlineData("nodes:\n  db:\n    config: {}\n", "nodes.db", "AdditionalPropertiesNotValid: #/implementations.default.classes.standard.nodes.db { PropertyRequired: #/implementations.default.classes.standard.nodes.db.template }")]
+    [InlineData("nodes:\n  db:\n    template: t/x\n    config: {}\nprobe: {}\n", "probe", "NoAdditionalPropertiesAllowed: #/implementations.default.classes.standard.probe")]
+    public async Task A_bad_node_name_is_reported_beside_the_parts_other_problems(string part, string location, string violation)
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", TestCatalog.Component("alpha-db", "[]", part.Replace("nodes:\n", "nodes:\n  Bad:\n    template: t/x\n    config: {}\n", StringComparison.Ordinal))));
+
+        Assert.Equal(
+            [new LoadError("c.yaml", $"{TestCatalog.PartPath}.nodes.Bad", NodeNameMessage), new LoadError("c.yaml", $"{TestCatalog.PartPath}.{location}", $"schema violation: {violation}")],
+            result.Errors.OrderBy(error => error.Location, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_part_without_nodes_is_a_schema_violation()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", TestCatalog.Component("alpha-db", "[]", "nodes: {}\nexports: {}\n")));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("c.yaml", "implementations.default"), (error.File, error.Location));
+        Assert.Contains($"TooFewProperties: #/{TestCatalog.PartPath}.nodes", error.Message);
     }
 
     private const string RuntimeHead = "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n";
@@ -390,18 +404,16 @@ public class CatalogParserTests
         Assert.Contains($"#/implementations.default.release.{name}", Assert.Single(blank.Errors).Message);
     }
 
-    // A policy requires, it never adds (docs/architecture/components.md section 3): an earlier policy's `add` gets one error saying what
-    // replaces it, not a schema violation, and the policy does not load.
+    // A policy requires, it never adds (docs/architecture/components.md section 3): the schema refuses an earlier policy's `add` like any field it
+    // does not declare, and the policy does not load.
     [Fact]
-    public async Task A_policy_with_add_is_an_error_saying_require_replaces_it()
+    public async Task A_policy_with_add_is_refused_by_the_schema()
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { kind: runtime }\nadd:\n  extra:\n    template: t/x\n    config: {}\n"));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", PolicyFile("pol-a") + "add:\n  extra:\n    template: t/x\n    config: {}\n"));
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("p.yaml", "add"), (error.File, error.Location));
-        Assert.Contains("can no longer add nodes", error.Message);
-        Assert.Contains("'require: <component>'", error.Message);
+        Assert.Equal(("p.yaml", "add", "schema violation: NoAdditionalPropertiesAllowed: #/add"), (error.File, error.Location, error.Message));
     }
 
     [Fact]
