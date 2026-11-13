@@ -46,11 +46,43 @@ public sealed class ReleaseCliTests : IDisposable
         var output = await CreateAsync();
         var before = await File.ReadAllTextAsync(output);
 
-        var (code, _, stderr) = await RunAsync("release", "create", Manifest, "--out", output);
+        var result = await RunAsync("release", "create", Manifest, "--out", output);
 
-        Assert.Equal(2, code);
-        Assert.Contains("already exists", stderr);
+        Assert.Equal((2, string.Empty, $"jd: '{output}' already exists; a release set is immutable, so create a new file.{System.Environment.NewLine}"), result);
         Assert.Equal(before, await File.ReadAllTextAsync(output));
+    }
+
+    // The reference is resolved beside the manifest and printed as resolved, not normalised.
+    [Theory]
+    [InlineData("ghost.yaml")]
+    [InlineData("nested/../ghost.yaml")]
+    public async Task A_missing_definition_is_named_by_its_path_beside_the_manifest_and_nothing_is_written(string reference)
+    {
+        var manifest = Path.Combine(_temp, "ghost.manifest.yaml");
+        await File.WriteAllTextAsync(manifest, $"kind: ReleaseManifest\nlabel: 1.0.0\nworkloads:\n  - definition: {reference}\n");
+        var output = Path.Combine(_temp, "set.yaml");
+
+        var result = await RunAsync("release", "create", manifest, "--out", output);
+
+        Assert.Equal(
+            (1, string.Empty, $"{manifest}: workloads[0].definition: workload definition '{_temp}{Path.DirectorySeparatorChar}{reference}' not found.{System.Environment.NewLine}"),
+            result);
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public async Task A_definition_that_is_not_utf8_exits_1_naming_it_and_nothing_is_written()
+    {
+        var definition = Path.Combine(_temp, "app.yaml");
+        await File.WriteAllBytesAsync(definition, [.. await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(Manifest)!, "..", "workloads", "sample-app.yaml")), 0xFF]);
+        var manifest = Path.Combine(_temp, "app.manifest.yaml");
+        await File.WriteAllTextAsync(manifest, "kind: ReleaseManifest\nlabel: 1.0.0\nworkloads:\n  - definition: app.yaml\n");
+        var output = Path.Combine(_temp, "set.yaml");
+
+        var result = await RunAsync("release", "create", manifest, "--out", output);
+
+        Assert.Equal((1, string.Empty, $"{definition}: not valid UTF-8.{System.Environment.NewLine}"), result);
+        Assert.False(File.Exists(output));
     }
 
     [Fact]
@@ -85,6 +117,20 @@ public sealed class ReleaseCliTests : IDisposable
         Assert.Contains("    depends on: (none)", stdout);
     }
 
+    // A set is decoded with its byte-order mark detected, so a mark an editor added changes nothing that is shown.
+    [Fact]
+    public async Task Show_of_a_set_with_a_byte_order_mark_prints_what_it_prints_without_one()
+    {
+        var output = await CreateAsync();
+        var (_, without, _) = await RunAsync("release", "show", output);
+        await File.WriteAllBytesAsync(output, [0xEF, 0xBB, 0xBF, .. await File.ReadAllBytesAsync(output)]);
+
+        var result = await RunAsync("release", "show", output);
+
+        Assert.StartsWith("release 1.0.0 (created ", without, StringComparison.Ordinal);
+        Assert.Equal((0, without, string.Empty), result);
+    }
+
     [Fact]
     public async Task Show_of_a_modified_set_exits_1()
     {
@@ -99,21 +145,25 @@ public sealed class ReleaseCliTests : IDisposable
     }
 
     [Theory]
-    [InlineData("release")]
-    [InlineData("release", "bogus")]
-    [InlineData("release", "create", "m.yaml")]
-    [InlineData("release", "create", "--out", "o.yaml")]
-    [InlineData("release", "create", "m.yaml", "--out")]
-    [InlineData("release", "create", "a.yaml", "b.yaml", "--out", "o.yaml")]
-    [InlineData("release", "show")]
-    [InlineData("release", "show", "s.yaml", "--out", "o.yaml")]
-    [InlineData("release", "show", "s.yaml", "--bogus")]
-    public async Task Release_usage_errors_exit_2_and_print_the_usage(params string[] args)
+    [InlineData("release needs a command: create, show, deploy or qualify.", "release")]
+    [InlineData("unknown release command 'bogus'.", "release", "bogus")]
+    [InlineData("create needs --out <release-set.yaml>.", "release", "create", "m.yaml")]
+    [InlineData("expected exactly one release manifest.", "release", "create", "--out", "o.yaml")]
+    [InlineData("--out needs a value.", "release", "create", "m.yaml", "--out")]
+    [InlineData("expected exactly one release manifest.", "release", "create", "a.yaml", "b.yaml", "--out", "o.yaml")]
+    [InlineData("unknown option '--bogus'.", "release", "create", "m.yaml", "--out", "o.yaml", "--bogus")]
+    [InlineData("expected exactly one release set.", "release", "show")]
+    [InlineData("expected exactly one release set.", "release", "show", "a.yaml", "b.yaml")]
+    [InlineData("unknown option '--out'.", "release", "show", "s.yaml", "--out", "o.yaml")]
+    [InlineData("unknown option '--bogus'.", "release", "show", "s.yaml", "--bogus")]
+    public async Task Release_usage_errors_exit_2_and_print_the_problem_and_the_usage(string problem, params string[] args)
     {
-        var (code, _, stderr) = await RunAsync(args);
+        var (_, usage, _) = await RunAsync("--help");
 
-        Assert.Equal(2, code);
-        Assert.Contains("Usage:", stderr);
+        var result = await RunAsync(args);
+
+        Assert.StartsWith("Usage:", usage, StringComparison.Ordinal);
+        Assert.Equal((2, string.Empty, $"jd: {problem}{System.Environment.NewLine}{usage}"), result);
     }
 
     [Theory]
