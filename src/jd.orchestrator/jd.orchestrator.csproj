@@ -6,4 +6,8 @@
     <ProjectReference Include="../jd.resolver/jd.resolver.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="jd.orchestrator.tests" />
+  </ItemGroup>
+
 </Project>
