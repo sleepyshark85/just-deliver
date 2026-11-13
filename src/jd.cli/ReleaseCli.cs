@@ -1,123 +1,150 @@
 using System.Globalization;
 using System.Text;
 using jd.orchestrator.usecases;
+using jd.resolver;
 using jd.resolver.release;
 
 namespace jd.cli;
 
-/// <summary>The <c>jd release</c> commands: wires the release builder and file, prints results and returns the exit codes <see cref="Cli"/> documents.</summary>
+/// <summary>
+/// The <c>jd release</c> commands: <c>create</c> and <c>show</c> read their files, hand them to <see cref="CreateRelease"/> and
+/// <see cref="ShowRelease"/>, print the result and write the set to <c>--out</c>; <c>deploy</c> and <c>qualify</c> go to <see cref="ReleaseDeployCli"/>.
+/// Parsing, reading, writing and output only; exit codes from <see cref="ExitCodes"/>. A read or write that fails is the dispatch's to report.
+/// </summary>
 internal static class ReleaseCli
 {
-    private const int Success = 0;
-    private const int Invalid = 1;
-    private const int UsageError = 2;
+    private const string CreateCommand = "create";
+    private const string ShowCommand = "show";
+    private const string DeployCommand = "deploy";
+    private const string QualifyCommand = "qualify";
+
+    private abstract record Options(string Input);
+
+    private sealed record CreateOptions(string Manifest, string Out) : Options(Manifest);
+
+    private sealed record ShowOptions(string Set) : Options(Set);
 
     // args are the arguments after "release".
     public static async Task<int> RunAsync(string[] args, TextWriter stdout, TextWriter stderr, Connections connections, CancellationToken cancellationToken)
     {
-        if (args.FirstOrDefault() is "deploy" or "qualify")
+        if (args.FirstOrDefault() is DeployCommand or QualifyCommand)
         {
-            return await ReleaseDeployCli.RunAsync(args[1..], args[0] == "qualify", stdout, stderr, connections, cancellationToken);
+            return await ReleaseDeployCli.RunAsync(args[1..], args[0] == QualifyCommand, stdout, stderr, connections, cancellationToken);
         }
 
-        var (command, input, output, problem) = Parse(args);
-        if (problem is not null)
+        var (options, problem) = Parse(args);
+        if (options is null)
         {
             stderr.WriteLine($"jd: {problem}");
             stderr.Write(Cli.Usage);
-            return UsageError;
+            return ExitCodes.UsageError;
         }
 
-        if (!File.Exists(input))
+        if (Unusable(options) is { } unusable)
         {
-            stderr.WriteLine($"jd: cannot read '{input}': not found or not a file.");
-            return UsageError;
+            stderr.WriteLine($"jd: {unusable}");
+            return ExitCodes.UsageError;
         }
 
-        if (command == "create" && File.Exists(output))
+        return options switch
         {
-            stderr.WriteLine($"jd: '{output}' already exists; a release set is immutable, so create a new file.");
-            return UsageError;
-        }
-
-        try
-        {
-            var result = command == "create"
-                ? await ReleaseBuilder.BuildAsync(input, DateTimeOffset.UtcNow, cancellationToken)
-                : await ReleaseSetFile.LoadAsync(input, cancellationToken);
-            if (result.Set is not { } set)
-            {
-                foreach (var error in result.Errors)
-                {
-                    stderr.WriteLine(error);
-                }
-
-                return Invalid;
-            }
-
-            if (command == "show")
-            {
-                stdout.Write(Format(set));
-                return Success;
-            }
-
-            // Parse only accepts create with --out, so the output path is set here.
-            await ReleaseSetFile.WriteAsync(set, output!, cancellationToken);
-            stdout.WriteLine($"{output}: release {set.Label} with {set.Workloads.Count} workload(s), deploy order {string.Join(", ", set.Order)}.");
-            return Success;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            stderr.WriteLine($"jd: {ex.Message}");
-            return UsageError;
-        }
+            CreateOptions create => await CreateAsync(create, connections, stdout, stderr, cancellationToken),
+            ShowOptions show => await ShowAsync(show.Set, stdout, stderr, cancellationToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(args), options, "not a release create or show."),
+        };
     }
 
-    private static (string? Command, string Input, string? Output, string? Problem) Parse(string[] args)
+    private static async Task<int> CreateAsync(
+        CreateOptions options, Connections connections, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var (manifest, output) = options;
+        var input = new CreateReleaseInput(await Cli.ReadDocumentAsync(manifest, cancellationToken), BesideManifest(manifest));
+        var result = await CreateRelease.RunAsync(input, connections, cancellationToken);
+        Cli.Print(result.Errors, stderr);
+        if (result is { Set: { } set, Document: { } document })
+        {
+            // CreateNew: an --out that appeared since the check is still never overwritten.
+            await using (var stream = new FileStream(output, FileMode.CreateNew, FileAccess.Write))
+            {
+                await stream.WriteAsync(document, cancellationToken);
+            }
+
+            stdout.WriteLine($"{output}: release {set.Label} with {set.Workloads.Count} workload(s), deploy order {string.Join(", ", set.Order)}.");
+        }
+
+        return ExitCodes.Of(result.Outcome);
+    }
+
+    private static async Task<int> ShowAsync(string path, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var result = await ShowRelease.RunAsync(new ShowReleaseInput(await Cli.ReadDocumentAsync(path, cancellationToken)), cancellationToken);
+        Cli.Print(result.Errors, stderr);
+        if (result is { Set: { } set, CreatedAt: { } createdAt })
+        {
+            stdout.Write(Format(set, createdAt));
+        }
+
+        return ExitCodes.Of(result.Outcome);
+    }
+
+    // The definitions a manifest names are files beside it: each reference is resolved against the manifest's directory, and that path names it.
+    private static DocumentReader BesideManifest(string manifest)
+    {
+        // The manifest exists, so its full path has a directory.
+        var directory = Path.GetDirectoryName(Path.GetFullPath(manifest))!;
+        return async (reference, cancellationToken) =>
+        {
+            var path = Path.Combine(directory, reference);
+            if (!File.Exists(path))
+            {
+                return (path, null);
+            }
+
+            return (path, await File.ReadAllBytesAsync(path, cancellationToken));
+        };
+    }
+
+    // The input must exist; an existing --out is refused up front, before anything is read, because a release set is never changed.
+    private static string? Unusable(Options options) =>
+        Arguments.Unreadable(options.Input, null, null)
+        ?? (options is CreateOptions { Out: var output } && File.Exists(output) ? $"'{output}' already exists; a release set is immutable, so create a new file." : null);
+
+    private static (Options? Options, string Problem) Parse(string[] args)
     {
         var command = args.FirstOrDefault();
-        if (command is not ("create" or "show"))
+        if (command is not (CreateCommand or ShowCommand))
         {
-            return (null, string.Empty, null, command is null ? "release needs a command: create, show, deploy or qualify." : $"unknown release command '{command}'.");
+            return (null, command is null
+                ? $"{Cli.ReleaseCommand} needs a command: {CreateCommand}, {ShowCommand}, {DeployCommand} or {QualifyCommand}."
+                : $"unknown {Cli.ReleaseCommand} command '{command}'.");
         }
 
-        string? output = null;
-        var positional = new List<string>();
-        for (var i = 1; i < args.Length; i++)
+        var (scanned, problem) = Arguments.ScanOptions(args[1..], command == CreateCommand ? [Arguments.OutOption] : [], []);
+        if (scanned is null)
         {
-            if (args[i] == "--out" && command == "create")
-            {
-                if (++i == args.Length)
-                {
-                    return (null, string.Empty, null, "--out needs a value.");
-                }
-
-                output = args[i];
-            }
-            else if (args[i].StartsWith("--", StringComparison.Ordinal))
-            {
-                return (null, string.Empty, null, $"unknown option '{args[i]}'.");
-            }
-            else
-            {
-                positional.Add(args[i]);
-            }
+            return (null, problem);
         }
 
+        var (positional, values, _) = scanned;
         if (positional.Count != 1)
         {
-            return (null, string.Empty, null, command == "create" ? "expected exactly one release manifest." : "expected exactly one release set.");
+            return (null, command == CreateCommand ? "expected exactly one release manifest." : "expected exactly one release set.");
         }
 
-        return command == "create" && output is null
-            ? (null, string.Empty, null, "create needs --out <release-set.yaml>.")
-            : (command, positional[0], output, null);
+        if (command == ShowCommand)
+        {
+            return (new ShowOptions(positional[0]), string.Empty);
+        }
+
+        return values.GetValueOrDefault(Arguments.OutOption) is { } output
+            ? (new CreateOptions(positional[0], output), string.Empty)
+            : (null, $"{CreateCommand} needs {Arguments.OutOption} <release-set.yaml>.");
     }
 
-    private static string Format(ReleaseSet set)
+    private static string Format(ReleaseSet set, string createdAt)
     {
         var text = new StringBuilder()
-            .AppendLine(CultureInfo.InvariantCulture, $"release {set.Label} (created {set.CreatedAt.ToString(ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture)})")
+            .AppendLine(CultureInfo.InvariantCulture, $"release {set.Label} (created {createdAt})")
             .AppendLine("deploy order:");
         for (var i = 0; i < set.Order.Count; i++)
         {

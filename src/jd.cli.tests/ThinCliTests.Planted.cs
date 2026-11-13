@@ -5,6 +5,7 @@ using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.graph;
+using jd.resolver.release;
 using Xunit;
 
 namespace jd.cli.tests
@@ -118,6 +119,22 @@ namespace jd.cli.tests
                     "jd.cli.tests.planted.EnvCommand.ComposesTheDescriptor reaches jd.resolver.environment.DescriptorComposer..ctor",
                     "jd.cli.tests.planted.EnvCommand.LoadsTheDefinition reaches jd.resolver.environment.EnvironmentDefinitionFile.LoadAsync",
                     "jd.cli.tests.planted.EnvCommand.LocatesTheCatalogErrors reaches jd.resolver.SourceCatalog.Located",
+                ],
+                findings.Select(f => f.Message).Order(StringComparer.Ordinal));
+        }
+
+        // jd's own CreateRelease and ShowRelease: their command code may build the inputs and read the results; building, serializing and the clock
+        // are the use cases'.
+        [Fact]
+        public void R1_names_the_release_command_and_member_that_reach_past_the_create_and_show_use_cases()
+        {
+            var findings = R1(Planted, Only(typeof(planted.ReleaseCommand)), UseCaseSurface(UseCases(typeof(Connections))));
+
+            Assert.Equal(
+                [
+                    "jd.cli.tests.planted.ReleaseCommand.BuildsTheSet reaches jd.resolver.release.ReleaseBuilder.BuildAsync",
+                    "jd.cli.tests.planted.ReleaseCommand.ReadsTheClock reaches jd.orchestrator.usecases.Connections.get_Time",
+                    "jd.cli.tests.planted.ReleaseCommand.SerializesTheSet reaches jd.resolver.release.ReleaseSetFile.Serialize",
                 ],
                 findings.Select(f => f.Message).Order(StringComparer.Ordinal));
         }
@@ -283,6 +300,26 @@ namespace jd.cli.tests.planted
 
         public static object ComposesTheDescriptor(EnvironmentDefinition definition, Catalog catalog, EnvironmentDescriptor environment, ResolvedGraph graph) =>
             new DescriptorComposer(definition, "x", catalog, environment, graph);
+    }
+
+    internal static class ReleaseCommand
+    {
+        private static readonly SourceDocument Document = new("x", "kind: ReleaseManifest"u8.ToArray());
+
+        private static readonly DocumentReader Nothing = (reference, _) => Task.FromResult((reference, (ReadOnlyMemory<byte>?)null));
+
+        public static async Task<string> CreatesAndShowsAsync(Connections connections)
+        {
+            var created = await CreateRelease.RunAsync(new CreateReleaseInput(Document, Nothing), connections, CancellationToken.None);
+            var shown = await ShowRelease.RunAsync(new ShowReleaseInput(Document), CancellationToken.None);
+            return $"{created.Set?.Label}{created.Document?.Length}{created.Errors.Count}{shown.CreatedAt}{shown.Set?.Workloads[0].Image}";
+        }
+
+        public static object BuildsTheSet() => ReleaseBuilder.BuildAsync(Document, Nothing, DateTimeOffset.UnixEpoch, CancellationToken.None);
+
+        public static object SerializesTheSet(ReleaseSet set) => ReleaseSetFile.Serialize(set);
+
+        public static object ReadsTheClock(Connections connections) => connections.Time();
     }
 
     internal sealed class Store : IRecordStore

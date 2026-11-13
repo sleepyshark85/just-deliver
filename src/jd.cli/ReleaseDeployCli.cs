@@ -3,6 +3,7 @@ using jd.core.identity;
 using jd.core.records;
 using jd.orchestrator;
 using jd.orchestrator.usecases;
+using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.graph;
@@ -81,7 +82,7 @@ internal static class ReleaseDeployCli
         var started = time.GetUtcNow();
         // A promotion is never a preview, so it has the records.
         var setResult = options.Promotion is { } promoted
-            ? await ReleaseSetFile.ParseAsync(options.Set, await records!.ReadAsync(promoted.QualifiedOn, promoted.Label, ReleaseRecordFile.SetFileName, cancellationToken), cancellationToken)
+            ? await ReleaseSetFile.ParseAsync(new SourceDocument(options.Set, await records!.ReadAsync(promoted.QualifiedOn, promoted.Label, ReleaseRecordFile.SetFileName, cancellationToken)), cancellationToken)
             : await ReleaseSetFile.LoadAsync(options.Set, cancellationToken);
         var source = await Cli.ReadCatalogAsync(options.Catalog, cancellationToken);
         var catalogResult = await CatalogParser.ParseAsync(source, cancellationToken);

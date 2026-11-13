@@ -96,8 +96,12 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
         var app = await File.ReadAllTextAsync(Path.Combine(Samples, "workloads", "sample-app.yaml"));
         await File.WriteAllTextAsync(Path.Combine(_temp, "workloads", "sample-app.yaml"), changeApp?.Invoke(app) ?? app);
         var set = Path.Combine(_temp, fileName);
-        var (code, _, stderr) = await RunAsync(null, "release", "create", Path.Combine(_temp, "releases", "sample.manifest.yaml"), "--out", set);
-        Assert.True(code == 0, stderr);
+        // Arranged on the system clock and unwatched, so the test's clock and factory list start with the run it tests.
+        var stderr = new StringWriter();
+        var code = await Cli.RunAsync(
+            ["release", "create", Path.Combine(_temp, "releases", "sample.manifest.yaml"), "--out", set], TextWriter.Null, stderr, CancellationToken.None,
+            Connections(null) with { Time = () => TimeProvider.System });
+        Assert.True(code == 0, stderr.ToString());
         return set;
     }
 

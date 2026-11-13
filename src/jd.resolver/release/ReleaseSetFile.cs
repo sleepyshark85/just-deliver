@@ -6,7 +6,7 @@ using YamlDotNet.Serialization.EventEmitters;
 
 namespace jd.resolver.release;
 
-/// <summary>Writes a <see cref="ReleaseSet"/> once and reads it back, re-verifying every embedded definition against its recorded hash.</summary>
+/// <summary>Serializes a <see cref="ReleaseSet"/> and reads it back, re-verifying every embedded definition against its recorded hash.</summary>
 public static class ReleaseSetFile
 {
     // Bridge: the kind written and read here until the release documents are bound from their schemas (S24f).
@@ -33,8 +33,8 @@ public static class ReleaseSetFile
         }
     }
 
-    /// <summary>Creates the file; throws <see cref="IOException"/> if it exists, because a release set is never changed.</summary>
-    public static async Task WriteAsync(ReleaseSet set, string path, CancellationToken cancellationToken = default)
+    /// <summary>The set's document, as UTF-8 without a byte-order mark: what is written once and never changed.</summary>
+    public static byte[] Serialize(ReleaseSet set)
     {
         var document = new Dictionary<string, object>
         {
@@ -49,12 +49,12 @@ public static class ReleaseSetFile
             }).ToList(),
         };
 
-        await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
-        await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
-        await writer.WriteAsync(Serializer.Serialize(document).AsMemory(), cancellationToken);
+        // GetBytes writes no byte-order mark.
+        return Encoding.UTF8.GetBytes(Serializer.Serialize(document));
     }
 
     /// <summary>Reads the set at <paramref name="path"/>, as <see cref="ParseAsync"/> reads its bytes; the set is set exactly when there are no errors.</summary>
+    // TODO(S25e1): deleted when release deploy reads its set itself.
     public static async Task<ReleaseSetResult> LoadAsync(string path, CancellationToken cancellationToken = default)
     {
         if (!File.Exists(path))
@@ -63,14 +63,13 @@ public static class ReleaseSetFile
         }
 
         // One read: the text parsed here and the bytes handed back are the same file content.
-        return await ParseAsync(path, await File.ReadAllBytesAsync(path, cancellationToken), cancellationToken);
+        return await ParseAsync(new SourceDocument(path, await File.ReadAllBytesAsync(path, cancellationToken)), cancellationToken);
     }
 
-    /// <summary>Reads a set from its bytes, as <see cref="LoadAsync"/> reads its file; errors name <paramref name="path"/>.</summary>
-    public static async Task<ReleaseSetResult> ParseAsync(string path, byte[] bytes, CancellationToken cancellationToken = default)
+    /// <summary>Reads <paramref name="set"/>, its byte-order mark detected, and verifies it; errors name it. The result hands back its exact bytes.</summary>
+    public static async Task<ReleaseSetResult> ParseAsync(SourceDocument set, CancellationToken cancellationToken = default)
     {
-        using var reader = new StreamReader(new MemoryStream(bytes), detectEncodingFromByteOrderMarks: true);
-        var loaded = await DocumentLoader.LoadAsync(path, await reader.ReadToEndAsync(cancellationToken), [Kind], cancellationToken);
+        var loaded = await DocumentLoader.LoadAsync(set.Name, set.Text(), [Kind], cancellationToken);
         if (loaded.Value is not { Body: var body })
         {
             return new ReleaseSetResult(null, loaded.Errors);
@@ -79,7 +78,7 @@ public static class ReleaseSetFile
         // The schema guarantees the shapes read here.
         if (!DateTimeOffset.TryParseExact((string)body["createdAt"]!, ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var createdAt))
         {
-            return new ReleaseSetResult(null, [new LoadError(path, "createdAt", "not a valid UTC time.")]);
+            return new ReleaseSetResult(null, [new LoadError(set.Name, "createdAt", "not a valid UTC time.")]);
         }
 
         // Only the definitions and what pins them are stored. Everything else (name, team, image, order) is derived from
@@ -93,14 +92,14 @@ public static class ReleaseSetFile
             var actual = ReleaseHash.Of(Encoding.UTF8.GetBytes(definition));
             if (actual != recorded)
             {
-                errors.Add(new LoadError(path, $"workloads[{i}].definition", $"does not match definitionSha256 (recorded {recorded}, content hashes to {actual}); the release set was modified."));
+                errors.Add(new LoadError(set.Name, $"workloads[{i}].definition", $"does not match definitionSha256 (recorded {recorded}, content hashes to {actual}); the release set was modified."));
             }
 
-            sources.Add(new WorkloadSource(path, $"workloads[{i}].definition", recorded, definition, item["dependsOn"]!.Select(t => (string)t!).ToList()));
+            sources.Add(new WorkloadSource(set.Name, $"workloads[{i}].definition", recorded, definition, item["dependsOn"]!.Select(t => (string)t!).ToList()));
         }
 
         return errors.Count > 0
             ? new ReleaseSetResult(null, errors)
-            : await ReleaseBuilder.ComposeAsync(path, (string)body["label"]!, createdAt, sources, cancellationToken) with { Bytes = bytes };
+            : await ReleaseBuilder.ComposeAsync(set.Name, (string)body["label"]!, createdAt, sources, cancellationToken) with { Bytes = set.Content };
     }
 }
