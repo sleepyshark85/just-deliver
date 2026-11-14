@@ -23,6 +23,12 @@ public partial class TemplateLibraryTests
         ("t/b", "name: b\nconfiguration:\n  other:\n    type: String\noutputs:\n  id: ${r.id}\n"),
     ]);
 
+    // The seed templates as the CLI hands them to the library: each Pulumi.yaml named by its directory under the templates root.
+    private static TemplateLibrary SeedTemplates() => TemplateLibrary.Parse(
+        Directory.EnumerateFiles(Templates, "Pulumi.yaml", SearchOption.AllDirectories)
+            // Safe: EnumerateFiles yields paths with a file name, so the directory is never null.
+            .Select(file => (Path.GetRelativePath(Templates, Path.GetDirectoryName(file)!).Replace(Path.DirectorySeparatorChar, '/'), File.ReadAllText(file))));
+
     private static ConfigText Text(string value) => new(new Resolved(value), new HashSet<string>());
 
     private static ConfigText Ref(string node, string output) =>
@@ -47,7 +53,7 @@ public partial class TemplateLibraryTests
         var sample = Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml");
         var workload = (await WorkloadFile.ParseAsync(sample, await File.ReadAllTextAsync(sample))).Value!;
         var graph = new GraphBuilder(environment, catalog.GrantTargets).Build(new PolicyApplier(catalog, environment).Apply(new Expander(catalog, environment).Expand(workload, "workload.yaml")));
-        var library = await TemplateLibrary.LoadAsync(Templates);
+        var library = SeedTemplates();
 
         Assert.Empty(graph.Errors);
         Assert.Empty(library.Check(graph));
@@ -56,9 +62,9 @@ public partial class TemplateLibraryTests
     [Fact]
     public async Task Seed_templates_have_no_defaults_and_no_fixed_guids()
     {
-        var library = await TemplateLibrary.LoadAsync(Templates);
+        var library = SeedTemplates();
 
-        Assert.Empty(library.Errors);
+        Assert.Empty(library.Check(Graph([])));
         foreach (var file in Directory.EnumerateFiles(Templates, "Pulumi.yaml", SearchOption.AllDirectories))
         {
             var text = await File.ReadAllTextAsync(file);
@@ -68,9 +74,9 @@ public partial class TemplateLibraryTests
     }
 
     [Fact]
-    public async Task The_container_app_template_declares_its_inputs_and_outputs()
+    public void The_container_app_template_declares_its_inputs_and_outputs()
     {
-        var library = await TemplateLibrary.LoadAsync(Templates);
+        var library = SeedTemplates();
         string[] inputs = ["resourceGroupName", "location", "containerAppsEnvironmentId", "containerAppName", "image", "targetPort", "externalIngress", "cpu", "memory", "minReplicas", "maxReplicas", "variables", "revisionSuffix", "traffic", "maxInactiveRevisions"];
         string[] outputs = ["containerAppId", "principalId", "latestRevisionName", "latestRevisionFqdn", "fqdn"];
         var app = Node("app", "azure/container-app", inputs.ToDictionary(i => i, i => (ConfigValue)Text("x")));
@@ -84,9 +90,9 @@ public partial class TemplateLibraryTests
     }
 
     [Fact]
-    public async Task The_diagnostic_setting_template_declares_its_inputs_and_output_and_refuses_an_unknown_input()
+    public void The_diagnostic_setting_template_declares_its_inputs_and_output_and_refuses_an_unknown_input()
     {
-        var library = await TemplateLibrary.LoadAsync(Templates);
+        var library = SeedTemplates();
         string[] inputs = ["resourceId", "workspaceResourceId", "settingName", "categoryGroup"];
         Dictionary<string, ConfigValue> Config(IEnumerable<string> keys) => keys.ToDictionary(k => k, k => (ConfigValue)Text("x"));
         var setting = Node("setting", "azure/diagnostic-setting", Config(inputs));
@@ -206,21 +212,20 @@ public partial class TemplateLibraryTests
         Assert.Equal(3, errors.Count);
     }
 
-    [Fact]
-    public void An_unreadable_template_is_reported_with_its_file_and_repeated_by_the_check()
+    // YAML that does not parse (the parser's error, a repeated key, an alias that contains itself) and YAML that is no mapping.
+    [Theory]
+    [InlineData(": invalid yaml :", "While scanning a plain scalar value, found invalid mapping. (line 1)")]
+    [InlineData("name: a\nname: b\n", "duplicate key 'name' at line 2.")]
+    [InlineData("a: &x [*x]\n", "Self referencing loop detected with type 'System.Collections.Generic.List`1[System.Object]'. Path 'a'.")]
+    [InlineData("- name\n", "a template must be a YAML mapping.")]
+    public void An_unreadable_template_is_reported_with_its_file_and_why_and_repeated_by_the_check(string yaml, string message)
     {
-        var library = TemplateLibrary.Parse([("t/broken", "name: [unclosed\n")]);
+        var library = TemplateLibrary.Parse([("t/broken", yaml), ("t/a", "name: a\n")]);
 
-        Assert.Equal("t/broken/Pulumi.yaml", Assert.Single(library.Errors).File);
-        Assert.Single(library.Check(Graph([])));
-    }
-
-    [Fact]
-    public async Task A_missing_template_directory_is_an_error()
-    {
-        var library = await TemplateLibrary.LoadAsync(Path.Combine(AppContext.BaseDirectory, "no-such-templates"));
-
-        Assert.Contains("not found", Assert.Single(library.Errors).Message);
+        var error = Assert.Single(library.Check(Graph([])));
+        Assert.Equal(("t/broken/Pulumi.yaml", string.Empty, message), (error.File, error.Location, error.Message));
+        Assert.Throws<KeyNotFoundException>(() => library.GetContent("t/broken"));
+        Assert.Equal("name: a\n", library.GetContent("t/a"));
     }
 
     private static readonly RuntimeRelease Release = new("suffix", "traffic", "traffic", "suffixOut", "revision", "fqdn", "revisionName", "latestRevision", "weight", "appId");
