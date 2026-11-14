@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using jd.resolver.catalog;
 using jd.resolver.expansion;
 using jd.resolver.expressions;
@@ -10,7 +11,7 @@ public enum Layer
     /// <summary>The catalog's component or runtime implementation the node comes from.</summary>
     Implementation,
 
-    /// <summary>The workload's own definition: its <c>container.variables</c>.</summary>
+    /// <summary>The workload's own definition: its variables.</summary>
     Workload,
 
     /// <summary>A policy's <c>set</c>: the value replaces whatever the earlier layers gave.</summary>
@@ -20,7 +21,7 @@ public enum Layer
     PolicyDefault,
 }
 
-/// <summary>Where a config field's value came from: the file and its rule (the component or runtime file, or the policy name and its file; for the workload's variables, the workload file and `container.variables`).</summary>
+/// <summary>Where a config field's value came from: the file and its rule (the component or runtime file, or the policy name and its file; for the workload's variables, the workload file and where it holds them).</summary>
 public sealed record Provenance(string Source, string Rule, Layer Layer)
 {
     /// <summary>The one-line form used by the graph JSON and the preview listing; the file is left out when it is the rule itself (implementations).</summary>
@@ -48,7 +49,11 @@ public sealed record ResolvedRequirement(
     string? Class,
     string Source,
     IReadOnlyDictionary<string, EvalResult> Exports,
-    IReadOnlyList<ResolvedNode> Nodes);
+    IReadOnlyList<ResolvedNode> Nodes)
+{
+    /// <summary>Where <see cref="Source"/> holds each export, by name (<see cref="ExpandedRequirement.ExportLocations"/>).</summary>
+    internal IReadOnlyDictionary<string, string> ExportLocations { get; init; } = ReadOnlyDictionary<string, string>.Empty;
+}
 
 /// <summary>
 /// RuntimeNodes are the nodes of the workload's runtime (none for an environment definition); Parts are an environment run's parts'

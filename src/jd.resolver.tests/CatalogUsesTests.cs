@@ -361,6 +361,15 @@ public class CatalogUsesTests
         Assert.Equal("'shared-group.group': 'shared-group' exports name.", error.Message);
     }
 
+    // An export is located as the binder read it (JToken.Path): a name with a dot is quoted, where it once read as two segments (S24c4).
+    [Fact]
+    public async Task An_export_is_located_by_its_path_in_the_file()
+    {
+        var error = SingleError(await Parse(("g.yaml", Shared("shared-group", exports: "{ name: x }")), ("s.yaml", Shared("cosmos-account", uses: "[shared-group]", exports: "{ resource.group: '${shared-group.group}' }"))));
+
+        Assert.Equal(("s.yaml", "exports['resource.group']"), (error.File, error.Location));
+    }
+
     [Theory]
     [InlineData("shared-group", TestCatalog.PartPath + ".nodes.shared-group")]
     [InlineData("alpha-db", TestCatalog.PartPath + ".nodes.alpha-db")]

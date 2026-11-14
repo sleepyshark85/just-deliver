@@ -53,6 +53,8 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
             Runtime = runtime,
             Errors = errors,
             Parts = NoParts,
+            RequirementsLocation = workload.RequirementsLocation,
+            VariablesLocation = workload.VariablesLocation,
         };
     }
 
@@ -232,14 +234,14 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         var found = new List<LoadError>();
         var evaluator = EvaluatorFor(owner, new ExpressionScope(requirement.Id, part.Nodes.Keys.ToHashSet(), NoOutputs, NoParts));
         var nodes = EvaluateNodes(component.Source, part.Nodes, found, (_, _) => (evaluator, null));
-        var exports = EvaluateExports(component.Source, part.ExportsLocation, part.Exports, evaluator, found);
+        var exports = EvaluateExports(component.Source, part, evaluator, found);
         if (found.Count > 0)
         {
             errors.AddRange(found.Select(e => e with { Message = $"for {requirement.Location} ('{requirement.Id}'): {e.Message}" }));
             return null;
         }
 
-        return new ExpandedRequirement(requirement.Id, requirement.Type, requirement.Class, component.Source, nodes, exports);
+        return new ExpandedRequirement(requirement.Id, requirement.Type, requirement.Class, component.Source, nodes, exports) { ExportLocations = part.ExportLocations };
     }
 
     // What selects a part here: the environment's type; a requirement adds its class.
@@ -320,13 +322,12 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         return nodes;
     }
 
-    private static Dictionary<string, EvalResult> EvaluateExports(
-        string source, string location, IReadOnlyDictionary<string, string> partExports, ExpressionEvaluator evaluator, List<LoadError> found)
+    private static Dictionary<string, EvalResult> EvaluateExports(string source, Part part, ExpressionEvaluator evaluator, List<LoadError> found)
     {
         var exports = new Dictionary<string, EvalResult>();
-        foreach (var (key, text) in partExports)
+        foreach (var (key, text) in part.Exports)
         {
-            if (evaluator.Evaluate(text, source, $"{location}.{key}", found) is { } result)
+            if (evaluator.Evaluate(text, source, part.ExportLocations[key], found) is { } result)
             {
                 exports[key] = result;
             }

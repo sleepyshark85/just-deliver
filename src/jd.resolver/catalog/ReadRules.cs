@@ -67,7 +67,7 @@ internal static class ReadRules
         var values = reader.Part.Nodes.Values.SelectMany(node => node.Config.Values)
             .SelectMany(value => value is JContainer container ? container.DescendantsAndSelf() : [value])
             .OfType<JValue>().Where(value => value.Type == JTokenType.String).Select(value => (Location: value.Path, Text: value.ToString()));
-        var exports = reader.Part.Exports.Select(export => (Location: $"{reader.Part.ExportsLocation}.{export.Key}", Text: export.Value));
+        var exports = reader.Part.Exports.Select(export => (Location: reader.Part.ExportLocations[export.Key], Text: export.Value));
         return from read in values.Concat(exports)
                from path in ExpressionEvaluator.Paths(read.Text)
                let problem = ReadProblem(reader, path, owners)

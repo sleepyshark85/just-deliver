@@ -100,6 +100,7 @@ public sealed class BinderTests
         Assert.Equal(1, (int)Assert.Single(a.Config, entry => entry.Key == "k").Value);
         Assert.Equal(new Dictionary<string, string> { ["out"] = "${a.x}" }, any.Exports);
         Assert.Equal("variants.any.gives", any.ExportsLocation);
+        Assert.Equal(new Dictionary<string, string> { ["out"] = "variants.any.gives.out" }, any.ExportLocations);
 
         var dev = owner.Parts[1];
         Assert.Equal([new SelectKey("env.type", "dev", "any", "variants", "variants")], dev.Keys);
@@ -110,6 +111,7 @@ public sealed class BinderTests
         Assert.Empty(b.Config);
         Assert.Empty(dev.Exports);
         Assert.Equal("variants.dev", dev.ExportsLocation);
+        Assert.Empty(dev.ExportLocations);
     }
 
     // A part reading nothing is located at itself, as one without exports is.

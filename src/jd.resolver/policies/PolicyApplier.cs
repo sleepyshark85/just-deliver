@@ -16,9 +16,6 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
 {
     private const char PathSeparator = '.';
 
-    // The source shown for the runtime's variables that come from the workload's definition (the file is the workload being resolved).
-    private const string WorkloadVariablesRule = "container.variables";
-
     // Policy name order makes conflict reports and "same value" provenance independent of file order.
     private readonly IReadOnlyList<Policy> _policies = catalog.Policies.OrderBy(p => p.Name, StringComparer.Ordinal).ToList();
 
@@ -27,6 +24,8 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
     {
         // A requirement the expansion dropped is not in the result, so its errors must carry through.
         var errors = new List<LoadError>(expansion.Errors);
+        // An entries field is the workload's variables (the expander gives them to the runtime node only), written in its file.
+        var variables = new Provenance(expansion.OwnerFile, expansion.VariablesLocation, Layer.Workload);
         ExpressionEvaluator EvaluatorFor(string currentId, IEnumerable<string> nodeNames) => new(new ExpressionContext(
             catalog.Roles, catalog.Naming, environment, expansion.Owner, new ExpressionScope(currentId, nodeNames.ToHashSet(), new Dictionary<Reference, string>(), expansion.Parts)));
 
@@ -38,9 +37,12 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             var nodes = requirement.Nodes
                 .Select(n => ApplyNodePolicies(
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(requirement.Source, requirement.Source, Layer.Implementation),
-                    requirement.Type, requirement.Class, evaluator, $"{requirement.Id}/{n.Name}", [], string.Empty, errors))
+                    requirement.Type, requirement.Class, evaluator, $"{requirement.Id}/{n.Name}", [], variables, errors))
                 .ToList();
-            requirements.Add(new ResolvedRequirement(requirement.Id, requirement.Type, requirement.Class, requirement.Source, requirement.Exports, nodes));
+            requirements.Add(new ResolvedRequirement(requirement.Id, requirement.Type, requirement.Class, requirement.Source, requirement.Exports, nodes)
+            {
+                ExportLocations = requirement.ExportLocations,
+            });
         }
 
         var workloadPolicies = _policies.Where(p => expansion.Kind == OwnerKind.Workload && IsWorkloadScope(p)).ToList();
@@ -48,7 +50,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         // A declared requirement that failed to expand still counts; its own error says why.
         foreach (var policy in workloadPolicies.Where(p => p.Require is { } type && !expansion.DeclaredTypes.Contains(type)))
         {
-            errors.Add(new LoadError(expansion.OwnerFile, "requires",
+            errors.Add(new LoadError(expansion.OwnerFile, expansion.RequirementsLocation,
                 $"policy '{policy.Name}' ({policy.Source}) requires a '{policy.Require}' requirement ({policy.Reason}); add '- type: {policy.Require}'."));
         }
 
@@ -62,7 +64,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             {
                 var node = ApplyNodePolicies(
                     n.Name, n.Template, n.Kind, new ConfigObject(n.Config), new Provenance(runtime.Source, runtime.Source, Layer.Implementation),
-                    null, null, EvaluatorFor(n.Name, runtimeNames), n.Name, n.Name == ExpressionEvaluator.RuntimeNode ? workloadPolicies : [], expansion.OwnerFile, errors);
+                    null, null, EvaluatorFor(n.Name, runtimeNames), n.Name, n.Name == ExpressionEvaluator.RuntimeNode ? workloadPolicies : [], variables, errors);
                 runtimeNodes.Add(n.Name == ExpressionEvaluator.RuntimeNode ? node with { Probe = runtime.Probe, Release = runtime.Release } : node);
             }
         }
@@ -99,13 +101,13 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
 
     private ResolvedNode ApplyNodePolicies(
         string name, string template, NodeKind kind, ConfigObject config, Provenance origin,
-        string? type, string? cls, ExpressionEvaluator evaluator, string label, List<Policy> workloadPolicies, string workloadFile, List<LoadError> errors)
+        string? type, string? cls, ExpressionEvaluator evaluator, string label, List<Policy> workloadPolicies, Provenance variables, List<LoadError> errors)
     {
         var provenance = new Dictionary<string, Provenance>();
         Record(provenance, string.Empty, config, origin);
         foreach (var (field, entries) in config.Properties.Where(p => p.Value is ConfigObject { AsEntries: true }))
         {
-            Record(provenance, field, entries, new Provenance(workloadFile, WorkloadVariablesRule, Layer.Workload));
+            Record(provenance, field, entries, variables);
         }
 
         var matching = _policies.Where(p => MatchesNode(p, template, type, cls)).Concat(workloadPolicies).ToList();

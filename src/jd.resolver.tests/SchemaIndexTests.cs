@@ -292,9 +292,10 @@ public sealed class SchemaIndexTests
         Assert.Equal(["$['m'].*"], index.NamesOf("Thing").Refs.Select(field => field.Path));
     }
 
-    // A field the document leaves out is located, and named in messages, by the property that would hold it (EnvironmentTypeCheck).
+    // A field the document leaves out is located, and named in messages, by the property that would hold it (EnvironmentTypeCheck); a list's items
+    // by the list (a workload without requirements is located at the list it leaves out, PolicyApplier).
     [Fact]
-    public async Task A_role_field_is_named_by_the_property_it_ends_in_and_unnamed_for_a_maps_values_or_a_lists_items()
+    public async Task A_role_field_is_named_by_the_property_it_ends_in_a_lists_items_by_the_list_and_a_maps_values_not_at_all()
     {
         var index = await BuildAsync(Planted("doc.json", """
             "properties": { "kind": { "enum": ["Thing"] },
@@ -304,7 +305,7 @@ public sealed class SchemaIndexTests
             """));
 
         Assert.Equal(
-            [("env.approval", "gate"), ("part", null), ("requirement", null)],
+            [("env.approval", "gate"), ("part", null), ("requirement", "l")],
             index.RolesOf("Thing").Select(field => (field.Role, field.Name)).OrderBy(field => field.Role, StringComparer.Ordinal));
     }
 }

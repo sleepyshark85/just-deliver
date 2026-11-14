@@ -29,18 +29,18 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
         var errors = new List<LoadError>(policy.Errors);
 
         // An export is evaluated in its requirement's scope, where another requirement's exports are out of reach. The catalog loader
-        // rejects it, at implementations.<key>.classes.<class>.exports.<name>; a graph built from anything else is still refused here. The
-        // ExpandedRequirement does not carry the implementation key, so the error names the export only.
+        // rejects it at the export; a graph built from anything else is still refused here, at the same location.
         foreach (var requirement in policy.Requirements)
         {
             foreach (var (name, result) in requirement.Exports.Where(e => e.Value is Pending { References: var refs } && refs.Any(r => r.Kind == ReferenceKind.Resource)))
             {
-                errors.Add(new LoadError(requirement.Source, $"exports.{name}", $"requirement '{requirement.Id}': an export cannot reference ${{resource.<id>.<export>}}."));
+                errors.Add(new LoadError(requirement.Source, requirement.ExportLocations[name], $"requirement '{requirement.Id}': an export cannot reference ${{resource.<id>.<export>}}."));
             }
         }
 
         // An environment run's parts have no type and no contract; what they export is the graph's Parts.
-        var exports = policy.Requirements.Where(r => r.Type is not null).OrderBy(r => r.Id, StringComparer.Ordinal).ToDictionary(r => r.Id, r => r.Exports);
+        var typed = policy.Requirements.Where(r => r.Type is not null).OrderBy(r => r.Id, StringComparer.Ordinal).ToList();
+        var exports = typed.ToDictionary(r => r.Id, r => r.Exports);
         var entries = policy.Requirements.SelectMany(r => r.Nodes.Select(n => (Scope: r.Id, Node: n)))
             .Concat(policy.RuntimeNodes.Select(n => (Scope: WorkloadScope, Node: n)))
             .Select(e => (e.Scope, e.Node, Id: $"{policy.WorkloadName}/{environment.Name}/{e.Scope}/{e.Node.Name}"))
@@ -61,7 +61,10 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
                 draft.Node.Config, draft.Node.Provenance, Hash(draft.Node), draft.DependsOn, draft.Node.Probe, draft.Node.Release));
         }
 
-        return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, policy.WorkloadImage, policy.WorkloadPort, nodes, exports, errors, policy.Parts);
+        return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, policy.WorkloadImage, policy.WorkloadPort, nodes, exports, errors, policy.Parts)
+        {
+            ExportLocations = typed.ToDictionary(r => r.Id, r => r.ExportLocations),
+        };
     }
 
     // Pulumi stack names allow [A-Za-z0-9_.-]. Ids contain no '.' or '_' (names are kebab; the owner and the scope may start
