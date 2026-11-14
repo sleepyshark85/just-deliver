@@ -8,7 +8,7 @@ namespace jd.cli.tests;
 // The HTTP probe against a stubbed handler: no network.
 public sealed class HttpRevisionProbeTests
 {
-    private static readonly Probe Spec = new("/health", 200, 60, 1);
+    private static readonly Probe Spec = new("https", "/health", 200, 60, 1);
 
     private sealed class StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler
     {
@@ -34,6 +34,16 @@ public sealed class HttpRevisionProbeTests
 
         Assert.Equal(new ProbeResult(true, "HTTP 200"), result);
         Assert.Equal(new Uri("https://app--r1.example.test/health"), Assert.Single(handler.Requests));
+    }
+
+    [Fact]
+    public async Task It_asks_with_the_scheme_the_runtimes_probe_declares()
+    {
+        var handler = Answering(HttpStatusCode.OK);
+
+        await ProbeOver(handler).ProbeAsync("app--r1.example.test", Spec with { Scheme = "http" }, CancellationToken.None);
+
+        Assert.Equal(new Uri("http://app--r1.example.test/health"), Assert.Single(handler.Requests));
     }
 
     [Theory]

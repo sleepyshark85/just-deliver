@@ -3,11 +3,12 @@ name: container-app
 description: Every workload runs as a Container App on Consumption in the environment's Container Apps environment.
 # Sized for the free tier (standards section 6). The image and first port come from the workload's definition. This is the runtime node (phase
 # runtime): the infrastructure walk does not deploy it, the release flow does. The release flow owns the revision suffix and the
-# traffic, so the node sets neither; `release` names the template's inputs and outputs it uses, and the shape of a traffic item.
+# traffic, so the node sets neither; `release` names the template's inputs and outputs it uses, the shape of a traffic item, how a
+# revision suffix is made and the weight of all traffic.
 uses: [env-group, apps-env]
 implementations:
   default:
-    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 300, intervalSeconds: 5 }   # grants may take minutes to propagate
+    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 300, intervalSeconds: 5, scheme: https }   # grants may take minutes to propagate; ingress is HTTPS
     release:
       suffixInput: revisionSuffix
       trafficInput: traffic
@@ -19,6 +20,11 @@ implementations:
       latestKey: latestRevision
       weightKey: weight
       resourceIdOutput: containerAppId
+      # A revision suffix is lowercase letters, digits and '-', starting with a letter, and the revision name <app>--<suffix> takes at most 54
+      # characters: 54 - 32 (the 'ca' rule's maxLength, naming.yaml) - 2 (the '--') = 20. The suffix is the prefix, 8 hex digits of the config
+      # and 6 of a salt: 15 characters.
+      suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }
+      fullWeight: 100                                 # all traffic to one revision
     nodes:
       runtime:
         template: azure/container-app

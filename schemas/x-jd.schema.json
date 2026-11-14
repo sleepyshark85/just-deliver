@@ -64,7 +64,8 @@
         "probe.path", "probe.expected-status", "probe.timeout", "probe.interval", "probe.scheme",
         "rollout.suffix-input", "rollout.traffic-input", "rollout.traffic-output", "rollout.suffix-output", "rollout.revision-output",
         "rollout.fqdn-output", "rollout.revision-key", "rollout.latest-key", "rollout.weight-key", "rollout.resource-id-output",
-        "rollout.suffix-prefix", "rollout.suffix-config-digits", "rollout.suffix-salt-digits", "rollout.full-weight",
+        "rollout.suffix-prefix", "rollout.suffix-config-digits", "rollout.suffix-salt-digits", "rollout.suffix-max-length",
+        "rollout.full-weight",
         "release.label", "release.created-at", "release.workloads", "release.definition", "release.definition-path",
         "release.definition-sha256", "release.depends-on"
       ],

@@ -228,7 +228,21 @@ public partial class TemplateLibraryTests
         Assert.Equal("name: a\n", library.GetContent("t/a"));
     }
 
-    private static readonly RuntimeRelease Release = new("suffix", "traffic", "traffic", "suffixOut", "revision", "fqdn", "revisionName", "latestRevision", "weight", "appId");
+    private static readonly RuntimeRelease Release = new()
+    {
+        SuffixInput = "suffix",
+        TrafficInput = "traffic",
+        TrafficOutput = "traffic",
+        SuffixOutput = "suffixOut",
+        RevisionOutput = "revision",
+        FqdnOutput = "fqdn",
+        RevisionKey = "revisionName",
+        LatestKey = "latestRevision",
+        WeightKey = "weight",
+        ResourceIdOutput = "appId",
+        Suffix = new("r", 8, 6),
+        FullWeight = 100,
+    };
 
     // A runtime template with the inputs and outputs Release names, except the one given (an input or an output name).
     private static TemplateLibrary RuntimeLibrary(string omit = "")
@@ -291,8 +305,8 @@ public partial class TemplateLibraryTests
         {
             "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
             "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n"
-                + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
-                + "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffixOut, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n"
+                + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }\n"
+                + "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffixOut, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }\n"
                 + "    nodes:\n      runtime:\n        template: t/rt\n        config: { image: i }\n",
             $"kind: Policy\nname: pol\nreason: r\nmatch: {{ kind: runtime }}\n{layer}: {{ runtime.{input}: from-policy }}\n",
         }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));

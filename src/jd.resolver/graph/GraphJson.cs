@@ -52,6 +52,7 @@ public static class GraphJson
                 ["expectedStatus"] = probe.ExpectedStatus,
                 ["timeoutSeconds"] = probe.TimeoutSeconds,
                 ["intervalSeconds"] = probe.IntervalSeconds,
+                ["scheme"] = probe.Scheme,
             };
         }
 
@@ -69,6 +70,13 @@ public static class GraphJson
                 ["latestKey"] = release.LatestKey,
                 ["weightKey"] = release.WeightKey,
                 ["resourceIdOutput"] = release.ResourceIdOutput,
+                ["suffix"] = new JObject
+                {
+                    ["prefix"] = release.Suffix.Prefix,
+                    ["configDigits"] = release.Suffix.ConfigDigits,
+                    ["saltDigits"] = release.Suffix.SaltDigits,
+                },
+                ["fullWeight"] = release.FullWeight,
             };
         }
 

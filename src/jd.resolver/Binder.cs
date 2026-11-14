@@ -28,6 +28,16 @@ internal sealed class Binder(SchemaIndex index)
         return new PartOwner(document.Source, name, Strings(values.Nearest(Roles.Contract, document.Body)), [.. parts]);
     }
 
+    /// <summary>
+    /// The rollout of each part of <paramref name="runtime"/>, which <paramref name="document"/> holds: the probe (<c>probe.*</c>) and the release
+    /// block (<c>rollout.*</c>) inside the part, and where the load checks locate their errors.
+    /// </summary>
+    public IReadOnlyList<Rollout> ReadRollouts(Document document, PartOwner runtime)
+    {
+        var values = ValuesOf(document);
+        return [.. runtime.Parts.Select(part => ReadRollout(values, runtime, part))];
+    }
+
     /// <summary>The catalog version <paramref name="document"/> holds (<see cref="Roles.CatalogVersion"/>); empty when it holds none.</summary>
     public string ReadVersion(Document document) => Text(ValuesOf(document).Nearest(Roles.CatalogVersion, document.Body));
 
@@ -141,6 +151,40 @@ internal sealed class Binder(SchemaIndex index)
         Strings(values.Nearest(Roles.ApprovalApprovers, block)),
         (bool)values.Nearest(Roles.ApprovalSeparate, block)!);
 
+    // The numbers are cast without a fallback, as the approval count: a default would hide a lost binding, and the schema requires every probe and
+    // release field of a runtime part, so a schema-valid document holds each inside the part. A part's location is its token's path.
+    private static Rollout ReadRollout(Values values, PartOwner runtime, Part part)
+    {
+        var at = values.Body.SelectToken(part.Location)!;
+        string Read(string role) => Text(values.Within(role, at));
+        int Number(string role) => (int)values.Within(role, at)!;
+        return new Rollout(
+            runtime,
+            part,
+            new Probe(Read(Roles.ProbeScheme), Read(Roles.ProbePath), Number(Roles.ProbeExpectedStatus), Number(Roles.ProbeTimeout), Number(Roles.ProbeInterval)),
+            new RuntimeRelease
+            {
+                SuffixInput = Read(Roles.RolloutSuffixInput),
+                TrafficInput = Read(Roles.RolloutTrafficInput),
+                TrafficOutput = Read(Roles.RolloutTrafficOutput),
+                SuffixOutput = Read(Roles.RolloutSuffixOutput),
+                RevisionOutput = Read(Roles.RolloutRevisionOutput),
+                FqdnOutput = Read(Roles.RolloutFqdnOutput),
+                ResourceIdOutput = Read(Roles.RolloutResourceIdOutput),
+                RevisionKey = Read(Roles.RolloutRevisionKey),
+                LatestKey = Read(Roles.RolloutLatestKey),
+                WeightKey = Read(Roles.RolloutWeightKey),
+                Suffix = new RevisionSuffix(Read(Roles.RolloutSuffixPrefix), Number(Roles.RolloutSuffixConfigDigits), Number(Roles.RolloutSuffixSaltDigits)),
+                FullWeight = Number(Roles.RolloutFullWeight),
+            })
+        {
+            IntervalLocation = values.Within(Roles.ProbeInterval, at)!.Path,
+            TimeoutName = values.NameOf(Roles.ProbeTimeout),
+            SuffixMaxLength = Number(Roles.RolloutSuffixMaxLength),
+            SuffixMaxLengthLocation = values.Within(Roles.RolloutSuffixMaxLength, at)!.Path,
+        };
+    }
+
     // Nested mappings of strings as one value per dot path; the schema refuses a key with a dot, so each dot path is one value (concept 3).
     private static IEnumerable<KeyValuePair<string, string>> Flatten(JToken? mapping, string prefix) =>
         Entries(mapping).SelectMany(entry => entry.Value is JObject
@@ -233,6 +277,9 @@ internal sealed class Binder(SchemaIndex index)
             return at.AncestorsAndSelf().Select(holder => held.FirstOrDefault(value => value.Parent?.Parent == holder)).FirstOrDefault(value => value is not null)
                 ?? roles.Where(field => field.Role == role).Select(field => field.Default).FirstOrDefault(value => value is not null);
         }
+
+        // The role's first value inside the object at, for a block the object holds below its own fields (a runtime part's probe); null when none.
+        public JToken? Within(string role, JToken at) => Every(role).FirstOrDefault(value => value.Ancestors().Contains(at));
 
         // A role the document holds once: its first value, so a role under a list takes the first item's.
         public JToken? First(string role) => Every(role).FirstOrDefault();

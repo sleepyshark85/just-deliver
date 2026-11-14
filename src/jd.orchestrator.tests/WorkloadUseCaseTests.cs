@@ -36,8 +36,8 @@ public sealed class WorkloadUseCaseTests
             + "        nodes:\n          group:\n            template: t/group\n            config: { k: 1 }\n        exports:\n          out: x\n"),
         Document("runtimes/container-app.yaml",
             "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n"
-            + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
-            + "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n"
+            + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }\n"
+            + "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }\n"
             + "    nodes:\n      runtime:\n        template: t/runtime\n        config: { k: 1 }\n"),
         Document("templates/t/group/Pulumi.yaml", "name: group\n"),
     ]);

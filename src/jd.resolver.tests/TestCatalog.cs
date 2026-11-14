@@ -8,13 +8,27 @@ internal static class TestCatalog
 {
     /// <summary>The probe and release block every runtime implementation needs, as top-level lines (<see cref="Runtime"/> indents them).</summary>
     public const string ProbeAndRelease =
-        "probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n"
-        + "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n";
+        "probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }\n"
+        + "release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }\n";
 
     /// <summary>What <see cref="ProbeAndRelease"/> says, parsed.</summary>
-    public static readonly Probe Probe = new("/health", 200, 60, 5);
+    public static readonly Probe Probe = new("https", "/health", 200, 60, 5);
 
-    public static readonly RuntimeRelease Release = new("suffix", "traffic", "traffic", "suffix", "revision", "fqdn", "revisionName", "latestRevision", "weight", "appId");
+    public static readonly RuntimeRelease Release = new()
+    {
+        SuffixInput = "suffix",
+        TrafficInput = "traffic",
+        TrafficOutput = "traffic",
+        SuffixOutput = "suffix",
+        RevisionOutput = "revision",
+        FqdnOutput = "fqdn",
+        RevisionKey = "revisionName",
+        LatestKey = "latestRevision",
+        WeightKey = "weight",
+        ResourceIdOutput = "appId",
+        Suffix = new("r", 8, 6),
+        FullWeight = 100,
+    };
 
     /// <summary>The runtime every workload needs: one node named runtime. Append it after the other files so their indexes stay.</summary>
     public static readonly string RuntimeFile = Runtime("nodes:\n  runtime:\n    template: t/runtime\n    config: { k: 1 }\n");

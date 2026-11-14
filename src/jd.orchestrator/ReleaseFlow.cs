@@ -16,7 +16,8 @@ internal sealed record Prepared(DeploymentPackage? Package, NodeOutcome Outcome 
 /// <summary>
 /// Deploys the runtime node in the steps of the release flow: a dark revision (the live revision keeps all traffic), the grants, a probe
 /// of the new revision, and the traffic shift. A revision that fails its probe never gets traffic while a live one exists. The runtime's
-/// release block names the template's inputs and outputs and the shape of a traffic item, so none is in code. <c>prepare</c> fills the
+/// release block names the template's inputs and outputs, the shape of a traffic item, how a revision suffix is made and the weight of all
+/// traffic, so none is in code. <c>prepare</c> fills the
 /// node's config as for any node; <c>deployDependants</c> deploys the nodes that depend on the runtime, given the dark deploy's outputs, and
 /// returns the failure reason or null. Rules: docs/architecture/provisioning.md.
 /// </summary>
@@ -24,13 +25,6 @@ internal sealed class ReleaseFlow(
     IBackEndProvider provider, IRevisionProbe probe, Func<TimeSpan, CancellationToken, Task> delay, bool preview,
     Func<GraphNode, Task<Prepared>> prepare, Func<Dictionary<string, ConfigEntry>, Task<string?>> deployDependants)
 {
-    // Azure's rule for a revision suffix: lowercase letters, digits and '-', starting with a letter; the revision name <app>--<suffix>
-    // takes at most 54 characters. The suffix is a letter, 8 hex digits of the config and 6 of the salt: 15 characters.
-    private const string SuffixPrefix = "r";
-    private const int ConfigHexLength = 8;
-    private const int SaltHexLength = 6;
-    private const int FullWeight = 100;
-
     public async Task<NodeReport> RunAsync(GraphNode node, CancellationToken cancellationToken)
     {
         var release = node.Release ?? throw new InvalidOperationException($"node '{node.Id}': the runtime has no release block.");
@@ -171,8 +165,8 @@ internal sealed class ReleaseFlow(
             .Where(p => p.Key != release.SuffixInput && p.Key != release.TrafficInput)
             .OrderBy(p => p.Key, StringComparer.Ordinal)
             .Select(p => new JArray(new JValue(p.Key), new JValue(p.Value.Value), new JValue(p.Value.IsSecret)))));
-        var config = SuffixPrefix + Hash(canonical.ToString(Formatting.None))[..ConfigHexLength];
-        return previous.StartsWith(config, StringComparison.Ordinal) ? previous : config + Hash(previous)[..SaltHexLength];
+        var config = release.Suffix.Prefix + Hash(canonical.ToString(Formatting.None))[..release.Suffix.ConfigDigits];
+        return previous.StartsWith(config, StringComparison.Ordinal) ? previous : config + Hash(previous)[..release.Suffix.SaltDigits];
     }
 
     private static string Hash(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
@@ -187,5 +181,5 @@ internal sealed class ReleaseFlow(
     private static ConfigEntry Traffic(RuntimeRelease release, string? revision) =>
         new(new JArray(new JObject(
             revision is null ? new JProperty(release.LatestKey, true) : new JProperty(release.RevisionKey, revision),
-            new JProperty(release.WeightKey, FullWeight))).ToString(Formatting.None));
+            new JProperty(release.WeightKey, release.FullWeight))).ToString(Formatting.None));
 }

@@ -121,7 +121,8 @@
         "path": "/health",
         "expectedStatus": 200,
         "timeoutSeconds": 300,
-        "intervalSeconds": 5
+        "intervalSeconds": 5,
+        "scheme": "https"
       },
       "release": {
         "suffixInput": "revisionSuffix",
@@ -133,7 +134,13 @@
         "revisionKey": "revisionName",
         "latestKey": "latestRevision",
         "weightKey": "weight",
-        "resourceIdOutput": "containerAppId"
+        "resourceIdOutput": "containerAppId",
+        "suffix": {
+          "prefix": "r",
+          "configDigits": 8,
+          "saltDigits": 6
+        },
+        "fullWeight": 100
       }
     },
     {

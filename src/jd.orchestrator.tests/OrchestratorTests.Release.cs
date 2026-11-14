@@ -100,7 +100,7 @@ public partial class OrchestratorTests
 
         var (fqdn, spec) = Assert.Single(probe.Calls);
         Assert.Equal("rev-1.example.test", fqdn);
-        Assert.Equal(new Probe("/health", 200, 60, 5), spec);
+        Assert.Equal(new Probe("https", "/health", 200, 60, 5), spec);
     }
 
     [Fact]

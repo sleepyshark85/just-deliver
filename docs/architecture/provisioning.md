@@ -202,23 +202,24 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   either, so one template deploys all the moves of the flow, in this order: (1) **Dark**: deploy with a revision suffix (below), and `traffic` =
   `[{revisionName: <live revision>, weight: 100}]`, so the new revision exists and the live one keeps all traffic; the first deploy has no live
   revision and passes `[{latestRevision: true, weight: 100}]`. The new revision is the dark deploy's `revisionOutput`. (2) **Grants**: the
-  after-runtime nodes, deployed with the dark deploy's outputs. (3) **Probe**: GET the new revision's `fqdnOutput` + the runtime's `probe.path`
+  after-runtime nodes, deployed with the dark deploy's outputs. (3) **Probe**: GET `<probe.scheme>://` + the new revision's `fqdnOutput` + the runtime's `probe.path`
   through `IRevisionProbe`; the orchestrator retries up to `1 + timeoutSeconds / intervalSeconds` times, waiting `intervalSeconds` between
   attempts, because grants may take minutes to propagate. (4) **Shift**: the same suffix with `traffic` = `[{revisionName: <new revision>,
-  weight: 100}]`, which changes traffic only and creates no revision; it also runs on a first deploy, so the stack's traffic names the
+  weight: <fullWeight>}]`, which changes traffic only and creates no revision; it also runs on a first deploy, so the stack's traffic names the
   revision from then on (the template echoes the traffic it was given, and `[{latestRevision: true}]` would never name one). Traffic goes to
   the new revision only here, after a passed probe. A failed step makes the runtime `failed` with `<step>: <reason>`; later steps do not
   run, so traffic stays on the live revision. **First-deploy exception:** there is no live revision to keep, so the dark deploy puts the
   latest revision at 100% and it serves before it is probed; a failed probe is still reported `failed`, but nothing protects the traffic.
   The probe target is built only from the dark deploy's FQDN output and the
   runtime's path (a missing or empty FQDN output fails the Probe step without a probe), never from workload data or another node.
-  **Suffix:** `r` + a config part + a salt, 15 characters (Azure's rule: lowercase letters, digits and `-`, starting with a letter; the revision
-  name `<app>--<suffix>` at most 54 characters). The config part is the first 8 hex digits of the SHA-256 of the template content and the
+  **Suffix:** the runtime's `release.suffix`: its `prefix` + a config part + a salt; container-app's is `r` + 8 + 6 hex digits, 15 characters
+  (Azure's rule: lowercase letters, digits and `-`, starting with a letter; the revision name `<app>--<suffix>` at most 54 characters, so the
+  file declares `maxLength: 20` and the catalog refuses parts that exceed it). The config part is the first `configDigits` hex digits of the SHA-256 of the template content and the
   filled runtime parameters (key, value, secret flag, in key order; the suffix and traffic inputs excluded). Azure rejects any template
   change whose suffix names an existing revision, even when the template equals that revision's old one, so the engine reads the previous
-  suffix from the stack (the runtime's `suffixOutput`, which the template echoes like the traffic): if it starts with `r` + this config part,
+  suffix from the stack (the runtime's `suffixOutput`, which the template echoes like the traffic): if it starts with the prefix + this config part,
   it is reused (the same config as the last deploy: a re-run is `unchanged`, and a re-run after a probe failure finds the failed revision
-  and probes and shifts it, creating no other); otherwise (first deploy, changed config or template, a revert) the salt is the first 6 hex
+  and probes and shifts it, creating no other); otherwise (first deploy, changed config or template, a revert) the salt is the first `saltDigits` hex
   digits of the SHA-256 of the previous suffix (of the empty string when there is none), so A to B to A gives A a new suffix and the old
   config is redeployed as a new revision. Residual: a 24-bit salt collision on a config deployed before names an existing revision, and
   Azure rejects it at the dark step. The salt depends only on the previous suffix, so if a dark deploy fails after Azure has created the
