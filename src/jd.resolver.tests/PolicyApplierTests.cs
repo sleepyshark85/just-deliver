@@ -99,7 +99,7 @@ public class PolicyApplierTests
         var result = await ApplyAsync([Policy("pol", "{ template: t/n }", "set: { 'keep.inner': 1 }\n")]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f4.yaml", "set.keep.inner", "cannot create field 'keep.inner' of node 'sqldb/n': a parent on the path is not an object."), (error.File, error.Location, error.Message));
+        Assert.Equal(("f4.yaml", "set['keep.inner']", "cannot create field 'keep.inner' of node 'sqldb/n': a parent on the path is not an object."), (error.File, error.Location, error.Message));
     }
 
     [Fact]
@@ -187,6 +187,18 @@ public class PolicyApplierTests
         Assert.Equal(("runtime", TestCatalog.Probe, TestCatalog.Release), (runtime.Name, runtime.Probe, runtime.Release));
         Assert.Equal(2, Number(runtime.Config["k"]));
         Assert.Equal(new Provenance("f4.yaml", "size", Layer.PolicySet), runtime.Provenance["k"]);
+    }
+
+    // A policy that names no scope is node scope even where it matches without a node: its path is a path in the runtime node's config, not a
+    // workload-scope path that names the runtime node.
+    [Fact]
+    public async Task A_node_scope_policy_matching_only_the_environment_is_not_a_workload_scope_policy()
+    {
+        var result = await ApplyAsync([Policy("everywhere", "{ environmentType: dev }", "set: { runtime.k: 3 }\n")]);
+
+        var runtime = Assert.Single(result.RuntimeNodes);
+        Assert.Equal((1, 3), (Number(runtime.Config["k"]), Number(At(runtime, "runtime.k"))));
+        Assert.Equal(new Provenance("f4.yaml", "everywhere", Layer.PolicySet), runtime.Provenance["runtime.k"]);
     }
 
     // A policy requires, it never adds (docs/architecture/components.md section 3): a workload the policy matches must declare the component.

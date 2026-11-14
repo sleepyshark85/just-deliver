@@ -61,8 +61,8 @@ public sealed class CatalogLoaderTests
         Assert.Equal(("container-app", "runtimes/r.yaml", (TestCatalog.Probe, TestCatalog.Release)), (runtime.Name, runtime.Source, catalog.Rollouts[("container-app", "default")]));
         Assert.Equal("t/runtime", implementation.Nodes["runtime"].Template);
         var policy = Assert.Single(catalog.Policies);
-        Assert.Equal("alpha-db", policy.Require);
-        Assert.True(policy.Set.ContainsKey("runtime.b"));
+        Assert.Equal("alpha-db", policy.Require.Value);
+        Assert.Contains(policy.Set.Entries, entry => entry.Path == "runtime.b");
         Assert.Equal(20, catalog.Naming["thing"].MaxLength);
         Assert.Equal("00000000-0000-0000-0000-000000000001", catalog.Roles["reader"]);
     }
@@ -281,7 +281,7 @@ public sealed class CatalogLoaderTests
     [InlineData("{ kind: runtime, type: sqldb, class: standard, template: t/x, environmentType: dev }", "set: { runtime.a: 1 }", "match", "a 'kind: runtime' policy cannot also match class, template, type.")]
     [InlineData("{ kind: runtime }", "set: { size: 1 }", "set.size", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'size'.")]
     [InlineData("{ kind: runtime }", "default: { size: 1 }", "default.size", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'size'.")]
-    [InlineData("{ kind: runtime }", "set: { runtimes.a: 1 }", "set.runtimes.a", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'runtimes.a'.")]
+    [InlineData("{ kind: runtime }", "set: { runtimes.a: 1 }", "set['runtimes.a']", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'runtimes.a'.")]
     public async Task A_policy_that_fits_neither_scope_is_an_error(string match, string body, string location, string message)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {match}\n{body}\n"));
@@ -302,7 +302,7 @@ public sealed class CatalogLoaderTests
 
     [Theory]
     [InlineData("set:\n  a:\n    b: 1\n  a.b: 2", "set.a", "a.b")]
-    [InlineData("default: { x.y: 1, x.y.z: 2 }", "default.x.y", "x.y.z")]
+    [InlineData("default: { x.y: 1, x.y.z: 2 }", "default['x.y']", "x.y.z")]
     public async Task A_policy_whose_own_paths_overlap_is_an_error(string body, string location, string inner)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {{ template: t/x }}\n{body}\n"));

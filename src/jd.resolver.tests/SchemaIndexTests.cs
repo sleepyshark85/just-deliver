@@ -308,4 +308,19 @@ public sealed class SchemaIndexTests
             [("env.approval", "gate"), ("part", null), ("requirement", "l")],
             index.RolesOf("Thing").Select(field => (field.Role, field.Name)).OrderBy(field => field.Role, StringComparer.Ordinal));
     }
+
+    // A criterion (match) compares with a role; it holds none, so it is no role field of its kind. Criteria keep the schema's order.
+    [Fact]
+    public async Task A_criterion_names_the_role_it_compares_with_in_schema_order_and_is_no_role_field()
+    {
+        var index = await BuildAsync(Planted("doc.json", """
+            "properties": { "kind": { "enum": ["Thing"] },
+              "title": { "x-jd": { "is": "policy.name" } },
+              "zeta": { "x-jd": { "match": "node.template" } },
+              "alpha": { "x-jd": { "match": "env.type" } } }
+            """));
+
+        Assert.Equal([("node.template", "zeta"), ("env.type", "alpha")], index.CriteriaOf("Thing").Select(field => (field.Role, field.Name)));
+        Assert.Equal([("policy.name", "title")], index.RolesOf("Thing").Select(field => (field.Role, field.Name)));
+    }
 }
