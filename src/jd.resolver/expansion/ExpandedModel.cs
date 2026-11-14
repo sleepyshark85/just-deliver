@@ -53,26 +53,30 @@ public enum OwnerKind
     Environment,
 }
 
-/// <param name="Owner">Whether the requirements are a workload's or an environment definition's.</param>
-/// <param name="OwnerFile">The workload's (or definition's) file, where its requirements and variables were written; errors about them name it.</param>
-/// <param name="WorkloadName">The workload's <c>metadata.name</c>, or <c>@</c> and the environment's name; carried on for policy evaluation.</param>
-/// <param name="WorkloadTeam">The workload's <c>metadata.team</c>.</param>
-/// <param name="WorkloadImage">The workload's <c>container.image</c>; null for an environment definition.</param>
-/// <param name="WorkloadPort">The first port of the workload's <c>container.ports</c>, if any.</param>
-/// <param name="Requirements">Requirements that expanded cleanly; a requirement with any error is left out.</param>
-/// <param name="DeclaredTypes">The <c>type</c> of every entry in the owner's <c>requires</c>, including those that failed to expand.</param>
-/// <param name="Runtime">The runtime nodes of a workload; null for an environment definition, and when the runtime failed to expand.</param>
-/// <param name="Errors">Everything that kept a requirement from expanding.</param>
-/// <param name="Parts">An environment run's parts: their exports (name to expression) by part name; empty for a workload.</param>
-public sealed record ExpansionResult(
-    OwnerKind Owner,
-    string OwnerFile,
-    string WorkloadName,
-    string WorkloadTeam,
-    string? WorkloadImage,
-    int? WorkloadPort,
-    IReadOnlyList<ExpandedRequirement> Requirements,
-    IReadOnlySet<string> DeclaredTypes,
-    ExpandedRuntime? Runtime,
-    IReadOnlyList<LoadError> Errors,
-    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts);
+/// <summary>An owner's requirements and runtime expanded, with what kept any of them from expanding.</summary>
+public sealed record ExpansionResult
+{
+    /// <summary>Whether the requirements are a workload's or an environment definition's.</summary>
+    public required OwnerKind Kind { get; init; }
+
+    /// <summary>The workload's (or definition's) file, where its requirements and variables were written; errors about them name it.</summary>
+    public required string OwnerFile { get; init; }
+
+    /// <summary>Who the run belongs to; carried on for policy evaluation.</summary>
+    public required WorkloadOwner Owner { get; init; }
+
+    /// <summary>Requirements that expanded cleanly; a requirement with any error is left out.</summary>
+    public required IReadOnlyList<ExpandedRequirement> Requirements { get; init; }
+
+    /// <summary>The type of every requirement the owner declares, including those that failed to expand.</summary>
+    public required IReadOnlySet<string> DeclaredTypes { get; init; }
+
+    /// <summary>The runtime nodes of a workload; null for an environment definition, and when the runtime failed to expand.</summary>
+    public required ExpandedRuntime? Runtime { get; init; }
+
+    /// <summary>Everything that kept a requirement from expanding.</summary>
+    public required IReadOnlyList<LoadError> Errors { get; init; }
+
+    /// <summary>An environment run's parts: their exports (name to expression) by part name; empty for a workload.</summary>
+    public required IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts { get; init; }
+}

@@ -162,6 +162,29 @@ metadata:
         Assert.Equal(["workload.yaml: container.variables.BAD: '${cosmos-account.id}' is not allowed; a variable may only reference a requirement's output, as ${resource.<id>.<output>}."], result.Errors);
     }
 
+    // Expressions are found by the evaluator's own scanner (ExpressionEvaluator.Expressions): spaces inside the braces are trimmed off the body,
+    // the expression is reported as written, and a '}' inside a quoted literal does not end it.
+    [Fact]
+    public async Task A_variable_is_scanned_as_the_evaluator_scans_it()
+    {
+        var spaced = await ValidateAsync(Workload("  variables:\n    DB: \"${ resource.database.endpoint }\"\n", "  - type: database\n"));
+        var undeclared = await ValidateAsync(Workload("  variables:\n    DB: \"${ resource.missing.endpoint }\"\n", "  - type: database\n"));
+        var quoted = await ValidateAsync(Workload("  variables:\n    DB: \"${name('}')}\"\n", "  - type: database\n"));
+
+        Assert.Empty(spaced.Errors);
+        Assert.Equal(["workload.yaml: container.variables.DB: '${ resource.missing.endpoint }' refers to 'missing', which no requirement declares (declared ids: database)."], undeclared.Errors);
+        Assert.Equal(["workload.yaml: container.variables.DB: '${name('}')}' is not allowed; a variable may only reference a requirement's output, as ${resource.<id>.<output>}."], quoted.Errors);
+    }
+
+    // An expression ends where the scanner says, and the scan resumes after it: a '${…}' inside a quoted literal is part of the one expression, not a second.
+    [Fact]
+    public async Task An_expression_inside_a_quoted_literal_is_not_a_second_expression()
+    {
+        var result = await ValidateAsync(Workload("  variables:\n    DB: \"${name('${cosmos-account.id}')}\"\n", "  - type: database\n"));
+
+        Assert.Equal(["workload.yaml: container.variables.DB: '${name('${cosmos-account.id}')}' is not allowed; a variable may only reference a requirement's output, as ${resource.<id>.<output>}."], result.Errors);
+    }
+
     // Every rule is checked: an id used twice and each bad variable, the ids first, the variables in the order written.
     [Fact]
     public async Task Every_broken_rule_is_reported_in_one_pass()

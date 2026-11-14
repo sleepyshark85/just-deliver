@@ -34,8 +34,7 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
             .SelectMany(n => outputs![n.Id].Where(o => o.Value.Value is not null && !o.Value.IsSecret).Select(o => (Reference: new Reference(ReferenceKind.Node, n.Name, o.Key), o.Value.Value)))
             .ToDictionary(o => o.Reference, o => o.Value!);
         var evaluator = new ExpressionEvaluator(new ExpressionContext(
-            catalog.Roles, catalog.Naming, environment, graph.Workload, graph.WorkloadTeam, Expander.SubstrateScope, graph.Nodes.Select(n => n.Name).ToHashSet(), known,
-            graph.WorkloadImage, graph.WorkloadPort, graph.Parts));
+            catalog.Roles, catalog.Naming, environment, graph.Owner, new ExpressionScope(Expander.SubstrateScope, graph.Nodes.Select(n => n.Name).ToHashSet(), known, graph.Parts)));
         var values = Nest(environment.Values);
         foreach (var (part, exports) in graph.Parts.OrderBy(p => p.Key, StringComparer.Ordinal))
         {

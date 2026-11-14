@@ -113,6 +113,15 @@ public class RuntimeVariablesTests
         Assert.Equal(("reg/app:1", 8080), (graph.WorkloadImage, graph.WorkloadPort));
     }
 
+    // The graph carries the owner its expressions read to the passes after it (ExportValues, the orchestrator, the descriptor composer).
+    [Fact]
+    public async Task The_graph_owner_is_the_workload_as_its_expressions_read_it()
+    {
+        var graph = await ResolveAsync("    STATIC: ${resource.sqldb.endpoint}\n");
+
+        Assert.Equal(new WorkloadOwner("shop", "crew", "reg/app:1", 8080), graph.Owner);
+    }
+
     [Fact]
     public async Task A_variable_that_reads_only_static_exports_adds_no_edge()
     {

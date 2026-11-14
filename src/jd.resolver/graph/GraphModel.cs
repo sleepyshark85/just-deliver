@@ -58,4 +58,8 @@ public sealed record ResolvedGraph(
     IReadOnlyList<GraphNode> Nodes,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, EvalResult>> Exports,
     IReadOnlyList<LoadError> Errors,
-    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts);
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts)
+{
+    /// <summary>Who the graph belongs to, as its expressions read it.</summary>
+    public WorkloadOwner Owner => new(Workload, WorkloadTeam, WorkloadImage, WorkloadPort);
+}

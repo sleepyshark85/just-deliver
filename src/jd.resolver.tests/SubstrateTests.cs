@@ -189,6 +189,17 @@ public class SubstrateTests
     }
 
     [Fact]
+    public async Task A_run_part_whose_name_only_starts_with_a_base_part_name_is_not_refused()
+    {
+        var shared = await SharedDescriptorAsync();
+        var near = shared with { Values = new Dictionary<string, string>(shared.Values) { ["env-groups.name"] = "rg-other" } };
+
+        var errors = Errors(await OfferingAsync("dev", "dev", "container-app", "database", "monitoring"), near, await CatalogAsync());
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
     public async Task A_part_the_base_already_has_is_refused()
     {
         var shared = await SharedDescriptorAsync();
@@ -223,6 +234,17 @@ public class SubstrateTests
         var error = Assert.Single(Errors(await OfferingAsync("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog));
 
         Assert.Equal(("offers[1]", "component 'cache' has no implementations entry for 'dev' and no 'default' entry (keys: stage)."), (error.Location, error.Message));
+    }
+
+    // Only the last layer, where workloads deploy, deploys an offered component's parts; an earlier layer selects none, so a component without an
+    // implementation for its type is no error there.
+    [Fact]
+    public async Task An_earlier_layer_selects_no_implementation_of_an_offered_component()
+    {
+        var catalog = await SeedCatalogWithAsync(("components/cache.yaml",
+            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  stage:\n    classes:\n      standard:\n        nodes: { c: { template: t/c, config: { k: 1 } } }\n        exports: { host: x }\n"));
+
+        Assert.Empty(Errors(await OfferingAsync("shared", "shared", "container-app", "cache"), null, catalog));
     }
 
     // The implementation is selected first and its parts kept by scope after: an exact key without an environment part deploys none, though
@@ -435,6 +457,26 @@ public class SubstrateTests
         var old = await EnvironmentParser.LoadDefinitionAsync(await SourceFiles.ReadAsync(path), CancellationToken.None);
 
         Assert.Contains(old.Errors, e => e.File == path && e.Message.Contains("offers"));
+    }
+
+    // An environment owner has no image (WorkloadOwner.Image is null), so a substrate part cannot read the workload's.
+    [Fact]
+    public async Task A_part_reading_the_workload_image_in_a_substrate_is_an_error()
+    {
+        var files = new[]
+        {
+            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment } }\n",
+            "kind: SharedResource\nname: thing\ndescription: d\nscope: environment\nnodes:\n  a:\n    template: t/a\n    config: { img: '${workload.image}' }\nexports: {}\n",
+            TestCatalog.Component("user", "[out]", "nodes:\n  b:\n    template: t/b\n    config: { k: 1 }\nexports:\n  out: x\n").Replace("exports: [out]\n", "exports: [out]\nuses: [thing]\n"),
+        }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
+        Assert.Empty(loaded.Errors);
+
+        var graph = Resolver.ResolveSubstrate("definition.yaml", loaded.Value!, (await OfferingAsync("dev", "dev", "user")).Over(null), null);
+
+        var error = Assert.Single(graph.Errors);
+        Assert.Equal(("f1.yaml", "nodes.a.config.img"), (error.File, error.Location));
+        Assert.Equal("'workload.image' has no value: workload '@dev' declares no image.", error.Message);
     }
 
     [Fact]
