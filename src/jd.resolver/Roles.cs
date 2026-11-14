@@ -72,6 +72,24 @@ internal static class Roles
     /// <summary>A policy's name; the documents of a kind that binds it are policies.</summary>
     public const string PolicyName = "policy.name";
 
+    /// <summary>Why a policy exists, shown when a workload lacks what it requires.</summary>
+    public const string PolicyReason = "policy.reason";
+
+    /// <summary>A policy's scope: absent for node scope, else the scope it names (<see cref="catalog.Policy.WorkloadScope"/>).</summary>
+    public const string PolicyScope = "policy.scope";
+
+    /// <summary>The runtime a workload-scope policy names; not matched until a workload names its runtime.</summary>
+    public const string PolicyRuntime = "policy.runtime";
+
+    /// <summary>A policy's config paths to values that win over every other layer.</summary>
+    public const string PolicySet = "policy.set";
+
+    /// <summary>A policy's config paths to values that fill only fields no other layer gave.</summary>
+    public const string PolicyDefault = "policy.default";
+
+    /// <summary>The component every workload a workload-scope policy matches must require.</summary>
+    public const string PolicyRequire = "policy.require";
+
     /// <summary>The environment's name, read as <c>${env.name}</c>.</summary>
     public const string EnvironmentName = "env.name";
 

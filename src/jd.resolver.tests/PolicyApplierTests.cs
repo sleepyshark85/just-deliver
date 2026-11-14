@@ -99,8 +99,7 @@ public class PolicyApplierTests
         var result = await ApplyAsync([Policy("pol", "{ template: t/n }", "set: { 'keep.inner': 1 }\n")]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f4.yaml", "set.keep.inner"), (error.File, error.Location));
-        Assert.Contains("not an object", error.Message);
+        Assert.Equal(("f4.yaml", "set['keep.inner']", "cannot create field 'keep.inner' of node 'sqldb/n': a parent on the path is not an object."), (error.File, error.Location, error.Message));
     }
 
     [Fact]
@@ -113,10 +112,7 @@ public class PolicyApplierTests
         ]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Contains("'alpha' (f5.yaml)", error.Message);
-        Assert.Contains("'zeta' (f4.yaml)", error.Message);
-        Assert.Contains("'size'", error.Message);
-        Assert.Equal("f5.yaml", error.File);
+        Assert.Equal(("f5.yaml", "set.size", "policies 'alpha' (f5.yaml) and 'zeta' (f4.yaml) give field 'size' of node 'sqldb/n' different set values."), (error.File, error.Location, error.Message));
     }
 
     [Fact]
@@ -133,7 +129,7 @@ public class PolicyApplierTests
             Policy("aa", "{ template: t/n }", "default: { fresh: 1 }\n"),
         ]);
 
-        Assert.Contains("default values", Assert.Single(differ.Errors).Message);
+        Assert.Equal("policies 'aa' (f4.yaml) and 'bb' (f5.yaml) give field 'fresh' of node 'sqldb/n' different default values.", Assert.Single(differ.Errors).Message);
         Assert.Empty(same.Errors);
         Assert.Equal("aa", Node(same, "n").Provenance["fresh"].Rule);
     }
@@ -191,6 +187,18 @@ public class PolicyApplierTests
         Assert.Equal(("runtime", TestCatalog.Probe, TestCatalog.Release), (runtime.Name, runtime.Probe, runtime.Release));
         Assert.Equal(2, Number(runtime.Config["k"]));
         Assert.Equal(new Provenance("f4.yaml", "size", Layer.PolicySet), runtime.Provenance["k"]);
+    }
+
+    // A policy that names no scope is node scope even where it matches without a node: its path is a path in the runtime node's config, not a
+    // workload-scope path that names the runtime node.
+    [Fact]
+    public async Task A_node_scope_policy_matching_only_the_environment_is_not_a_workload_scope_policy()
+    {
+        var result = await ApplyAsync([Policy("everywhere", "{ environmentType: dev }", "set: { runtime.k: 3 }\n")]);
+
+        var runtime = Assert.Single(result.RuntimeNodes);
+        Assert.Equal((1, 3), (Number(runtime.Config["k"]), Number(At(runtime, "runtime.k"))));
+        Assert.Equal(new Provenance("f4.yaml", "everywhere", Layer.PolicySet), runtime.Provenance["runtime.k"]);
     }
 
     // A policy requires, it never adds (docs/architecture/components.md section 3): a workload the policy matches must declare the component.
@@ -300,9 +308,7 @@ public class PolicyApplierTests
         ]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Contains("'inner' (f5.yaml)", error.Message);
-        Assert.Contains("'outer' (f4.yaml)", error.Message);
-        Assert.Contains("'fresh' and 'fresh.b'", error.Message);
+        Assert.Equal(("f4.yaml", $"{layer}.fresh", $"policies 'outer' (f4.yaml) and 'inner' (f5.yaml) give overlapping {layer} fields 'fresh' and 'fresh.b' of node 'sqldb/n'."), (error.File, error.Location, error.Message));
         Assert.False(Node(result, "n").Config.ContainsKey("fresh"));
     }
 
@@ -316,13 +322,54 @@ public class PolicyApplierTests
         Assert.Equal(Layer.PolicySet, node.Provenance["nested.c"].Layer);
     }
 
-    [Fact]
-    public async Task Evaluation_errors_name_the_policy_file_and_location()
+    // An entry whose path has a dot is located in the bracket form, and a value inside it below that.
+    [Theory]
+    [InlineData("set: { a: '${env.nope}' }", "set.a")]
+    [InlineData("set: { x.y: '${env.nope}' }", "set['x.y']")]
+    [InlineData("default: { x.y: { z: '${env.nope}' } }", "default['x.y'].z")]
+    public async Task Evaluation_errors_name_the_policy_file_and_location(string body, string location)
     {
-        var result = await ApplyAsync([Policy("pol", "{ template: t/n }", "set: { a: '${env.nope}' }\n")]);
+        var result = await ApplyAsync([Policy("pol", "{ template: t/n }", $"{body}\n")]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f4.yaml", "set.a"), (error.File, error.Location));
+        Assert.Equal(("f4.yaml", location), (error.File, error.Location));
+    }
+
+    // A criterion on a role the applier does not supply is a jd bug: the schema declares a match the applier does not know, and a policy using it
+    // would otherwise silently never apply.
+    [Fact]
+    public async Task A_policy_criterion_on_a_role_the_applier_does_not_supply_throws_instead_of_never_applying()
+    {
+        var binder = await PlantedPolicySchema.BinderAsync(("team", "workload.team"));
+        var policy = binder.ReadPolicy(new Document("p.yaml", "Policy", JObject.Parse("""{ "kind": "Policy", "name": "pol", "reason": "r", "match": { "team": "crew" }, "set": { "size": 1 } }""")));
+        var files = BaseFiles.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var catalog = (await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]))).Value! with { Policies = [policy] };
+        var workload = await TestWorkload.ParseAsync("metadata: { name: shop, team: crew }\nrequires:\n  - type: sqldb\n");
+        var expansion = new Expander(catalog, Env()).Expand(workload, "workload.yaml");
+
+        Assert.Throws<KeyNotFoundException>(() => new PolicyApplier(catalog, Env()).Apply(expansion));
+    }
+
+    // A name that only begins with another's (a, ab; k, kk) is not under it: no overlap between policies, and applying k leaves kk's provenance.
+    [Fact]
+    public async Task Policies_whose_paths_only_share_a_name_prefix_do_not_overlap_and_both_apply()
+    {
+        var result = await ApplyAsync([Policy("pol-a", "{ template: t/n }", "set: { a: 1 }\n"), Policy("pol-b", "{ template: t/n }", "set: { ab: 2 }\n")]);
+
+        Assert.Empty(result.Errors);
+        var node = Node(result, "n");
+        Assert.Equal((1, 2), (Number(node.Config["a"]), Number(node.Config["ab"])));
+    }
+
+    [Fact]
+    public async Task Applying_a_default_does_not_take_the_provenance_of_a_field_that_only_begins_with_its_name()
+    {
+        var result = await ApplyAsync([Policy("pol-set", "{ template: t/n }", "set: { kk: 1 }\n"), Policy("pol-default", "{ template: t/n }", "default: { k: 2 }\n")]);
+
+        Assert.Empty(result.Errors);
+        var node = Node(result, "n");
+        Assert.Equal(new Provenance("f4.yaml", "pol-set", Layer.PolicySet), node.Provenance["kk"]);
+        Assert.Equal(new Provenance("f5.yaml", "pol-default", Layer.PolicyDefault), node.Provenance["k"]);
     }
 
     [Fact]

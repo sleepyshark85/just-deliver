@@ -101,6 +101,33 @@ internal sealed class Binder(SchemaIndex index)
         };
     }
 
+    /// <summary>
+    /// The policy <paramref name="document"/> is, by the <c>policy.*</c> roles and the criteria of its kind (<see cref="SchemaIndex.CriteriaOf"/>),
+    /// each criterion with the value the policy compares, if any. Each field and criterion carries its name for messages, and each field and entry
+    /// where it was read.
+    /// </summary>
+    public Policy ReadPolicy(Document document)
+    {
+        var values = ValuesOf(document);
+        PolicyField Field(string role) => new(values.NameOf(role), values.Locate(role), (string?)values.First(role));
+        PolicyEntries EntriesOf(string role) =>
+            new(values.NameOf(role), [.. Entries(values.First(role)).Select(entry => new PolicyEntry(entry.Name, entry.Value, entry.Value.Path))]);
+        return new Policy
+        {
+            Source = document.Source,
+            Name = Text(values.First(Roles.PolicyName)),
+            Reason = Text(values.First(Roles.PolicyReason)),
+            Scope = Field(Roles.PolicyScope),
+            Runtime = Field(Roles.PolicyRuntime),
+            Criteria = [.. index.CriteriaOf(document.Kind).Select(criterion =>
+                new Criterion(criterion.Role, criterion.Name ?? string.Empty, (string?)document.Body.SelectToken(criterion.Path)))],
+            CriteriaLocation = values.First(Roles.PolicyScope) is { } scope ? Holder(scope).Path : string.Empty,
+            Set = EntriesOf(Roles.PolicySet),
+            Default = EntriesOf(Roles.PolicyDefault),
+            Require = Field(Roles.PolicyRequire),
+        };
+    }
+
     /// <summary>The value of <paramref name="role"/> held at the root of <paramref name="document"/>, for a rule on its raw shape; null when it holds none.</summary>
     public JToken? ReadValue(Document document, string role) => ValuesOf(document).Nearest(role, document.Body);
 
@@ -216,6 +243,7 @@ internal sealed class Binder(SchemaIndex index)
         // Where the list holding a role on a list's items was read; for a document that holds none of its items, the list's property.
         public string LocateList(string role) => First(role)?.Parent?.Path ?? NameOf(role);
 
-        private string NameOf(string role) => roles.Where(field => field.Role == role).Select(field => field.Name).FirstOrDefault() ?? string.Empty;
+        // The property the role's field ends in, as errors name it (empty when none).
+        public string NameOf(string role) => roles.Where(field => field.Role == role).Select(field => field.Name).FirstOrDefault() ?? string.Empty;
     }
 }

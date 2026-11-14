@@ -63,10 +63,28 @@ public sealed class BinderTests
         }
         """;
 
+    // The policy roles and two criteria on fields of its own names, the scope and the runtime beside the criteria.
+    private const string Rule = """
+        "properties": {
+          "kind": { "enum": ["Rule"] },
+          "title": { "type": "string", "x-jd": { "is": "policy.name" } },
+          "why": { "type": "string", "x-jd": { "is": "policy.reason" } },
+          "when": { "type": "object", "properties": {
+            "tpl": { "type": "string", "x-jd": { "match": "node.template" } },
+            "stage": { "type": "string", "x-jd": { "match": "env.type" } },
+            "level": { "type": "string", "x-jd": { "is": "policy.scope" } },
+            "engine": { "type": "string", "x-jd": { "is": "policy.runtime" } } } },
+          "force": { "type": "object", "x-jd": { "is": "policy.set" } },
+          "fill": { "type": "object", "x-jd": { "is": "policy.default" } },
+          "needs": { "type": "string", "x-jd": { "is": "policy.require" } }
+        }
+        """;
+
     private static async Task<Binder> BinderAsync() => new(await SchemaIndex.BuildAsync([
         Shipped("x-jd.schema.json"), Shipped("catalog/part.schema.json"), ("gizmo.json", $$"""{ "$id": "https://test/gizmo.json", {{Gizmo}} }"""),
         ("ledger.json", $$"""{ "$id": "https://test/ledger.json", {{Ledger}} }"""),
         ("errand.json", $$"""{ "$id": "https://test/errand.json", {{Errand}} }"""),
+        ("rule.json", $$"""{ "$id": "https://test/rule.json", {{Rule}} }"""),
         ("plain.json", """{ "$id": "https://test/plain.json", "properties": { "kind": { "enum": ["Plain"] } } }"""),
     ]));
 
@@ -214,5 +232,45 @@ public sealed class BinderTests
         Assert.Empty(workload.Variables);
         Assert.Empty(workload.Requirements);
         Assert.Equal("settings", workload.VariablesLocation);
+    }
+
+    // Each criterion of the kind is bound, with no value when the policy gives none; the criteria are located at the object holding the scope;
+    // each entry where it is, a dotted path in the bracket form.
+    [Fact]
+    public async Task A_planted_kind_binds_the_policy_roles_and_criteria_on_fields_of_its_own_names()
+    {
+        var document = new Document("r.yaml", "Rule", JObject.Parse("""
+            { "kind": "Rule", "title": "pin", "why": "because", "when": { "tpl": "t/x", "level": "runtime", "engine": "ca" },
+              "force": { "a.b": 1, "c": 2 }, "needs": "sqldb" }
+            """));
+
+        var policy = (await BinderAsync()).ReadPolicy(document);
+
+        Assert.Equal(("r.yaml", "pin", "because"), (policy.Source, policy.Name, policy.Reason));
+        Assert.Equal(new PolicyField("level", "when.level", "runtime"), policy.Scope);
+        Assert.Equal(new PolicyField("engine", "when.engine", "ca"), policy.Runtime);
+        Assert.Equal(new PolicyField("needs", "needs", "sqldb"), policy.Require);
+        Assert.Equal([new Criterion("node.template", "tpl", "t/x"), new Criterion("env.type", "stage", null)], policy.Criteria);
+        Assert.Equal("when", policy.CriteriaLocation);
+        Assert.Equal("force", policy.Set.Name);
+        Assert.Equal([("a.b", 1, "force['a.b']"), ("c", 2, "force.c")], policy.Set.Entries.Select(entry => (entry.Path, (int)entry.Value, entry.Location)));
+        Assert.Equal(("fill", 0), (policy.Default.Name, policy.Default.Entries.Count));
+    }
+
+    // A field the policy leaves out has no value and is located by its name, as messages name it; without a scope the criteria have no location.
+    [Fact]
+    public async Task A_policy_that_leaves_out_its_optional_fields_binds_them_without_values_located_by_name()
+    {
+        var document = new Document("r.yaml", "Rule", JObject.Parse("""{ "kind": "Rule", "title": "pin", "why": "because", "when": { "stage": "dev" }, "fill": { "x": 1 } }"""));
+
+        var policy = (await BinderAsync()).ReadPolicy(document);
+
+        Assert.Equal(
+            [new PolicyField("level", "level", null), new PolicyField("engine", "engine", null), new PolicyField("needs", "needs", null)],
+            [policy.Scope, policy.Runtime, policy.Require]);
+        Assert.Equal([new Criterion("node.template", "tpl", null), new Criterion("env.type", "stage", "dev")], policy.Criteria);
+        Assert.Equal(string.Empty, policy.CriteriaLocation);
+        Assert.Equal(("force", 0), (policy.Set.Name, policy.Set.Entries.Count));
+        Assert.Equal([("x", "fill.x")], policy.Default.Entries.Select(entry => (entry.Path, entry.Location)));
     }
 }

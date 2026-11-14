@@ -14,7 +14,7 @@ namespace jd.resolver;
 /// twice, or a reference to no schema is a mistake in jd, not in a user's file: building throws <see cref="InvalidOperationException"/>. Per kind,
 /// the index also keeps the fields its <c>x-jd</c> annotations name: those that define names, those that refer to them, and whether the kind has
 /// exactly one document (<see cref="NamesOf"/>); the fields that hold a role, with the <c>select</c> maps enclosing each (<see cref="RolesOf"/>);
-/// and the <see cref="Layers"/>.
+/// the criteria, fields compared with a role (<see cref="CriteriaOf"/>); and the <see cref="Layers"/>.
 /// </summary>
 internal sealed class SchemaIndex
 {
@@ -28,6 +28,7 @@ internal sealed class SchemaIndex
     private const string IsKeyword = "is";
     private const string SelectKeyword = "select";
     private const string ScopeKeyword = "scope";
+    private const string MatchKeyword = "match";
     private const string MetaSchemaName = $"schemas/{Annotation}.schema.json";
 
     // Binding completeness (documents.md section 4): what a kind that binds the key role binds too, since a security boundary reads it: the nodes
@@ -46,6 +47,7 @@ internal sealed class SchemaIndex
     private readonly Dictionary<string, string> _schemaNames;
     private readonly Dictionary<string, KindNames> _names;
     private readonly Dictionary<string, List<RoleField>> _roles;
+    private readonly Dictionary<string, List<RoleField>> _criteria;
 
     private SchemaIndex(Dictionary<string, (string Name, JsonSchema Schema)> declared)
     {
@@ -55,7 +57,8 @@ internal sealed class SchemaIndex
         var fields = byKind.ToDictionary(entry => entry.Key, entry => Fields(entry.Value));
         var selects = fields.ToDictionary(entry => entry.Key, entry => Selects(entry.Value));
         _names = byKind.ToDictionary(entry => entry.Key, entry => Annotated(entry.Value, fields[entry.Key], selects[entry.Key]));
-        _roles = fields.ToDictionary(entry => entry.Key, entry => RoleFields(entry.Value, selects[entry.Key]));
+        _roles = fields.ToDictionary(entry => entry.Key, entry => RoleFields(entry.Value, selects[entry.Key], IsKeyword));
+        _criteria = fields.ToDictionary(entry => entry.Key, entry => RoleFields(entry.Value, selects[entry.Key], MatchKeyword));
         Layers = fields.Values.SelectMany(kind => kind).Where(field => Keyword(field.Schema, IsKeyword) is Roles.Layer)
             .Select(field => field.Schema.Enumeration.OfType<string>().ToList()).FirstOrDefault() ?? [];
     }
@@ -72,6 +75,9 @@ internal sealed class SchemaIndex
 
     /// <summary>The fields of <paramref name="kind"/>, which must be one the schemas declare, that hold a role (<c>is</c>).</summary>
     public IReadOnlyList<RoleField> RolesOf(string kind) => _roles[kind];
+
+    /// <summary>The criteria of <paramref name="kind"/>, which must be one the schemas declare: the fields that hold a value to compare with a role's (<c>match</c>), in schema order.</summary>
+    public IReadOnlyList<RoleField> CriteriaOf(string kind) => _criteria[kind];
 
     /// <summary>The layers, in deploy order: the <c>enum</c> of the subschema that holds the <see cref="Roles.Layer"/> role.</summary>
     public IReadOnlyList<string> Layers { get; }
@@ -221,10 +227,10 @@ internal sealed class SchemaIndex
         return selects;
     }
 
-    // Each role once per path, with what every subschema at that path says: the scope, the default, the select maps whose entries the path
-    // is in, outermost first, and the property it ends in.
-    private static List<RoleField> RoleFields(List<Field> fields, List<SelectField> selects) =>
-        fields.GroupBy(field => field.Path).SelectMany(at => at.Select(field => Keyword(field.Schema, IsKeyword)).OfType<string>().Distinct().Select(role => new RoleField(
+    // Each role the keyword (is or match) names, once per path, with what every subschema at that path says: the scope, the default, the select
+    // maps whose entries the path is in, outermost first, and the property it ends in.
+    private static List<RoleField> RoleFields(List<Field> fields, List<SelectField> selects, string keyword) =>
+        fields.GroupBy(field => field.Path).SelectMany(at => at.Select(field => Keyword(field.Schema, keyword)).OfType<string>().Distinct().Select(role => new RoleField(
             role,
             at.Key,
             at.Select(field => Keyword(field.Schema, ScopeKeyword)).OfType<string>().FirstOrDefault(),

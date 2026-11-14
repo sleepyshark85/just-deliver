@@ -290,22 +290,18 @@ public class RuntimeVariablesTests
             [WorkloadPolicy("alpha", "set: { runtime.variables.X: one }\n"), WorkloadPolicy("zeta", "set: { runtime.variables.X: two }\n")]);
 
         var error = Assert.Single(graph.Errors);
-        Assert.Contains("'alpha'", error.Message);
-        Assert.Contains("'zeta'", error.Message);
-        Assert.Contains("'runtime.variables.X'", error.Message);
-        Assert.Equal("set.runtime.variables.X", error.Location);
+        Assert.Equal(("set['runtime.variables.X']", "policies 'alpha' (f4.yaml) and 'zeta' (f5.yaml) give field 'runtime.variables.X' of node 'runtime' different set values."), (error.Location, error.Message));
     }
 
     [Theory]
-    [InlineData("set: { runtime.variables: x }\n", "set.runtime.variables")]
-    [InlineData("default: { runtime.variables: x }\n", "default.runtime.variables")]
+    [InlineData("set: { runtime.variables: x }\n", "set['runtime.variables']")]
+    [InlineData("default: { runtime.variables: x }\n", "default['runtime.variables']")]
     public async Task A_policy_cannot_give_the_whole_variables_field_but_its_keys_are_fine(string body, string location)
     {
         var graph = await ResolveAsync("    A: a\n", [WorkloadPolicy("whole", body)]);
 
         var error = Assert.Single(graph.Errors);
-        Assert.Equal(location, error.Location);
-        Assert.Contains("give its keys", error.Message);
+        Assert.Equal((location, "policy 'whole' gives 'runtime.variables' of node 'runtime': it is the list built from a map of entries; give its keys instead."), (error.Location, error.Message));
     }
 
     [Fact]
@@ -314,8 +310,7 @@ public class RuntimeVariablesTests
         var graph = await ResolveAsync("    A: a\n", [WorkloadPolicy("deep", "set: { runtime.variables.NEW.deep: x }\n")]);
 
         var error = Assert.Single(graph.Errors);
-        Assert.Equal("set.runtime.variables.NEW.deep", error.Location);
-        Assert.Contains("a single value", error.Message);
+        Assert.Equal(("set['runtime.variables.NEW.deep']", "policy 'deep' gives 'runtime.variables.NEW.deep' of node 'runtime': an entry is a single value; give a key of the entries, not a path below it."), (error.Location, error.Message));
     }
 
     [Theory]
@@ -354,8 +349,7 @@ public class RuntimeVariablesTests
         var graph = await ResolveAsync("    A: a\n", [WorkloadPolicy("pol", $"{layer}: {{ runtime.variables.NEW: {value} }}\n")]);
 
         var error = Assert.Single(graph.Errors);
-        Assert.Equal($"{layer}.runtime.variables.NEW", error.Location);
-        Assert.Contains("an entry is a string", error.Message);
+        Assert.Equal(($"{layer}['runtime.variables.NEW']", "policy 'pol' gives 'runtime.variables.NEW' of node 'runtime': an entry is a string."), (error.Location, error.Message));
     }
 
     [Fact]
