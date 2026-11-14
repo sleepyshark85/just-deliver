@@ -23,6 +23,11 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
 
     private sealed record Draft(string Id, string Scope, string Stack, ResolvedNode Node, List<string> DependsOn);
 
+    // What every node's analysis shares: the node ids by scope and name, the typed requirements' exports, the workload's runtime node (null
+    // for an environment definition, which has none) and where the errors go.
+    private sealed record BuildContext(
+        Dictionary<(string Scope, string Name), string> Ids, Dictionary<string, IReadOnlyDictionary<string, EvalResult>> Exports, string? RuntimeId, List<LoadError> Errors);
+
     /// <summary>The graph of <paramref name="policy"/>'s nodes; its errors are the policy result's and those the build finds (references, cycles, grant targets).</summary>
     public ResolvedGraph Build(PolicyResult policy)
     {
@@ -47,9 +52,9 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
             .ToList();
 
         var runtimeId = entries.Where(e => e.Scope == WorkloadScope && e.Node.Name == ExpressionEvaluator.RuntimeNode).Select(e => e.Id).FirstOrDefault();
-        var ids = entries.ToDictionary(e => (e.Scope, e.Node.Name), e => e.Id);
+        var context = new BuildContext(entries.ToDictionary(e => (e.Scope, e.Node.Name), e => e.Id), exports, runtimeId, errors);
         var drafts = entries
-            .Select(e => Analyse(e.Scope, e.Node, e.Id, ids, exports, runtimeId, errors))
+            .Select(e => Analyse(e.Scope, e.Node, e.Id, context))
             .ToDictionary(d => d.Id);
         var phases = new Dictionary<string, Phase>();
         var nodes = new List<GraphNode>();
@@ -72,15 +77,12 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
     private static string Stack(string id) => id.Replace('/', '.').Replace('@', '_');
 
     // Finds a node's dependencies from its pending references and, for a grant, checks its target.
-    // runtimeId is the workload's runtime node, or null for an environment definition, which has none.
-    private Draft Analyse(
-        string scope, ResolvedNode node, string id, Dictionary<(string Scope, string Name), string> ids,
-        Dictionary<string, IReadOnlyDictionary<string, EvalResult>> exports, string? runtimeId, List<LoadError> errors)
+    private Draft Analyse(string scope, ResolvedNode node, string id, BuildContext context)
     {
         var dependsOn = new SortedSet<string>(StringComparer.Ordinal);
         if (node.Kind == NodeKind.Grant)
         {
-            CheckGrantTarget(node, id, errors);
+            CheckGrantTarget(node, id, context.Errors);
         }
 
         foreach (var (field, text) in Texts(new ConfigObject(node.Config), string.Empty))
@@ -89,7 +91,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
             var origin = node.Provenance.GetValueOrDefault(field);
             // A workload entry's provenance key is <field>.<NAME> (the config walk makes it so), hence the dot.
             var location = origin?.Layer == Layer.Workload && field.IndexOf('.') is var dot and > 0 ? origin.Rule + field[dot..] : field;
-            void Fail(string message) => errors.Add(new LoadError(origin?.Source ?? id, location, $"node '{id}': {message}"));
+            void Fail(string message) => context.Errors.Add(new LoadError(origin?.Source ?? id, location, $"node '{id}': {message}"));
 
             foreach (var reference in (text.Result as Pending)?.References ?? (IEnumerable<Reference>)[])
             {
@@ -101,24 +103,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
                 }
                 else if (reference.Kind == ReferenceKind.Resource)
                 {
-                    // The export waits on the nodes of its requirement, so this node does too.
-                    if (!exports.TryGetValue(reference.Target, out var requirementExports) || !requirementExports.TryGetValue(reference.Output, out var export))
-                    {
-                        Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which is not an export of a requirement of this workload.");
-                        continue;
-                    }
-
-                    foreach (var inner in (export as Pending)?.References.Where(r => r.Kind == ReferenceKind.Node) ?? [])
-                    {
-                        if (inner.Target == ExpressionEvaluator.RuntimeNode)
-                        {
-                            Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which waits on the runtime; the runtime cannot read an export that waits on the runtime.");
-                        }
-                        else
-                        {
-                            AddDependency(inner, reference.Target, field, Fail);
-                        }
-                    }
+                    FollowExport(reference, field, context.Exports, Fail, inner => AddDependency(inner, reference.Target, field, Fail));
                 }
                 else
                 {
@@ -132,16 +117,16 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
         {
             if (reference.Target == ExpressionEvaluator.RuntimeNode)
             {
-                if (runtimeId is null)
+                if (context.RuntimeId is null)
                 {
                     fail($"field '{field}' references runtime.{reference.Output}, but there is no runtime.");
                 }
                 else
                 {
-                    dependsOn.Add(runtimeId);
+                    dependsOn.Add(context.RuntimeId);
                 }
             }
-            else if (ids.TryGetValue((inScope, reference.Target), out var target))
+            else if (context.Ids.TryGetValue((inScope, reference.Target), out var target))
             {
                 dependsOn.Add(target);
             }
@@ -153,6 +138,30 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
         }
 
         return new Draft(id, scope, Stack(id), node, dependsOn.ToList());
+    }
+
+    // A reference to a requirement's export: the export waits on the nodes of its requirement, so the node does too (dependOn, given the
+    // export's node reference); one that waits on the runtime is refused, as the runtime cannot read it.
+    private static void FollowExport(
+        Reference reference, string field, Dictionary<string, IReadOnlyDictionary<string, EvalResult>> exports, Action<string> fail, Action<Reference> dependOn)
+    {
+        if (!exports.TryGetValue(reference.Target, out var requirementExports) || !requirementExports.TryGetValue(reference.Output, out var export))
+        {
+            fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which is not an export of a requirement of this workload.");
+            return;
+        }
+
+        foreach (var inner in (export as Pending)?.References.Where(r => r.Kind == ReferenceKind.Node) ?? [])
+        {
+            if (inner.Target == ExpressionEvaluator.RuntimeNode)
+            {
+                fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which waits on the runtime; the runtime cannot read an export that waits on the runtime.");
+            }
+            else
+            {
+                dependOn(inner);
+            }
+        }
     }
 
     // After policies, a grant's target is still one pending reference to a node of its own scope or the runtime, and nothing else: the

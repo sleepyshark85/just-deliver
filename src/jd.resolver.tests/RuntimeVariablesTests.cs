@@ -201,14 +201,14 @@ public class RuntimeVariablesTests
         var files = new[]
         {
             "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
-            TestCatalog.Component("sqldb", "[endpoint, dyn, lit, quoted, apostrophes, fine]", "nodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.region, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n"
-                + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.region} isn't\"\n"),
+            TestCatalog.Component("sqldb", "[endpoint, dyn, lit, quoted, apostrophes, fine, db.url]", "nodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.region, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n"
+                + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.region} isn't\"\n  db.url: ${resource.other.x}\n"),
         };
 
         var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)))]));
 
         Assert.Equal(
-            new[] { "apostrophes", "dyn", "endpoint", "quoted" }.Select(e => ("f1.yaml", $"{TestCatalog.PartPath}.exports.{e}")),
+            new[] { ".apostrophes", ".dyn", ".endpoint", ".quoted", "['db.url']" }.Select(e => ("f1.yaml", $"{TestCatalog.PartPath}.exports{e}")),
             loaded.Errors.Select(e => (e.File, e.Location)).Order());
         Assert.All(loaded.Errors, e => Assert.Contains("an export cannot reference ${resource.<id>.<export>}", e.Message));
     }

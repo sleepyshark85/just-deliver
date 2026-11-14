@@ -127,17 +127,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         var isDefault = layer == Layer.PolicyDefault;
         var field = isDefault ? "default" : "set";
 
-        // A path that is a strict prefix of another policy's path would make one policy's value depend on application order.
-        var overlapping = new HashSet<string>();
-        foreach (var outer in all)
-        {
-            foreach (var inner in all.Where(i => i.Policy.Name != outer.Policy.Name && i.Path.StartsWith(outer.Path + PathSeparator, StringComparison.Ordinal)))
-            {
-                errors.Add(new LoadError(outer.Policy.Source, $"{field}.{outer.Shown}",
-                    $"policies '{outer.Policy.Name}' ({outer.Policy.Source}) and '{inner.Policy.Name}' ({inner.Policy.Source}) give overlapping {field} fields '{outer.Shown}' and '{inner.Shown}' of node '{label}'."));
-                overlapping.UnionWith([outer.Path, inner.Path]);
-            }
-        }
+        var overlapping = ReportOverlaps(all, field, run);
 
         var byPath = all.Where(e => !overlapping.Contains(e.Path)).GroupBy(e => e.Path).OrderBy(g => g.Key, StringComparer.Ordinal);
         foreach (var group in byPath)
@@ -183,6 +173,24 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         }
 
         return config;
+    }
+
+    // A path that is a strict prefix of another policy's path would make one policy's value depend on application order: every such pair is
+    // reported, and the paths they involve are returned, for the caller to leave out.
+    private static HashSet<string> ReportOverlaps(List<PolicyEntry> all, string field, NodeRun run)
+    {
+        var overlapping = new HashSet<string>();
+        foreach (var outer in all)
+        {
+            foreach (var inner in all.Where(i => i.Policy.Name != outer.Policy.Name && i.Path.StartsWith(outer.Path + PathSeparator, StringComparison.Ordinal)))
+            {
+                run.Errors.Add(new LoadError(outer.Policy.Source, $"{field}.{outer.Shown}",
+                    $"policies '{outer.Policy.Name}' ({outer.Policy.Source}) and '{inner.Policy.Name}' ({inner.Policy.Source}) give overlapping {field} fields '{outer.Shown}' and '{inner.Shown}' of node '{run.Label}'."));
+                overlapping.UnionWith([outer.Path, inner.Path]);
+            }
+        }
+
+        return overlapping;
     }
 
     // An entries field (the workload's variables) takes one key per name, each a string (an expression string is fine): not the field as a whole,
