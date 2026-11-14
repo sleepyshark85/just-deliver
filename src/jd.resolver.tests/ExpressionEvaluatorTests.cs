@@ -360,4 +360,13 @@ public class ExpressionEvaluatorTests
 
         Assert.NotEqual(first, second);
     }
+
+    // What an expression reads is found by the evaluator's own rules: a '${…}' inside a quoted literal is text, and a call without its closing ')' reads nothing.
+    [Fact]
+    public void An_expression_inside_a_quoted_literal_is_not_read_and_a_call_without_its_closing_parenthesis_reads_no_path()
+    {
+        Assert.False(ExpressionEvaluator.ReadsResource("${name('${resource.db.x}')}"));
+        Assert.True(ExpressionEvaluator.ReadsResource("${name(resource.db.x)}"));
+        Assert.Empty(ExpressionEvaluator.Paths("${name(resource.db.endpoint}"));
+    }
 }

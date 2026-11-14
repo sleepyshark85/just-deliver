@@ -327,7 +327,7 @@ collected by `Expander.ExpandEnvironment` into one scope `substrate` (`Expander.
 `Resolver.ResolveSubstrate(definition, file, catalog, environment, base)` is the one entry point. The owner is the definition, with
 the name `@<name>` (a workload name cannot start with `@`) in node ids, stacks and `name()` hashes: ids `@dev/dev/substrate/group`,
 stacks `_dev.dev.substrate.group`, so a workload named like the environment, with a requirement `substrate`, shares nothing with the
-substrate and a workload deploy never touches it ([ADR 0006](../decisions/0006-infra-deployed-with-app.md)). `ExpansionResult.Owner` records the owner kind
+substrate and a workload deploy never touches it ([ADR 0006](../decisions/0006-infra-deployed-with-app.md)). `ExpansionResult.Kind` records the owner kind
 (`Workload` or `Environment`); an environment owner has no runtime, so workload-scope policies do not apply. In a substrate
 part `${workload.name}` therefore evaluates to `@<name>`; the `{workload}` naming placeholder drops the `@` through `allowed`. Its team is empty
 (`${workload.team}` is empty). The `environment` is `definition.Over(base)`: the definition's name, region and type, and the **base descriptor's

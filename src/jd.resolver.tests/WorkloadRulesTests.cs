@@ -176,6 +176,15 @@ metadata:
         Assert.Equal(["workload.yaml: container.variables.DB: '${name('}')}' is not allowed; a variable may only reference a requirement's output, as ${resource.<id>.<output>}."], quoted.Errors);
     }
 
+    // An expression ends where the scanner says, and the scan resumes after it: a '${…}' inside a quoted literal is part of the one expression, not a second.
+    [Fact]
+    public async Task An_expression_inside_a_quoted_literal_is_not_a_second_expression()
+    {
+        var result = await ValidateAsync(Workload("  variables:\n    DB: \"${name('${cosmos-account.id}')}\"\n", "  - type: database\n"));
+
+        Assert.Equal(["workload.yaml: container.variables.DB: '${name('${cosmos-account.id}')}' is not allowed; a variable may only reference a requirement's output, as ${resource.<id>.<output>}."], result.Errors);
+    }
+
     // Every rule is checked: an id used twice and each bad variable, the ids first, the variables in the order written.
     [Fact]
     public async Task Every_broken_rule_is_reported_in_one_pass()
