@@ -43,7 +43,7 @@ public class ExpressionEvaluatorTests
         string? image = null,
         int? port = null,
         Dictionary<string, IReadOnlyDictionary<string, string>>? parts = null) =>
-        new(roles ?? Roles, naming ?? Naming, Env, workload, "team-a", id, new HashSet<string> { "database", "container" }, known ?? [], image, port, parts ?? []);
+        new(roles ?? Roles, naming ?? Naming, Env, new WorkloadOwner(workload, "team-a", image, port), new ExpressionScope(id, new HashSet<string> { "database", "container" }, known ?? [], parts ?? []));
 
     // An environment run's parts (docs/architecture/components.md section 2): 'account' reads 'group' in place, 'database' (also a node) reads its node.
     private static readonly Dictionary<string, IReadOnlyDictionary<string, string>> RunParts = new()
@@ -334,7 +334,9 @@ public class ExpressionEvaluatorTests
             .Append(sampleEndpoint)
             .ToList();
 
-        var evaluator = new ExpressionEvaluator(new ExpressionContext(catalog.Roles, catalog.Naming, Env, "shop", "team-a", "db", nodeNames, new Dictionary<Reference, string>(), "registry.example/app:1", 8080, new Dictionary<string, IReadOnlyDictionary<string, string>>()));
+        var evaluator = new ExpressionEvaluator(new ExpressionContext(
+            catalog.Roles, catalog.Naming, Env, new WorkloadOwner("shop", "team-a", "registry.example/app:1", 8080),
+            new ExpressionScope("db", nodeNames, new Dictionary<Reference, string>(), new Dictionary<string, IReadOnlyDictionary<string, string>>())));
         var errors = new List<LoadError>();
         var results = strings.Select(s => evaluator.Evaluate(s, "seed", "", errors)).ToList();
 

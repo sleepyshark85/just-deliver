@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using jd.resolver.expressions;
 
 namespace jd.resolver.workload;
@@ -8,12 +7,8 @@ namespace jd.resolver.workload;
 /// a variable, workload input crossing into the platform, reads only a requirement's export, as <c>${resource.&lt;id&gt;.&lt;export&gt;}</c>
 /// (boundary 6).
 /// </summary>
-internal static partial class WorkloadRules
+internal static class WorkloadRules
 {
-    // Any expression, with its body captured; only ${resource.<id>.<output>} is allowed in a variable.
-    [GeneratedRegex(@"\$\{([^}]*)\}")]
-    private static partial Regex ExpressionRegex();
-
     private const string ResourcePrefix = ExpressionEvaluator.ResourceNamespace + ".";
 
     /// <summary>Every rule <paramref name="workload"/> breaks, each where it is broken in <paramref name="file"/>; empty when it keeps them all.</summary>
@@ -25,32 +20,31 @@ internal static partial class WorkloadRules
             string.Join(", ", id.Select(requirement => requirement.Location)),
             $"the id '{id.Key}' is used more than once (a requirement without an id uses its type as id). Set distinct 'id's."));
         var ids = declared.Select(id => id.Key).ToList();
-        var references = workload.Variables.SelectMany(variable => ExpressionRegex().Matches(variable.Value)
-            .Select(reference => CheckReference(reference, ids))
+        var references = workload.Variables.SelectMany(variable => ExpressionEvaluator.Expressions(variable.Value)
+            .Select(expression => CheckReference(expression, ids))
             .OfType<string>()
             .Select(message => new LoadError(file, $"{workload.VariablesLocation}.{variable.Key}", message)));
         return [.. duplicates, .. references];
     }
 
-    // What is wrong with one reference in a variable; null when it reads a declared requirement's export.
-    private static string? CheckReference(Match reference, List<string> ids)
+    // What is wrong with one expression in a variable; null when it reads a declared requirement's export, the only expression allowed there.
+    private static string? CheckReference((string Written, string Body) reference, List<string> ids)
     {
-        var expression = reference.Groups[1].Value.Trim();
-        if (!expression.StartsWith(ResourcePrefix, StringComparison.Ordinal))
+        if (!reference.Body.StartsWith(ResourcePrefix, StringComparison.Ordinal))
         {
-            return $"'{reference.Value}' is not allowed; a variable may only reference a requirement's output, as ${{resource.<id>.<output>}}.";
+            return $"'{reference.Written}' is not allowed; a variable may only reference a requirement's output, as ${{resource.<id>.<output>}}.";
         }
 
-        var body = expression[ResourcePrefix.Length..];
+        var body = reference.Body[ResourcePrefix.Length..];
         var separator = body.IndexOf('.');
         if (separator <= 0 || separator == body.Length - 1)
         {
-            return $"'{reference.Value}' must have the form ${{resource.<id>.<output>}}.";
+            return $"'{reference.Written}' must have the form ${{resource.<id>.<output>}}.";
         }
 
         var id = body[..separator];
         return ids.Contains(id)
             ? null
-            : $"'{reference.Value}' refers to '{id}', which no requirement declares (declared ids: {(ids.Count == 0 ? "none" : string.Join(", ", ids))}).";
+            : $"'{reference.Written}' refers to '{id}', which no requirement declares (declared ids: {(ids.Count == 0 ? "none" : string.Join(", ", ids))}).";
     }
 }

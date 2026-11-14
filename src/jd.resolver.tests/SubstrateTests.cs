@@ -225,6 +225,17 @@ public class SubstrateTests
         Assert.Equal(("offers[1]", "component 'cache' has no implementations entry for 'dev' and no 'default' entry (keys: stage)."), (error.Location, error.Message));
     }
 
+    // Only the last layer, where workloads deploy, deploys an offered component's parts; an earlier layer selects none, so a component without an
+    // implementation for its type is no error there.
+    [Fact]
+    public async Task An_earlier_layer_selects_no_implementation_of_an_offered_component()
+    {
+        var catalog = await SeedCatalogWithAsync(("components/cache.yaml",
+            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  stage:\n    classes:\n      standard:\n        nodes: { c: { template: t/c, config: { k: 1 } } }\n        exports: { host: x }\n"));
+
+        Assert.Empty(Errors(await OfferingAsync("shared", "shared", "container-app", "cache"), null, catalog));
+    }
+
     // The implementation is selected first and its parts kept by scope after: an exact key without an environment part deploys none, though
     // the fallback has one; with no exact key the fallback's is deployed.
     [Theory]

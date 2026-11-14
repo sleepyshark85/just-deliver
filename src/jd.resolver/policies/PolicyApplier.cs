@@ -28,8 +28,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         // A requirement the expansion dropped is not in the result, so its errors must carry through.
         var errors = new List<LoadError>(expansion.Errors);
         ExpressionEvaluator EvaluatorFor(string currentId, IEnumerable<string> nodeNames) => new(new ExpressionContext(
-            catalog.Roles, catalog.Naming, environment, expansion.WorkloadName, expansion.WorkloadTeam, currentId, nodeNames.ToHashSet(), new Dictionary<Reference, string>(),
-            expansion.WorkloadImage, expansion.WorkloadPort, expansion.Parts));
+            catalog.Roles, catalog.Naming, environment, expansion.Owner, new ExpressionScope(currentId, nodeNames.ToHashSet(), new Dictionary<Reference, string>(), expansion.Parts)));
 
         var requirements = new List<ResolvedRequirement>();
         foreach (var requirement in expansion.Requirements)
@@ -44,7 +43,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             requirements.Add(new ResolvedRequirement(requirement.Id, requirement.Type, requirement.Class, requirement.Source, requirement.Exports, nodes));
         }
 
-        var workloadPolicies = _policies.Where(p => expansion.Owner == OwnerKind.Workload && IsWorkloadScope(p)).ToList();
+        var workloadPolicies = _policies.Where(p => expansion.Kind == OwnerKind.Workload && IsWorkloadScope(p)).ToList();
 
         // A declared requirement that failed to expand still counts; its own error says why.
         foreach (var policy in workloadPolicies.Where(p => p.Require is { } type && !expansion.DeclaredTypes.Contains(type)))
@@ -68,7 +67,8 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             }
         }
 
-        return new PolicyResult(catalog.Version, expansion.WorkloadName, expansion.WorkloadTeam, expansion.WorkloadImage, expansion.WorkloadPort, requirements, runtimeNodes, errors, expansion.Parts);
+        var owner = expansion.Owner;
+        return new PolicyResult(catalog.Version, owner.Name, owner.Team, owner.Image, owner.Port, requirements, runtimeNodes, errors, expansion.Parts);
     }
 
     // Workload scope is kind: runtime, optionally narrowed by environmentType. The 'runtime' key is accepted but not matched yet:

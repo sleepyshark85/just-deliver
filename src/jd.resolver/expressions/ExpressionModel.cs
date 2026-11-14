@@ -29,24 +29,11 @@ public sealed record Pending(string Original, IReadOnlySet<Reference> References
 /// <param name="Roles">Catalog role name to role-definition GUID.</param>
 /// <param name="Naming">Catalog naming rules by resource kind.</param>
 /// <param name="Environment">Source of <c>${env.…}</c> and of the environment name used by <c>name()</c>.</param>
-/// <param name="WorkloadName">The workload's <c>metadata.name</c>.</param>
-/// <param name="WorkloadTeam">The workload's <c>metadata.team</c>.</param>
-/// <param name="WorkloadImage">The workload's <c>container.image</c>; null where there is none (an environment definition).</param>
-/// <param name="WorkloadPort">The first port of the workload's <c>container.ports</c>; null when it declares none.</param>
-/// <param name="CurrentId">The requirement's effective id, or the node name for nodes not tied to a requirement.</param>
-/// <param name="NodeNames">Nodes in scope for <c>${node.output}</c>.</param>
-/// <param name="KnownOutputs">Outputs already known; a reference found here resolves instead of staying pending.</param>
-/// <param name="Parts">The exports (name to expression) of the parts deployed in this run, by part name: <c>${&lt;name&gt;.&lt;export&gt;}</c> of one of
-/// them is evaluated in place. Empty in a workload run.</param>
+/// <param name="Owner">Who the run belongs to: source of <c>${workload.…}</c> and of the owner name used by <c>name()</c>.</param>
+/// <param name="Scope">The scope the expression is evaluated in.</param>
 public sealed record ExpressionContext(
     IReadOnlyDictionary<string, string> Roles,
     IReadOnlyDictionary<string, NamingRule> Naming,
     EnvironmentDescriptor Environment,
-    string WorkloadName,
-    string WorkloadTeam,
-    string CurrentId,
-    IReadOnlySet<string> NodeNames,
-    IReadOnlyDictionary<Reference, string> KnownOutputs,
-    string? WorkloadImage,
-    int? WorkloadPort,
-    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts);
+    WorkloadOwner Owner,
+    ExpressionScope Scope);

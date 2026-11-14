@@ -29,8 +29,8 @@ internal static partial class BuiltIns
 
         var values = new Dictionary<string, string>
         {
-            ["workload"] = context.WorkloadName,
-            ["id"] = context.CurrentId,
+            ["workload"] = context.Owner.Name,
+            ["id"] = context.Scope.CurrentId,
             ["env"] = context.Environment.Name,
             ["hash"] = Hash(context, kind),
         };
@@ -49,7 +49,7 @@ internal static partial class BuiltIns
     internal static string Guid(IEnumerable<string> args) => Uuid5(GuidNamespace, string.Join('|', args)).ToString();
 
     private static string Hash(ExpressionContext context, string kind) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{context.WorkloadName}|{context.Environment.Name}|{context.CurrentId}|{kind}")))[..HashLength];
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{context.Owner.Name}|{context.Environment.Name}|{context.Scope.CurrentId}|{kind}")))[..HashLength];
 
     // RFC 4122 section 4.3: SHA-1 over namespace (network byte order) + name; set version 5 and the RFC variant.
     public static Guid Uuid5(Guid ns, string name)
