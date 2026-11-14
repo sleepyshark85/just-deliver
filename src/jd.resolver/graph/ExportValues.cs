@@ -51,7 +51,7 @@ public sealed record ExportValues(IReadOnlyDictionary<Reference, string> Values,
                 catalog.Roles, catalog.Naming, environment, graph.Owner, new ExpressionScope(scope, nodes.Select(n => n.Name).ToHashSet(), known, graph.Parts)));
             foreach (var (export, result) in exports)
             {
-                var resolved = result is Pending pending ? evaluator.Evaluate(pending.Original, file, $"exports.{export}", errors) : result;
+                var resolved = result is Pending pending ? evaluator.Evaluate(pending.Original, file, graph.ExportLocations[scope][export], errors) : result;
                 if (resolved is Resolved value)
                 {
                     var reference = new Reference(ReferenceKind.Resource, scope, export);

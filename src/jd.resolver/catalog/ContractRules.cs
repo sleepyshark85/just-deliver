@@ -39,7 +39,7 @@ internal static class ContractRules
         // An export is evaluated in its own requirement's scope, where another requirement's exports are out of reach.
         foreach (var export in part.Exports.Where(export => ExpressionEvaluator.ReadsResource(export.Value)).Select(export => export.Key))
         {
-            yield return new LoadError(component.Source, $"{part.ExportsLocation}.{export}",
+            yield return new LoadError(component.Source, part.ExportLocations[export],
                 "an export cannot reference ${resource.<id>.<export>}; it may read its own nodes' outputs, what its component uses, env.* and runtime.*.");
         }
 

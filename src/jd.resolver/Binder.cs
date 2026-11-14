@@ -97,6 +97,7 @@ internal sealed class Binder(SchemaIndex index)
         {
             ImageLocation = values.Locate(Roles.WorkloadImage),
             VariablesLocation = values.Locate(Roles.WorkloadVariables),
+            RequirementsLocation = values.LocateList(Roles.Requirement),
         };
     }
 
@@ -133,6 +134,7 @@ internal sealed class Binder(SchemaIndex index)
             Nodes = Entries(values.Nearest(Roles.PartNodes, part)).ToDictionary(node => node.Name, node => ReadNode(values, node.Value)),
             Exports = Entries(exports).ToDictionary(export => export.Name, export => Text(export.Value)),
             ExportsLocation = exports?.Path ?? part.Path,
+            ExportLocations = Entries(exports).ToDictionary(export => export.Name, export => export.Value.Path),
         };
     }
 
@@ -209,7 +211,11 @@ internal sealed class Binder(SchemaIndex index)
         public JToken? First(string role) => Every(role).FirstOrDefault();
 
         // Where the role's first value was read; for a role the document leaves out, the property its field ends in (empty when none).
-        public string Locate(string role) =>
-            First(role)?.Path ?? roles.Where(field => field.Role == role).Select(field => field.Name).FirstOrDefault() ?? string.Empty;
+        public string Locate(string role) => First(role)?.Path ?? NameOf(role);
+
+        // Where the list holding a role on a list's items was read; for a document that holds none of its items, the list's property.
+        public string LocateList(string role) => First(role)?.Parent?.Path ?? NameOf(role);
+
+        private string NameOf(string role) => roles.Where(field => field.Role == role).Select(field => field.Name).FirstOrDefault() ?? string.Empty;
     }
 }

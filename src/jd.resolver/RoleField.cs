@@ -8,5 +8,5 @@ namespace jd.resolver;
 /// <param name="Scope">The scope the schema states for a part at this path (<c>scope</c>); null when it states none.</param>
 /// <param name="Default">The value an absent field binds (the schema's <c>default</c>); null when there is none.</param>
 /// <param name="Selects">The select maps whose entries the path is in, outermost first.</param>
-/// <param name="Name">The property the path ends in, as errors name a field the document leaves out; null for a map's values or a list's items.</param>
+/// <param name="Name">The property the path ends in, as errors name a field the document leaves out (a list's items: the list's); null for a map's values.</param>
 internal sealed record RoleField(string Role, string Path, string? Scope, JToken? Default, IReadOnlyList<SelectField> Selects, string? Name);

@@ -23,4 +23,7 @@ public sealed record Workload(
 
     /// <summary>Where the variables were read; a variable is located at this location and its name.</summary>
     internal string VariablesLocation { get; init; } = string.Empty;
+
+    /// <summary>Where the requirements list was read, or would be when the workload declares none, for an error about a requirement it lacks.</summary>
+    internal string RequirementsLocation { get; init; } = string.Empty;
 }

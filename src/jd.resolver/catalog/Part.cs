@@ -29,4 +29,7 @@ public sealed record Part
 
     /// <summary>Where the exports are in the file; the part's own <see cref="Location"/> when it has none.</summary>
     public required string ExportsLocation { get; init; }
+
+    /// <summary>Where each export is in the file, by name: the location of an error about that export.</summary>
+    public required IReadOnlyDictionary<string, string> ExportLocations { get; init; }
 }

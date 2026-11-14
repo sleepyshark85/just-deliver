@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using jd.resolver.catalog;
 using jd.resolver.expressions;
 using Newtonsoft.Json.Linq;
@@ -38,7 +39,11 @@ public sealed record ExpandedRequirement(
     string? Class,
     string Source,
     IReadOnlyList<ExpandedNode> Nodes,
-    IReadOnlyDictionary<string, EvalResult> Exports);
+    IReadOnlyDictionary<string, EvalResult> Exports)
+{
+    /// <summary>Where <see cref="Source"/> holds each export, by name (<see cref="Part.ExportLocations"/>); empty for an environment run's part, which exports nothing here.</summary>
+    internal IReadOnlyDictionary<string, string> ExportLocations { get; init; } = ReadOnlyDictionary<string, string>.Empty;
+}
 
 /// <summary>The workload's runtime nodes expanded from the runtime in <see cref="Source"/>, with its probe and release block.</summary>
 public sealed record ExpandedRuntime(string Source, IReadOnlyList<ExpandedNode> Nodes, Probe? Probe, RuntimeRelease? Release);
@@ -79,4 +84,10 @@ public sealed record ExpansionResult
 
     /// <summary>An environment run's parts: their exports (name to expression) by part name; empty for a workload.</summary>
     public required IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts { get; init; }
+
+    /// <summary>Where <see cref="OwnerFile"/> holds the workload's requirements list, or would; empty for an environment run, which has none.</summary>
+    internal string RequirementsLocation { get; init; } = string.Empty;
+
+    /// <summary>Where <see cref="OwnerFile"/> holds the workload's variables, or would; empty for an environment run, which has none.</summary>
+    internal string VariablesLocation { get; init; } = string.Empty;
 }

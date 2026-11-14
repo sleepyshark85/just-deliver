@@ -277,9 +277,10 @@ internal sealed class SchemaIndex
             throw new InvalidOperationException($"The map at {path} has {annotatedValues} annotated value schemas; each would be read for every key at {path}.*.");
         }
 
+        // A list's items are named after the list, so a many role on them names the list when the document leaves it out.
         foreach (var item in new[] { schema.Item }.OfType<JsonSchema>())
         {
-            Walk(item, $"{path}[*]", null, within, fields, repeated);
+            Walk(item, $"{path}[*]", name, within, fields, repeated);
         }
 
         foreach (var same in schema.AllOf.Concat(schema.AnyOf).Concat(schema.OneOf).Append(schema.Reference).OfType<JsonSchema>())
@@ -310,8 +311,8 @@ internal sealed class SchemaIndex
         }
     }
 
-    // A subschema of a kind, the path (JSONPath) of the values it describes, the property that path ends in (null for a map's value, a list's item
-    // and the root), and the subschemas it is in, itself included.
+    // A subschema of a kind, the path (JSONPath) of the values it describes, the property that path ends in (a list's item: the list's; null for a
+    // map's value and the root), and the subschemas it is in, itself included.
     private sealed record Field(JsonSchema Schema, string Path, string? Name, ImmutableHashSet<JsonSchema> Within);
 
     // Resolves a reference to another shipped schema by its $id, never from disk or the network.

@@ -47,6 +47,13 @@ public class RuntimeVariablesTests
 
     private static async Task<ResolvedGraph> ResolveAsync(string variables, string[]? policies = null, string runtimeFile = RuntimeFile, string component = "")
     {
+        var workload = await TestWorkload.ParseAsync(
+            $"metadata: {{ name: shop, team: crew }}\ncontainer:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n{variables}requires:\n  - type: sqldb\n");
+        return Resolver.Resolve(workload, "workload.yaml", await LoadAsync(policies, runtimeFile, component), Env);
+    }
+
+    private static async Task<Catalog> LoadAsync(string[]? policies = null, string runtimeFile = RuntimeFile, string component = "")
+    {
         var files = new[]
             {
                 "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
@@ -59,9 +66,7 @@ public class RuntimeVariablesTests
             .Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
         var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
-        var workload = await TestWorkload.ParseAsync(
-            $"metadata: {{ name: shop, team: crew }}\ncontainer:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n{variables}requires:\n  - type: sqldb\n");
-        return Resolver.Resolve(workload, "workload.yaml", loaded.Value!, Env);
+        return loaded.Value!;
     }
 
     private static string WorkloadPolicy(string name, string body) =>
@@ -196,14 +201,14 @@ public class RuntimeVariablesTests
         var files = new[]
         {
             "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
-            TestCatalog.Component("sqldb", "[endpoint, dyn, lit, quoted, apostrophes, fine]", "nodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.region, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n"
-                + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.region} isn't\"\n"),
+            TestCatalog.Component("sqldb", "[endpoint, dyn, lit, quoted, apostrophes, fine, db.url]", "nodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.region, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n"
+                + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.region} isn't\"\n  db.url: ${resource.other.x}\n"),
         };
 
         var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)))]));
 
         Assert.Equal(
-            new[] { "apostrophes", "dyn", "endpoint", "quoted" }.Select(e => ("f1.yaml", $"{TestCatalog.PartPath}.exports.{e}")),
+            new[] { ".apostrophes", ".dyn", ".endpoint", ".quoted", "['db.url']" }.Select(e => ("f1.yaml", $"{TestCatalog.PartPath}.exports{e}")),
             loaded.Errors.Select(e => (e.File, e.Location)).Order());
         Assert.All(loaded.Errors, e => Assert.Contains("an export cannot reference ${resource.<id>.<export>}", e.Message));
     }
@@ -217,13 +222,37 @@ public class RuntimeVariablesTests
         var runtime = new ResolvedNode("runtime", "t/runtime", NodeKind.Create, new Dictionary<string, ConfigValue> { ["v"] = variable }, new Dictionary<string, Provenance>());
         var policy = new PolicyResult(
             "1", "shop", "crew", null, null,
-            [new ResolvedRequirement("db", "sqldb", "standard", "m.yaml", new Dictionary<string, EvalResult> { ["endpoint"] = export }, [])],
+            [new ResolvedRequirement("db", "sqldb", "standard", "m.yaml", new Dictionary<string, EvalResult> { ["endpoint"] = export }, [])
+            {
+                ExportLocations = new Dictionary<string, string> { ["endpoint"] = "implementations.default.classes.standard.exports.endpoint" },
+            }],
             [runtime], [], new Dictionary<string, IReadOnlyDictionary<string, string>>());
 
         var graph = new GraphBuilder(Env, new Dictionary<string, string>()).Build(policy);
 
         var error = Assert.Single(graph.Errors);
-        Assert.Equal(("m.yaml", "exports.endpoint"), (error.File, error.Location));
+        Assert.Equal(("m.yaml", "implementations.default.classes.standard.exports.endpoint"), (error.File, error.Location));
+    }
+
+    // The second pass reports an export where its component's file holds it, carried from the binder through the graph.
+    [Fact]
+    public async Task An_export_that_fails_on_the_second_pass_is_located_where_its_file_holds_it()
+    {
+        var graph = await ResolveAsync("    DYN: ${resource.sqldb.dyn}\n");
+        var broken = graph with
+        {
+            Exports = new Dictionary<string, IReadOnlyDictionary<string, EvalResult>>
+            {
+                ["sqldb"] = new Dictionary<string, EvalResult> { ["dyn"] = new Pending("${gone.out}", new HashSet<Reference> { new(ReferenceKind.Node, "gone", "out") }) },
+            },
+        };
+        var errors = new List<LoadError>();
+
+        ExportValues.Evaluate(broken, await LoadAsync(), Env, new Dictionary<string, IReadOnlyDictionary<string, jd.core.bp.ConfigEntry>>(), "shop/dev/@workload/runtime", errors);
+
+        var error = Assert.Single(errors);
+        Assert.Equal(("shop/dev/@workload/runtime", "implementations.default.classes.standard.exports.dyn"), (error.File, error.Location));
+        Assert.StartsWith("'gone.out' refers to unknown node 'gone'", error.Message);
     }
 
     [Fact]

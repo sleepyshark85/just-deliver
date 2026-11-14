@@ -28,12 +28,12 @@ public class PolicyApplierTests
     private static EnvironmentDescriptor Env(string type = "dev") =>
         new("dev", "region", type, new Dictionary<string, string>(), ["sqldb", "container-app"], null);
 
-    private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string type = "dev", bool expectExpansionErrors = false)
+    private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "requires:\n  - type: sqldb\n", string type = "dev", bool expectExpansionErrors = false)
     {
         var files = BaseFiles.Concat(policies).Append(TestCatalog.RuntimeFile).Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
         var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
-        var workload = await TestWorkload.ParseAsync($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
+        var workload = await TestWorkload.ParseAsync($"metadata: {{ name: shop, team: crew }}\n{requires}");
         var expansion = new Expander(loaded.Value!, Env(type)).Expand(workload, "workload.yaml");
         Assert.Equal(expectExpansionErrors, expansion.Errors.Count > 0);
         return new PolicyApplier(loaded.Value!, Env(type)).Apply(expansion);
@@ -160,7 +160,7 @@ public class PolicyApplierTests
             Policy("by-type", "{ type: sqldb, class: isolated }", "set: { by: type }\n"),
             Policy("by-environment-type", "{ environmentType: stage }", "set: { guarded: true }\n"),
             Policy("everything", "{ type: sqldb, class: standard, environmentType: dev }", "set: { all: true }\n"),
-        ], "  - type: sqldb\n  - type: sqldb\n    id: iso\n    class: isolated\n");
+        ], "requires:\n  - type: sqldb\n  - type: sqldb\n    id: iso\n    class: isolated\n");
 
         Assert.Equal("template", Text(Node(result, "m").Config["by"]));
         Assert.False(Node(result, "n").Config.ContainsKey("by"));
@@ -197,7 +197,7 @@ public class PolicyApplierTests
     [Fact]
     public async Task A_workload_without_a_required_component_is_an_error_naming_the_policy_and_its_file()
     {
-        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], "  []\n");
+        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], "requires: []\n");
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires"), (error.File, error.Location));
@@ -205,9 +205,22 @@ public class PolicyApplierTests
         Assert.Single(result.RuntimeNodes);
     }
 
+    // The location is the workload's requirements list as the binding finds it (S24c4), also when the workload leaves the list out.
     [Theory]
-    [InlineData("  - type: sqldb\n")]
-    [InlineData("  - type: sqldb\n    id: other\n    class: isolated\n")]
+    [InlineData("", false)]
+    [InlineData("requires:\n  - type: nosuch\n", true)]
+    public async Task A_workload_without_a_required_component_is_an_error_at_its_requirements_list(string requires, bool expectExpansionErrors)
+    {
+        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], requires, expectExpansionErrors: expectExpansionErrors);
+
+        var error = Assert.Single(result.Errors, error => error.Message.StartsWith("policy", StringComparison.Ordinal));
+        Assert.Equal(("workload.yaml", "requires"), (error.File, error.Location));
+        Assert.Equal("policy 'needs-sqldb' (f4.yaml) requires a 'sqldb' requirement (because); add '- type: sqldb'.", error.Message);
+    }
+
+    [Theory]
+    [InlineData("requires:\n  - type: sqldb\n")]
+    [InlineData("requires:\n  - type: sqldb\n    id: other\n    class: isolated\n")]
     public async Task A_requirement_of_the_required_type_with_any_id_and_class_satisfies_the_policy(string requires)
     {
         var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], requires);
@@ -220,8 +233,8 @@ public class PolicyApplierTests
     {
         var policy = Policy("needs-sqldb", "{ kind: runtime, environmentType: stage }", "require: sqldb\n");
 
-        var team = await ApplyAsync([policy], "  []\n");
-        var gated = await ApplyAsync([policy], "  []\n", type: "stage");
+        var team = await ApplyAsync([policy], "requires: []\n");
+        var gated = await ApplyAsync([policy], "requires: []\n", type: "stage");
 
         Assert.Empty(team.Errors);
         Assert.Equal("requires", Assert.Single(gated.Errors).Location);
@@ -230,7 +243,7 @@ public class PolicyApplierTests
     [Fact]
     public async Task A_declared_requirement_that_failed_to_expand_still_satisfies_the_policy()
     {
-        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], "  - type: sqldb\n    class: premium\n", expectExpansionErrors: true);
+        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], "requires:\n  - type: sqldb\n    class: premium\n", expectExpansionErrors: true);
 
         var error = Assert.Single(result.Errors);
         Assert.Equal("requires[0]", error.Location);
@@ -268,7 +281,7 @@ public class PolicyApplierTests
     [Fact]
     public async Task Expansion_errors_carry_into_the_policy_result()
     {
-        var result = await ApplyAsync([], "  - type: sqldb\n  - type: unmapped\n", expectExpansionErrors: true);
+        var result = await ApplyAsync([], "requires:\n  - type: sqldb\n  - type: unmapped\n", expectExpansionErrors: true);
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[1]"), (error.File, error.Location));

@@ -6,7 +6,7 @@ namespace jd.resolver.tests;
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
-        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3, S24c4, S24d, S24e, S24f }.SelectMany(Entries)];
+        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3, S24d, S24e, S24f }.SelectMany(Entries)];
 
     private static IEnumerable<(string File, string Literal)> Entries(Dictionary<string, string[]> group) =>
         group.SelectMany(entry => entry.Value.Select(literal => (entry.Key, literal)));
@@ -69,14 +69,6 @@ public sealed partial class LiteralGuardTests
     private static readonly Dictionary<string, string[]> S24b3 = new()
     {
         ["backend-providers/jd.bp.pulumi/TemplateLibrary.cs"] = ["exports.", "template"],
-    };
-
-    // Split from S24c3: the expansion model carries the workload's locations and the per-export locations.
-    private static readonly Dictionary<string, string[]> S24c4 = new()
-    {
-        ["jd.resolver/graph/ExportValues.cs"] = ["exports."],
-        ["jd.resolver/graph/GraphBuilder.cs"] = ["exports."],
-        ["jd.resolver/policies/PolicyApplier.cs"] = ["container.variables", "requires"],
     };
 
     private static readonly Dictionary<string, string[]> S24d = new()

@@ -211,6 +211,23 @@ public class ExpanderTests
         Assert.Equal("runtime 'container-app' has no implementations entry for 'dev' and no 'default' entry (keys: stage).", error.Message);
     }
 
+    // An export that cannot be evaluated is reported at the export, as the binder located it (S24c4).
+    // A name with a dot is quoted in the path, as the binder read it.
+    [Theory]
+    [InlineData("endpoint", ".endpoint")]
+    [InlineData("db.endpoint", "['db.endpoint']")]
+    public async Task An_export_reading_a_port_the_workload_lacks_is_an_error_at_the_export(string export, string path)
+    {
+        var catalog = await LoadAsync(TestCatalog.Component("sqldb", $"[{export}]", $"nodes:\n  n: {{ template: t/n, config: {{}} }}\nexports:\n  {export}: ${{workload.port}}\n"));
+
+        var result = await ExpandAsync(catalog, "  - type: sqldb\n");
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal((ComponentFile, $"{TestCatalog.PartPath}.exports{path}"), (error.File, error.Location));
+        Assert.Equal("for requires[0] ('sqldb'): 'workload.port' has no value: workload 'shop' declares no port.", error.Message);
+        Assert.Empty(result.Requirements);
+    }
+
     [Fact]
     public async Task Reading_the_port_of_a_workload_without_ports_is_an_error_naming_the_workload()
     {
