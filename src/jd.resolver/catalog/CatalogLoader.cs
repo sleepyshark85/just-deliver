@@ -87,7 +87,7 @@ public static class CatalogLoader
             shared,
             runtimes.ConvertAll(runtime => runtime.Owner),
             shared.DistinctBy(resource => resource.Name).ToDictionary(resource => resource.Name),
-            [.. runtimes.SelectMany(runtime => runtime.Owner.Parts.Select(part => Rollout.Read(runtime.Document, runtime.Owner, part)))],
+            [.. runtimes.SelectMany(runtime => binder.ReadRollouts(runtime.Document, runtime.Owner))],
             Binding(index, valid, Roles.PolicyName).ConvertAll(binder.ReadPolicy),
             namingFiles,
             Merge(namingFiles.Select(file => file.Rules)),

@@ -41,6 +41,9 @@ internal sealed class FakeBackend : IBackEndProvider, ITemplateStore
     public Dictionary<string, List<ResourceChange>> PreviewChanges { get; } = [];
     public bool DetectChanges { get; set; }
     public string? FailOn { get; set; }
+
+    // Which deploy of the FailOn stack fails, counting from 1; every one when null.
+    public int? FailOnDeploy { get; set; }
     public string? PreviewFailOn { get; set; }
     public bool OmitIdOutput { get; set; }
     public string? Fqdn { get; set; } = "app.example.test";
@@ -53,7 +56,7 @@ internal sealed class FakeBackend : IBackEndProvider, ITemplateStore
     {
         Calls.Add(("deploy", package));
         Log.Add("deploy " + package.StackName);
-        if (package.StackName == FailOn)
+        if (package.StackName == FailOn && (FailOnDeploy is null || FailOnDeploy == Calls.Count(c => c.Op == "deploy" && c.Package.StackName == FailOn)))
         {
             throw new InvalidOperationException("provider exploded");
         }

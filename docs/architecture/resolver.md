@@ -215,7 +215,7 @@ description: Every workload runs as a Container App on Consumption in the enviro
 uses: [env-group, apps-env]                          # the environment's group and Container Apps environment
 implementations:
   default:
-    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 300, intervalSeconds: 5 }   # data for the release flow; the resolver only carries it
+    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 300, intervalSeconds: 5, scheme: https }   # data for the release flow; the resolver only carries it
     release:                                          # which template inputs/outputs the release flow uses; the resolver only carries it
       suffixInput: revisionSuffix                     # inputs the flow sets per step, so the runtime node sets neither
       trafficInput: traffic
@@ -227,6 +227,8 @@ implementations:
       latestKey: latestRevision                       # traffic item key meaning the latest revision
       weightKey: weight
       resourceIdOutput: containerAppId                # output with the runtime resource's id; qualification looks its live revisions up by it
+      suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }   # how a revision is named; the parts must fit maxLength (load check)
+      fullWeight: 100                                 # the weight of all traffic
     nodes:
       runtime:
         template: azure/container-app

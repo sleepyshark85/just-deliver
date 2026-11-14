@@ -5,8 +5,8 @@ using jd.resolver.catalog;
 namespace jd.cli;
 
 /// <summary>
-/// The probe over HTTPS: <c>GET https://&lt;fqdn&gt;&lt;path&gt;</c> passes when the status is the expected one. An attempt is cut off after
-/// the probe's interval, so a revision that hangs costs one interval, not the client's default timeout.
+/// The probe over HTTP: <c>GET &lt;scheme&gt;://&lt;fqdn&gt;&lt;path&gt;</c>, with the runtime probe's scheme and path, passes when the status is the
+/// expected one. An attempt is cut off after the probe's interval, so a revision that hangs costs one interval, not the client's default timeout.
 /// </summary>
 internal sealed class HttpRevisionProbe(HttpClient client) : IRevisionProbe
 {
@@ -19,7 +19,7 @@ internal sealed class HttpRevisionProbe(HttpClient client) : IRevisionProbe
         attempt.CancelAfter(TimeSpan.FromSeconds(probe.IntervalSeconds));
         try
         {
-            using var response = await client.GetAsync(new Uri($"https://{fqdn}{probe.Path}"), attempt.Token);
+            using var response = await client.GetAsync(new Uri($"{probe.Scheme}://{fqdn}{probe.Path}"), attempt.Token);
             return new ProbeResult((int)response.StatusCode == probe.ExpectedStatus, $"HTTP {(int)response.StatusCode}");
         }
         catch (Exception ex) when (ex is HttpRequestException or UriFormatException)

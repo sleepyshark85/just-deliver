@@ -16,4 +16,7 @@ jobs:
       # The Category=Pulumi tests drive the real CLI against a local file backend (no cloud); the container-app preview
       # test also downloads the azure-native provider plugin (placeholder credentials, no Azure calls).
       - uses: pulumi/actions@v6
+      # Pulumi looks plugin versions up through GitHub's API; anonymous calls from shared runners hit the rate limit.
       - run: tools/verify.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

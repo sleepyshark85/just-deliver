@@ -44,11 +44,13 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["path", "expectedStatus", "timeoutSeconds", "intervalSeconds"],
+          "allOf": [{ "required": ["scheme"], "x-jd": { "message": "required: this jd reads it from the runtime; a catalog written for an older jd lacks it, so add it (see catalog/runtimes/container-app.yaml)." } }],
           "properties": {
-            "path": { "description": "Request path, starting with /.", "type": "string", "pattern": "^/" },
-            "expectedStatus": { "description": "HTTP status that means healthy.", "type": "integer", "minimum": 100, "maximum": 599 },
-            "timeoutSeconds": { "description": "How long to keep trying before the revision counts as unhealthy (grants may take minutes to propagate).", "type": "integer", "minimum": 1 },
-            "intervalSeconds": { "description": "Wait between attempts; at most timeoutSeconds.", "type": "integer", "minimum": 1 }
+            "path": { "description": "Request path, starting with /.", "type": "string", "pattern": "^/", "x-jd": { "is": "probe.path" } },
+            "expectedStatus": { "description": "HTTP status that means healthy.", "type": "integer", "minimum": 100, "maximum": 599, "x-jd": { "is": "probe.expected-status" } },
+            "timeoutSeconds": { "description": "How long to keep trying before the revision counts as unhealthy (grants may take minutes to propagate).", "type": "integer", "minimum": 1, "x-jd": { "is": "probe.timeout" } },
+            "intervalSeconds": { "description": "Wait between attempts; at most timeoutSeconds.", "type": "integer", "minimum": 1, "x-jd": { "is": "probe.interval" } },
+            "scheme": { "description": "The URI scheme the probe asks the revision's address with: <scheme>://<fqdn><path>.", "type": "string", "pattern": "^[a-z][a-z0-9+.-]*$", "x-jd": { "is": "probe.scheme" } }
           }
         },
         "release": {
@@ -56,17 +58,31 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["suffixInput", "trafficInput", "trafficOutput", "suffixOutput", "revisionOutput", "fqdnOutput", "revisionKey", "latestKey", "weightKey", "resourceIdOutput"],
+          "allOf": [{ "required": ["suffix", "fullWeight"], "x-jd": { "message": "required: this jd reads it from the runtime; a catalog written for an older jd lacks it, so add it (see catalog/runtimes/container-app.yaml)." } }],
           "properties": {
-            "suffixInput": { "description": "Template input that receives the revision suffix.", "type": "string", "minLength": 1 },
-            "trafficInput": { "description": "Template input that receives the traffic list.", "type": "string", "minLength": 1 },
-            "trafficOutput": { "description": "Output echoing the traffic last deployed; names the live revision.", "type": "string", "minLength": 1 },
-            "suffixOutput": { "description": "Output echoing the revision suffix last deployed; the next run compares it with its own.", "type": "string", "minLength": 1 },
-            "revisionOutput": { "description": "Output naming the revision a deploy created.", "type": "string", "minLength": 1 },
-            "fqdnOutput": { "description": "Output with that revision's address, the probe target.", "type": "string", "minLength": 1 },
-            "revisionKey": { "description": "Key of a traffic item that names a revision.", "type": "string", "minLength": 1 },
-            "latestKey": { "description": "Key of a traffic item that means the latest revision.", "type": "string", "minLength": 1 },
-            "weightKey": { "description": "Key of a traffic item's weight.", "type": "string", "minLength": 1 },
-            "resourceIdOutput": { "description": "Output with the runtime resource's id; qualification looks up its live revisions by it.", "type": "string", "minLength": 1 }
+            "suffixInput": { "description": "Template input that receives the revision suffix.", "type": "string", "minLength": 1, "x-jd": { "is": "rollout.suffix-input" } },
+            "trafficInput": { "description": "Template input that receives the traffic list.", "type": "string", "minLength": 1, "x-jd": { "is": "rollout.traffic-input" } },
+            "trafficOutput": { "description": "Output echoing the traffic last deployed; names the live revision.", "type": "string", "minLength": 1, "x-jd": { "is": "rollout.traffic-output" } },
+            "suffixOutput": { "description": "Output echoing the revision suffix last deployed; the next run compares it with its own.", "type": "string", "minLength": 1, "x-jd": { "is": "rollout.suffix-output" } },
+            "revisionOutput": { "description": "Output naming the revision a deploy created.", "type": "string", "minLength": 1, "x-jd": { "is": "rollout.revision-output" } },
+            "fqdnOutput": { "description": "Output with that revision's address, the probe target.", "type": "string", "minLength": 1, "x-jd": { "is": "rollout.fqdn-output" } },
+            "revisionKey": { "description": "Key of a traffic item that names a revision.", "type": "string", "minLength": 1, "x-jd": { "is": "rollout.revision-key" } },
+            "latestKey": { "description": "Key of a traffic item that means the latest revision.", "type": "string", "minLength": 1, "x-jd": { "is": "rollout.latest-key" } },
+            "weightKey": { "description": "Key of a traffic item's weight.", "type": "string", "minLength": 1, "x-jd": { "is": "rollout.weight-key" } },
+            "resourceIdOutput": { "description": "Output with the runtime resource's id; qualification looks up its live revisions by it.", "type": "string", "minLength": 1, "x-jd": { "is": "rollout.resource-id-output" } },
+            "suffix": {
+              "description": "How the release flow names a revision: the prefix, then hex digits of the config's hash and of a salt. Its parts must fit maxLength (checked at load).",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["prefix", "configDigits", "saltDigits", "maxLength"],
+              "properties": {
+                "prefix": { "description": "The suffix's first characters.", "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "x-jd": { "is": "rollout.suffix-prefix" } },
+                "configDigits": { "description": "Hex digits of the config's SHA-256 (64 at most).", "type": "integer", "minimum": 1, "maximum": 64, "x-jd": { "is": "rollout.suffix-config-digits" } },
+                "saltDigits": { "description": "Hex digits of the salt's SHA-256 (64 at most).", "type": "integer", "minimum": 1, "maximum": 64, "x-jd": { "is": "rollout.suffix-salt-digits" } },
+                "maxLength": { "description": "The longest suffix the runtime accepts.", "type": "integer", "minimum": 1, "x-jd": { "is": "rollout.suffix-max-length" } }
+              }
+            },
+            "fullWeight": { "description": "The traffic weight that sends all traffic to one revision.", "type": "integer", "minimum": 1, "x-jd": { "is": "rollout.full-weight" } }
           }
         }
       }

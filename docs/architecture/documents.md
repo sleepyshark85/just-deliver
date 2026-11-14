@@ -271,7 +271,7 @@ Records written before stay readable either way: the schemas keep accepting `tie
 
 ## 7. Simplicity guard
 
-Annotations say **where**, never **how**: no conditions, no loops, no computed values, no user-defined roles. **Nine keywords, 73 roles**
+Annotations say **where**, never **how**: no conditions, no loops, no computed values, no user-defined roles. **Nine keywords, 74 roles**
 (Appendix B; ~118 with choice 2 a), both checked by the meta-schema. Two fallbacks remain and are named as such: a `select` map's `fallback`
 key (`default`), and a requirement's id falling back to its type, which is concept 2's rule in code, not an annotation. Every rule is one
 generic C# rule or a concept's own.
@@ -502,7 +502,7 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 
 ## Appendix B. Roles (the closed list)
 
-`one` unless marked *many*. 73 roles; choice 2 (a) adds ~45 `record.*`.
+`one` unless marked *many*. 74 roles; choice 2 (a) adds ~45 `record.*`.
 
 | Group | Roles | # |
 |---|---|---|
@@ -510,7 +510,7 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 | Environment | `env.name`, `env.region`, `env.type`, `env.offers`, `env.values`, `env.approval`, `approval.qualified-on`, `approval.required`, `approval.approvers`, `approval.separate` | 10 |
 | Workload | `workload.name`, `workload.team`, `workload.image`, `workload.port`, `workload.variables`, `requirement` *many*, `requirement.type`, `requirement.id`, `requirement.class` | 9 |
 | Policy | `policy.name`, `policy.reason`, `policy.scope`, `policy.runtime`, `policy.set`, `policy.default`, `policy.require` (criteria use `match:` with the roles above) | 7 |
-| Runtime | `probe.path`, `probe.expected-status`, `probe.timeout`, `probe.interval`, `probe.scheme`, `rollout.suffix-input`, `rollout.traffic-input`, `rollout.traffic-output`, `rollout.suffix-output`, `rollout.revision-output`, `rollout.fqdn-output`, `rollout.revision-key`, `rollout.latest-key`, `rollout.weight-key`, `rollout.resource-id-output`, `rollout.suffix-prefix`, `rollout.suffix-config-digits`, `rollout.suffix-salt-digits`, `rollout.full-weight` | 19 |
+| Runtime | `probe.path`, `probe.expected-status`, `probe.timeout`, `probe.interval`, `probe.scheme`, `rollout.suffix-input`, `rollout.traffic-input`, `rollout.traffic-output`, `rollout.suffix-output`, `rollout.revision-output`, `rollout.fqdn-output`, `rollout.revision-key`, `rollout.latest-key`, `rollout.weight-key`, `rollout.resource-id-output`, `rollout.suffix-prefix`, `rollout.suffix-config-digits`, `rollout.suffix-salt-digits`, `rollout.suffix-max-length` (added in S24e: the load check reads the declared bound), `rollout.full-weight` | 20 |
 | Release | `release.label`, `release.created-at`, `release.workloads` *many*, `release.definition`, `release.definition-path`, `release.definition-sha256`, `release.depends-on` | 7 |
 
 The `layer` role's value set is ordered: the `enum`'s listed order is the deploy order (`shared` before `environment`); the definition says so in a `$comment`.

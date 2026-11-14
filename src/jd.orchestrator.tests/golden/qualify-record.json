@@ -27,7 +27,7 @@
       "dependsOn": [],
       "image": "registry.example/app@sha256:aaaa",
       "graph": {
-        "sha256": "944737d7579797cc0626ab009e6336d611914472273962eeb7ae8aaf4f8b6b9c",
+        "sha256": "761da54bd8112593fcc97cc70c5aca3e47ca5ef33c4916e016a9775cbac5758e",
         "nodes": [
           {
             "id": "shop/dev/@workload/runtime",
@@ -74,7 +74,7 @@
       "dependsOn": [],
       "image": "registry.example/app@sha256:aaaa",
       "graph": {
-        "sha256": "64139e6d73695dea2ca6fb8120d46132a2a4378702ce6991a9785967cb211641",
+        "sha256": "7337492b2427a76395428a7249ff9b47702fb78ab89b07ddfd4ad86e3bbcb804",
         "nodes": [
           {
             "id": "cart/dev/@workload/runtime",

@@ -7,10 +7,10 @@ public sealed record ProbeResult(bool Passed, string Detail);
 
 /// <summary>
 /// Asks a deployed revision once whether it is healthy. The orchestrator owns the retries; the adapter owns the transport. The target
-/// is only the revision's <c>fqdn</c> and the runtime's <see cref="Probe.Path"/>.
+/// is only the revision's <c>fqdn</c> and the runtime's <see cref="Probe.Scheme"/> and <see cref="Probe.Path"/>.
 /// </summary>
 public interface IRevisionProbe
 {
-    /// <summary>Asks <paramref name="fqdn"/> once at <see cref="Probe.Path"/>; a wrong status, a transport failure or no answer in time is a failed result.</summary>
+    /// <summary>Asks <paramref name="fqdn"/> once over <see cref="Probe.Scheme"/> at <see cref="Probe.Path"/>; a wrong status, a transport failure or no answer in time is a failed result.</summary>
     Task<ProbeResult> ProbeAsync(string fqdn, Probe probe, CancellationToken cancellationToken);
 }

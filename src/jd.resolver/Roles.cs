@@ -146,4 +146,64 @@ internal static class Roles
 
     /// <summary>A requirement's class, which selects a class part.</summary>
     public const string RequirementClass = "requirement.class";
+
+    /// <summary>The URI scheme a runtime's probe asks with.</summary>
+    public const string ProbeScheme = "probe.scheme";
+
+    /// <summary>The path a runtime's probe asks.</summary>
+    public const string ProbePath = "probe.path";
+
+    /// <summary>The status that means the runtime is healthy.</summary>
+    public const string ProbeExpectedStatus = "probe.expected-status";
+
+    /// <summary>How long, in seconds, the probe keeps trying.</summary>
+    public const string ProbeTimeout = "probe.timeout";
+
+    /// <summary>The wait, in seconds, between the probe's attempts.</summary>
+    public const string ProbeInterval = "probe.interval";
+
+    /// <summary>The runtime node's input that receives the revision suffix.</summary>
+    public const string RolloutSuffixInput = "rollout.suffix-input";
+
+    /// <summary>The runtime node's input that receives the traffic list.</summary>
+    public const string RolloutTrafficInput = "rollout.traffic-input";
+
+    /// <summary>The runtime node's output echoing the traffic last deployed.</summary>
+    public const string RolloutTrafficOutput = "rollout.traffic-output";
+
+    /// <summary>The runtime node's output echoing the suffix last deployed.</summary>
+    public const string RolloutSuffixOutput = "rollout.suffix-output";
+
+    /// <summary>The runtime node's output naming the revision a deploy created.</summary>
+    public const string RolloutRevisionOutput = "rollout.revision-output";
+
+    /// <summary>The runtime node's output with that revision's address.</summary>
+    public const string RolloutFqdnOutput = "rollout.fqdn-output";
+
+    /// <summary>The runtime node's output with the runtime resource's id.</summary>
+    public const string RolloutResourceIdOutput = "rollout.resource-id-output";
+
+    /// <summary>The key of a traffic item that names a revision.</summary>
+    public const string RolloutRevisionKey = "rollout.revision-key";
+
+    /// <summary>The key of a traffic item that means the latest revision.</summary>
+    public const string RolloutLatestKey = "rollout.latest-key";
+
+    /// <summary>The key of a traffic item's weight.</summary>
+    public const string RolloutWeightKey = "rollout.weight-key";
+
+    /// <summary>A revision suffix's first characters.</summary>
+    public const string RolloutSuffixPrefix = "rollout.suffix-prefix";
+
+    /// <summary>How many hex digits of the config's hash a revision suffix takes.</summary>
+    public const string RolloutSuffixConfigDigits = "rollout.suffix-config-digits";
+
+    /// <summary>How many hex digits of a salt a revision suffix takes.</summary>
+    public const string RolloutSuffixSaltDigits = "rollout.suffix-salt-digits";
+
+    /// <summary>The longest revision suffix the runtime accepts; checked against the suffix's parts at load.</summary>
+    public const string RolloutSuffixMaxLength = "rollout.suffix-max-length";
+
+    /// <summary>The traffic weight that sends all traffic to one revision.</summary>
+    public const string RolloutFullWeight = "rollout.full-weight";
 }

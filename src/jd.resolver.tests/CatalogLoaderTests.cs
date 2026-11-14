@@ -384,8 +384,8 @@ public sealed class CatalogLoaderTests
 
     private const string RuntimeHead = "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n";
     private const string RuntimeNode = "    nodes:\n      runtime:\n        template: t/rt\n        config: {}\n";
-    private const string Probe = "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }\n";
-    private const string Release = "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId }\n";
+    private const string Probe = "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }\n";
+    private const string Release = "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }\n";
     private const string ComponentHead = "kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n  default:\n";
     private const string ClassesWith = "    classes:\n      standard:\n        exports: { endpoint: x }\n        nodes:\n          ";
 
@@ -407,7 +407,7 @@ public sealed class CatalogLoaderTests
 
     [Theory]
     [InlineData(ComponentHead + ClassesWith + "runtime: { template: t/rt, config: {} }\n", TestCatalog.PartPath + ".nodes.runtime", "'runtime' is the runtime node, declared only by a runtime.")]
-    [InlineData(RuntimeHead + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 6 }\n" + Release + RuntimeNode, "implementations.default.probe.intervalSeconds", "must not exceed timeoutSeconds.")]
+    [InlineData(RuntimeHead + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 6, scheme: https }\n" + Release + RuntimeNode, "implementations.default.probe.intervalSeconds", "must not exceed timeoutSeconds.")]
     [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      runtime:\n        template: t/rt\n        config: { suffix: x }\n", "implementations.default.nodes.runtime.config.suffix", "the release flow sets this input; the runtime node must not.")]
     [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      runtime:\n        template: t/rt\n        config: { traffic: [] }\n", "implementations.default.nodes.runtime.config.traffic", "the release flow sets this input; the runtime node must not.")]
     public async Task The_runtime_rules_are_enforced(string file, string location, string message)
@@ -422,7 +422,7 @@ public sealed class CatalogLoaderTests
     [Fact]
     public async Task A_probe_whose_interval_equals_its_timeout_loads()
     {
-        var probe = "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 5 }\n";
+        var probe = "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 5, scheme: https }\n";
 
         var result = await Parse(("catalog.yaml", CatalogFile), ("f.yaml", RuntimeHead + probe + Release + RuntimeNode));
 
@@ -430,17 +430,17 @@ public sealed class CatalogLoaderTests
     }
 
     [Theory]
-    [InlineData("{ path: health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.path")]
-    [InlineData("{ path: /health, expectedStatus: 99, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.expectedStatus")]
-    [InlineData("{ path: /health, expectedStatus: 600, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.expectedStatus")]
-    [InlineData("{ path: /health, expectedStatus: ok, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.expectedStatus")]
-    [InlineData("{ path: /health, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.expectedStatus")]
-    [InlineData("{ expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5 }", "probe.path")]
-    [InlineData("{ path: /health, expectedStatus: 200, intervalSeconds: 5 }", "probe.timeoutSeconds")]
-    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 60 }", "probe.intervalSeconds")]
-    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 0, intervalSeconds: 5 }", "probe.timeoutSeconds")]
-    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 0 }", "probe.intervalSeconds")]
-    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, method: POST }", "probe.method")]
+    [InlineData("{ path: health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }", "probe.path")]
+    [InlineData("{ path: /health, expectedStatus: 99, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }", "probe.expectedStatus")]
+    [InlineData("{ path: /health, expectedStatus: 600, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }", "probe.expectedStatus")]
+    [InlineData("{ path: /health, expectedStatus: ok, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }", "probe.expectedStatus")]
+    [InlineData("{ path: /health, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }", "probe.expectedStatus")]
+    [InlineData("{ expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }", "probe.path")]
+    [InlineData("{ path: /health, expectedStatus: 200, intervalSeconds: 5, scheme: https }", "probe.timeoutSeconds")]
+    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 60, scheme: https }", "probe.intervalSeconds")]
+    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 0, intervalSeconds: 5, scheme: https }", "probe.timeoutSeconds")]
+    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 0, scheme: https }", "probe.intervalSeconds")]
+    [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https, method: POST }", "probe.method")]
     public async Task A_bad_probe_is_an_error(string probe, string location)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + $"    probe: {probe}\n" + Release + RuntimeNode));
