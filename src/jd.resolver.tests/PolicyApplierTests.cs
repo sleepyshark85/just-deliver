@@ -322,13 +322,17 @@ public class PolicyApplierTests
         Assert.Equal(Layer.PolicySet, node.Provenance["nested.c"].Layer);
     }
 
-    [Fact]
-    public async Task Evaluation_errors_name_the_policy_file_and_location()
+    // An entry whose path has a dot is located in the bracket form, and a value inside it below that.
+    [Theory]
+    [InlineData("set: { a: '${env.nope}' }", "set.a")]
+    [InlineData("set: { x.y: '${env.nope}' }", "set['x.y']")]
+    [InlineData("default: { x.y: { z: '${env.nope}' } }", "default['x.y'].z")]
+    public async Task Evaluation_errors_name_the_policy_file_and_location(string body, string location)
     {
-        var result = await ApplyAsync([Policy("pol", "{ template: t/n }", "set: { a: '${env.nope}' }\n")]);
+        var result = await ApplyAsync([Policy("pol", "{ template: t/n }", $"{body}\n")]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f4.yaml", "set.a"), (error.File, error.Location));
+        Assert.Equal(("f4.yaml", location), (error.File, error.Location));
     }
 
     [Fact]
