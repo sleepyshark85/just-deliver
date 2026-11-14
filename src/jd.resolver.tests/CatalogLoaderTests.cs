@@ -274,18 +274,20 @@ public sealed class CatalogLoaderTests
     }
 
     [Theory]
-    [InlineData("{ kind: grant }", "set: { a: 1 }", "match.kind")]
-    [InlineData("{ runtime: container-app }", "set: { a: 1 }", "match.runtime")]
-    [InlineData("{ kind: runtime, type: sqldb }", "set: { runtime.a: 1 }", "match")]
-    [InlineData("{ kind: runtime, template: t/x }", "set: { runtime.a: 1 }", "match")]
-    [InlineData("{ kind: runtime }", "set: { size: 1 }", "set.size")]
-    [InlineData("{ kind: runtime }", "default: { size: 1 }", "default.size")]
-    public async Task A_policy_that_fits_neither_scope_is_an_error(string match, string body, string location)
+    [InlineData("{ kind: grant }", "set: { a: 1 }", "match.kind", "'grant' is not a policy scope; the only 'kind' a policy can match is 'runtime'.")]
+    [InlineData("{ runtime: container-app }", "set: { a: 1 }", "match.runtime", "'runtime' needs 'kind: runtime'; node-scope policies match type, class, environmentType and template.")]
+    [InlineData("{ kind: runtime, type: sqldb }", "set: { runtime.a: 1 }", "match", "a 'kind: runtime' policy cannot also match type.")]
+    [InlineData("{ kind: runtime, template: t/x }", "set: { runtime.a: 1 }", "match", "a 'kind: runtime' policy cannot also match template.")]
+    [InlineData("{ kind: runtime, type: sqldb, class: standard, template: t/x, environmentType: dev }", "set: { runtime.a: 1 }", "match", "a 'kind: runtime' policy cannot also match class, template, type.")]
+    [InlineData("{ kind: runtime }", "set: { size: 1 }", "set.size", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'size'.")]
+    [InlineData("{ kind: runtime }", "default: { size: 1 }", "default.size", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'size'.")]
+    [InlineData("{ kind: runtime }", "set: { runtimes.a: 1 }", "set.runtimes.a", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'runtimes.a'.")]
+    public async Task A_policy_that_fits_neither_scope_is_an_error(string match, string body, string location, string message)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {match}\n{body}\n"));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("p.yaml", location), (error.File, error.Location));
+        Assert.Equal(("p.yaml", location, message), (error.File, error.Location, error.Message));
     }
 
     [Theory]
@@ -299,15 +301,14 @@ public sealed class CatalogLoaderTests
     }
 
     [Theory]
-    [InlineData("set:\n  a:\n    b: 1\n  a.b: 2", "set.a")]
-    [InlineData("default: { x.y: 1, x.y.z: 2 }", "default.x.y")]
-    public async Task A_policy_whose_own_paths_overlap_is_an_error(string body, string location)
+    [InlineData("set:\n  a:\n    b: 1\n  a.b: 2", "set.a", "a.b")]
+    [InlineData("default: { x.y: 1, x.y.z: 2 }", "default.x.y", "x.y.z")]
+    public async Task A_policy_whose_own_paths_overlap_is_an_error(string body, string location, string inner)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {{ template: t/x }}\n{body}\n"));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("p.yaml", location), (error.File, error.Location));
-        Assert.Contains("overlaps", error.Message);
+        Assert.Equal(("p.yaml", location, $"overlaps '{inner}' in the same policy; give one of them."), (error.File, error.Location, error.Message));
     }
 
     [Fact]
@@ -316,7 +317,7 @@ public sealed class CatalogLoaderTests
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { kind: runtime }\nset: { runtime: 1 }\n"));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("p.yaml", "set.runtime"), (error.File, error.Location));
+        Assert.Equal(("p.yaml", "set.runtime", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'runtime'."), (error.File, error.Location, error.Message));
     }
 
     // The part schema's message (shared by every part kind), located at the node: a name with a dot in the validator's bracket form.
@@ -504,8 +505,7 @@ public sealed class CatalogLoaderTests
         var result = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", ComponentFile("alpha-db")), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { template: t/x }\nrequire: alpha-db\n"));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("p.yaml", "require"), (error.File, error.Location));
-        Assert.Contains("a node-scope policy cannot require a component", error.Message);
+        Assert.Equal(("p.yaml", "require", "a node-scope policy cannot require a component; use 'kind: runtime' to make every workload require it."), (error.File, error.Location, error.Message));
     }
 
     [Fact]

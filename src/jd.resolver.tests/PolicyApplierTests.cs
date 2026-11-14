@@ -99,8 +99,7 @@ public class PolicyApplierTests
         var result = await ApplyAsync([Policy("pol", "{ template: t/n }", "set: { 'keep.inner': 1 }\n")]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f4.yaml", "set.keep.inner"), (error.File, error.Location));
-        Assert.Contains("not an object", error.Message);
+        Assert.Equal(("f4.yaml", "set.keep.inner", "cannot create field 'keep.inner' of node 'sqldb/n': a parent on the path is not an object."), (error.File, error.Location, error.Message));
     }
 
     [Fact]
@@ -113,10 +112,7 @@ public class PolicyApplierTests
         ]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Contains("'alpha' (f5.yaml)", error.Message);
-        Assert.Contains("'zeta' (f4.yaml)", error.Message);
-        Assert.Contains("'size'", error.Message);
-        Assert.Equal("f5.yaml", error.File);
+        Assert.Equal(("f5.yaml", "set.size", "policies 'alpha' (f5.yaml) and 'zeta' (f4.yaml) give field 'size' of node 'sqldb/n' different set values."), (error.File, error.Location, error.Message));
     }
 
     [Fact]
@@ -133,7 +129,7 @@ public class PolicyApplierTests
             Policy("aa", "{ template: t/n }", "default: { fresh: 1 }\n"),
         ]);
 
-        Assert.Contains("default values", Assert.Single(differ.Errors).Message);
+        Assert.Equal("policies 'aa' (f4.yaml) and 'bb' (f5.yaml) give field 'fresh' of node 'sqldb/n' different default values.", Assert.Single(differ.Errors).Message);
         Assert.Empty(same.Errors);
         Assert.Equal("aa", Node(same, "n").Provenance["fresh"].Rule);
     }
@@ -300,9 +296,7 @@ public class PolicyApplierTests
         ]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Contains("'inner' (f5.yaml)", error.Message);
-        Assert.Contains("'outer' (f4.yaml)", error.Message);
-        Assert.Contains("'fresh' and 'fresh.b'", error.Message);
+        Assert.Equal(("f4.yaml", $"{layer}.fresh", $"policies 'outer' (f4.yaml) and 'inner' (f5.yaml) give overlapping {layer} fields 'fresh' and 'fresh.b' of node 'sqldb/n'."), (error.File, error.Location, error.Message));
         Assert.False(Node(result, "n").Config.ContainsKey("fresh"));
     }
 
