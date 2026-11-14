@@ -1,5 +1,6 @@
 using jd.resolver.catalog;
 using jd.resolver.environment;
+using jd.resolver.workload;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -45,9 +46,27 @@ public sealed class BinderTests
         }
         """;
 
+    // The workload roles on fields of its own names: a port under a list, a requirement per item, a class with its own default.
+    private const string Errand = """
+        "properties": {
+          "kind": { "enum": ["Errand"] },
+          "label": { "type": "string", "x-jd": { "is": "workload.name" } },
+          "crew": { "type": "string", "x-jd": { "is": "workload.team" } },
+          "box": { "properties": {
+            "picture": { "type": "string", "x-jd": { "is": "workload.image" } },
+            "settings": { "type": "object", "x-jd": { "is": "workload.variables" } },
+            "doors": { "type": "array", "items": { "properties": { "number": { "type": "integer", "x-jd": { "is": "workload.port" } } } } } } },
+          "asks": { "type": "array", "items": { "x-jd": { "is": "requirement" }, "properties": {
+            "what": { "type": "string", "x-jd": { "is": "requirement.type" } },
+            "as": { "type": "string", "x-jd": { "is": "requirement.id" } },
+            "grade": { "type": "string", "default": "plain", "x-jd": { "is": "requirement.class" } } } } }
+        }
+        """;
+
     private static async Task<Binder> BinderAsync() => new(await SchemaIndex.BuildAsync([
         Shipped("x-jd.schema.json"), Shipped("catalog/part.schema.json"), ("gizmo.json", $$"""{ "$id": "https://test/gizmo.json", {{Gizmo}} }"""),
         ("ledger.json", $$"""{ "$id": "https://test/ledger.json", {{Ledger}} }"""),
+        ("errand.json", $$"""{ "$id": "https://test/errand.json", {{Errand}} }"""),
         ("plain.json", """{ "$id": "https://test/plain.json", "properties": { "kind": { "enum": ["Plain"] } } }"""),
     ]));
 
@@ -159,5 +178,39 @@ public sealed class BinderTests
         var error = Assert.Throws<InvalidOperationException>(() => binder.ReadOwner(new Document("p.yaml", "Plain", JObject.Parse("""{ "kind": "Plain" }""")), "p"));
 
         Assert.Equal("Kind 'Plain' binds no owner; its documents own no parts.", error.Message);
+    }
+
+    // Each workload role is the first value the document holds (a port, the first item's); a requirement without an id has its type as id, and
+    // one without a class binds the schema's default.
+    [Fact]
+    public async Task A_planted_kind_binds_the_workload_roles_on_fields_of_its_own_names()
+    {
+        var document = new Document("e.yaml", "Errand", JObject.Parse("""
+            { "kind": "Errand", "label": "shop", "crew": "team-a",
+              "box": { "picture": "reg/app:1", "settings": { "A": "x", "B": "${resource.db.url}" }, "doors": [{ "number": 80 }, { "number": 90 }] },
+              "asks": [{ "what": "sqldb", "as": "db", "grade": "big" }, { "what": "cache" }] }
+            """));
+
+        var workload = (await BinderAsync()).ReadWorkload(document);
+
+        Assert.Equal(("shop", "team-a", "reg/app:1", 80), (workload.Name, workload.Team, workload.Image, workload.Port));
+        Assert.Equal([KeyValuePair.Create("A", "x"), KeyValuePair.Create("B", "${resource.db.url}")], workload.Variables);
+        Assert.Equal([new Requirement("sqldb", "db", "big", "asks[0]"), new Requirement("cache", null, "plain", "asks[1]")], workload.Requirements);
+        Assert.Equal(["db", "cache"], workload.Requirements.Select(requirement => requirement.Id));
+        Assert.Equal(("box.picture", "box.settings"), (workload.ImageLocation, workload.VariablesLocation));
+    }
+
+    // An absent image, port, variables or requirements binds nothing; the variables are located by their field's name.
+    [Fact]
+    public async Task A_workload_that_leaves_out_its_optional_roles_binds_none_of_them()
+    {
+        var document = new Document("e.yaml", "Errand", JObject.Parse("""{ "kind": "Errand", "label": "shop", "crew": "team-a" }"""));
+
+        var workload = (await BinderAsync()).ReadWorkload(document);
+
+        Assert.Equal(("shop", "team-a", null, null), (workload.Name, workload.Team, workload.Image, workload.Port));
+        Assert.Empty(workload.Variables);
+        Assert.Empty(workload.Requirements);
+        Assert.Equal("settings", workload.VariablesLocation);
     }
 }

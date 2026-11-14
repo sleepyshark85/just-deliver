@@ -1,3 +1,6 @@
+using jd.resolver.environment;
+using jd.resolver.graph;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace jd.resolver.tests;
@@ -84,5 +87,37 @@ public sealed class BindingCompletenessTests
         var message = await UnboundAsync("schemas/catalog/part.schema.json", "layer");
 
         Assert.Equal("No schema binds role 'layer'.", message);
+    }
+
+    // A workload is a kind that binds the workload's name; its variables are workload input into the platform (boundary 6).
+    [Fact]
+    public async Task A_workload_that_does_not_bind_its_variables_stops_jd()
+    {
+        var message = await UnboundAsync("schemas/workload.schema.json", "workload.variables");
+
+        Assert.Equal("Schema 'schemas/workload.schema.json' does not bind role 'workload.variables'.", message);
+    }
+
+    // The engine reads nothing it has not bound: a field the workload schema accepts but binds to no role cannot carry an expression into the
+    // platform, even one reading a deployed part's export. The planted field passes the schema, and the graph is the one without it.
+    [Fact]
+    public async Task An_unbound_workload_field_carrying_a_part_export_is_inert()
+    {
+        var index = await PlantedAsync("schemas/workload.schema.json", "\"notes\": { \"type\": \"string\" }, \"variables\": {", "\"variables\": {");
+        var sample = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml"));
+        var noted = sample.Replace("  variables:\n", "  notes: \"${cosmos-account.id}\"\n  variables:\n", StringComparison.Ordinal);
+        Assert.NotEqual(sample, noted);
+        var catalog = (await SeedCatalog.LoadAsync()).Value!;
+        var environment = (await EnvironmentParser.LoadAsync(await SourceFiles.ReadAsync(Path.Combine(AppContext.BaseDirectory, "golden", "seed-environment.yaml")), CancellationToken.None)).Value!;
+        string Resolve(string yaml)
+        {
+            var document = new Document("workload.yaml", "Workload", (JObject)definitionvalidator.YamlSchemaValidator.ParseYaml(yaml));
+            Assert.Empty(index.Validate(document));
+            var graph = Resolver.Resolve(new Binder(index).ReadWorkload(document), "workload.yaml", catalog, environment);
+            Assert.Empty(graph.Errors);
+            return GraphJson.Serialize(graph);
+        }
+
+        Assert.Equal(Resolve(sample), Resolve(noted));
     }
 }

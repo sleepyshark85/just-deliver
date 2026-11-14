@@ -57,8 +57,9 @@ Overrides (`overrides`, `override_reason`) are out of MVP scope and rejected by 
 
 `additionalProperties: false` at every level; top-level required: `apiVersion`, `kind`, `metadata`, `container`. Validation is implemented in `src/jd.definitionvalidator` (YamlDotNet with unquoted-scalar type inference so
 `port: 8080` stays an integer, then NJsonSchema). Rules JSON Schema cannot express run afterwards in code
-(`WorkloadRules`), only on a document that passed the schema: effective ids are unique within the workload,
-and every `${resource.<id>.<output>}` in `container.variables` names a declared effective id.
+(`WorkloadRules`, in `src/jd.resolver/workload`), only on a document that passed the schema and on the values its roles bind
+(docs/architecture/documents.md section 3): effective ids are unique within the workload, and every `${resource.<id>.<output>}` in
+`container.variables` names a declared effective id.
 
 ### Requirements: `id` and `class` (C12, C13)
 

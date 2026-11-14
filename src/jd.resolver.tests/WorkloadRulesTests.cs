@@ -15,7 +15,7 @@ metadata:
   team: platform-team
 ";
 
-    private static async Task<(bool IsValid, string[] Errors)> ValidateAsync(string yaml)
+    private static async Task<(bool IsValid, IReadOnlyList<string> Errors)> ValidateAsync(string yaml)
     {
         var result = await WorkloadFile.ParseAsync("workload.yaml", yaml);
         return (result.Value is not null, [.. result.Errors.Select(error => error.ToString())]);
@@ -131,5 +131,50 @@ metadata:
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Contains("type"));
         Assert.DoesNotContain(result.Errors, e => e.Contains("distinct"));
+    }
+
+    [Theory]
+    [InlineData("${resource.database}")]
+    [InlineData("${resource.database.}")]
+    [InlineData("${resource..endpoint}")]
+    public async Task A_reference_without_an_id_and_an_output_is_refused_with_the_form(string value)
+    {
+        var result = await ValidateAsync(Workload($"  variables:\n    DB: \"{value}\"\n", "  - type: database\n"));
+
+        Assert.Equal([$"workload.yaml: container.variables.DB: '{value}' must have the form ${{resource.<id>.<output>}}."], result.Errors);
+    }
+
+    [Fact]
+    public async Task A_reference_to_an_undeclared_id_names_the_declared_ids_or_none()
+    {
+        var none = await ValidateAsync(Workload("  variables:\n    DB: ${resource.missing.endpoint}\n", "  []\n"));
+        var two = await ValidateAsync(Workload("  variables:\n    DB: ${resource.missing.endpoint}\n", "  - type: database\n  - type: cache\n    id: hot\n"));
+
+        Assert.Equal(["workload.yaml: container.variables.DB: '${resource.missing.endpoint}' refers to 'missing', which no requirement declares (declared ids: none)."], none.Errors);
+        Assert.Equal(["workload.yaml: container.variables.DB: '${resource.missing.endpoint}' refers to 'missing', which no requirement declares (declared ids: database, hot)."], two.Errors);
+    }
+
+    [Fact]
+    public async Task A_reference_outside_resource_is_refused_with_the_one_form_allowed()
+    {
+        var result = await ValidateAsync(Workload("  variables:\n    BAD: ${cosmos-account.id}\n", "  - type: database\n"));
+
+        Assert.Equal(["workload.yaml: container.variables.BAD: '${cosmos-account.id}' is not allowed; a variable may only reference a requirement's output, as ${resource.<id>.<output>}."], result.Errors);
+    }
+
+    // Every rule is checked: an id used twice and each bad variable, the ids first, the variables in the order written.
+    [Fact]
+    public async Task Every_broken_rule_is_reported_in_one_pass()
+    {
+        var result = await ValidateAsync(Workload(
+            "  variables:\n    A: ${env.name}\n    B: ${resource.database.endpoint} ${resource.nope.x}\n",
+            "  - type: database\n  - type: cache\n    id: database\n"));
+
+        Assert.Equal(
+        [
+            "workload.yaml: requires[0], requires[1]: the id 'database' is used more than once (a requirement without an id uses its type as id). Set distinct 'id's.",
+            "workload.yaml: container.variables.A: '${env.name}' is not allowed; a variable may only reference a requirement's output, as ${resource.<id>.<output>}.",
+            "workload.yaml: container.variables.B: '${resource.nope.x}' refers to 'nope', which no requirement declares (declared ids: database).",
+        ], result.Errors);
     }
 }
