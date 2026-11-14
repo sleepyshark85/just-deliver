@@ -350,6 +350,28 @@ public class PolicyApplierTests
         Assert.Throws<KeyNotFoundException>(() => new PolicyApplier(catalog, Env()).Apply(expansion));
     }
 
+    // A name that only begins with another's (a, ab; k, kk) is not under it: no overlap between policies, and applying k leaves kk's provenance.
+    [Fact]
+    public async Task Policies_whose_paths_only_share_a_name_prefix_do_not_overlap_and_both_apply()
+    {
+        var result = await ApplyAsync([Policy("pol-a", "{ template: t/n }", "set: { a: 1 }\n"), Policy("pol-b", "{ template: t/n }", "set: { ab: 2 }\n")]);
+
+        Assert.Empty(result.Errors);
+        var node = Node(result, "n");
+        Assert.Equal((1, 2), (Number(node.Config["a"]), Number(node.Config["ab"])));
+    }
+
+    [Fact]
+    public async Task Applying_a_default_does_not_take_the_provenance_of_a_field_that_only_begins_with_its_name()
+    {
+        var result = await ApplyAsync([Policy("pol-set", "{ template: t/n }", "set: { kk: 1 }\n"), Policy("pol-default", "{ template: t/n }", "default: { k: 2 }\n")]);
+
+        Assert.Empty(result.Errors);
+        var node = Node(result, "n");
+        Assert.Equal(new Provenance("f4.yaml", "pol-set", Layer.PolicySet), node.Provenance["kk"]);
+        Assert.Equal(new Provenance("f5.yaml", "pol-default", Layer.PolicyDefault), node.Provenance["k"]);
+    }
+
     [Fact]
     public async Task The_catalog_version_is_on_the_result_and_the_catalog_is_not_changed()
     {

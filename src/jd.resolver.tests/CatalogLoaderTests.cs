@@ -311,6 +311,15 @@ public sealed class CatalogLoaderTests
         Assert.Equal(("p.yaml", location, $"overlaps '{inner}' in the same policy; give one of them."), (error.File, error.Location, error.Message));
     }
 
+    // A name that only begins with another's (a, ab) is not under it.
+    [Fact]
+    public async Task A_policy_whose_paths_only_share_a_name_prefix_loads()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { template: t/x }\nset: { a: 1, ab: 2 }\n"));
+
+        Assert.Empty(result.Errors);
+    }
+
     [Fact]
     public async Task A_bare_runtime_path_is_rejected()
     {
