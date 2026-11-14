@@ -31,7 +31,7 @@ internal sealed class SchemaIndex
     private const string MetaSchemaName = $"schemas/{Annotation}.schema.json";
 
     // Binding completeness (documents.md section 4): what a kind that binds the key role binds too, since a security boundary reads it: the nodes
-    // of every part (boundaries 1, 2, 3, 5, 6) and whether a declared environment type is gated (boundary 13).
+    // of every part (boundaries 1, 2, 3, 5, 6), whether a declared environment type is gated (boundary 13) and a workload's variables (boundary 6).
     private static readonly string[] NodeRoles = [Roles.PartNodes, Roles.NodeKind, Roles.NodeTemplate, Roles.NodeConfig];
 
     private static readonly Dictionary<string, string[]> Implied = new()
@@ -39,6 +39,7 @@ internal sealed class SchemaIndex
         [Roles.Part] = NodeRoles,
         [Roles.RuntimePart] = NodeRoles,
         [Roles.EnvironmentTypeLayer] = [Roles.EnvironmentTypeGated],
+        [Roles.WorkloadName] = [Roles.WorkloadVariables],
     };
 
     private readonly Dictionary<string, JsonSchema> _byKind;
@@ -77,8 +78,8 @@ internal sealed class SchemaIndex
 
     /// <summary>
     /// Binding completeness (docs/architecture/documents.md section 4): a security boundary reads only what a schema binds, so a kind that binds a
-    /// part binds the node roles, a kind that declares environment types binds whether each is gated, and some schema binds the runtime's part, the
-    /// environment types' layer and <see cref="Roles.Layer"/>. A schema that does not is a mistake in jd: throws <see cref="InvalidOperationException"/>
+    /// part binds the node roles, a kind that declares environment types binds whether each is gated, a workload binds its variables, and some schema
+    /// binds the runtime's part, the environment types' layer and <see cref="Roles.Layer"/>. A schema that does not is a mistake in jd: throws <see cref="InvalidOperationException"/>
     /// naming every schema and role it misses.
     /// </summary>
     public void CheckBindings()

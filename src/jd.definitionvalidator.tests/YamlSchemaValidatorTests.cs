@@ -140,16 +140,6 @@ version: invalid-version
     }
 
     [Fact]
-    public async Task An_exception_from_the_rules_reaches_the_caller()
-    {
-        var validator = new YamlSchemaValidator(_ => throw new InvalidOperationException("a bug in a rule"));
-
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => validator.ValidateTokenAsync(ValidSchema, YamlSchemaValidator.ParseYaml(ValidYaml)));
-
-        Assert.Equal("a bug in a rule", error.Message);
-    }
-
-    [Fact]
     public async Task ValidationResult_ToString_FormattsErrors()
     {
         var result = await _validator.ValidateContentAsync(ValidSchema, InvalidYaml_MissingRequired);

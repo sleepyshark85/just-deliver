@@ -1,5 +1,4 @@
 using System.Text;
-using jd.definitionvalidator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expansion;
@@ -34,7 +33,7 @@ public class PolicyApplierTests
         var files = BaseFiles.Concat(policies).Append(TestCatalog.RuntimeFile).Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
         var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
+        var workload = await TestWorkload.ParseAsync($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
         var expansion = new Expander(loaded.Value!, Env(type)).Expand(workload, "workload.yaml");
         Assert.Equal(expectExpansionErrors, expansion.Errors.Count > 0);
         return new PolicyApplier(loaded.Value!, Env(type)).Apply(expansion);
@@ -320,7 +319,7 @@ public class PolicyApplierTests
             .Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
         var catalog = (await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]))).Value!;
         var before = JsonConvert.SerializeObject(catalog);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\nrequires:\n  - type: sqldb\n");
+        var workload = await TestWorkload.ParseAsync("metadata: { name: shop, team: crew }\nrequires:\n  - type: sqldb\n");
         var expansion = new Expander(catalog, Env()).Expand(workload, "workload.yaml");
 
         var result = new PolicyApplier(catalog, Env()).Apply(expansion);
@@ -357,7 +356,7 @@ public class PolicyApplierTests
     public async Task Seed_catalog_and_sample_workload_resolve_with_monitoring_as_a_requirement()
     {
         var catalog = (await SeedCatalog.LoadAsync()).Value!;
-        var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
+        var workload = await TestWorkload.ParseAsync(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var environment = new EnvironmentDescriptor(
             "dev",
             "region",

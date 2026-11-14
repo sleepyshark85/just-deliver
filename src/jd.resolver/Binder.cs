@@ -1,5 +1,6 @@
 using jd.resolver.catalog;
 using jd.resolver.environment;
+using jd.resolver.workload;
 using Newtonsoft.Json.Linq;
 
 namespace jd.resolver;
@@ -74,8 +75,28 @@ internal sealed class Binder(SchemaIndex index)
             Strings(Read(Roles.EnvironmentOffers)),
             Read(Roles.EnvironmentApproval) is JObject block ? ReadApproval(values, block) : null)
         {
-            Locations = index.RolesOf(document.Kind).DistinctBy(field => field.Role)
-                .ToDictionary(field => field.Role, field => values.Every(field.Role).FirstOrDefault()?.Path ?? field.Name ?? string.Empty),
+            Locations = index.RolesOf(document.Kind).DistinctBy(field => field.Role).ToDictionary(field => field.Role, field => values.Locate(field.Role)),
+        };
+    }
+
+    /// <summary>
+    /// The workload <paramref name="document"/> is, by the <c>workload.*</c> roles (each the first value the document holds, so a role under a list
+    /// takes the first item's) and one requirement per <see cref="Roles.Requirement"/> value, with its type, id and class (an absent class binds
+    /// its default). Unbound fields are not read, so they are inert.
+    /// </summary>
+    public Workload ReadWorkload(Document document)
+    {
+        var values = ValuesOf(document);
+        return new Workload(
+            Text(values.First(Roles.WorkloadName)),
+            Text(values.First(Roles.WorkloadTeam)),
+            Text(values.First(Roles.WorkloadImage)),
+            (int?)values.First(Roles.WorkloadPort),
+            Entries(values.First(Roles.WorkloadVariables)).ToDictionary(variable => variable.Name, variable => Text(variable.Value)),
+            [.. values.Every(Roles.Requirement).Select(requirement => ReadRequirement(values, requirement))])
+        {
+            ImageLocation = values.Locate(Roles.WorkloadImage),
+            VariablesLocation = values.Locate(Roles.WorkloadVariables),
         };
     }
 
@@ -138,6 +159,14 @@ internal sealed class Binder(SchemaIndex index)
             template?.Path ?? node.Path);
     }
 
+    private static Requirement ReadRequirement(Values values, JToken requirement) => new(
+        Text(values.Nearest(Roles.RequirementType, requirement)),
+        Text(values.Nearest(Roles.RequirementClass, requirement)))
+    {
+        DeclaredId = (string?)values.Nearest(Roles.RequirementId, requirement),
+        Location = requirement.Path,
+    };
+
     // A rule without allowed characters is located where the rule is, as a node without config is.
     private static NamingRule ReadNamingRule(Values values, JToken rule)
     {
@@ -175,5 +204,12 @@ internal sealed class Binder(SchemaIndex index)
             return at.AncestorsAndSelf().Select(holder => held.FirstOrDefault(value => value.Parent?.Parent == holder)).FirstOrDefault(value => value is not null)
                 ?? roles.Where(field => field.Role == role).Select(field => field.Default).FirstOrDefault(value => value is not null);
         }
+
+        // A role the document holds once: its first value, so a role under a list takes the first item's.
+        public JToken? First(string role) => Every(role).FirstOrDefault();
+
+        // Where the role's first value was read; for a role the document leaves out, the property its field ends in (empty when none).
+        public string Locate(string role) =>
+            First(role)?.Path ?? roles.Where(field => field.Role == role).Select(field => field.Name).FirstOrDefault() ?? string.Empty;
     }
 }

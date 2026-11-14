@@ -1,9 +1,9 @@
 using System.Text;
-using jd.definitionvalidator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expansion;
 using jd.resolver.expressions;
+using jd.resolver.workload;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -41,11 +41,11 @@ public class ExpanderTests
         return result.Value!;
     }
 
-    private static JObject Workload(string requires) =>
-        (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
+    private static Task<Workload> WorkloadAsync(string requires) =>
+        TestWorkload.ParseAsync($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
 
-    private static ExpansionResult Expand(Catalog catalog, string requires, string type = "dev") =>
-        new Expander(catalog, Env(type)).Expand(Workload(requires), "workload.yaml");
+    private static async Task<ExpansionResult> ExpandAsync(Catalog catalog, string requires, string type = "dev") =>
+        new Expander(catalog, Env(type)).Expand(await WorkloadAsync(requires), "workload.yaml");
 
     [Fact]
     public async Task A_requirement_expands_its_component_class_with_the_requirement_id()
@@ -54,7 +54,7 @@ public class ExpanderTests
             "  n:\n    template: t/g\n    kind: grant\n    config:\n      scope: ${runtime.id}\n      name: ${name('thing')}\n      host: ${env.region}\n",
             "  endpoint: ${env.region}\n"));
 
-        var result = Expand(catalog, "  - type: sqldb\n    id: orders\n");
+        var result = await ExpandAsync(catalog, "  - type: sqldb\n    id: orders\n");
 
         Assert.Empty(result.Errors);
         var requirement = Assert.Single(result.Requirements);
@@ -73,7 +73,7 @@ public class ExpanderTests
     {
         var catalog = await LoadAsync(SqldbForStage);
 
-        var requirement = Assert.Single(Expand(catalog, "  - type: sqldb\n", type).Requirements);
+        var requirement = Assert.Single((await ExpandAsync(catalog, "  - type: sqldb\n", type)).Requirements);
 
         Assert.Equal(endpoint, Assert.IsType<Resolved>(requirement.Exports["endpoint"]).Value);
     }
@@ -83,7 +83,7 @@ public class ExpanderTests
     {
         var catalog = await LoadAsync(Sqldb(key: "stage"));
 
-        var result = Expand(catalog, "  - type: sqldb\n    id: orders\n");
+        var result = await ExpandAsync(catalog, "  - type: sqldb\n    id: orders\n");
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[0]"), (error.File, error.Location));
@@ -96,7 +96,7 @@ public class ExpanderTests
     {
         var catalog = await LoadAsync(Sqldb());
 
-        var result = Expand(catalog, "  - type: sqldb\n    id: orders\n    class: isolated\n");
+        var result = await ExpandAsync(catalog, "  - type: sqldb\n    id: orders\n    class: isolated\n");
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[0]"), (error.File, error.Location));
@@ -109,7 +109,7 @@ public class ExpanderTests
     {
         var catalog = await LoadAsync(Sqldb());
 
-        var error = Assert.Single(Expand(catalog, "  - type: cache\n").Errors);
+        var error = Assert.Single((await ExpandAsync(catalog, "  - type: cache\n")).Errors);
 
         Assert.Equal(("requires[0]", "requirement 'cache': 'cache' is not a component in the catalog."), (error.Location, error.Message));
     }
@@ -118,11 +118,11 @@ public class ExpanderTests
 
     private const string RuntimeFile = "f3.yaml";
 
-    private static JObject WorkloadWith(string container) =>
-        (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\ncontainer:\n{container}requires: []\n");
+    private static Task<Workload> WorkloadWithAsync(string container) =>
+        TestWorkload.ParseAsync($"metadata: {{ name: shop, team: crew }}\ncontainer:\n{container}requires: []\n");
 
     private static async Task<ExpansionResult> ExpandRuntimeAsync(string container, string type, params string[] runtimes) =>
-        new Expander(await LoadWithoutRuntimeAsync(runtimes), Env(type)).Expand(WorkloadWith(container), "workload.yaml");
+        new Expander(await LoadWithoutRuntimeAsync(runtimes), Env(type)).Expand(await WorkloadWithAsync(container), "workload.yaml");
 
     private static async Task<Catalog> LoadWithoutRuntimeAsync(string[] files)
     {
@@ -165,7 +165,7 @@ public class ExpanderTests
     {
         var catalog = await LoadAsync(Sqldb(), Sqldb().Replace("name: sqldb", "name: cache", StringComparison.Ordinal));
 
-        var result = new Expander(catalog, Env() with { Offers = ["cache", "container-app"] }).Expand(Workload("  - type: sqldb\n  - type: cache\n"), "workload.yaml");
+        var result = new Expander(catalog, Env() with { Offers = ["cache", "container-app"] }).Expand(await WorkloadAsync("  - type: sqldb\n  - type: cache\n"), "workload.yaml");
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[0]", "requirement 'sqldb': environment 'dev' does not offer sqldb (offers: cache, container-app)."), (error.File, error.Location, error.Message));
@@ -198,7 +198,7 @@ public class ExpanderTests
     private static async Task<ExpansionResult> ExpandOfferingAsync(string[] offers)
     {
         var catalog = await LoadWithoutRuntimeAsync([TestCatalog.Runtime(RuntimeNodes), TestCatalog.Runtime(RuntimeNodes.Replace("t/rt", "t/other")).Replace("name: container-app", "name: other-app")]);
-        return new Expander(catalog, Env() with { Offers = offers }).Expand(WorkloadWith("  image: i\n  ports:\n    - port: 80\n"), "workload.yaml");
+        return new Expander(catalog, Env() with { Offers = offers }).Expand(await WorkloadWithAsync("  image: i\n  ports:\n    - port: 80\n"), "workload.yaml");
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public class ExpanderTests
     {
         var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config:\n      size: 400\n      on: true\n      none: null\n      tags: [x, '${env.region}', 7]\n      nested: { deep: { host: '${env.region}' }, count: 2 }\n"));
 
-        var node = Assert.Single(Assert.Single(Expand(catalog, "  - type: sqldb\n").Requirements).Nodes);
+        var node = Assert.Single(Assert.Single((await ExpandAsync(catalog, "  - type: sqldb\n")).Requirements).Nodes);
 
         Assert.Equal(400, (int)Assert.IsType<ConfigScalar>(node.Config["size"]).Value);
         Assert.True((bool)Assert.IsType<ConfigScalar>(node.Config["on"]).Value);
@@ -247,7 +247,7 @@ public class ExpanderTests
         var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config: { a: 1 }\n  m:\n    template: t/m\n    config:\n      db: ${n.databaseName}\n      who: [{ id: '${runtime.principalId}' }]\n",
             "  endpoint: ${n.endpoint}\n"));
 
-        var requirement = Assert.Single(Expand(catalog, "  - type: sqldb\n").Requirements);
+        var requirement = Assert.Single((await ExpandAsync(catalog, "  - type: sqldb\n")).Requirements);
 
         var config = requirement.Nodes.Single(n => n.Name == "m").Config;
         Assert.Equal(new Reference(ReferenceKind.Node, "n", "databaseName"), Assert.Single(Assert.IsType<Pending>(Assert.IsType<ConfigText>(config["db"]).Result).References));
@@ -261,7 +261,7 @@ public class ExpanderTests
     {
         var catalog = await LoadAsync(Sqldb("  n:\n    template: t/n\n    config: { a: '${workload.nope}', b: '${role.nope}' }\n"));
 
-        var result = Expand(catalog, "  - type: sqldb\n    id: one\n  - type: sqldb\n    id: two\n");
+        var result = await ExpandAsync(catalog, "  - type: sqldb\n    id: one\n  - type: sqldb\n    id: two\n");
 
         Assert.Equal(4, result.Errors.Count);
         Assert.All(result.Errors, e => Assert.Equal(ComponentFile, e.File));
@@ -276,7 +276,7 @@ public class ExpanderTests
         string Snapshot() => JsonConvert.SerializeObject(catalog.Components);
         var before = Snapshot();
 
-        var node = Assert.Single(Assert.Single(Expand(catalog, "  - type: sqldb\n").Requirements).Nodes);
+        var node = Assert.Single(Assert.Single((await ExpandAsync(catalog, "  - type: sqldb\n")).Requirements).Nodes);
         ((JValue)Assert.IsType<ConfigScalar>(node.Config["size"]).Value).Value = 999;
         ((JValue)Assert.IsType<ConfigScalar>(Assert.IsType<ConfigArray>(node.Config["tags"]).Items[0]).Value).Value = 999;
 
@@ -287,7 +287,7 @@ public class ExpanderTests
     public async Task Seed_catalog_and_sample_workload_expand_without_errors()
     {
         var catalog = (await SeedCatalog.LoadAsync()).Value!;
-        var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
+        var workload = await TestWorkload.ParseAsync(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var environment = new EnvironmentDescriptor(
             "dev",
             "region",

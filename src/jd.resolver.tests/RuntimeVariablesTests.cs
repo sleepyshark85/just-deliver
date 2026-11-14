@@ -1,5 +1,4 @@
 using System.Text;
-using jd.definitionvalidator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expansion;
@@ -60,7 +59,7 @@ public class RuntimeVariablesTests
             .Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
         var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml(
+        var workload = await TestWorkload.ParseAsync(
             $"metadata: {{ name: shop, team: crew }}\ncontainer:\n  image: reg/app:1\n  ports:\n    - port: 8080\n  variables:\n{variables}requires:\n  - type: sqldb\n");
         return Resolver.Resolve(workload, "workload.yaml", loaded.Value!, Env);
     }

@@ -102,6 +102,30 @@ internal static class Roles
     /// <summary>Whether an approver must not have deployed the label on the environment the set is qualified on.</summary>
     public const string ApprovalSeparate = "approval.separate";
 
+    /// <summary>The workload's name, read as <c>${workload.name}</c>; the documents of a kind that binds it are workloads.</summary>
+    public const string WorkloadName = "workload.name";
+
+    /// <summary>The team that owns the workload, read as <c>${workload.team}</c>.</summary>
+    public const string WorkloadTeam = "workload.team";
+
+    /// <summary>The workload's image, read as <c>${workload.image}</c>.</summary>
+    public const string WorkloadImage = "workload.image";
+
+    /// <summary>The workload's port, read as <c>${workload.port}</c>; under a list, the first item's.</summary>
+    public const string WorkloadPort = "workload.port";
+
+    /// <summary>The workload's variables, by name: workload input into the platform, so each may read only a requirement's export (boundary 6).</summary>
+    public const string WorkloadVariables = "workload.variables";
+
+    /// <summary>A requirement of the workload, one per item.</summary>
+    public const string Requirement = "requirement";
+
+    /// <summary>A requirement's type: the component it asks for.</summary>
+    public const string RequirementType = "requirement.type";
+
+    /// <summary>A requirement's id; absent, the requirement's id is its type (ADR 0011).</summary>
+    public const string RequirementId = "requirement.id";
+
     /// <summary>A requirement's class, which selects a class part.</summary>
     public const string RequirementClass = "requirement.class";
 }
