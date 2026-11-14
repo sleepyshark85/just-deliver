@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="jd.resolver.tests" />
+    <InternalsVisibleTo Include="jd.orchestrator.tests" />
   </ItemGroup>
 
   <ItemGroup>

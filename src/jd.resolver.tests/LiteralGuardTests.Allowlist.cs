@@ -6,7 +6,7 @@ namespace jd.resolver.tests;
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
-        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3, S24c2, S24d, S24e, S24f }.SelectMany(Entries)];
+        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3, S24c3, S24d, S24e, S24f }.SelectMany(Entries)];
 
     private static IEnumerable<(string File, string Literal)> Entries(Dictionary<string, string[]> group) =>
         group.SelectMany(entry => entry.Value.Select(literal => (entry.Key, literal)));
@@ -34,7 +34,8 @@ public sealed partial class LiteralGuardTests
             "approval.approvers", "approval.qualified-on", "approval.required", "approval.separate", "catalog.version", "contract", "env.approval",
             "env.name", "env.offers", "env.region", "env.type", "env.values", "environment-type.layer", "layer", "naming.allowed", "naming.pattern",
             "naming.rules", "node.config", "node.kind", "node.template", "part.exports", "part.nodes", "part.scope", "policy.name", "requirement.class",
-            "roles", "runtime.part",
+            "requirement.id", "requirement.type", "roles", "runtime.part", "workload.image", "workload.name", "workload.port", "workload.team",
+            "workload.variables",
         ],
         ["jd.resolver/expansion/ConfigWalker.cs"] = ["workload.variables"], // the fn::entries source (Appendix A: concept 4)
         // the annotation keyword and the annotations it reads (each named once); JSON Schema's own keyword
@@ -70,22 +71,12 @@ public sealed partial class LiteralGuardTests
         ["backend-providers/jd.bp.pulumi/TemplateLibrary.cs"] = ["exports.", "template"],
     };
 
-    private static readonly Dictionary<string, string[]> S24c2 = new()
+    // Split from S24c2: the expansion model carries the workload's locations and the per-export locations.
+    private static readonly Dictionary<string, string[]> S24c3 = new()
     {
-        ["jd.definitionvalidator/WorkloadRules.cs"] = ["container", "container.variables.", "id", "requires", "requires[", "type", "variables"],
-        ["jd.resolver/expansion/ConfigWalker.cs"] = ["container.variables"],
-        ["jd.resolver/expansion/Expander.cs"] =
-        [
-            "class", "container", "id", "image", "metadata", "name", "port", "ports", "requires", "requires[", "team", "type", "variables",
-        ],
         ["jd.resolver/graph/ExportValues.cs"] = ["exports."],
         ["jd.resolver/graph/GraphBuilder.cs"] = ["exports."],
         ["jd.resolver/policies/PolicyApplier.cs"] = ["container.variables", "requires"],
-        ["jd.resolver/release/ReleaseBuilder.cs"] =
-        [
-            ".container.image", "].definition", "].dependsOn[", "container", "container.image", "definition", "dependsOn", "image", "label",
-            "metadata", "name", "team", "workloads", "workloads[",
-        ],
     };
 
     private static readonly Dictionary<string, string[]> S24d = new()
@@ -108,6 +99,7 @@ public sealed partial class LiteralGuardTests
     private static readonly Dictionary<string, string[]> S24f = new()
     {
         ["jd.resolver/environment/DescriptorComposer.cs"] = ["approval", "name", "offers", "region", "type", "values", "values."],
+        ["jd.resolver/release/ReleaseBuilder.cs"] = ["].definition", "].dependsOn[", "definition", "dependsOn", "label", "workloads", "workloads["], // the manifest
         ["jd.resolver/release/ReleaseSetFile.cs"] = ["].definition", "createdAt", "definition", "definitionSha256", "dependsOn", "label", "workloads", "workloads["],
     };
 }

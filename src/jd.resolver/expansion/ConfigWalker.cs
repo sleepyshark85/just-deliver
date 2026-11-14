@@ -3,8 +3,8 @@ using Newtonsoft.Json.Linq;
 
 namespace jd.resolver.expansion;
 
-/// <summary>The workload's <c>container.variables</c> and the file they were written in: what <c>fn::entries</c> stands for in the runtime node.</summary>
-internal sealed record WorkloadVariables(JObject Map, string File);
+/// <summary>The workload's variables, the file they were written in and where in it: what <c>fn::entries</c> stands for in the runtime node.</summary>
+internal sealed record WorkloadVariables(IReadOnlyDictionary<string, string> Map, string File, string Location);
 
 /// <summary>Evaluates catalog config (component and runtime nodes, policy values and added nodes) into <see cref="ConfigValue"/>s; shared by expansion and policies.</summary>
 internal static class ConfigWalker
@@ -14,8 +14,6 @@ internal static class ConfigWalker
 
     /// <summary>The only source of <see cref="EntriesKey"/>.</summary>
     internal const string EntriesSource = "workload.variables";
-
-    private const string VariablesLocation = "container.variables";
 
     /// <summary>
     /// Walks each field of a node's config; a field that failed to evaluate is omitted (see <see cref="Walk"/>). The form
@@ -30,7 +28,7 @@ internal static class ConfigWalker
         {
             var walked = variables is not null && IsEntriesForm(value)
                 // The variables are walked as plain properties, so a variable may itself be named like the form, and their problems are the workload's.
-                ? WalkConfig(Pairs(variables.Map), evaluator, variables.File, VariablesLocation, errors) with { AsEntries = true }
+                ? WalkConfig(variables.Map.Select(variable => KeyValuePair.Create(variable.Key, (JToken)variable.Value)), evaluator, variables.File, variables.Location, errors) with { AsEntries = true }
                 : Walk(value, evaluator, file, $"{location}.{key}", errors);
             if (walked is not null)
             {

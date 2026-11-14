@@ -1,13 +1,11 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using jd.core.bp;
-using jd.definitionvalidator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expansion;
 using jd.resolver.expressions;
 using jd.resolver.graph;
-using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace jd.resolver.tests;
@@ -278,7 +276,7 @@ public class SubstrateTests
         Assert.Equal(["container-app", "database", "monitoring"], descriptor.Offers);
 
         // The layout serves the components and policies: the sample workload resolves on it without errors.
-        var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
+        var workload = await TestWorkload.ParseAsync(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         Assert.Empty(Resolver.Resolve(workload, "workload.yaml", await CatalogAsync(), descriptor).Errors);
     }
 
@@ -384,7 +382,7 @@ public class SubstrateTests
         Assert.Empty(loaded.Errors);
         var definition = await OfferingAsync("dev", "dev", "thing");
         var environment = definition.Over(null);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: dev, team: crew }\nrequires:\n  - type: thing\n    id: substrate\n    class: substrate\n");
+        var workload = await TestWorkload.ParseAsync("metadata: { name: dev, team: crew }\nrequires:\n  - type: thing\n    id: substrate\n    class: substrate\n");
 
         var substrate = Resolver.ResolveSubstrate("definition.yaml", loaded.Value!, environment, null).Nodes.Single();
         var workloadNode = Resolver.Resolve(workload, "workload.yaml", loaded.Value!, environment).Nodes.Single();

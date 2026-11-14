@@ -77,7 +77,9 @@ public partial class OrchestratorTests
             .Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
         var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: {workloadName}, team: crew }}\n{container}requires:\n{requires}");
+        // Bound without the workload schema, so a test leaves out what it does not read (the image, the ports).
+        var body = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: {workloadName}, team: crew }}\n{container}requires:\n{requires}");
+        var workload = new Binder(await SchemaIndex.Shipped).ReadWorkload(new Document("workload.yaml", "Workload", body));
         var graph = Resolver.Resolve(workload, "workload.yaml", loaded.Value!, Env);
         Assert.Empty(graph.Errors);
         return (graph, loaded.Value!);

@@ -1,7 +1,7 @@
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expressions;
-using Newtonsoft.Json.Linq;
+using jd.resolver.workload;
 
 namespace jd.resolver.expansion;
 
@@ -17,27 +17,15 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
     /// <summary>Owner-name prefix of environment definitions. A workload name cannot start with it, so substrate and workload ids, stacks and <c>name()</c> hashes never collide.</summary>
     public const string EnvironmentOwnerPrefix = "@";
 
-    private sealed record Owner(OwnerKind Kind, string Name, string Team, string? Image, int? Port, JObject Variables);
+    private sealed record Owner(OwnerKind Kind, string Name, string Team, string? Image, int? Port, WorkloadVariables Variables);
 
-    /// <summary>A requirement with the format defaults applied: <c>id</c> falls back to the type, <c>class</c> to <see cref="DefaultClass"/>.</summary>
-    private sealed record Requirement(string Id, string Type, string Class)
-    {
-        public const string DefaultClass = "standard";
-    }
-
-    /// <param name="workload">The parsed workload definition, already schema-validated.</param>
+    /// <param name="workload">The workload, loaded through <see cref="WorkloadFile"/>.</param>
     /// <param name="workloadFile">Name reported in errors about the workload itself.</param>
-    public ExpansionResult Expand(JObject workload, string workloadFile)
+    public ExpansionResult Expand(Workload workload, string workloadFile)
     {
-        var container = workload["container"];
-        var owner = new Owner(
-            OwnerKind.Workload,
-            (string?)workload["metadata"]?["name"] ?? string.Empty,
-            (string?)workload["metadata"]?["team"] ?? string.Empty,
-            (string?)container?["image"],
-            (int?)(container?["ports"] as JArray)?.FirstOrDefault()?["port"],
-            container?["variables"] as JObject ?? new JObject());
-        return Expand(owner, workload["requires"] as JArray ?? [], workloadFile);
+        var variables = new WorkloadVariables(workload.Variables, workloadFile, workload.VariablesLocation);
+        var owner = new Owner(OwnerKind.Workload, workload.Name, workload.Team, workload.Image, workload.Port, variables);
+        return Expand(owner, workload.Requirements, workloadFile);
     }
 
     /// <summary>
@@ -48,7 +36,8 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
     /// </summary>
     public ExpansionResult ExpandEnvironment(string definitionFile, EnvironmentDescriptor? baseDescriptor)
     {
-        var owner = new Owner(OwnerKind.Environment, EnvironmentOwnerPrefix + environment.Name, string.Empty, null, null, new JObject());
+        var owner = new Owner(
+            OwnerKind.Environment, EnvironmentOwnerPrefix + environment.Name, string.Empty, null, null, new WorkloadVariables(new Dictionary<string, string>(), definitionFile, string.Empty));
         var errors = new List<LoadError>();
         void Fail(string location, string message) => errors.Add(new LoadError(definitionFile, location, message));
         string Offers() => environment.Location(Roles.EnvironmentOffers); // read when an error is reported
@@ -143,27 +132,19 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         return reached;
     }
 
-    private ExpansionResult Expand(Owner owner, JArray requires, string ownerFile)
+    private ExpansionResult Expand(Owner owner, IReadOnlyList<Requirement> declared, string ownerFile)
     {
-        var requirements = new List<ExpandedRequirement>();
         var errors = new List<LoadError>();
-        var declaredTypes = new HashSet<string>();
-        var index = 0;
-        foreach (var entry in requires)
+        var requirements = new List<ExpandedRequirement>();
+        foreach (var requirement in declared)
         {
-            var type = (string?)entry["type"] ?? string.Empty;
-            declaredTypes.Add(type);
-            var requirement = new Requirement(
-                (string?)entry["id"] ?? type,
-                type,
-                (string?)entry["class"] ?? Requirement.DefaultClass);
-            var location = $"requires[{index++}]";
-            if (ExpandOne(requirement, owner, ownerFile, location, errors) is { } expanded)
+            if (ExpandOne(requirement, owner, ownerFile, errors) is { } expanded)
             {
                 requirements.Add(expanded);
             }
         }
 
+        var declaredTypes = declared.Select(requirement => requirement.Type).ToHashSet();
         var runtime = ExpandRuntime(owner, requirements, ownerFile, errors);
         return new ExpansionResult(owner.Kind, ownerFile, owner.Name, owner.Team, owner.Image, owner.Port, requirements, declaredTypes, runtime, errors, new Dictionary<string, IReadOnlyDictionary<string, string>>());
     }
@@ -176,9 +157,9 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 
     // Exact lookup, no matching: the component named by the type, which the environment must offer (security boundary 11), and its part
     // the environment's type and the class select.
-    private ExpandedRequirement? ExpandOne(Requirement requirement, Owner owner, string ownerFile, string location, List<LoadError> errors)
+    private ExpandedRequirement? ExpandOne(Requirement requirement, Owner owner, string ownerFile, List<LoadError> errors)
     {
-        void Fail(string message) => errors.Add(new LoadError(ownerFile, location, $"requirement '{requirement.Id}': {message}"));
+        void Fail(string message) => errors.Add(new LoadError(ownerFile, requirement.Location, $"requirement '{requirement.Id}': {message}"));
         if (!catalog.Components.TryGetValue(requirement.Type, out var component))
         {
             Fail($"'{requirement.Type}' is not a component in the catalog.");
@@ -208,7 +189,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         var exports = EvaluateExports(component.Source, part.ExportsLocation, part.Exports, evaluator, found);
         if (found.Count > 0)
         {
-            errors.AddRange(found.Select(e => e with { Message = $"for {location} ('{requirement.Id}'): {e.Message}" }));
+            errors.AddRange(found.Select(e => e with { Message = $"for {requirement.Location} ('{requirement.Id}'): {e.Message}" }));
             return null;
         }
 
@@ -259,9 +240,8 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         }
 
         var found = new List<LoadError>();
-        var variables = new WorkloadVariables(owner.Variables, ownerFile);
         var nodes = EvaluateNodes(runtime.Source, part.Nodes, found, (name, kind) => IsRuntimeNode(name, kind)
-            ? (EvaluatorFor(owner, name, part.Nodes.Keys, known), variables)
+            ? (EvaluatorFor(owner, name, part.Nodes.Keys, known), owner.Variables)
             : (EvaluatorFor(owner, name, part.Nodes.Keys), null));
         if (found.Count > 0)
         {

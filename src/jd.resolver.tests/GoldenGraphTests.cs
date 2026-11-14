@@ -1,8 +1,6 @@
 using System.Runtime.CompilerServices;
-using jd.definitionvalidator;
 using jd.resolver.environment;
 using jd.resolver.graph;
-using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace jd.resolver.tests;
@@ -16,7 +14,7 @@ public class GoldenGraphTests
     {
         var catalog = (await SeedCatalog.LoadAsync()).Value!;
         var environment = (await EnvironmentParser.LoadAsync(await SourceFiles.ReadAsync(Path.Combine(AppContext.BaseDirectory, "golden", "seed-environment.yaml")), CancellationToken.None)).Value!;
-        var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
+        var workload = await TestWorkload.ParseAsync(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
 
         var graph = Resolver.Resolve(workload, "workload.yaml", catalog, environment);
 

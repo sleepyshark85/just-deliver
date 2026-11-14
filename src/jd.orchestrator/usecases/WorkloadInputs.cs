@@ -3,13 +3,12 @@ using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.graph;
 using jd.resolver.workload;
-using Newtonsoft.Json.Linq;
 
 namespace jd.orchestrator.usecases;
 
 // What preview and deploy resolve: the workload, the catalog and the environment, each loaded from its document, the environment's type checked
 // against the catalog. WorkloadName names the workload's document as its errors do.
-internal sealed record WorkloadInputs(JObject Workload, string WorkloadName, Catalog Catalog, EnvironmentDescriptor Environment)
+internal sealed record WorkloadInputs(Workload Workload, string WorkloadName, Catalog Catalog, EnvironmentDescriptor Environment)
 {
     // Null with the errors in the order a person fixes them: the workload's alone, then the catalog's (located: application.md section 7) and the
     // environment's together, then the type's.

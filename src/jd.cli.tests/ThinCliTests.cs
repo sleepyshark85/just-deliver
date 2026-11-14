@@ -13,7 +13,7 @@ namespace jd.cli.tests;
 // the references it finds today, by type: a later S25 slice removes the entries its move makes obsolete, and a stale entry fails, so the lists only shrink.
 public sealed partial class ThinCliTests
 {
-    private static readonly Assembly[] InnerAssemblies = [typeof(IRecordStore).Assembly, typeof(WorkloadRules).Assembly, typeof(Resolver).Assembly, typeof(Orchestrator).Assembly];
+    private static readonly Assembly[] InnerAssemblies = [typeof(IRecordStore).Assembly, typeof(YamlSchemaValidator).Assembly, typeof(Resolver).Assembly, typeof(Orchestrator).Assembly];
 
     // A use case's one entry point (section 5).
     private const string RunAsync = "RunAsync";

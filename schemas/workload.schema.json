@@ -20,11 +20,13 @@
       "required": ["name", "team"],
       "properties": {
         "name": {
+          "x-jd": { "is": "workload.name" },
           "description": "Workload identifier. Used to generate resource names, so it must be DNS-safe and short enough to survive per-resource prefixes and suffixes.",
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
         },
         "team": {
+          "x-jd": { "is": "workload.team" },
           "description": "Owning team. Drives approval routing and cost attribution.",
           "type": "string",
           "minLength": 1
@@ -38,11 +40,13 @@
       "required": ["image"],
       "properties": {
         "image": {
+          "x-jd": { "is": "workload.image" },
           "description": "Fully qualified image reference including a tag, or pinned by digest (`@sha256:…`) — prefer the digest for releases.",
           "type": "string",
           "minLength": 1
         },
         "variables": {
+          "x-jd": { "is": "workload.variables" },
           "description": "Environment variables. Values may reference provisioned resources with ${resource.<id>.<output>}, where <id> is the requirement's effective id (its id, or its type when no id is set). Substituted at deployment time.",
           "type": "object",
           "additionalProperties": { "type": "string" }
@@ -55,6 +59,7 @@
             "required": ["port"],
             "properties": {
               "port": {
+                "x-jd": { "is": "workload.port" },
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 65535
@@ -71,21 +76,25 @@
       "description": "Infrastructure the workload needs, declared by type only. The platform picks the concrete resource and its configuration. Effective ids (id, or type when id is absent) must be unique within the workload, and every ${resource.<id>.<output>} reference must name a declared id; the validator checks both, this schema cannot.",
       "type": "array",
       "items": {
+        "x-jd": { "is": "requirement" },
         "type": "object",
         "additionalProperties": false,
         "required": ["type"],
         "properties": {
           "type": {
+            "x-jd": { "is": "requirement.type" },
             "description": "Resource type, lowercase kebab-case. Whether the type exists is checked against the platform catalog by the resolver, not by this schema.",
             "type": "string",
             "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$"
           },
           "id": {
+            "x-jd": { "is": "requirement.id" },
             "description": "Identity of this requirement within the workload, referenced as ${resource.<id>.<output>}. Optional; the effective id defaults to the value of type. It is an identity, not a label: renaming it deletes the old resource and provisions a new one.",
             "type": "string",
             "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$"
           },
           "class": {
+            "x-jd": { "is": "requirement.class" },
             "description": "Operational shape of the resource, such as how isolated it is. Optional; defaults to standard.",
             "type": "string",
             "default": "standard",

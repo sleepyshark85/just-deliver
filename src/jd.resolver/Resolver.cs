@@ -3,18 +3,18 @@ using jd.resolver.environment;
 using jd.resolver.expansion;
 using jd.resolver.graph;
 using jd.resolver.policies;
-using Newtonsoft.Json.Linq;
+using jd.resolver.workload;
 
 namespace jd.resolver;
 
 /// <summary>The whole resolution in one call: expand the requirements, apply the policies, build the graph. Pure.</summary>
 public static class Resolver
 {
-    /// <param name="workload">The workload definition, already schema-validated (see <see cref="workload.WorkloadFile"/>).</param>
+    /// <param name="workload">The workload, loaded through <see cref="WorkloadFile"/>.</param>
     /// <param name="workloadFile">Name reported in errors about the workload itself.</param>
     /// <param name="catalog">The loaded catalog.</param>
     /// <param name="environment">The environment descriptor the graph is resolved for.</param>
-    public static ResolvedGraph Resolve(JObject workload, string workloadFile, Catalog catalog, EnvironmentDescriptor environment) =>
+    public static ResolvedGraph Resolve(Workload workload, string workloadFile, Catalog catalog, EnvironmentDescriptor environment) =>
         Build(new Expander(catalog, environment).Expand(workload, workloadFile), catalog, environment);
 
     /// <summary>
