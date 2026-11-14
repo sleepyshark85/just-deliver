@@ -93,6 +93,14 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
             var location = origin?.Layer == Layer.Workload && field.IndexOf('.') is var dot and > 0 ? origin.Rule + field[dot..] : field;
             void Fail(string message) => context.Errors.Add(new LoadError(origin?.Source ?? id, location, $"node '{id}': {message}"));
 
+            void DependOn(Reference reference, string inScope)
+            {
+                if (DependencyOf(reference, inScope, field, context, Fail) is { } target)
+                {
+                    dependsOn.Add(target);
+                }
+            }
+
             foreach (var reference in (text.Result as Pending)?.References ?? (IEnumerable<Reference>)[])
             {
                 // Only the runtime node reads requirements' exports (workload variables). Elsewhere one requirement could read another, or a
@@ -103,49 +111,43 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
                 }
                 else if (reference.Kind == ReferenceKind.Resource)
                 {
-                    FollowExport(reference, field, context.Exports, Fail, inner => AddDependency(inner, reference.Target, field, Fail));
+                    FollowExport(reference, field, context, Fail, inner => DependOn(inner, reference.Target));
                 }
                 else
                 {
-                    AddDependency(reference, scope, field, Fail);
+                    DependOn(reference, scope);
                 }
-            }
-        }
-
-        // A reference to a node output, in the scope its expression was written in, is an edge to that node.
-        void AddDependency(Reference reference, string inScope, string field, Action<string> fail)
-        {
-            if (reference.Target == ExpressionEvaluator.RuntimeNode)
-            {
-                if (context.RuntimeId is null)
-                {
-                    fail($"field '{field}' references runtime.{reference.Output}, but there is no runtime.");
-                }
-                else
-                {
-                    dependsOn.Add(context.RuntimeId);
-                }
-            }
-            else if (context.Ids.TryGetValue((inScope, reference.Target), out var target))
-            {
-                dependsOn.Add(target);
-            }
-            else
-            {
-                // The evaluator rejects names outside the scope it was given.
-                throw new UnreachableException($"node '{id}' references '{reference.Target}', which the evaluator should have rejected.");
             }
         }
 
         return new Draft(id, scope, Stack(id), node, dependsOn.ToList());
     }
 
+    // A reference to a node output, in the scope its expression was written in, is an edge to that node: its id, or the runtime's. Null, after
+    // fail, when the reference is to a runtime that does not exist.
+    private static string? DependencyOf(Reference reference, string inScope, string field, BuildContext context, Action<string> fail)
+    {
+        if (reference.Target == ExpressionEvaluator.RuntimeNode)
+        {
+            if (context.RuntimeId is null)
+            {
+                fail($"field '{field}' references runtime.{reference.Output}, but there is no runtime.");
+            }
+
+            return context.RuntimeId;
+        }
+
+        // The evaluator rejects names outside the scope it was given.
+        return context.Ids.TryGetValue((inScope, reference.Target), out var target)
+            ? target
+            : throw new UnreachableException($"field '{field}' references '{reference.Target}', which the evaluator should have rejected.");
+    }
+
     // A reference to a requirement's export: the export waits on the nodes of its requirement, so the node does too (dependOn, given the
     // export's node reference); one that waits on the runtime is refused, as the runtime cannot read it.
-    private static void FollowExport(
-        Reference reference, string field, Dictionary<string, IReadOnlyDictionary<string, EvalResult>> exports, Action<string> fail, Action<Reference> dependOn)
+    private static void FollowExport(Reference reference, string field, BuildContext context, Action<string> fail, Action<Reference> dependOn)
     {
-        if (!exports.TryGetValue(reference.Target, out var requirementExports) || !requirementExports.TryGetValue(reference.Output, out var export))
+        if (!context.Exports.TryGetValue(reference.Target, out var requirementExports) || !requirementExports.TryGetValue(reference.Output, out var export))
         {
             fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which is not an export of a requirement of this workload.");
             return;
