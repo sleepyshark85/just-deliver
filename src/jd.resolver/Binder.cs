@@ -90,7 +90,7 @@ internal sealed class Binder(SchemaIndex index)
         return new Workload(
             Text(values.First(Roles.WorkloadName)),
             Text(values.First(Roles.WorkloadTeam)),
-            (string?)values.First(Roles.WorkloadImage),
+            Text(values.First(Roles.WorkloadImage)),
             (int?)values.First(Roles.WorkloadPort),
             Entries(values.First(Roles.WorkloadVariables)).ToDictionary(variable => variable.Name, variable => Text(variable.Value)),
             [.. values.Every(Roles.Requirement).Select(requirement => ReadRequirement(values, requirement))])
@@ -161,9 +161,11 @@ internal sealed class Binder(SchemaIndex index)
 
     private static Requirement ReadRequirement(Values values, JToken requirement) => new(
         Text(values.Nearest(Roles.RequirementType, requirement)),
-        (string?)values.Nearest(Roles.RequirementId, requirement),
-        Text(values.Nearest(Roles.RequirementClass, requirement)),
-        requirement.Path);
+        Text(values.Nearest(Roles.RequirementClass, requirement)))
+    {
+        DeclaredId = (string?)values.Nearest(Roles.RequirementId, requirement),
+        Location = requirement.Path,
+    };
 
     // A rule without allowed characters is located where the rule is, as a node without config is.
     private static NamingRule ReadNamingRule(Values values, JToken rule)

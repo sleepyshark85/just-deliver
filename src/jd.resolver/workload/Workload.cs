@@ -6,14 +6,14 @@ namespace jd.resolver.workload;
 /// </summary>
 /// <param name="Name">The workload's name.</param>
 /// <param name="Team">The team that owns it.</param>
-/// <param name="Image">Its image; the schema requires it, so null only for a workload bound without its schema (a test's).</param>
+/// <param name="Image">Its image.</param>
 /// <param name="Port">Its first port; null when it declares none.</param>
 /// <param name="Variables">Its variables, by name; workload input into the platform (boundary 6).</param>
 /// <param name="Requirements">Its requirements, in the order written.</param>
 public sealed record Workload(
     string Name,
     string Team,
-    string? Image,
+    string Image,
     int? Port,
     IReadOnlyDictionary<string, string> Variables,
     IReadOnlyList<Requirement> Requirements)

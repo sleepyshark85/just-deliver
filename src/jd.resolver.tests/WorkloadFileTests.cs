@@ -50,7 +50,7 @@ public sealed class WorkloadFileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_rule_error_has_its_location_split_from_the_message()
+    public async Task A_rule_error_carries_its_location_and_message()
     {
         var result = await LoadAsync((await File.ReadAllTextAsync(Sample)) + "  - type: database\n");
 

@@ -195,7 +195,7 @@ public sealed class BinderTests
 
         Assert.Equal(("shop", "team-a", "reg/app:1", 80), (workload.Name, workload.Team, workload.Image, workload.Port));
         Assert.Equal([KeyValuePair.Create("A", "x"), KeyValuePair.Create("B", "${resource.db.url}")], workload.Variables);
-        Assert.Equal([new Requirement("sqldb", "db", "big", "asks[0]"), new Requirement("cache", null, "plain", "asks[1]")], workload.Requirements);
+        Assert.Equal([new Requirement("sqldb", "big") { DeclaredId = "db", Location = "asks[0]" }, new Requirement("cache", "plain") { Location = "asks[1]" }], workload.Requirements);
         Assert.Equal(["db", "cache"], workload.Requirements.Select(requirement => requirement.Id));
         Assert.Equal(("box.picture", "box.settings"), (workload.ImageLocation, workload.VariablesLocation));
     }
@@ -208,7 +208,7 @@ public sealed class BinderTests
 
         var workload = (await BinderAsync()).ReadWorkload(document);
 
-        Assert.Equal(("shop", "team-a", null, null), (workload.Name, workload.Team, workload.Image, workload.Port));
+        Assert.Equal(("shop", "team-a", "", null), (workload.Name, workload.Team, workload.Image, workload.Port));
         Assert.Empty(workload.Variables);
         Assert.Empty(workload.Requirements);
         Assert.Equal("settings", workload.VariablesLocation);

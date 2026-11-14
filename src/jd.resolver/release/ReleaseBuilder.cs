@@ -91,8 +91,7 @@ public static class ReleaseBuilder
                 continue;
             }
 
-            // A loaded definition holds an image: the workload schema requires it.
-            var image = workload.Image!;
+            var image = workload.Image;
             if (!PinnedByDigest.IsMatch(image))
             {
                 errors.Add(new LoadError(source.File, Within(source.Location, workload.ImageLocation), $"'{image}' is not pinned by digest; a tag can change under a release. Use <image>@sha256:<64 hex digits>."));

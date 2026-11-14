@@ -18,7 +18,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     internal const string EnvNamespace = "env";
     private const string RoleNamespace = "role";
     private const string WorkloadNamespace = "workload";
-    private const string ResourceNamespace = "resource";
+    internal const string ResourceNamespace = "resource";
     private const string WorkloadNameField = "name";
     private const string WorkloadTeamField = "team";
     private const string WorkloadImageField = "image";

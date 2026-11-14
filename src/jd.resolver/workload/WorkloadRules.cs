@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using jd.resolver.expressions;
 
 namespace jd.resolver.workload;
 
@@ -13,7 +14,7 @@ internal static partial class WorkloadRules
     [GeneratedRegex(@"\$\{([^}]*)\}")]
     private static partial Regex ExpressionRegex();
 
-    private const string ResourcePrefix = "resource.";
+    private const string ResourcePrefix = ExpressionEvaluator.ResourceNamespace + ".";
 
     /// <summary>Every rule <paramref name="workload"/> breaks, each where it is broken in <paramref name="file"/>; empty when it keeps them all.</summary>
     public static IReadOnlyList<LoadError> Check(Workload workload, string file)
