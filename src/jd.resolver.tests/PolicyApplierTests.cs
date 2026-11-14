@@ -335,6 +335,21 @@ public class PolicyApplierTests
         Assert.Equal(("f4.yaml", location), (error.File, error.Location));
     }
 
+    // A criterion on a role the applier does not supply is a jd bug: the schema declares a match the applier does not know, and a policy using it
+    // would otherwise silently never apply.
+    [Fact]
+    public async Task A_policy_criterion_on_a_role_the_applier_does_not_supply_throws_instead_of_never_applying()
+    {
+        var binder = await PlantedPolicySchema.BinderAsync(("team", "workload.team"));
+        var policy = binder.ReadPolicy(new Document("p.yaml", "Policy", JObject.Parse("""{ "kind": "Policy", "name": "pol", "reason": "r", "match": { "team": "crew" }, "set": { "size": 1 } }""")));
+        var files = BaseFiles.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var catalog = (await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]))).Value! with { Policies = [policy] };
+        var workload = await TestWorkload.ParseAsync("metadata: { name: shop, team: crew }\nrequires:\n  - type: sqldb\n");
+        var expansion = new Expander(catalog, Env()).Expand(workload, "workload.yaml");
+
+        Assert.Throws<KeyNotFoundException>(() => new PolicyApplier(catalog, Env()).Apply(expansion));
+    }
+
     [Fact]
     public async Task The_catalog_version_is_on_the_result_and_the_catalog_is_not_changed()
     {

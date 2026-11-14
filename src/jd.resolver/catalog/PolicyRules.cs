@@ -1,3 +1,4 @@
+using jd.resolver.expansion;
 using jd.resolver.expressions;
 
 namespace jd.resolver.catalog;
@@ -13,7 +14,7 @@ internal static class PolicyRules
     private static readonly string[] WorkloadCriteria = [Roles.EnvironmentType];
 
     // Every path of a workload-scope policy is a field of the runtime node, so it starts with that node's name.
-    private const string RuntimePrefix = ExpressionEvaluator.RuntimeNode + ".";
+    private static readonly string RuntimePrefix = ExpressionEvaluator.RuntimeNode + ConfigLeaves.PathSeparator;
 
     /// <summary>Every policy of <paramref name="policies"/> that fits neither scope, then every path that overlaps another in the same policy.</summary>
     public static IReadOnlyList<LoadError> Check(IReadOnlyList<Policy> policies) => [.. policies.SelectMany(ScopeErrors), .. policies.SelectMany(OverlapErrors)];
@@ -61,12 +62,12 @@ internal static class PolicyRules
     private static IEnumerable<LoadError> OverlapErrors(Policy policy) =>
         from field in Fields(policy)
         from outer in field.Entries.OrderBy(entry => entry.Path, StringComparer.Ordinal)
-        from inner in field.Entries.Select(entry => entry.Path).Order(StringComparer.Ordinal).Where(path => path.StartsWith(outer.Path + ".", StringComparison.Ordinal))
+        from inner in field.Entries.Select(entry => entry.Path).Order(StringComparer.Ordinal).Where(path => path.StartsWith(outer.Path + ConfigLeaves.PathSeparator, StringComparison.Ordinal))
         select new LoadError(policy.Source, outer.Location, $"overlaps '{inner}' in the same policy; give one of them.");
 
     // The paths the policy sets, then those it defaults.
     private static PolicyEntries[] Fields(Policy policy) => [policy.Set, policy.Default];
 
-    // Names as a sentence lists them, "a, b and c"; the policy schema has several criteria, so there is a last one and one before it.
-    private static string Listed(IReadOnlyList<string> names) => $"{string.Join(", ", names.SkipLast(1))} and {names[^1]}";
+    // Names as a sentence lists them: "a", "a and b", "a, b and c".
+    private static string Listed(IReadOnlyList<string> names) => names.Count < 2 ? string.Join(string.Empty, names) : $"{string.Join(", ", names.SkipLast(1))} and {names[^1]}";
 }

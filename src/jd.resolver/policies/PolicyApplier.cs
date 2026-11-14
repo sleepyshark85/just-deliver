@@ -14,8 +14,6 @@ namespace jd.resolver.policies;
 /// </summary>
 public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environment)
 {
-    private const char PathSeparator = '.';
-
     // Policy name order makes conflict reports and "same value" provenance independent of file order.
     private readonly IReadOnlyList<Policy> _policies = catalog.Policies.OrderBy(p => p.Name, StringComparer.Ordinal).ToList();
 
@@ -84,9 +82,10 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         [Roles.RequirementClass] = cls,
     };
 
-    // Every criterion the policy gives a value holds: the value equals the role's, so a role without a value holds none.
+    // Every criterion the policy gives a value holds: the value equals the role's, so a role without a value holds none. A criterion on a role
+    // ValuesAt does not supply is a jd bug (the schema declares a match this applier does not know), so it throws rather than never applying.
     private static bool Holds(Policy policy, Dictionary<string, string?> values) =>
-        policy.Criteria.All(criterion => criterion.Value is null || criterion.Value == values.GetValueOrDefault(criterion.Role));
+        policy.Criteria.All(criterion => criterion.Value is null || criterion.Value == values[criterion.Role]);
 
     // The node's config with the matching policies applied, and where each field came from; the variables' provenance is that of its entries fields.
     private ResolvedNode ApplyNodePolicies(ExpandedNode node, NodeOwner owner, Provenance variables, NodeRun run)
@@ -106,7 +105,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         // A workload-scope policy addresses the runtime node by name: its paths here have that name removed, but are reported as written.
         List<NodeEntry> Entries(Func<Policy, PolicyEntries> of) =>
             [.. matching.SelectMany(p => owner.WorkloadPolicies.Contains(p)
-                ? of(p).Entries.Where(e => e.Path.StartsWith(node.Name + PathSeparator, StringComparison.Ordinal)).Select(e => new NodeEntry(p, of(p).Name, e.Path[(node.Name.Length + 1)..], e))
+                ? of(p).Entries.Where(e => e.Path.StartsWith(node.Name + ConfigLeaves.PathSeparator, StringComparison.Ordinal)).Select(e => new NodeEntry(p, of(p).Name, e.Path[(node.Name.Length + 1)..], e))
                 : of(p).Entries.Select(e => new NodeEntry(p, of(p).Name, e.Path, e)))];
 
         // Sets replace whatever is there; defaults only fill what is absent after the sets.
@@ -132,7 +131,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
                 continue;
             }
 
-            var path = first.Path.Split(PathSeparator);
+            var path = first.Path.Split(ConfigLeaves.PathSeparator);
             if (EntriesMisuse(config, path, entry.Value) is { } misuse)
             {
                 errors.Add(new LoadError(policy.Source, entry.Location, $"policy '{policy.Name}' gives '{entry.Path}' of node '{label}': {misuse}"));
@@ -156,7 +155,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
             }
 
             config = updated;
-            foreach (var key in provenance.Keys.Where(k => k == first.Path || k.StartsWith(first.Path + PathSeparator, StringComparison.Ordinal)).ToList())
+            foreach (var key in provenance.Keys.Where(k => k == first.Path || k.StartsWith(first.Path + ConfigLeaves.PathSeparator, StringComparison.Ordinal)).ToList())
             {
                 provenance.Remove(key);
             }
@@ -174,7 +173,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         var overlapping = new HashSet<string>();
         foreach (var outer in all)
         {
-            foreach (var inner in all.Where(i => i.Policy.Name != outer.Policy.Name && i.Path.StartsWith(outer.Path + PathSeparator, StringComparison.Ordinal)))
+            foreach (var inner in all.Where(i => i.Policy.Name != outer.Policy.Name && i.Path.StartsWith(outer.Path + ConfigLeaves.PathSeparator, StringComparison.Ordinal)))
             {
                 run.Errors.Add(new LoadError(outer.Policy.Source, outer.Entry.Location,
                     $"policies '{outer.Policy.Name}' ({outer.Policy.Source}) and '{inner.Policy.Name}' ({inner.Policy.Source}) give overlapping {outer.Field} fields '{outer.Entry.Path}' and '{inner.Entry.Path}' of node '{run.Label}'."));
