@@ -216,4 +216,111 @@ public sealed class SchemaIndexTests
         Assert.StartsWith("The meta-schema refuses: doc.json: properties.a: schema violation: AdditionalPropertiesNotValid: #/properties.a ", error.Message);
         Assert.Contains(violation, error.Message);
     }
+
+    // A recursive schema is walked down to where it repeats (documents.md section 3): an annotation in it would be read at its first level only.
+    [Fact]
+    public async Task An_annotation_in_a_recursive_schema_is_refused_at_its_path()
+    {
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(Planted("doc.json", """
+            "properties": { "kind": { "enum": ["Thing"] }, "tree": { "$ref": "#/definitions/tree" } },
+            "definitions": { "tree": { "properties": {
+              "name": { "x-jd": { "define": "component" } }, "children": { "type": "array", "items": { "$ref": "#/definitions/tree" } } } } }
+            """)));
+
+        Assert.Equal("The annotation at $['tree']['name'] is in a recursive schema, so it would be read at its first level only.", error.Message);
+    }
+
+    // Only an annotation inside the repeating schema is refused: one beside it, and a message (which binds nothing) inside it, are read.
+    [Fact]
+    public async Task A_recursive_schema_without_annotations_beside_an_annotated_field_is_accepted()
+    {
+        var index = await BuildAsync(Planted("doc.json", """
+            "properties": { "kind": { "enum": ["Thing"] }, "name": { "x-jd": { "define": "component" } }, "tree": { "$ref": "#/definitions/tree" } },
+            "definitions": { "tree": { "x-jd": { "message": "m" }, "properties": { "children": { "type": "array", "items": { "$ref": "#/definitions/tree" } } } } }
+            """));
+
+        Assert.Equal(["$['name']"], index.NamesOf("Thing").Defines.Select(field => field.Path));
+    }
+
+    // Each value schema of a map stands for every key, so two annotated ones would each be read at every value.
+    [Theory]
+    [InlineData("""{ "patternProperties": { "^a": { "x-jd": { "ref": "component" } }, "^b": { "x-jd": { "ref": "component" } } } }""", 2)]
+    [InlineData("""{ "patternProperties": { "^a": { "x-jd": { "ref": "component" } } }, "additionalProperties": { "properties": { "b": { "x-jd": { "is": "part" } } } } }""", 2)]
+    public async Task A_map_with_two_annotated_value_schemas_is_refused(string map, int count)
+    {
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(Planted("doc.json", $$"""
+            "properties": { "kind": { "enum": ["Thing"] }, "m": {{map}} }
+            """)));
+
+        Assert.Equal($"The map at $['m'] has {count} annotated value schemas; each would be read for every key at $['m'].*.", error.Message);
+    }
+
+    // A part's keys are read by depth, one select map per depth (PartOwner.Select): sibling select maps are refused, nested ones are not.
+    [Fact]
+    public async Task Two_select_maps_at_one_depth_are_refused_naming_both()
+    {
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(Planted("doc.json", """
+            "properties": { "kind": { "enum": ["Thing"] },
+              "a": { "type": "object", "x-jd": { "select": "env.type" }, "additionalProperties": { "type": "object" } },
+              "b": { "type": "object", "x-jd": { "select": "requirement.class" }, "additionalProperties": { "type": "object" } } }
+            """)));
+
+        Assert.Equal("The select maps at $['a'] and $['b'] are at the same depth; a part's keys are read by depth.", error.Message);
+    }
+
+    [Fact]
+    public async Task A_select_map_inside_another_is_accepted()
+    {
+        var index = await BuildAsync(Planted("doc.json", """
+            "properties": { "kind": { "enum": ["Thing"] },
+              "a": { "type": "object", "x-jd": { "select": "env.type" }, "additionalProperties": { "type": "object", "properties": {
+                "b": { "type": "object", "x-jd": { "select": "requirement.class" }, "additionalProperties": { "x-jd": { "is": "part" } } } } } } }
+            """));
+
+        var part = Assert.Single(index.RolesOf("Thing"));
+        Assert.Equal(["$['a']", "$['a'].*['b']"], part.Selects.Select(select => select.Path));
+    }
+
+    [Fact]
+    public async Task A_map_with_one_annotated_value_schema_among_several_is_accepted()
+    {
+        var index = await BuildAsync(Planted("doc.json", """
+            "properties": { "kind": { "enum": ["Thing"] }, "m": {
+              "patternProperties": { "^a": { "x-jd": { "ref": "component" } }, "^b": { "type": "string" } }, "additionalProperties": { "x-jd": { "message": "m" } } } }
+            """));
+
+        Assert.Equal(["$['m'].*"], index.NamesOf("Thing").Refs.Select(field => field.Path));
+    }
+
+    // A field the document leaves out is located, and named in messages, by the property that would hold it (EnvironmentTypeCheck); a list's items
+    // by the list (a workload without requirements is located at the list it leaves out, PolicyApplier).
+    [Fact]
+    public async Task A_role_field_is_named_by_the_property_it_ends_in_a_lists_items_by_the_list_and_a_maps_values_not_at_all()
+    {
+        var index = await BuildAsync(Planted("doc.json", """
+            "properties": { "kind": { "enum": ["Thing"] },
+              "gate": { "type": "object", "x-jd": { "is": "env.approval" } },
+              "m": { "type": "object", "additionalProperties": { "x-jd": { "is": "part" } } },
+              "l": { "type": "array", "items": { "x-jd": { "is": "requirement" } } } }
+            """));
+
+        Assert.Equal(
+            [("env.approval", "gate"), ("part", null), ("requirement", "l")],
+            index.RolesOf("Thing").Select(field => (field.Role, field.Name)).OrderBy(field => field.Role, StringComparer.Ordinal));
+    }
+
+    // A criterion (match) compares with a role; it holds none, so it is no role field of its kind. Criteria keep the schema's order.
+    [Fact]
+    public async Task A_criterion_names_the_role_it_compares_with_in_schema_order_and_is_no_role_field()
+    {
+        var index = await BuildAsync(Planted("doc.json", """
+            "properties": { "kind": { "enum": ["Thing"] },
+              "title": { "x-jd": { "is": "policy.name" } },
+              "zeta": { "x-jd": { "match": "node.template" } },
+              "alpha": { "x-jd": { "match": "env.type" } } }
+            """));
+
+        Assert.Equal([("node.template", "zeta"), ("env.type", "alpha")], index.CriteriaOf("Thing").Select(field => (field.Role, field.Name)));
+        Assert.Equal([("policy.name", "title")], index.RolesOf("Thing").Select(field => (field.Role, field.Name)));
+    }
 }

@@ -13,7 +13,8 @@ namespace jd.resolver;
 /// spelled in code. The schemas ship with jd, so a schema without an <c>$id</c> or one the meta-schema refuses, an <c>$id</c> or a kind declared
 /// twice, or a reference to no schema is a mistake in jd, not in a user's file: building throws <see cref="InvalidOperationException"/>. Per kind,
 /// the index also keeps the fields its <c>x-jd</c> annotations name: those that define names, those that refer to them, and whether the kind has
-/// exactly one document (<see cref="NamesOf"/>).
+/// exactly one document (<see cref="NamesOf"/>); the fields that hold a role, with the <c>select</c> maps enclosing each (<see cref="RolesOf"/>);
+/// the criteria, fields compared with a role (<see cref="CriteriaOf"/>); and the <see cref="Layers"/>.
 /// </summary>
 internal sealed class SchemaIndex
 {
@@ -24,15 +25,42 @@ internal sealed class SchemaIndex
     private const string RefKeyword = "ref";
     private const string FallbackKeyword = "fallback";
     private const string OneKeyword = "one";
+    private const string IsKeyword = "is";
+    private const string SelectKeyword = "select";
+    private const string ScopeKeyword = "scope";
+    private const string MatchKeyword = "match";
     private const string MetaSchemaName = $"schemas/{Annotation}.schema.json";
 
-    private readonly Dictionary<string, JsonSchema> _byKind;
-    private readonly Dictionary<string, KindNames> _names;
+    // Binding completeness (documents.md section 4): what a kind that binds the key role binds too, since a security boundary reads it: the nodes
+    // of every part (boundaries 1, 2, 3, 5, 6), whether a declared environment type is gated (boundary 13) and a workload's variables (boundary 6).
+    private static readonly string[] NodeRoles = [Roles.PartNodes, Roles.NodeKind, Roles.NodeTemplate, Roles.NodeConfig];
 
-    private SchemaIndex(Dictionary<string, JsonSchema> byKind)
+    private static readonly Dictionary<string, string[]> Implied = new()
     {
+        [Roles.Part] = NodeRoles,
+        [Roles.RuntimePart] = NodeRoles,
+        [Roles.EnvironmentTypeLayer] = [Roles.EnvironmentTypeGated],
+        [Roles.WorkloadName] = [Roles.WorkloadVariables],
+    };
+
+    private readonly Dictionary<string, JsonSchema> _byKind;
+    private readonly Dictionary<string, string> _schemaNames;
+    private readonly Dictionary<string, KindNames> _names;
+    private readonly Dictionary<string, List<RoleField>> _roles;
+    private readonly Dictionary<string, List<RoleField>> _criteria;
+
+    private SchemaIndex(Dictionary<string, (string Name, JsonSchema Schema)> declared)
+    {
+        var byKind = declared.ToDictionary(entry => entry.Key, entry => entry.Value.Schema);
         _byKind = byKind;
-        _names = byKind.ToDictionary(entry => entry.Key, entry => Annotated(entry.Value));
+        _schemaNames = declared.ToDictionary(entry => entry.Key, entry => entry.Value.Name);
+        var fields = byKind.ToDictionary(entry => entry.Key, entry => Fields(entry.Value));
+        var selects = fields.ToDictionary(entry => entry.Key, entry => Selects(entry.Value));
+        _names = byKind.ToDictionary(entry => entry.Key, entry => Annotated(entry.Value, fields[entry.Key], selects[entry.Key]));
+        _roles = fields.ToDictionary(entry => entry.Key, entry => RoleFields(entry.Value, selects[entry.Key], IsKeyword));
+        _criteria = fields.ToDictionary(entry => entry.Key, entry => RoleFields(entry.Value, selects[entry.Key], MatchKeyword));
+        Layers = fields.Values.SelectMany(kind => kind).Where(field => Keyword(field.Schema, IsKeyword) is Roles.Layer)
+            .Select(field => field.Schema.Enumeration.OfType<string>().ToList()).FirstOrDefault() ?? [];
     }
 
     /// <summary>The schemas jd ships, built once for the process; no caller's cancellation applies to a build every caller shares.</summary>
@@ -44,6 +72,41 @@ internal sealed class SchemaIndex
 
     /// <summary>The name annotations of <paramref name="kind"/>, which must be one the schemas declare.</summary>
     public KindNames NamesOf(string kind) => _names[kind];
+
+    /// <summary>The fields of <paramref name="kind"/>, which must be one the schemas declare, that hold a role (<c>is</c>).</summary>
+    public IReadOnlyList<RoleField> RolesOf(string kind) => _roles[kind];
+
+    /// <summary>The criteria of <paramref name="kind"/>, which must be one the schemas declare: the fields that hold a value to compare with a role's (<c>match</c>), in schema order.</summary>
+    public IReadOnlyList<RoleField> CriteriaOf(string kind) => _criteria[kind];
+
+    /// <summary>The layers, in deploy order: the <c>enum</c> of the subschema that holds the <see cref="Roles.Layer"/> role.</summary>
+    public IReadOnlyList<string> Layers { get; }
+
+    /// <summary>
+    /// Binding completeness (docs/architecture/documents.md section 4): a security boundary reads only what a schema binds, so a kind that binds a
+    /// part binds the node roles, a kind that declares environment types binds whether each is gated, a workload binds its variables, and some schema
+    /// binds the runtime's part, the environment types' layer and <see cref="Roles.Layer"/>. A schema that does not is a mistake in jd: throws <see cref="InvalidOperationException"/>
+    /// naming every schema and role it misses.
+    /// </summary>
+    public void CheckBindings()
+    {
+        var unbound = Implied.SelectMany(entry => KindsBinding(entry.Key).SelectMany(kind => entry.Value.Select(role => (Kind: kind, Role: role))))
+            .Where(binding => !BindsRole(binding.Kind, binding.Role))
+            .Select(binding => $"Schema '{_schemaNames[binding.Kind]}' does not bind role '{binding.Role}'.")
+            .Order(StringComparer.Ordinal)
+            .Concat(new[] { Roles.RuntimePart, Roles.EnvironmentTypeLayer }.Where(role => KindsBinding(role).Count == 0).Select(role => $"No schema binds role '{role}'."))
+            .Concat(Layers.Count == 0 ? [$"No schema binds role '{Roles.Layer}'."] : Array.Empty<string>())
+            .ToList();
+        if (unbound.Count > 0)
+        {
+            throw new InvalidOperationException(string.Join(" ", unbound));
+        }
+    }
+
+    /// <summary>The kinds whose schema binds <paramref name="role"/> (<c>is</c>).</summary>
+    public IReadOnlyList<string> KindsBinding(string role) => [.. _roles.Keys.Where(kind => BindsRole(kind, role))];
+
+    private bool BindsRole(string kind, string role) => _roles[kind].Any(field => field.Role == role);
 
     /// <summary>Builds the index from <paramref name="schemas"/>, each a name (for errors) and its text; the meta-schema is among them.</summary>
     internal static async Task<SchemaIndex> BuildAsync(IReadOnlyList<(string Name, string Text)> schemas)
@@ -76,7 +139,7 @@ internal sealed class SchemaIndex
             }
         }
 
-        return new SchemaIndex(byKind.ToDictionary(entry => entry.Key, entry => entry.Value.Schema));
+        return new SchemaIndex(byKind);
     }
 
     // Each schema's text by its $id, the key a reference resolves by.
@@ -125,44 +188,111 @@ internal sealed class SchemaIndex
     private static string? Message(JsonSchema? schema) => Keyword(schema, MessageKeyword) as string;
 
     private static object? Keyword(JsonSchema? schema, string keyword) =>
-        schema?.ExtensionData is { } data && data.TryGetValue(Annotation, out var value) && value is IDictionary<string, object?> annotations
-            && annotations.TryGetValue(keyword, out var found)
-            ? found
-            : null;
+        Annotations(schema) is { } annotations && annotations.TryGetValue(keyword, out var found) ? found : null;
 
-    private static KindNames Annotated(JsonSchema root)
+    private static IDictionary<string, object?>? Annotations(JsonSchema? schema) =>
+        schema?.ExtensionData is { } data && data.TryGetValue(Annotation, out var value) ? value as IDictionary<string, object?> : null;
+
+    // Whether a subschema carries an annotation the engine reads from documents: every keyword but message, which the validator reads.
+    private static bool Binds(JsonSchema schema) => Annotations(schema)?.Keys.Any(keyword => keyword != MessageKeyword) == true;
+
+    // A reference's fallback is its map's select fallback: one annotation, read once, for both rules.
+    private static KindNames Annotated(JsonSchema root, List<Field> fields, List<SelectField> selects)
     {
-        var located = Located(root, "$", []).ToList();
         // define takes one namespace or a list of them (the meta-schema's two forms).
-        var defines = located.SelectMany(field => (Keyword(field.Schema, DefineKeyword) switch
+        var defines = fields.SelectMany(field => (Keyword(field.Schema, DefineKeyword) switch
         {
             string single => [single],
             IEnumerable<object> list => list.OfType<string>(),
             _ => [],
         }).Select(space => new NameField(space, field.Path, Fallback: null)));
-        var refs = located.SelectMany(field => Keyword(field.Schema, RefKeyword) is string space
-            ? [new NameField(space, field.Path, Keyword(field.Schema, FallbackKeyword) as string)]
+        var refs = fields.SelectMany(field => Keyword(field.Schema, RefKeyword) is string space
+            ? [new NameField(space, field.Path, selects.FirstOrDefault(select => select.Path == field.Path)?.Fallback)]
             : Array.Empty<NameField>());
         return new KindNames(Keyword(root, OneKeyword) is true, [.. defines], [.. refs]);
     }
 
+    // A part's keys are read by depth (PartOwner.Select), so two select maps at one depth are refused.
+    private static List<SelectField> Selects(List<Field> fields)
+    {
+        var selects = fields.SelectMany(field => Keyword(field.Schema, SelectKeyword) is string role
+            ? [new SelectField(role, field.Path, Keyword(field.Schema, FallbackKeyword) as string)]
+            : Array.Empty<SelectField>()).Distinct().ToList();
+        var level = selects.GroupBy(select => selects.Count(outer => select.Path.StartsWith($"{outer.Path}.*", StringComparison.Ordinal)));
+        if (level.FirstOrDefault(group => group.Count() > 1) is { } same)
+        {
+            throw new InvalidOperationException($"The select maps at {string.Join(" and ", same.Select(select => select.Path))} are at the same depth; a part's keys are read by depth.");
+        }
+
+        return selects;
+    }
+
+    // Each role the keyword (is or match) names, once per path, with what every subschema at that path says: the scope, the default, the select
+    // maps whose entries the path is in, outermost first, and the property it ends in.
+    private static List<RoleField> RoleFields(List<Field> fields, List<SelectField> selects, string keyword) =>
+        fields.GroupBy(field => field.Path).SelectMany(at => at.Select(field => Keyword(field.Schema, keyword)).OfType<string>().Distinct().Select(role => new RoleField(
+            role,
+            at.Key,
+            at.Select(field => Keyword(field.Schema, ScopeKeyword)).OfType<string>().FirstOrDefault(),
+            at.Select(field => field.Schema.Default).FirstOrDefault(value => value is not null) is { } value ? JToken.FromObject(value) : null,
+            [.. selects.Where(select => at.Key.StartsWith($"{select.Path}.*", StringComparison.Ordinal))],
+            at.Select(field => field.Name).FirstOrDefault(name => name is not null)))).ToList();
+
     // Every subschema of a kind with the path (JSONPath) of the values it describes: a property adds its name, a map's subschema stands for
     // each of its values and a list's for each item, and a reference or a branch describes the same values as its parent. A recursive schema
-    // (a value holding values of its own shape, such as a descriptor's values) is walked down to where it repeats: below that, its values have
-    // no end of paths, so a field annotated there is read only at its first level.
-    private static IEnumerable<(JsonSchema Schema, string Path)> Located(JsonSchema schema, string path, ImmutableHashSet<JsonSchema> outer)
+    // (a value holding values of its own shape, such as a descriptor's values) is walked down to where it repeats. An annotation in it would
+    // be read at its first level only, and of two annotated value schemas of one map each would be read for every key: both are refused.
+    private static List<Field> Fields(JsonSchema root)
+    {
+        var fields = new List<Field>();
+        var repeated = new HashSet<JsonSchema>();
+        Walk(root, "$", null, [], fields, repeated);
+        if (fields.FirstOrDefault(field => Binds(field.Schema) && field.Within.Overlaps(repeated)) is { } recursive)
+        {
+            throw new InvalidOperationException($"The annotation at {recursive.Path} is in a recursive schema, so it would be read at its first level only.");
+        }
+
+        return fields;
+    }
+
+    private static void Walk(JsonSchema schema, string path, string? name, ImmutableHashSet<JsonSchema> outer, List<Field> fields, HashSet<JsonSchema> repeated)
     {
         if (outer.Contains(schema))
         {
-            return [];
+            repeated.Add(schema);
+            return;
         }
 
         var within = outer.Add(schema);
-        return schema.Properties.SelectMany(property => Located(property.Value, $"{path}['{property.Key}']", within))
-            .Concat(schema.PatternProperties.Values.Append(schema.AdditionalPropertiesSchema).OfType<JsonSchema>().SelectMany(value => Located(value, $"{path}.*", within)))
-            .Concat(new[] { schema.Item }.OfType<JsonSchema>().SelectMany(item => Located(item, $"{path}[*]", within)))
-            .Concat(schema.AllOf.Concat(schema.AnyOf).Concat(schema.OneOf).Append(schema.Reference).OfType<JsonSchema>().SelectMany(same => Located(same, path, within)))
-            .Prepend((schema, path));
+        fields.Add(new Field(schema, path, name, within));
+        foreach (var (propertyName, property) in schema.Properties)
+        {
+            Walk(property, $"{path}['{propertyName}']", propertyName, within, fields, repeated);
+        }
+
+        var annotatedValues = 0;
+        foreach (var value in schema.PatternProperties.Values.Append(schema.AdditionalPropertiesSchema).OfType<JsonSchema>())
+        {
+            var first = fields.Count;
+            Walk(value, $"{path}.*", null, within, fields, repeated);
+            annotatedValues += fields.Skip(first).Any(field => Binds(field.Schema)) ? 1 : 0;
+        }
+
+        if (annotatedValues > 1)
+        {
+            throw new InvalidOperationException($"The map at {path} has {annotatedValues} annotated value schemas; each would be read for every key at {path}.*.");
+        }
+
+        // A list's items are named after the list, so a many role on them names the list when the document leaves it out.
+        foreach (var item in new[] { schema.Item }.OfType<JsonSchema>())
+        {
+            Walk(item, $"{path}[*]", name, within, fields, repeated);
+        }
+
+        foreach (var same in schema.AllOf.Concat(schema.AnyOf).Concat(schema.OneOf).Append(schema.Reference).OfType<JsonSchema>())
+        {
+            Walk(same, path, name, within, fields, repeated);
+        }
     }
 
     // Every resource of the assembly is a schema: jd.resolver.csproj embeds nothing else.
@@ -186,6 +316,10 @@ internal sealed class SchemaIndex
             return new Source(name, (string?)tree["$id"] ?? throw new InvalidOperationException($"Schema '{name}' has no $id."), tree, text);
         }
     }
+
+    // A subschema of a kind, the path (JSONPath) of the values it describes, the property that path ends in (a list's item: the list's; null for a
+    // map's value and the root), and the subschemas it is in, itself included.
+    private sealed record Field(JsonSchema Schema, string Path, string? Name, ImmutableHashSet<JsonSchema> Within);
 
     // Resolves a reference to another shipped schema by its $id, never from disk or the network.
     private sealed class ShippedReferences(JsonSchema root, Dictionary<string, string> texts)

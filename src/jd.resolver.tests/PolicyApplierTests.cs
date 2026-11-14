@@ -1,5 +1,4 @@
 using System.Text;
-using jd.definitionvalidator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expansion;
@@ -29,12 +28,12 @@ public class PolicyApplierTests
     private static EnvironmentDescriptor Env(string type = "dev") =>
         new("dev", "region", type, new Dictionary<string, string>(), ["sqldb", "container-app"], null);
 
-    private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "  - type: sqldb\n", string type = "dev", bool expectExpansionErrors = false)
+    private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "requires:\n  - type: sqldb\n", string type = "dev", bool expectExpansionErrors = false)
     {
         var files = BaseFiles.Concat(policies).Append(TestCatalog.RuntimeFile).Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
-        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
+        var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: shop, team: crew }}\nrequires:\n{requires}");
+        var workload = await TestWorkload.ParseAsync($"metadata: {{ name: shop, team: crew }}\n{requires}");
         var expansion = new Expander(loaded.Value!, Env(type)).Expand(workload, "workload.yaml");
         Assert.Equal(expectExpansionErrors, expansion.Errors.Count > 0);
         return new PolicyApplier(loaded.Value!, Env(type)).Apply(expansion);
@@ -100,8 +99,7 @@ public class PolicyApplierTests
         var result = await ApplyAsync([Policy("pol", "{ template: t/n }", "set: { 'keep.inner': 1 }\n")]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f4.yaml", "set.keep.inner"), (error.File, error.Location));
-        Assert.Contains("not an object", error.Message);
+        Assert.Equal(("f4.yaml", "set['keep.inner']", "cannot create field 'keep.inner' of node 'sqldb/n': a parent on the path is not an object."), (error.File, error.Location, error.Message));
     }
 
     [Fact]
@@ -114,10 +112,7 @@ public class PolicyApplierTests
         ]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Contains("'alpha' (f5.yaml)", error.Message);
-        Assert.Contains("'zeta' (f4.yaml)", error.Message);
-        Assert.Contains("'size'", error.Message);
-        Assert.Equal("f5.yaml", error.File);
+        Assert.Equal(("f5.yaml", "set.size", "policies 'alpha' (f5.yaml) and 'zeta' (f4.yaml) give field 'size' of node 'sqldb/n' different set values."), (error.File, error.Location, error.Message));
     }
 
     [Fact]
@@ -134,7 +129,7 @@ public class PolicyApplierTests
             Policy("aa", "{ template: t/n }", "default: { fresh: 1 }\n"),
         ]);
 
-        Assert.Contains("default values", Assert.Single(differ.Errors).Message);
+        Assert.Equal("policies 'aa' (f4.yaml) and 'bb' (f5.yaml) give field 'fresh' of node 'sqldb/n' different default values.", Assert.Single(differ.Errors).Message);
         Assert.Empty(same.Errors);
         Assert.Equal("aa", Node(same, "n").Provenance["fresh"].Rule);
     }
@@ -161,7 +156,7 @@ public class PolicyApplierTests
             Policy("by-type", "{ type: sqldb, class: isolated }", "set: { by: type }\n"),
             Policy("by-environment-type", "{ environmentType: stage }", "set: { guarded: true }\n"),
             Policy("everything", "{ type: sqldb, class: standard, environmentType: dev }", "set: { all: true }\n"),
-        ], "  - type: sqldb\n  - type: sqldb\n    id: iso\n    class: isolated\n");
+        ], "requires:\n  - type: sqldb\n  - type: sqldb\n    id: iso\n    class: isolated\n");
 
         Assert.Equal("template", Text(Node(result, "m").Config["by"]));
         Assert.False(Node(result, "n").Config.ContainsKey("by"));
@@ -194,11 +189,23 @@ public class PolicyApplierTests
         Assert.Equal(new Provenance("f4.yaml", "size", Layer.PolicySet), runtime.Provenance["k"]);
     }
 
+    // A policy that names no scope is node scope even where it matches without a node: its path is a path in the runtime node's config, not a
+    // workload-scope path that names the runtime node.
+    [Fact]
+    public async Task A_node_scope_policy_matching_only_the_environment_is_not_a_workload_scope_policy()
+    {
+        var result = await ApplyAsync([Policy("everywhere", "{ environmentType: dev }", "set: { runtime.k: 3 }\n")]);
+
+        var runtime = Assert.Single(result.RuntimeNodes);
+        Assert.Equal((1, 3), (Number(runtime.Config["k"]), Number(At(runtime, "runtime.k"))));
+        Assert.Equal(new Provenance("f4.yaml", "everywhere", Layer.PolicySet), runtime.Provenance["runtime.k"]);
+    }
+
     // A policy requires, it never adds (docs/architecture/components.md section 3): a workload the policy matches must declare the component.
     [Fact]
     public async Task A_workload_without_a_required_component_is_an_error_naming_the_policy_and_its_file()
     {
-        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], "  []\n");
+        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], "requires: []\n");
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires"), (error.File, error.Location));
@@ -206,9 +213,22 @@ public class PolicyApplierTests
         Assert.Single(result.RuntimeNodes);
     }
 
+    // The location is the workload's requirements list as the binding finds it (S24c4), also when the workload leaves the list out.
     [Theory]
-    [InlineData("  - type: sqldb\n")]
-    [InlineData("  - type: sqldb\n    id: other\n    class: isolated\n")]
+    [InlineData("", false)]
+    [InlineData("requires:\n  - type: nosuch\n", true)]
+    public async Task A_workload_without_a_required_component_is_an_error_at_its_requirements_list(string requires, bool expectExpansionErrors)
+    {
+        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], requires, expectExpansionErrors: expectExpansionErrors);
+
+        var error = Assert.Single(result.Errors, error => error.Message.StartsWith("policy", StringComparison.Ordinal));
+        Assert.Equal(("workload.yaml", "requires"), (error.File, error.Location));
+        Assert.Equal("policy 'needs-sqldb' (f4.yaml) requires a 'sqldb' requirement (because); add '- type: sqldb'.", error.Message);
+    }
+
+    [Theory]
+    [InlineData("requires:\n  - type: sqldb\n")]
+    [InlineData("requires:\n  - type: sqldb\n    id: other\n    class: isolated\n")]
     public async Task A_requirement_of_the_required_type_with_any_id_and_class_satisfies_the_policy(string requires)
     {
         var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], requires);
@@ -221,8 +241,8 @@ public class PolicyApplierTests
     {
         var policy = Policy("needs-sqldb", "{ kind: runtime, environmentType: stage }", "require: sqldb\n");
 
-        var team = await ApplyAsync([policy], "  []\n");
-        var gated = await ApplyAsync([policy], "  []\n", type: "stage");
+        var team = await ApplyAsync([policy], "requires: []\n");
+        var gated = await ApplyAsync([policy], "requires: []\n", type: "stage");
 
         Assert.Empty(team.Errors);
         Assert.Equal("requires", Assert.Single(gated.Errors).Location);
@@ -231,11 +251,11 @@ public class PolicyApplierTests
     [Fact]
     public async Task A_declared_requirement_that_failed_to_expand_still_satisfies_the_policy()
     {
-        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], "  - type: sqldb\n    class: premium\n", expectExpansionErrors: true);
+        var result = await ApplyAsync([Policy("needs-sqldb", "{ kind: runtime }", "require: sqldb\n")], "requires:\n  - type: sqldb\n    class: premium\n", expectExpansionErrors: true);
 
         var error = Assert.Single(result.Errors);
         Assert.Equal("requires[0]", error.Location);
-        Assert.Contains("class 'premium'", error.Message);
+        Assert.Contains("classes entry for 'premium'", error.Message);
     }
 
     [Fact]
@@ -269,7 +289,7 @@ public class PolicyApplierTests
     [Fact]
     public async Task Expansion_errors_carry_into_the_policy_result()
     {
-        var result = await ApplyAsync([], "  - type: sqldb\n  - type: unmapped\n", expectExpansionErrors: true);
+        var result = await ApplyAsync([], "requires:\n  - type: sqldb\n  - type: unmapped\n", expectExpansionErrors: true);
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[1]"), (error.File, error.Location));
@@ -288,9 +308,7 @@ public class PolicyApplierTests
         ]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Contains("'inner' (f5.yaml)", error.Message);
-        Assert.Contains("'outer' (f4.yaml)", error.Message);
-        Assert.Contains("'fresh' and 'fresh.b'", error.Message);
+        Assert.Equal(("f4.yaml", $"{layer}.fresh", $"policies 'outer' (f4.yaml) and 'inner' (f5.yaml) give overlapping {layer} fields 'fresh' and 'fresh.b' of node 'sqldb/n'."), (error.File, error.Location, error.Message));
         Assert.False(Node(result, "n").Config.ContainsKey("fresh"));
     }
 
@@ -304,13 +322,54 @@ public class PolicyApplierTests
         Assert.Equal(Layer.PolicySet, node.Provenance["nested.c"].Layer);
     }
 
-    [Fact]
-    public async Task Evaluation_errors_name_the_policy_file_and_location()
+    // An entry whose path has a dot is located in the bracket form, and a value inside it below that.
+    [Theory]
+    [InlineData("set: { a: '${env.nope}' }", "set.a")]
+    [InlineData("set: { x.y: '${env.nope}' }", "set['x.y']")]
+    [InlineData("default: { x.y: { z: '${env.nope}' } }", "default['x.y'].z")]
+    public async Task Evaluation_errors_name_the_policy_file_and_location(string body, string location)
     {
-        var result = await ApplyAsync([Policy("pol", "{ template: t/n }", "set: { a: '${env.nope}' }\n")]);
+        var result = await ApplyAsync([Policy("pol", "{ template: t/n }", $"{body}\n")]);
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f4.yaml", "set.a"), (error.File, error.Location));
+        Assert.Equal(("f4.yaml", location), (error.File, error.Location));
+    }
+
+    // A criterion on a role the applier does not supply is a jd bug: the schema declares a match the applier does not know, and a policy using it
+    // would otherwise silently never apply.
+    [Fact]
+    public async Task A_policy_criterion_on_a_role_the_applier_does_not_supply_throws_instead_of_never_applying()
+    {
+        var binder = await PlantedPolicySchema.BinderAsync(("team", "workload.team"));
+        var policy = binder.ReadPolicy(new Document("p.yaml", "Policy", JObject.Parse("""{ "kind": "Policy", "name": "pol", "reason": "r", "match": { "team": "crew" }, "set": { "size": 1 } }""")));
+        var files = BaseFiles.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var catalog = (await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]))).Value! with { Policies = [policy] };
+        var workload = await TestWorkload.ParseAsync("metadata: { name: shop, team: crew }\nrequires:\n  - type: sqldb\n");
+        var expansion = new Expander(catalog, Env()).Expand(workload, "workload.yaml");
+
+        Assert.Throws<KeyNotFoundException>(() => new PolicyApplier(catalog, Env()).Apply(expansion));
+    }
+
+    // A name that only begins with another's (a, ab; k, kk) is not under it: no overlap between policies, and applying k leaves kk's provenance.
+    [Fact]
+    public async Task Policies_whose_paths_only_share_a_name_prefix_do_not_overlap_and_both_apply()
+    {
+        var result = await ApplyAsync([Policy("pol-a", "{ template: t/n }", "set: { a: 1 }\n"), Policy("pol-b", "{ template: t/n }", "set: { ab: 2 }\n")]);
+
+        Assert.Empty(result.Errors);
+        var node = Node(result, "n");
+        Assert.Equal((1, 2), (Number(node.Config["a"]), Number(node.Config["ab"])));
+    }
+
+    [Fact]
+    public async Task Applying_a_default_does_not_take_the_provenance_of_a_field_that_only_begins_with_its_name()
+    {
+        var result = await ApplyAsync([Policy("pol-set", "{ template: t/n }", "set: { kk: 1 }\n"), Policy("pol-default", "{ template: t/n }", "default: { k: 2 }\n")]);
+
+        Assert.Empty(result.Errors);
+        var node = Node(result, "n");
+        Assert.Equal(new Provenance("f4.yaml", "pol-set", Layer.PolicySet), node.Provenance["kk"]);
+        Assert.Equal(new Provenance("f5.yaml", "pol-default", Layer.PolicyDefault), node.Provenance["k"]);
     }
 
     [Fact]
@@ -318,9 +377,9 @@ public class PolicyApplierTests
     {
         var files = BaseFiles.Concat([Policy("pol", "{ template: t/n }", "set: { nested.deep: 1 }\ndefault: { list: [1] }\n")])
             .Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
-        var catalog = (await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]))).Value!;
+        var catalog = (await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]))).Value!;
         var before = JsonConvert.SerializeObject(catalog);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\nrequires:\n  - type: sqldb\n");
+        var workload = await TestWorkload.ParseAsync("metadata: { name: shop, team: crew }\nrequires:\n  - type: sqldb\n");
         var expansion = new Expander(catalog, Env()).Expand(workload, "workload.yaml");
 
         var result = new PolicyApplier(catalog, Env()).Apply(expansion);
@@ -357,7 +416,7 @@ public class PolicyApplierTests
     public async Task Seed_catalog_and_sample_workload_resolve_with_monitoring_as_a_requirement()
     {
         var catalog = (await SeedCatalog.LoadAsync()).Value!;
-        var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
+        var workload = await TestWorkload.ParseAsync(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var environment = new EnvironmentDescriptor(
             "dev",
             "region",

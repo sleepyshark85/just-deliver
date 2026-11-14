@@ -4,17 +4,19 @@
   "title": "just-deliver catalog shared resource",
   "description": "A platform-owned part (for example the Cosmos DB account), deployed once per scope and read by the parts that name it in 'uses' as ${<name>.<export>} (docs/architecture/components.md section 2). Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across shared resources, components and runtimes.",
   "type": "object",
+  "x-jd": { "is": "owner" },
+  "allOf": [{ "x-jd": { "is": "part" } }],
   "additionalProperties": false,
   "required": ["kind", "name", "description", "scope", "nodes", "exports"],
   "properties": {
     "kind": { "enum": ["SharedResource"] },
     "name": { "description": "Same pattern as a component name; how other parts read it.", "type": "string", "x-jd": { "define": ["part owner", "shared resource"] }, "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
     "description": { "description": "What the resource is for.", "type": "string", "minLength": 1 },
-    "scope": { "description": "The layer that deploys it.", "$ref": "part.schema.json#/definitions/layer" },
+    "scope": { "description": "The layer that deploys it.", "$ref": "part.schema.json#/definitions/layer", "x-jd": { "is": "part.scope" } },
     "uses": {
       "description": "The shared resources this one reads. A shared-scope resource uses only shared-scope ones; no cycles (checked by the resolver).",
       "type": "array",
-      "x-jd": { "ref": "shared resource" },
+      "x-jd": { "is": "part.reads", "ref": "shared resource" },
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 }
     },

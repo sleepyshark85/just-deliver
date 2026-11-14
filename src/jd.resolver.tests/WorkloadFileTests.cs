@@ -1,5 +1,4 @@
 using jd.resolver.workload;
-using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace jd.resolver.tests;
@@ -12,14 +11,14 @@ public sealed class WorkloadFileTests : IDisposable
 
     public void Dispose() => Directory.Delete(_temp, recursive: true);
 
-    private async Task<LoadResult<JObject>> LoadAsync(string content)
+    private async Task<LoadResult<Workload>> LoadAsync(string content)
     {
         var path = Path.Combine(_temp, "workload.yaml");
         await File.WriteAllTextAsync(path, content);
         return await LoadFileAsync(path);
     }
 
-    private static async Task<LoadResult<JObject>> LoadFileAsync(string path) =>
+    private static async Task<LoadResult<Workload>> LoadFileAsync(string path) =>
         await WorkloadFile.LoadAsync(new SourceDocument(path, await File.ReadAllBytesAsync(path)), CancellationToken.None);
 
     [Fact]
@@ -28,7 +27,7 @@ public sealed class WorkloadFileTests : IDisposable
         var result = await LoadFileAsync(Sample);
 
         Assert.Empty(result.Errors);
-        Assert.Equal("just-deliver-sample-app", (string?)result.Value?["metadata"]?["name"]);
+        Assert.Equal("just-deliver-sample-app", result.Value?.Name);
     }
 
     [Fact]
@@ -51,7 +50,7 @@ public sealed class WorkloadFileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_rule_error_has_its_location_split_from_the_message()
+    public async Task A_rule_error_carries_its_location_and_message()
     {
         var result = await LoadAsync((await File.ReadAllTextAsync(Sample)) + "  - type: database\n");
 

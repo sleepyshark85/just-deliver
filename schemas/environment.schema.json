@@ -11,18 +11,20 @@
     "name": {
       "description": "Environment name; same pattern as workload ids.",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+      "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$",
+      "x-jd": { "is": "env.name" }
     },
-    "region": { "type": "string", "minLength": 1 },
-    "type": { "description": "An environment type the catalog declares.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" },
+    "region": { "type": "string", "minLength": 1, "x-jd": { "is": "env.region" } },
+    "type": { "description": "An environment type the catalog declares.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$", "x-jd": { "is": "env.type" } },
     "offers": {
       "description": "The components and runtime the environment offers, as its definition names them; a shared layer's descriptor offers nothing, so no workload can deploy on it.",
       "type": "array",
       "uniqueItems": true,
+      "x-jd": { "is": "env.offers" },
       "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" }
     },
-    "values": { "$ref": "#/definitions/values" },
-    "approval": { "$ref": "approval.schema.json" }
+    "values": { "$ref": "#/definitions/values", "x-jd": { "is": "env.values" } },
+    "approval": { "$ref": "approval.schema.json", "x-jd": { "is": "env.approval" } }
   },
   "definitions": {
     "values": {

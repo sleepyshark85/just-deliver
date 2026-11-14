@@ -12,20 +12,35 @@ internal static class NameRules
     /// <summary>Every name problem in <paramref name="set"/>.</summary>
     public static IReadOnlyList<LoadError> Check(SchemaIndex index, DocumentSet set)
     {
-        var errors = new List<LoadError>();
         var documents = set.Documents.Where(document => set.Kinds.Contains(document.Kind)).ToList();
+        var (extras, errors) = One(index, set, documents);
         // A second document of a one kind is reported once, by its kind, so its names are not read.
-        var named = documents.Except(One(index, set, documents, errors)).ToList();
-        var defined = Define(index, named, errors);
+        var named = documents.Except(extras).ToList();
+        var (defined, clashes) = Define(index, named);
         // A document that failed its schema is reported there; its references are not checked as well.
-        Ref(index, set.Name, named.Where(set.Valid.Contains), defined, errors);
-        return errors;
+        return [.. errors, .. clashes, .. Ref(index, set.Name, named.Where(set.Valid.Contains), defined)];
     }
 
-    // Exactly one document of each one kind: none is an error unless an unreadable file might have been it. Returns the extra documents.
-    private static List<Document> One(SchemaIndex index, DocumentSet set, List<Document> documents, List<LoadError> errors)
+    /// <summary>The names <paramref name="document"/> defines, each with its location, in the order its kind's fields define them.</summary>
+    public static IEnumerable<(string Location, string Name)> Defined(SchemaIndex index, Document document) =>
+        index.NamesOf(document.Kind).Defines.Select(field => field.Path).Distinct().SelectMany(path => Names(document.Body, path));
+
+    /// <summary>
+    /// Every name <paramref name="documents"/> define that is one of <paramref name="roots"/>, the reserved roots of expressions: a part named so
+    /// could never be read, since <c>${env.x}</c> always means the environment. Documents that failed their schema are checked too.
+    /// </summary>
+    public static IReadOnlyList<LoadError> CheckReserved(SchemaIndex index, IEnumerable<Document> documents, IReadOnlySet<string> roots) =>
+        [.. from document in documents
+            from defined in Defined(index, document)
+            where roots.Contains(defined.Name)
+            select new LoadError(document.Source, defined.Location,
+                $"'{defined.Name}' is a reserved root of expressions ({string.Join(", ", roots.Order(StringComparer.Ordinal))}); choose another name.")];
+
+    // Exactly one document of each one kind: none is an error unless an unreadable file might have been it. The extra documents, and the errors.
+    private static (List<Document> Extras, List<LoadError> Errors) One(SchemaIndex index, DocumentSet set, List<Document> documents)
     {
         var extras = new List<Document>();
+        var errors = new List<LoadError>();
         foreach (var kind in set.Kinds.Where(kind => index.NamesOf(kind).IsOne))
         {
             var ofKind = documents.Where(document => document.Kind == kind).ToList();
@@ -41,15 +56,16 @@ internal static class NameRules
             }
         }
 
-        return extras;
+        return (extras, errors);
     }
 
     // Each name once per namespace across the set; a field that defines in several namespaces clashes once, naming the file that holds the
     // name first. A document that failed its schema still defines its names, so a reference to one is not reported as a second mistake.
-    // Returns the file that defined each name, by namespace and name.
-    private static Dictionary<(string Namespace, string Name), string> Define(SchemaIndex index, List<Document> documents, List<LoadError> errors)
+    // Returns the file that defined each name, by namespace and name, and the clashes.
+    private static (Dictionary<(string Namespace, string Name), string> Defined, List<LoadError> Errors) Define(SchemaIndex index, List<Document> documents)
     {
         var defined = new Dictionary<(string Namespace, string Name), string>();
+        var errors = new List<LoadError>();
         foreach (var document in documents)
         {
             foreach (var field in index.NamesOf(document.Kind).Defines.GroupBy(field => field.Path))
@@ -68,26 +84,18 @@ internal static class NameRules
             }
         }
 
-        return defined;
+        return (defined, errors);
     }
 
     // Every referring value is a name defined in its namespace; the key a map names its fallback is a key, not a reference.
-    private static void Ref(
-        SchemaIndex index, string set, IEnumerable<Document> documents, Dictionary<(string Namespace, string Name), string> defined, List<LoadError> errors)
-    {
-        foreach (var document in documents)
-        {
-            foreach (var field in index.NamesOf(document.Kind).Refs)
-            {
-                foreach (var (location, name) in Names(document.Body, field.Path).Where(found => found.Name != field.Fallback && !defined.ContainsKey((field.Namespace, found.Name))))
-                {
-                    var declared = defined.Keys.Where(key => key.Namespace == field.Namespace).Select(key => key.Name).Order(StringComparer.Ordinal);
-                    errors.Add(new LoadError(document.Source, location,
-                        $"'{name}' is not {Article(field.Namespace)} {field.Namespace} in the {set} (declared: {string.Join(", ", declared)})."));
-                }
-            }
-        }
-    }
+    private static IEnumerable<LoadError> Ref(
+        SchemaIndex index, string set, IEnumerable<Document> documents, Dictionary<(string Namespace, string Name), string> defined) =>
+        from document in documents
+        from field in index.NamesOf(document.Kind).Refs
+        from found in Names(document.Body, field.Path)
+        where found.Name != field.Fallback && !defined.ContainsKey((field.Namespace, found.Name))
+        let declared = defined.Keys.Where(key => key.Namespace == field.Namespace).Select(key => key.Name).Order(StringComparer.Ordinal)
+        select new LoadError(document.Source, found.Location, $"'{found.Name}' is not {Article(field.Namespace)} {field.Namespace} in the {set} (declared: {string.Join(", ", declared)}).");
 
     // The names a field holds, each with its location: a string is one name, a list's strings are names located at the list, a map's keys are
     // names located at the map followed by the key as written. A value of another shape (in a document that failed its schema) holds none.

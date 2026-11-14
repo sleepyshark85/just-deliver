@@ -13,11 +13,12 @@
   ],
   "properties": {
     "kind": { "enum": ["Policy"] },
-    "name": { "type": "string", "x-jd": { "define": "policy" }, "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$" },
+    "name": { "type": "string", "x-jd": { "define": "policy", "is": "policy.name" }, "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$" },
     "reason": {
       "description": "Why the policy exists; shown to teams asking why a setting has its value.",
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "x-jd": { "is": "policy.reason" }
     },
     "match": {
       "description": "Criteria the policy applies to: the requirement's type and class, the environment type, the kind (requirement or runtime), the runtime, and the template of a node.",
@@ -25,28 +26,30 @@
       "minProperties": 1,
       "additionalProperties": false,
       "properties": {
-        "type": { "type": "string" },
-        "class": { "type": "string" },
-        "environmentType": { "description": "The environment's type, as the catalog declares it.", "type": "string", "x-jd": { "ref": "environment type" } },
-        "kind": { "type": "string" },
-        "runtime": { "type": "string" },
-        "template": { "type": "string" }
+        "type": { "type": "string", "x-jd": { "match": "requirement.type" } },
+        "class": { "type": "string", "x-jd": { "match": "requirement.class" } },
+        "environmentType": { "description": "The environment's type, as the catalog declares it.", "type": "string", "x-jd": { "ref": "environment type", "match": "env.type" } },
+        "kind": { "type": "string", "x-jd": { "is": "policy.scope" } },
+        "runtime": { "type": "string", "x-jd": { "is": "policy.runtime" } },
+        "template": { "type": "string", "x-jd": { "match": "node.template" } }
       }
     },
     "set": {
       "description": "Config path -> value. Wins over every other layer.",
       "type": "object",
-      "minProperties": 1
+      "minProperties": 1,
+      "x-jd": { "is": "policy.set" }
     },
     "default": {
       "description": "Config path -> value, applied only where nothing else set the field.",
       "type": "object",
-      "minProperties": 1
+      "minProperties": 1,
+      "x-jd": { "is": "policy.default" }
     },
     "require": {
       "description": "A component every workload this policy matches must require (any id, any class); only with 'kind: runtime'. A policy never adds nodes.",
       "type": "string",
-      "x-jd": { "ref": "component" },
+      "x-jd": { "ref": "component", "is": "policy.require" },
       "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$"
     }
   }

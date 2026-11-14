@@ -9,7 +9,7 @@ using YamlDotNet.Serialization;
 namespace jd.definitionvalidator;
 
 /// <summary>
-/// Validates a YAML document against a JSON schema, then runs optional rules for what the schema cannot express.
+/// Validates a YAML document against a JSON schema.
 /// </summary>
 public sealed class YamlSchemaValidator
 {
@@ -89,8 +89,6 @@ public sealed class YamlSchemaValidator
         return null;
     }
 
-    private readonly Func<JToken, IReadOnlyList<string>>? _rules;
-
     /// <summary>
     /// Parses YAML into the JSON tree the schemas are validated against (same scalar typing as validation).
     /// Throws <see cref="YamlException"/> on invalid YAML, a repeated key or more than one document, and <see cref="JsonException"/> on an
@@ -134,15 +132,6 @@ public sealed class YamlSchemaValidator
         }
     }
 
-    /// <param name="rules">
-    /// Checks for what the schema cannot express, run only on a document that passed the schema
-    /// (for workloads: <see cref="WorkloadRules.Check"/>). Each returned string is one error.
-    /// </param>
-    public YamlSchemaValidator(Func<JToken, IReadOnlyList<string>>? rules = null)
-    {
-        _rules = rules;
-    }
-
     /// <summary>Validates the YAML file against the schema file; a missing file is a failed result, not an exception.</summary>
     internal async Task<ValidationResult> ValidateAsync(string schemaFilePath, string yamlFilePath)
     {
@@ -182,19 +171,10 @@ public sealed class YamlSchemaValidator
             return new ValidationResult(false, new[] { $"Validation error: {ex.Message}" });
         }
 
-        var validationErrors = schema.Validate(instance);
-        if (validationErrors.Count == 0)
-        {
-            var ruleErrors = _rules?.Invoke(instance) ?? Array.Empty<string>();
-            return ruleErrors.Count == 0
-                ? new ValidationResult(true, Array.Empty<string>())
-                : new ValidationResult(false, ruleErrors.ToArray());
-        }
-
-        var errors = validationErrors
+        var errors = schema.Validate(instance)
             .Select(e => e.ToString() ?? "Validation error")
             .ToArray();
-        return new ValidationResult(false, errors);
+        return new ValidationResult(errors.Length == 0, errors);
     }
 }
 

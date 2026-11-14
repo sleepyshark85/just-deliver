@@ -23,33 +23,38 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
 
     private sealed record Draft(string Id, string Scope, string Stack, ResolvedNode Node, List<string> DependsOn);
 
+    // What every node's analysis shares: the node ids by scope and name, the typed requirements' exports, the workload's runtime node (null
+    // for an environment definition, which has none) and where the errors go.
+    private sealed record BuildContext(
+        Dictionary<(string Scope, string Name), string> Ids, Dictionary<string, IReadOnlyDictionary<string, EvalResult>> Exports, string? RuntimeId, List<LoadError> Errors);
+
     /// <summary>The graph of <paramref name="policy"/>'s nodes; its errors are the policy result's and those the build finds (references, cycles, grant targets).</summary>
     public ResolvedGraph Build(PolicyResult policy)
     {
         var errors = new List<LoadError>(policy.Errors);
 
         // An export is evaluated in its requirement's scope, where another requirement's exports are out of reach. The catalog loader
-        // rejects it, at implementations.<key>.classes.<class>.exports.<name>; a graph built from anything else is still refused here. The
-        // ExpandedRequirement does not carry the implementation key, so the error names the export only.
+        // rejects it at the export; a graph built from anything else is still refused here, at the same location.
         foreach (var requirement in policy.Requirements)
         {
             foreach (var (name, result) in requirement.Exports.Where(e => e.Value is Pending { References: var refs } && refs.Any(r => r.Kind == ReferenceKind.Resource)))
             {
-                errors.Add(new LoadError(requirement.Source, $"exports.{name}", $"requirement '{requirement.Id}': an export cannot reference ${{resource.<id>.<export>}}."));
+                errors.Add(new LoadError(requirement.Source, requirement.ExportLocations[name], $"requirement '{requirement.Id}': an export cannot reference ${{resource.<id>.<export>}}."));
             }
         }
 
         // An environment run's parts have no type and no contract; what they export is the graph's Parts.
-        var exports = policy.Requirements.Where(r => r.Type is not null).OrderBy(r => r.Id, StringComparer.Ordinal).ToDictionary(r => r.Id, r => r.Exports);
+        var typed = policy.Requirements.Where(r => r.Type is not null).OrderBy(r => r.Id, StringComparer.Ordinal).ToList();
+        var exports = typed.ToDictionary(r => r.Id, r => r.Exports);
         var entries = policy.Requirements.SelectMany(r => r.Nodes.Select(n => (Scope: r.Id, Node: n)))
             .Concat(policy.RuntimeNodes.Select(n => (Scope: WorkloadScope, Node: n)))
             .Select(e => (e.Scope, e.Node, Id: $"{policy.WorkloadName}/{environment.Name}/{e.Scope}/{e.Node.Name}"))
             .ToList();
 
         var runtimeId = entries.Where(e => e.Scope == WorkloadScope && e.Node.Name == ExpressionEvaluator.RuntimeNode).Select(e => e.Id).FirstOrDefault();
-        var ids = entries.ToDictionary(e => (e.Scope, e.Node.Name), e => e.Id);
+        var context = new BuildContext(entries.ToDictionary(e => (e.Scope, e.Node.Name), e => e.Id), exports, runtimeId, errors);
         var drafts = entries
-            .Select(e => Analyse(e.Scope, e.Node, e.Id, ids, exports, runtimeId, errors))
+            .Select(e => Analyse(e.Scope, e.Node, e.Id, context))
             .ToDictionary(d => d.Id);
         var phases = new Dictionary<string, Phase>();
         var nodes = new List<GraphNode>();
@@ -61,7 +66,10 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
                 draft.Node.Config, draft.Node.Provenance, Hash(draft.Node), draft.DependsOn, draft.Node.Probe, draft.Node.Release));
         }
 
-        return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, policy.WorkloadImage, policy.WorkloadPort, nodes, exports, errors, policy.Parts);
+        return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, policy.WorkloadImage, policy.WorkloadPort, nodes, exports, errors, policy.Parts)
+        {
+            ExportLocations = typed.ToDictionary(r => r.Id, r => r.ExportLocations),
+        };
     }
 
     // Pulumi stack names allow [A-Za-z0-9_.-]. Ids contain no '.' or '_' (names are kebab; the owner and the scope may start
@@ -69,15 +77,12 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
     private static string Stack(string id) => id.Replace('/', '.').Replace('@', '_');
 
     // Finds a node's dependencies from its pending references and, for a grant, checks its target.
-    // runtimeId is the workload's runtime node, or null for an environment definition, which has none.
-    private Draft Analyse(
-        string scope, ResolvedNode node, string id, Dictionary<(string Scope, string Name), string> ids,
-        Dictionary<string, IReadOnlyDictionary<string, EvalResult>> exports, string? runtimeId, List<LoadError> errors)
+    private Draft Analyse(string scope, ResolvedNode node, string id, BuildContext context)
     {
         var dependsOn = new SortedSet<string>(StringComparer.Ordinal);
         if (node.Kind == NodeKind.Grant)
         {
-            CheckGrantTarget(node, id, errors);
+            CheckGrantTarget(node, id, context.Errors);
         }
 
         foreach (var (field, text) in Texts(new ConfigObject(node.Config), string.Empty))
@@ -86,7 +91,15 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
             var origin = node.Provenance.GetValueOrDefault(field);
             // A workload entry's provenance key is <field>.<NAME> (the config walk makes it so), hence the dot.
             var location = origin?.Layer == Layer.Workload && field.IndexOf('.') is var dot and > 0 ? origin.Rule + field[dot..] : field;
-            void Fail(string message) => errors.Add(new LoadError(origin?.Source ?? id, location, $"node '{id}': {message}"));
+            void Fail(string message) => context.Errors.Add(new LoadError(origin?.Source ?? id, location, $"node '{id}': {message}"));
+
+            void DependOn(Reference reference, string inScope)
+            {
+                if (DependencyOf(reference, inScope, field, context, Fail) is { } target)
+                {
+                    dependsOn.Add(target);
+                }
+            }
 
             foreach (var reference in (text.Result as Pending)?.References ?? (IEnumerable<Reference>)[])
             {
@@ -98,58 +111,59 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
                 }
                 else if (reference.Kind == ReferenceKind.Resource)
                 {
-                    // The export waits on the nodes of its requirement, so this node does too.
-                    if (!exports.TryGetValue(reference.Target, out var requirementExports) || !requirementExports.TryGetValue(reference.Output, out var export))
-                    {
-                        Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which is not an export of a requirement of this workload.");
-                        continue;
-                    }
-
-                    foreach (var inner in (export as Pending)?.References.Where(r => r.Kind == ReferenceKind.Node) ?? [])
-                    {
-                        if (inner.Target == ExpressionEvaluator.RuntimeNode)
-                        {
-                            Fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which waits on the runtime; the runtime cannot read an export that waits on the runtime.");
-                        }
-                        else
-                        {
-                            AddDependency(inner, reference.Target, field, Fail);
-                        }
-                    }
+                    FollowExport(reference, field, context, Fail, inner => DependOn(inner, reference.Target));
                 }
                 else
                 {
-                    AddDependency(reference, scope, field, Fail);
+                    DependOn(reference, scope);
                 }
-            }
-        }
-
-        // A reference to a node output, in the scope its expression was written in, is an edge to that node.
-        void AddDependency(Reference reference, string inScope, string field, Action<string> fail)
-        {
-            if (reference.Target == ExpressionEvaluator.RuntimeNode)
-            {
-                if (runtimeId is null)
-                {
-                    fail($"field '{field}' references runtime.{reference.Output}, but there is no runtime.");
-                }
-                else
-                {
-                    dependsOn.Add(runtimeId);
-                }
-            }
-            else if (ids.TryGetValue((inScope, reference.Target), out var target))
-            {
-                dependsOn.Add(target);
-            }
-            else
-            {
-                // The evaluator rejects names outside the scope it was given.
-                throw new UnreachableException($"node '{id}' references '{reference.Target}', which the evaluator should have rejected.");
             }
         }
 
         return new Draft(id, scope, Stack(id), node, dependsOn.ToList());
+    }
+
+    // A reference to a node output, in the scope its expression was written in, is an edge to that node: its id, or the runtime's. Null, after
+    // fail, when the reference is to a runtime that does not exist.
+    private static string? DependencyOf(Reference reference, string inScope, string field, BuildContext context, Action<string> fail)
+    {
+        if (reference.Target == ExpressionEvaluator.RuntimeNode)
+        {
+            if (context.RuntimeId is null)
+            {
+                fail($"field '{field}' references runtime.{reference.Output}, but there is no runtime.");
+            }
+
+            return context.RuntimeId;
+        }
+
+        // The evaluator rejects names outside the scope it was given.
+        return context.Ids.TryGetValue((inScope, reference.Target), out var target)
+            ? target
+            : throw new UnreachableException($"field '{field}' references '{reference.Target}', which the evaluator should have rejected.");
+    }
+
+    // A reference to a requirement's export: the export waits on the nodes of its requirement, so the node does too (dependOn, given the
+    // export's node reference); one that waits on the runtime is refused, as the runtime cannot read it.
+    private static void FollowExport(Reference reference, string field, BuildContext context, Action<string> fail, Action<Reference> dependOn)
+    {
+        if (!context.Exports.TryGetValue(reference.Target, out var requirementExports) || !requirementExports.TryGetValue(reference.Output, out var export))
+        {
+            fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which is not an export of a requirement of this workload.");
+            return;
+        }
+
+        foreach (var inner in (export as Pending)?.References.Where(r => r.Kind == ReferenceKind.Node) ?? [])
+        {
+            if (inner.Target == ExpressionEvaluator.RuntimeNode)
+            {
+                fail($"field '{field}' references resource.{reference.Target}.{reference.Output}, which waits on the runtime; the runtime cannot read an export that waits on the runtime.");
+            }
+            else
+            {
+                dependOn(inner);
+            }
+        }
     }
 
     // After policies, a grant's target is still one pending reference to a node of its own scope or the runtime, and nothing else: the

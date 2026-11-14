@@ -1,13 +1,11 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using jd.core.bp;
-using jd.definitionvalidator;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expansion;
 using jd.resolver.expressions;
 using jd.resolver.graph;
-using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace jd.resolver.tests;
@@ -22,7 +20,7 @@ public class SubstrateTests
 
     private static async Task<Catalog> CatalogAsync() => (await SeedCatalog.LoadAsync()).Value!;
 
-    private static async Task<EnvironmentDefinition> DefinitionAsync(string file = "shared.yaml", Func<string, string>? edit = null)
+    private static async Task<EnvironmentDescriptor> DefinitionAsync(string file = "shared.yaml", Func<string, string>? edit = null)
     {
         var path = Sample(file);
         if (edit is not null)
@@ -32,15 +30,22 @@ public class SubstrateTests
             await File.WriteAllTextAsync(path, text);
         }
 
-        var result = await EnvironmentDefinitionFile.LoadAsync(await SourceFiles.ReadAsync(path), CancellationToken.None);
+        var result = await EnvironmentParser.LoadDefinitionAsync(await SourceFiles.ReadAsync(path), CancellationToken.None);
         Assert.Empty(result.Errors);
         return result.Value!;
     }
 
-    private static IReadOnlyList<LoadError> Errors(EnvironmentDefinition definition, EnvironmentDescriptor? baseDescriptor, Catalog catalog) =>
-        Resolver.ResolveSubstrate(definition, "definition.yaml", catalog, definition.Over(baseDescriptor), baseDescriptor).Errors;
+    private static IReadOnlyList<LoadError> Errors(EnvironmentDescriptor definition, EnvironmentDescriptor? baseDescriptor, Catalog catalog) =>
+        Resolver.ResolveSubstrate("definition.yaml", catalog, definition.Over(baseDescriptor), baseDescriptor).Errors;
 
-    private static EnvironmentDefinition Offering(string name, string type, params string[] offers) => new(name, Region, type, offers, null);
+    // A definition as the loader reads it, so its errors are located as a file's are.
+    private static async Task<EnvironmentDescriptor> OfferingAsync(string name, string type, params string[] offers)
+    {
+        var text = $"kind: EnvironmentDefinition\nname: {name}\nregion: {Region}\ntype: {type}\noffers: [{string.Join(", ", offers)}]\n";
+        var result = await EnvironmentParser.LoadDefinitionAsync(new SourceDocument("definition.yaml", Encoding.UTF8.GetBytes(text)), CancellationToken.None);
+        Assert.Empty(result.Errors);
+        return result.Value!;
+    }
 
     private static async Task<EnvironmentDescriptor> SharedDescriptorAsync() => await ComposeAsync((await PrepareAsync(await DefinitionAsync())).Composer, SharedOutputs);
 
@@ -48,7 +53,7 @@ public class SubstrateTests
     private static async Task<Catalog> SeedCatalogWithAsync(params (string Path, string Content)[] files)
     {
         var seed = SeedCatalog.Read();
-        var loaded = await CatalogParser.ParseAsync(seed with { Documents = [.. seed.Documents, .. files.Select(f => new SourceDocument(f.Path, Encoding.UTF8.GetBytes(f.Content)))] });
+        var loaded = await CatalogLoader.LoadAsync(seed with { Documents = [.. seed.Documents, .. files.Select(f => new SourceDocument(f.Path, Encoding.UTF8.GetBytes(f.Content)))] });
         Assert.Empty(loaded.Errors);
         return loaded.Value!;
     }
@@ -75,13 +80,13 @@ public class SubstrateTests
         outputs.ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, ConfigEntry>)o.Value.ToDictionary(v => v.Key, v => new ConfigEntry(v.Value)));
 
     private static async Task<(ResolvedGraph Graph, DescriptorComposer Composer)> PrepareAsync(
-        EnvironmentDefinition definition, EnvironmentDescriptor? baseDescriptor = null, Catalog? fixture = null)
+        EnvironmentDescriptor definition, EnvironmentDescriptor? baseDescriptor = null, Catalog? fixture = null)
     {
         var catalog = fixture ?? await CatalogAsync();
         var environment = definition.Over(baseDescriptor);
-        var graph = Resolver.ResolveSubstrate(definition, "definition.yaml", catalog, environment, baseDescriptor);
+        var graph = Resolver.ResolveSubstrate("definition.yaml", catalog, environment, baseDescriptor);
         Assert.Empty(graph.Errors);
-        return (graph, new DescriptorComposer(definition, "definition.yaml", catalog, environment, graph));
+        return (graph, new DescriptorComposer("definition.yaml", catalog, environment, graph));
     }
 
     private static async Task<EnvironmentDescriptor> ComposeAsync(DescriptorComposer composer, Dictionary<string, Dictionary<string, string>> outputs)
@@ -162,13 +167,36 @@ public class SubstrateTests
         var shared = await ComposeAsync(composer, SharedOutputs.Where(o => !o.Key.EndsWith("/cosmos", StringComparison.Ordinal)).ToDictionary(o => o.Key, o => o.Value));
         Assert.DoesNotContain(layer.Nodes, n => n.Name == "cosmos");
 
-        var error = Assert.Single(Errors(Offering("dev", "dev", "container-app", "database"), shared, catalog));
-        var none = Errors(Offering("dev", "dev", "database"), null, catalog);
+        var error = Assert.Single(Errors(await OfferingAsync("dev", "dev", "container-app", "database"), shared, catalog));
+        var none = Errors(await OfferingAsync("dev", "dev", "database"), null, catalog);
 
         Assert.Equal(("definition.yaml", "offers"), (error.File, error.Location));
         Assert.Contains("shared resource 'cosmos-account', but base descriptor 'shared' has no values for it", error.Message);
         Assert.Equal(["cosmos-account", "shared-group"], none.Select(e => e.Message.Split('\'')[1]).ToList());
         Assert.All(none, e => Assert.Contains("but there is no base descriptor", e.Message));
+    }
+
+    // An environment built in code was read from no document, so none of its roles has a location: it resolves, and an error it causes is located by nothing.
+    [Fact]
+    public async Task An_environment_built_in_code_resolves_and_its_errors_have_an_empty_location()
+    {
+        var environment = new EnvironmentDescriptor("dev", Region, "dev", new Dictionary<string, string>(), ["container-app", "database"], null);
+
+        var graph = Resolver.ResolveSubstrate("definition.yaml", await CatalogAsync(), environment, null);
+
+        Assert.Equal(["cosmos-account", "log-analytics", "shared-group"], graph.Errors.Select(e => e.Message.Split('\'')[1]).ToList());
+        Assert.All(graph.Errors, e => Assert.Equal(("definition.yaml", string.Empty), (e.File, e.Location)));
+    }
+
+    [Fact]
+    public async Task A_run_part_whose_name_only_starts_with_a_base_part_name_is_not_refused()
+    {
+        var shared = await SharedDescriptorAsync();
+        var near = shared with { Values = new Dictionary<string, string>(shared.Values) { ["env-groups.name"] = "rg-other" } };
+
+        var errors = Errors(await OfferingAsync("dev", "dev", "container-app", "database", "monitoring"), near, await CatalogAsync());
+
+        Assert.Empty(errors);
     }
 
     [Fact]
@@ -177,7 +205,7 @@ public class SubstrateTests
         var shared = await SharedDescriptorAsync();
         var clash = shared with { Values = new Dictionary<string, string>(shared.Values) { ["env-group.name"] = "rg-other" } };
 
-        var error = Assert.Single(Errors(Offering("dev", "dev", "container-app", "database", "monitoring"), clash, await CatalogAsync()));
+        var error = Assert.Single(Errors(await OfferingAsync("dev", "dev", "container-app", "database", "monitoring"), clash, await CatalogAsync()));
 
         Assert.Equal("offers", error.Location);
         Assert.Contains("part 'env-group' is already in the base descriptor's values", error.Message);
@@ -190,8 +218,8 @@ public class SubstrateTests
         var catalog = await SeedCatalogWithAsync(("runtimes/other.yaml", runtime.Replace("name: container-app", "name: other-app")));
         var shared = await SharedDescriptorAsync();
 
-        var unknown = Assert.Single(Errors(Offering("dev", "dev", "container-app", "nosql"), shared, catalog));
-        var two = Assert.Single(Errors(Offering("dev", "dev", "container-app", "other-app"), shared, catalog));
+        var unknown = Assert.Single(Errors(await OfferingAsync("dev", "dev", "container-app", "nosql"), shared, catalog));
+        var two = Assert.Single(Errors(await OfferingAsync("dev", "dev", "container-app", "other-app"), shared, catalog));
 
         Assert.Equal(("offers[1]", "'nosql' is not a component or runtime in the catalog."), (unknown.Location, unknown.Message));
         Assert.Equal(("offers", "an environment offers at most one runtime; it offers container-app, other-app."), (two.Location, two.Message));
@@ -203,9 +231,37 @@ public class SubstrateTests
         var catalog = await SeedCatalogWithAsync(("components/cache.yaml",
             "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  stage:\n    classes:\n      standard:\n        nodes: { c: { template: t/c, config: { k: 1 } } }\n        exports: { host: x }\n"));
 
-        var error = Assert.Single(Errors(Offering("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog));
+        var error = Assert.Single(Errors(await OfferingAsync("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog));
 
-        Assert.Equal(("offers[1]", "component 'cache' has no implementation for environment type 'dev' and no 'default' implementation."), (error.Location, error.Message));
+        Assert.Equal(("offers[1]", "component 'cache' has no implementations entry for 'dev' and no 'default' entry (keys: stage)."), (error.Location, error.Message));
+    }
+
+    // Only the last layer, where workloads deploy, deploys an offered component's parts; an earlier layer selects none, so a component without an
+    // implementation for its type is no error there.
+    [Fact]
+    public async Task An_earlier_layer_selects_no_implementation_of_an_offered_component()
+    {
+        var catalog = await SeedCatalogWithAsync(("components/cache.yaml",
+            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  stage:\n    classes:\n      standard:\n        nodes: { c: { template: t/c, config: { k: 1 } } }\n        exports: { host: x }\n"));
+
+        Assert.Empty(Errors(await OfferingAsync("shared", "shared", "container-app", "cache"), null, catalog));
+    }
+
+    // The implementation is selected first and its parts kept by scope after: an exact key without an environment part deploys none, though
+    // the fallback has one; with no exact key the fallback's is deployed.
+    [Theory]
+    [InlineData("dev", new string[0])]
+    [InlineData("stage", new[] { "c" })]
+    public async Task An_environment_deploys_the_environment_part_of_the_implementation_its_type_selects(string key, string[] cache)
+    {
+        const string classes = "    classes:\n      standard: { nodes: { s: { template: t/s, config: {} } }, exports: { host: x } }\n";
+        var catalog = await SeedCatalogWithAsync(("components/cache.yaml",
+            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n"
+            + $"  default:\n    environment: {{ nodes: {{ c: {{ template: t/c, config: {{ k: 1 }} }} }} }}\n{classes}  {key}:\n{classes}"));
+
+        var (graph, _) = await PrepareAsync(await OfferingAsync("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog);
+
+        Assert.Equal(cache, graph.Nodes.Where(n => n.Provenance.Values.Any(p => p.Source == "components/cache.yaml")).Select(n => n.Name));
     }
 
     [Fact]
@@ -216,7 +272,7 @@ public class SubstrateTests
         var definition = await DefinitionAsync("dev.yaml");
         var shared = await SharedDescriptorAsync();
 
-        var graph = Resolver.ResolveSubstrate(definition, "dev.yaml", catalog, definition.Over(shared), shared);
+        var graph = Resolver.ResolveSubstrate("dev.yaml", catalog, definition.Over(shared), shared);
 
         Assert.Empty(graph.Errors);
         var name = Assert.IsType<Pending>(((ConfigText)graph.Nodes.Single(n => n.Name == "apps").Config["environmentName"]).Result);
@@ -242,7 +298,7 @@ public class SubstrateTests
         Assert.Equal(["container-app", "database", "monitoring"], descriptor.Offers);
 
         // The layout serves the components and policies: the sample workload resolves on it without errors.
-        var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
+        var workload = await TestWorkload.ParseAsync(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         Assert.Empty(Resolver.Resolve(workload, "workload.yaml", await CatalogAsync(), descriptor).Errors);
     }
 
@@ -283,12 +339,14 @@ public class SubstrateTests
     [Fact]
     public async Task A_definition_whose_policy_cannot_be_met_is_found_before_anything_is_created()
     {
-        var definition = await DefinitionAsync("stage.yaml", text => text.Replace("required: 1", "required: 2", StringComparison.Ordinal));
-        var (_, composer) = await PrepareAsync(definition, await SharedDescriptorAsync());
+        var text = (await File.ReadAllTextAsync(Sample("stage.yaml"))).Replace("required: 1", "required: 2", StringComparison.Ordinal);
 
-        var error = Assert.Single((await composer.ComposeAsync(null)).Errors);
+        var loaded = await EnvironmentParser.LoadDefinitionAsync(new SourceDocument("stage.yaml", Encoding.UTF8.GetBytes(text)), CancellationToken.None);
 
-        Assert.Equal("approval.required", error.Location);
+        // Reported as the definition is read (before S24c1, by the composer's dry run): one loader checks a definition and a descriptor alike.
+        var error = Assert.Single(loaded.Errors);
+        Assert.Equal(("stage.yaml", "approval.required"), (error.File, error.Location));
+        Assert.Equal("2 approvers are required but only 1 are listed; the policy could never be met.", error.Message);
     }
 
     [Fact]
@@ -342,13 +400,13 @@ public class SubstrateTests
             "kind: Naming\nrules:\n  rg:\n    pattern: \"rg-{env}-{hash}\"\n    maxLength: 90\n    allowed: \"[a-z0-9-]\"\n",
             "kind: Component\nname: thing\ndescription: d\nexports: [out]\nimplementations:\n  default:\n    environment:\n      nodes:\n        group:\n          template: t/group\n          config:\n            groupName: ${name('rg')}\n      exports: {}\n    classes:\n      substrate:\n        nodes:\n          group:\n            template: t/group\n            config:\n              groupName: ${name('rg')}\n        exports:\n          out: ${group.groupName}\n",
         }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
-        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
+        var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
-        var definition = Offering("dev", "dev", "thing");
+        var definition = await OfferingAsync("dev", "dev", "thing");
         var environment = definition.Over(null);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: dev, team: crew }\nrequires:\n  - type: thing\n    id: substrate\n    class: substrate\n");
+        var workload = await TestWorkload.ParseAsync("metadata: { name: dev, team: crew }\nrequires:\n  - type: thing\n    id: substrate\n    class: substrate\n");
 
-        var substrate = Resolver.ResolveSubstrate(definition, "definition.yaml", loaded.Value!, environment, null).Nodes.Single();
+        var substrate = Resolver.ResolveSubstrate("definition.yaml", loaded.Value!, environment, null).Nodes.Single();
         var workloadNode = Resolver.Resolve(workload, "workload.yaml", loaded.Value!, environment).Nodes.Single();
 
         Assert.Equal(("@dev/dev/substrate/group", "_dev.dev.substrate.group"), (substrate.Id, substrate.Stack));
@@ -380,7 +438,7 @@ public class SubstrateTests
             await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(Sample("dev.yaml"))).Replace("region: southeastasia\n", string.Empty, StringComparison.Ordinal));
 
             Assert.Equal("region-9", (await ComposeAsync(dev, DevOutputs)).Region);
-            var loaded = await EnvironmentDefinitionFile.LoadAsync(await SourceFiles.ReadAsync(path), CancellationToken.None);
+            var loaded = await EnvironmentParser.LoadDefinitionAsync(await SourceFiles.ReadAsync(path), CancellationToken.None);
             Assert.Null(loaded.Value);
             Assert.Contains(loaded.Errors, e => e.File == path && e.Message.Contains("region", StringComparison.Ordinal));
         }
@@ -396,9 +454,29 @@ public class SubstrateTests
         var dir = Directory.CreateTempSubdirectory("jd-def").FullName;
         var path = Path.Combine(dir, "d.yaml");
         await File.WriteAllTextAsync(path, "kind: EnvironmentDefinition\nname: xyz\ntype: dev\nrequires: [{ type: env-substrate }]\nvalues: {}\n");
-        var old = await EnvironmentDefinitionFile.LoadAsync(await SourceFiles.ReadAsync(path), CancellationToken.None);
+        var old = await EnvironmentParser.LoadDefinitionAsync(await SourceFiles.ReadAsync(path), CancellationToken.None);
 
         Assert.Contains(old.Errors, e => e.File == path && e.Message.Contains("offers"));
+    }
+
+    // An environment owner has no image (WorkloadOwner.Image is null), so a substrate part cannot read the workload's.
+    [Fact]
+    public async Task A_part_reading_the_workload_image_in_a_substrate_is_an_error()
+    {
+        var files = new[]
+        {
+            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment } }\n",
+            "kind: SharedResource\nname: thing\ndescription: d\nscope: environment\nnodes:\n  a:\n    template: t/a\n    config: { img: '${workload.image}' }\nexports: {}\n",
+            TestCatalog.Component("user", "[out]", "nodes:\n  b:\n    template: t/b\n    config: { k: 1 }\nexports:\n  out: x\n").Replace("exports: [out]\n", "exports: [out]\nuses: [thing]\n"),
+        }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
+        var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
+        Assert.Empty(loaded.Errors);
+
+        var graph = Resolver.ResolveSubstrate("definition.yaml", loaded.Value!, (await OfferingAsync("dev", "dev", "user")).Over(null), null);
+
+        var error = Assert.Single(graph.Errors);
+        Assert.Equal(("f1.yaml", "nodes.a.config.img"), (error.File, error.Location));
+        Assert.Equal("'workload.image' has no value: workload '@dev' declares no image.", error.Message);
     }
 
     [Fact]
@@ -410,10 +488,10 @@ public class SubstrateTests
             "kind: SharedResource\nname: thing\ndescription: d\nscope: environment\nnodes:\n  a:\n    template: t/a\n    config: { who: '${runtime.principalId}' }\nexports: {}\n",
             TestCatalog.Component("user", "[out]", "nodes:\n  b:\n    template: t/b\n    config: { k: 1 }\nexports:\n  out: x\n").Replace("exports: [out]\n", "exports: [out]\nuses: [thing]\n"),
         }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
-        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
+        var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
 
-        var graph = Resolver.ResolveSubstrate(Offering("dev", "dev", "user"), "definition.yaml", loaded.Value!, Offering("dev", "dev", "user").Over(null), null);
+        var graph = Resolver.ResolveSubstrate("definition.yaml", loaded.Value!, (await OfferingAsync("dev", "dev", "user")).Over(null), null);
         var (layer, _) = await PrepareAsync(await DefinitionAsync());
 
         var error = Assert.Single(graph.Errors);

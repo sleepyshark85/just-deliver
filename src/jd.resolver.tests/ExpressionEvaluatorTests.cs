@@ -43,7 +43,7 @@ public class ExpressionEvaluatorTests
         string? image = null,
         int? port = null,
         Dictionary<string, IReadOnlyDictionary<string, string>>? parts = null) =>
-        new(roles ?? Roles, naming ?? Naming, Env, workload, "team-a", id, new HashSet<string> { "database", "container" }, known ?? [], image, port, parts ?? []);
+        new(roles ?? Roles, naming ?? Naming, Env, new WorkloadOwner(workload, "team-a", image, port), new ExpressionScope(id, new HashSet<string> { "database", "container" }, known ?? [], parts ?? []));
 
     // An environment run's parts (docs/architecture/components.md section 2): 'account' reads 'group' in place, 'database' (also a node) reads its node.
     private static readonly Dictionary<string, IReadOnlyDictionary<string, string>> RunParts = new()
@@ -137,6 +137,16 @@ public class ExpressionEvaluatorTests
         Assert.Equal("shop by team-a in dev", Resolve("${workload.name} by ${workload.team} in ${env.name}"));
     }
 
+    // The fields env.* reads are the ones the env.* roles bind, from a descriptor as it is read.
+    [Fact]
+    public async Task Env_reads_the_name_region_and_type_a_descriptor_binds()
+    {
+        var read = await EnvironmentParser.ParseAsync("env.yaml", "kind: Environment\nname: test-env\nregion: testregion\ntype: dev\noffers: []\nvalues: { part: { a: b } }\n");
+
+        Assert.Empty(read.Errors);
+        Assert.Equal("test-env/testregion/dev", Resolve("${env.name}/${env.region}/${env.type}", Context() with { Environment = read.Value! }));
+    }
+
     [Fact]
     public void Env_workload_and_role_namespaces_resolve()
     {
@@ -209,6 +219,13 @@ public class ExpressionEvaluatorTests
     [InlineData("${env.region.x}", "'env.region.x' is not an environment field")]
     [InlineData("${env.cosmos-account.id}", "'env.cosmos-account.id' is not an environment field")] // boundary 4: no way around uses
     [InlineData("${guid(env.cosmos-account.id)}", "'env.cosmos-account.id' is not an environment field")]
+    // Boundary 4: env.values and env.offers are roles the binder fills, never roots (docs/architecture/documents.md section 3).
+    [InlineData("${env.values.cosmos-account.id}", "'env.values.cosmos-account.id' is not an environment field; env.* reads only env.name, env.region, env.type")]
+    [InlineData("${env.offers}", "'env.offers' is not an environment field; env.* reads only env.name, env.region, env.type")]
+    [InlineData("${env.approval}", "'env.approval' is not an environment field; env.* reads only env.name, env.region, env.type")]
+    // A descriptor's values are not env fields, by key or by dot path.
+    [InlineData("${env.env-group.name}", "'env.env-group.name' is not an environment field")]
+    [InlineData("${env.values}", "'env.values' is not an environment field")]
     [InlineData("${role.nope}", "'role.nope' is not a role in the catalog")]
     [InlineData("${workload.region}", "not a workload field")]
     [InlineData("${nope.output}", "unknown node 'nope'")]
@@ -307,9 +324,9 @@ public class ExpressionEvaluatorTests
         Assert.NotNull(catalog);
         var workload = YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
         var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
-        var part = catalog.Components["database"].Implementations["default"].Classes["standard"];
-        var monitoring = catalog.Components["monitoring"].Implementations["default"].Classes["standard"];
-        var runtime = Assert.Single(catalog.Runtimes).Value.Implementations["default"];
+        var part = TestCatalog.PartAt(catalog.Components["database"], "implementations.default.classes.standard");
+        var monitoring = TestCatalog.PartAt(catalog.Components["monitoring"], "implementations.default.classes.standard");
+        var runtime = TestCatalog.PartAt(Assert.Single(catalog.Runtimes).Value, "implementations.default");
         var nodeNames = part.Nodes.Keys.Concat(monitoring.Nodes.Keys).ToHashSet();
         var strings = part.Nodes.Values.Concat(monitoring.Nodes.Values).Concat(runtime.Nodes.Values).SelectMany(n => n.Config.Values)
             .Select(t => t.ToString())
@@ -317,7 +334,9 @@ public class ExpressionEvaluatorTests
             .Append(sampleEndpoint)
             .ToList();
 
-        var evaluator = new ExpressionEvaluator(new ExpressionContext(catalog.Roles, catalog.Naming, Env, "shop", "team-a", "db", nodeNames, new Dictionary<Reference, string>(), "registry.example/app:1", 8080, new Dictionary<string, IReadOnlyDictionary<string, string>>()));
+        var evaluator = new ExpressionEvaluator(new ExpressionContext(
+            catalog.Roles, catalog.Naming, Env, new WorkloadOwner("shop", "team-a", "registry.example/app:1", 8080),
+            new ExpressionScope("db", nodeNames, new Dictionary<Reference, string>(), new Dictionary<string, IReadOnlyDictionary<string, string>>())));
         var errors = new List<LoadError>();
         var results = strings.Select(s => evaluator.Evaluate(s, "seed", "", errors)).ToList();
 
@@ -340,5 +359,14 @@ public class ExpressionEvaluatorTests
         var second = Resolve("${name('cosmos-container')}", context("shop", "orders-store"));
 
         Assert.NotEqual(first, second);
+    }
+
+    // What an expression reads is found by the evaluator's own rules: a '${…}' inside a quoted literal is text, and a call without its closing ')' reads nothing.
+    [Fact]
+    public void An_expression_inside_a_quoted_literal_is_not_read_and_a_call_without_its_closing_parenthesis_reads_no_path()
+    {
+        Assert.False(ExpressionEvaluator.ReadsResource("${name('${resource.db.x}')}"));
+        Assert.True(ExpressionEvaluator.ReadsResource("${name(resource.db.x)}"));
+        Assert.Empty(ExpressionEvaluator.Paths("${name(resource.db.endpoint}"));
     }
 }

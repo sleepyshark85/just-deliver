@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using jd.definitionvalidator;
 using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
@@ -8,7 +7,7 @@ using jd.resolver.expansion;
 using jd.resolver.expressions;
 using jd.resolver.graph;
 using jd.resolver.policies;
-using Newtonsoft.Json.Linq;
+using jd.resolver.workload;
 using Xunit;
 
 namespace jd.bp.pulumi.tests;
@@ -48,10 +47,11 @@ public partial class TemplateLibraryTests
         var root = Path.Combine(AppContext.BaseDirectory, "catalog");
         var documents = Directory.EnumerateFiles(root, "*.yaml", SearchOption.AllDirectories)
             .Select(file => new SourceDocument(Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/'), File.ReadAllBytes(file)));
-        var catalog = (await CatalogParser.ParseAsync(new SourceCatalog(root, [.. documents]))).Value!;
+        var catalog = (await CatalogLoader.LoadAsync(new SourceCatalog(root, [.. documents]))).Value!;
         var descriptor = Path.Combine(AppContext.BaseDirectory, "golden", "seed-environment.yaml");
         var environment = (await EnvironmentParser.LoadAsync(new SourceDocument(descriptor, await File.ReadAllBytesAsync(descriptor)), CancellationToken.None)).Value!;
-        var workload = (JObject)YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
+        var sample = Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml");
+        var workload = (await WorkloadFile.ParseAsync(sample, await File.ReadAllTextAsync(sample))).Value!;
         var graph = new GraphBuilder(environment, catalog.GrantTargets).Build(new PolicyApplier(catalog, environment).Apply(new Expander(catalog, environment).Expand(workload, "workload.yaml")));
         var library = SeedTemplates();
 
@@ -296,9 +296,9 @@ public partial class TemplateLibraryTests
                 + "    nodes:\n      runtime:\n        template: t/rt\n        config: { image: i }\n",
             $"kind: Policy\nname: pol\nreason: r\nmatch: {{ kind: runtime }}\n{layer}: {{ runtime.{input}: from-policy }}\n",
         }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
-        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. sources]));
+        var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. sources]));
         Assert.Empty(loaded.Errors);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml("metadata: { name: shop, team: crew }\ncontainer:\n  image: reg/app:1\nrequires: []\n");
+        var workload = (await WorkloadFile.ParseAsync("workload.yaml", "apiVersion: just-deliver/v1\nkind: Workload\nmetadata: { name: shop, team: crew }\ncontainer:\n  image: reg/app:1\nrequires: []\n")).Value!;
         var graph = jd.resolver.Resolver.Resolve(workload, "workload.yaml", loaded.Value!, new EnvironmentDescriptor("dev", "region-1", "dev", new Dictionary<string, string>(), ["container-app"], null));
         Assert.Empty(graph.Errors);
 

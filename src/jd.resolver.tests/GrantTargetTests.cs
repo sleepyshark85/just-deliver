@@ -32,7 +32,7 @@ public class GrantTargetTests
         + TestCatalog.RuntimeImplementation($"nodes:\n  runtime: {{ template: t/rt, config: {{}} }}\n{extraNodes}");
 
     private static Task<LoadResult<Catalog>> Parse(string component, string runtime = "", string sharedGroup = SharedGroup) =>
-        CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. new[]
+        CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. new[]
         {
             ("catalog.yaml", CatalogFile), ("grants.yaml", TestCatalog.GrantsFile), ("shared/a.yaml", sharedGroup), ("shared/b.yaml", CosmosAccount),
             ("c.yaml", component), ("r.yaml", runtime.Length > 0 ? runtime : Runtime()),
@@ -70,6 +70,7 @@ public class GrantTargetTests
     [InlineData("'${role.reader}'")]
     [InlineData("''")]                                 // set but empty
     [InlineData("")]                                   // not set
+    [InlineData("null")]                               // set to YAML null
     public async Task A_grant_target_that_is_not_one_reference_to_its_own_part_or_the_runtime_is_a_load_error(string target)
     {
         var error = SingleError(await Parse(Component(Grant(target))));
@@ -118,5 +119,18 @@ public class GrantTargetTests
 
         Assert.Equal(("c.yaml", "implementations.default.environment.nodes.access"), (error.File, error.Location));
         Assert.Contains("not in a part of the environment scope", error.Message);
+    }
+
+    // A template listed twice is the define rule's error, and the grants are checked against the first file's input only.
+    [Fact]
+    public async Task A_template_listed_in_two_files_is_checked_against_the_first_files_input()
+    {
+        var result = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. new[]
+        {
+            ("catalog.yaml", CatalogFile), ("grants.yaml", TestCatalog.GrantsFile), ("grants2.yaml", "kind: Grants\ntargets: { t/g: target }\n"),
+            ("shared/a.yaml", SharedGroup), ("shared/b.yaml", CosmosAccount), ("c.yaml", Component(Grant("'${container.scope}'"))), ("r.yaml", Runtime()),
+        }.Select(f => new SourceDocument(f.Item1, Encoding.UTF8.GetBytes(f.Item2)))]));
+
+        Assert.Equal([new LoadError("grants2.yaml", "targets.t/g", "'t/g' is already declared in grants.yaml.")], result.Errors);
     }
 }

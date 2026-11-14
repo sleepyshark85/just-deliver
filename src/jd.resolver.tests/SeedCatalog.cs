@@ -12,5 +12,5 @@ internal static class SeedCatalog
         [.. Directory.EnumerateFiles(Root, "*.yaml", SearchOption.AllDirectories)
             .Select(file => new SourceDocument(Path.GetRelativePath(Root, file).Replace(Path.DirectorySeparatorChar, '/'), File.ReadAllBytes(file)))]);
 
-    public static Task<LoadResult<Catalog>> LoadAsync() => CatalogParser.ParseAsync(Read());
+    public static Task<LoadResult<Catalog>> LoadAsync() => CatalogLoader.LoadAsync(Read());
 }

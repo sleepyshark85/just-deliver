@@ -38,16 +38,27 @@ public class EnvironmentParserTests
         Assert.Equal(["container-app"], env.Offers);
     }
 
+    // Reachable from any descriptor jd reads (a hand-written base, or a composed one whose part is named so), so the check is live (S24c1).
     [Theory]
-    [InlineData("name")]
-    [InlineData("region")]
-    [InlineData("type")]
-    public async Task Reserved_key_in_values_is_rejected(string key)
+    [InlineData("name", "x")]
+    [InlineData("region", "x")]
+    [InlineData("type", "x")]
+    [InlineData("name", "{ id: x }")]
+    [InlineData("type", "{}")]
+    public async Task Reserved_key_in_values_is_rejected(string key, string value)
     {
-        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", $"  resourceGroup: rg-test\n  {key}: x"));
+        var result = await Parse(Valid.Replace("  resourceGroup: rg-test", $"  resourceGroup: rg-test\n  {key}: {value}"));
         var error = Assert.Single(result.Errors);
-        Assert.Equal($"values.{key}", error.Location);
+        Assert.Equal(($"values.{key}", $"'{key}' is reserved for the top-level field and cannot be a value."), (error.Location, error.Message));
         Assert.Null(result.Value);
+    }
+
+    [Fact]
+    public async Task A_reserved_name_deeper_in_values_is_a_value_like_any_other()
+    {
+        var env = await Load(Valid.Replace("logAnalytics: { id: /law/id }", "logAnalytics: { name: law, deeper: { type: x } }"));
+
+        Assert.Equal(("law", "x"), (env.Values["logAnalytics.name"], env.Values["logAnalytics.deeper.type"]));
     }
 
     [Fact]
@@ -129,31 +140,5 @@ public class EnvironmentParserTests
     {
         var result = await Parse("kind: [unclosed");
         Assert.Contains("not valid YAML", Assert.Single(result.Errors).Message);
-    }
-
-    [Fact]
-    public async Task Lookup_resolves_reserved_keys_from_top_level_fields()
-    {
-        var env = await Load(Valid);
-        Assert.True(env.TryGet("name", out var name));
-        Assert.Equal("test-env", name);
-        Assert.True(env.TryGet("region", out var region));
-        Assert.Equal("testregion", region);
-        Assert.True(env.TryGet("type", out var type));
-        Assert.Equal("dev", type);
-    }
-
-    // env.* reads only the top-level fields; a part's exports are read as ${<part>.<export>} (security boundary 4).
-    [Theory]
-    [InlineData("resourceGroup")]
-    [InlineData("cosmos.accountId")]
-    [InlineData("unknown")]
-    [InlineData("cosmos.unknown")]
-    [InlineData("cosmos")]
-    [InlineData("values.resourceGroup")]
-    public async Task Lookup_of_an_unknown_path_is_not_found(string path)
-    {
-        var env = await Load(Valid);
-        Assert.False(env.TryGet(path, out _));
     }
 }

@@ -2,13 +2,13 @@ using Xunit;
 
 namespace jd.definitionvalidator.tests;
 
-// Runs against the real workload schema and sample, plus the workload rules.
+// Runs against the real workload schema and sample; the workload rules are jd.resolver's (WorkloadRulesTests).
 public class WorkloadDefinitionTests
 {
     private static readonly string SchemaPath = Path.Combine(AppContext.BaseDirectory, "workload.schema.json");
     private static readonly string SamplePath = Path.Combine(AppContext.BaseDirectory, "sample-workload.yaml");
 
-    private readonly YamlSchemaValidator _validator = new(workload => WorkloadRules.Check(workload).Select(e => $"{e.Location}: {e.Message}").ToList());
+    private readonly YamlSchemaValidator _validator = new();
 
     private const string Header = @"
 apiVersion: just-deliver/v1
@@ -38,104 +38,6 @@ metadata:
         var result = await _validator.ValidateAsync(SchemaPath, SamplePath);
 
         Assert.True(result.IsValid, result.ToString());
-    }
-
-    [Fact]
-    public async Task TwoRequirementsOfSameType_WithDistinctIds_AreValid()
-    {
-        var result = await ValidateAsync(Workload(
-            "  variables:\n    MAIN: ${resource.primary.endpoint}\n    OTHER: ${resource.reporting.endpoint}\n",
-            "  - type: database\n    id: primary\n  - type: database\n    id: reporting\n    class: dedicated\n"));
-
-        Assert.True(result.IsValid, result.ToString());
-    }
-
-    [Fact]
-    public async Task ReferenceWithoutId_ResolvesToTypeAsEffectiveId()
-    {
-        var result = await ValidateAsync(Workload(
-            "  variables:\n    DB: ${resource.database.endpoint}\n",
-            "  - type: database\n"));
-
-        Assert.True(result.IsValid, result.ToString());
-    }
-
-    [Fact]
-    public async Task TwoRequirementsOfSameTypeWithoutIds_AreRejected_AskingForDistinctIds()
-    {
-        var result = await ValidateAsync(Workload("", "  - type: database\n  - type: database\n"));
-
-        Assert.False(result.IsValid);
-        var error = Assert.Single(result.Errors);
-        Assert.Contains("'database'", error);
-        Assert.Contains("requires[0], requires[1]", error);
-        Assert.Contains("distinct 'id's", error);
-    }
-
-    [Fact]
-    public async Task ExplicitIdCollidingWithAnotherTypeDefault_IsRejected()
-    {
-        var result = await ValidateAsync(Workload("", "  - type: database\n  - type: redis\n    id: database\n"));
-
-        Assert.False(result.IsValid);
-        Assert.Contains("'database'", Assert.Single(result.Errors));
-    }
-
-    [Fact]
-    public async Task ReferenceToUndeclaredId_IsRejected_NamingTheVariable()
-    {
-        var result = await ValidateAsync(Workload(
-            "  variables:\n    DB: ${resource.missing.endpoint}\n",
-            "  - type: database\n"));
-
-        Assert.False(result.IsValid);
-        var error = Assert.Single(result.Errors);
-        Assert.Contains("container.variables.DB", error);
-        Assert.Contains("'missing'", error);
-        Assert.Contains("database", error);
-    }
-
-    [Fact]
-    public async Task ReferenceByTypeWhenRequirementHasAnId_IsRejected()
-    {
-        var result = await ValidateAsync(Workload(
-            "  variables:\n    DB: ${resource.database.endpoint}\n",
-            "  - type: database\n    id: primary\n"));
-
-        Assert.False(result.IsValid);
-        Assert.Contains("'database'", Assert.Single(result.Errors));
-    }
-
-    [Fact]
-    public async Task ReferenceWithoutOutput_IsRejected()
-    {
-        var result = await ValidateAsync(Workload(
-            "  variables:\n    DB: ${resource.database}\n",
-            "  - type: database\n"));
-
-        Assert.False(result.IsValid);
-        Assert.Contains("container.variables.DB", Assert.Single(result.Errors));
-    }
-
-    [Theory]
-    [InlineData("${env.cosmos.accountId}")]
-    [InlineData("${cosmos-account.id}")]                   // a deployed part's export: platform-side, never a workload input (boundary 6)
-    [InlineData("${name('ca')}")]
-    [InlineData("${workload.team}")]
-    [InlineData("${runtime.principalId}")]
-    [InlineData("${role.cosmos-data-contributor}")]
-    [InlineData("${appinsights.connectionString}")]
-    [InlineData("ok-${resource.database.endpoint}-${env.name}")]
-    public async Task AVariableMayOnlyReferenceARequirementsOutput(string value)
-    {
-        var result = await ValidateAsync(Workload(
-            $"  variables:\n    BAD: \"{value}\"\n",
-            "  - type: database\n"));
-
-        Assert.False(result.IsValid);
-        var error = Assert.Single(result.Errors);
-        Assert.Contains("container.variables.BAD", error);
-        Assert.Contains("${resource.<id>.<output>}", error);
     }
 
     [Fact]
@@ -173,17 +75,6 @@ metadata:
         var result = await ValidateAsync(Workload("", "  - " + requirement + "\n"));
 
         Assert.False(result.IsValid);
-    }
-
-    [Fact]
-    public async Task WorkloadRulesAreNotRun_WhenSchemaFails()
-    {
-        // Fails the schema (no type) and would fail the uniqueness rule if the rules ran.
-        var result = await ValidateAsync(Workload("", "  - id: dup\n  - id: dup\n"));
-
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Contains("type"));
-        Assert.DoesNotContain(result.Errors, e => e.Contains("distinct"));
     }
 
     [Fact]

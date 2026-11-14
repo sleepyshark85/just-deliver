@@ -281,6 +281,22 @@ public sealed class ReleaseTests : IDisposable
         Assert.Contains(errors, e => e.StartsWith($"{path}: workloads[0].definition.container.image: ", StringComparison.Ordinal) && e.Contains("not pinned by digest"));
     }
 
+    // An error about the definition as a whole has no location of its own, so it is located at the definition's entry.
+    [Fact]
+    public async Task Loading_a_rehashed_definition_that_is_not_yaml_is_an_error_at_its_entry()
+    {
+        var set = await BuildAsync(WriteManifest(("web-app", [])));
+        var path = Path.Combine(_temp, "set.yaml");
+        await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
+        var text = await File.ReadAllTextAsync(path);
+        var rehash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Definition("web-app").Replace("team: team-a", "team: [team-a"))));
+        await File.WriteAllTextAsync(path, text.Replace("team: team-a", "team: [team-a").Replace(set.Workloads[0].DefinitionSha256, rehash));
+
+        var error = Assert.Single((await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path))).Errors);
+
+        Assert.StartsWith($"{path}: workloads[0].definition: not valid YAML: ", error.ToString());
+    }
+
     [Fact]
     public async Task A_definition_that_is_not_utf8_is_rejected_at_that_file()
     {

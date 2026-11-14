@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using jd.resolver.environment;
 
 namespace jd.resolver.expressions;
 
@@ -19,11 +18,19 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     internal const string EnvNamespace = "env";
     private const string RoleNamespace = "role";
     private const string WorkloadNamespace = "workload";
-    private const string ResourceNamespace = "resource";
+    internal const string ResourceNamespace = "resource";
     private const string WorkloadNameField = "name";
     private const string WorkloadTeamField = "team";
     private const string WorkloadImageField = "image";
     private const string WorkloadPortField = "port";
+
+    // The environment's fields env.* reads, and no other (security boundary 4): roots of the grammar, bound from the env.* roles.
+    private const string EnvNameField = "name";
+    private const string EnvRegionField = "region";
+    private const string EnvTypeField = "type";
+
+    /// <summary>The fields <c>env.*</c> reads, in the order the env.* limit lists them.</summary>
+    internal static readonly IReadOnlyList<string> EnvFields = [EnvNameField, EnvRegionField, EnvTypeField];
 
     private static readonly Dictionary<string, (int Min, int Max)> Arity = new()
     {
@@ -51,26 +58,26 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     /// own rules (where an expression ends, how arguments split, what a path is), so the two cannot disagree; text the evaluator rejects
     /// is left to it.
     /// </summary>
-    internal static IEnumerable<string> Paths(string text)
+    internal static IEnumerable<string> Paths(string text) =>
+        Expressions(text).SelectMany(expression => Arguments(expression.Body)).Where(argument => PathPattern().IsMatch(argument));
+
+    /// <summary>
+    /// Each expression in <paramref name="text"/> that ends, as written (<c>${…}</c>) and its body trimmed, found with the evaluator's own rule for
+    /// where an expression ends; an unterminated one is left to the evaluator.
+    /// </summary>
+    internal static IEnumerable<(string Written, string Body)> Expressions(string text)
     {
         var pos = 0;
         while (text.IndexOf("${", pos, StringComparison.Ordinal) is var start and >= 0 && FindClosingBrace(text, start + 2) is var end and >= 0)
         {
-            var expression = text[(start + 2)..end].Trim();
-            var open = expression.IndexOf('(');
-            var arguments = open < 0 ? [expression] : expression.EndsWith(')') ? SplitArguments(expression[(open + 1)..^1]) : [];
-            foreach (var path in arguments.Where(a => PathPattern().IsMatch(a)))
-            {
-                yield return path;
-            }
-
+            yield return (text[start..(end + 1)], text[(start + 2)..end].Trim());
             pos = end + 1;
         }
     }
 
     /// <summary>The env.* limit as the loader and the evaluator report it.</summary>
     internal static string EnvLimit(string path) =>
-        $"'{path}' is not an environment field; env.* reads only {string.Join(", ", EnvironmentDescriptor.ReservedKeys.Select(k => $"{EnvNamespace}.{k}"))}; read a deployed part's export as ${{<name>.<export>}} through uses.";
+        $"'{path}' is not an environment field; env.* reads only {string.Join(", ", EnvFields.Select(k => $"{EnvNamespace}.{k}"))}; read a deployed part's export as ${{<name>.<export>}} through uses.";
 
     /// <summary>The grant target rule, as the loader and the graph builder report it.</summary>
     internal static string GrantTargetRule(string input) =>
@@ -222,6 +229,10 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
         return result is null ? null : new Value(result, NoReferences, reads);
     }
 
+    // What an expression reads: a call's arguments, else the expression itself (a malformed call is no path, so it reads nothing).
+    private static List<string> Arguments(string expression) =>
+        expression.IndexOf('(') is var open and >= 0 && expression.EndsWith(')') ? SplitArguments(expression[(open + 1)..^1]) : [expression];
+
     private static List<string> SplitArguments(string inner)
     {
         if (inner.Trim().Length == 0)
@@ -273,7 +284,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
             case EnvNamespace:
                 // Only the environment's own fields: a part's exports are read through uses as ${<name>.<export>}, so env.* cannot skip
                 // the uses and grant target checks (security boundary 4).
-                if (segments.Length == 2 && context.Environment.TryGet(segments[1], out var envValue))
+                if (segments.Length == 2 && EnvField(segments[1]) is { } envValue)
                 {
                     return Known(envValue);
                 }
@@ -299,17 +310,17 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
 
                 var field = segments[1] switch
                 {
-                    WorkloadNameField => context.WorkloadName,
-                    WorkloadTeamField => context.WorkloadTeam,
-                    WorkloadImageField => context.WorkloadImage,
-                    _ => context.WorkloadPort?.ToString(CultureInfo.InvariantCulture),
+                    WorkloadNameField => context.Owner.Name,
+                    WorkloadTeamField => context.Owner.Team,
+                    WorkloadImageField => context.Owner.Image,
+                    _ => context.Owner.Port?.ToString(CultureInfo.InvariantCulture),
                 };
                 if (field is not null)
                 {
                     return Known(field);
                 }
 
-                fail($"'{path}' has no value: workload '{context.WorkloadName}' declares no {segments[1]}.");
+                fail($"'{path}' has no value: workload '{context.Owner.Name}' declares no {segments[1]}.");
                 return null;
 
             case ResourceNamespace:
@@ -324,7 +335,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
             default:
                 // 'runtime' is a node like any other; it is in scope without being listed. A node is read before a part of the same name:
                 // a part's exports read its own nodes (the database part's node is 'database').
-                if (segments[0] != RuntimeNode && !context.NodeNames.Contains(segments[0]))
+                if (segments[0] != RuntimeNode && !context.Scope.NodeNames.Contains(segments[0]))
                 {
                     return ResolvePart(segments, path, fail);
                 }
@@ -339,12 +350,21 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
         }
     }
 
+    // The environment's field env.<field> reads; null for any other.
+    private string? EnvField(string field) => field switch
+    {
+        EnvNameField => context.Environment.Name,
+        EnvRegionField => context.Environment.Region,
+        EnvTypeField => context.Environment.Type,
+        _ => null,
+    };
+
     // A part of this run is read by evaluating its export in place, so the read becomes the node references it is made of
     // (docs/architecture/components.md section 2); the catalog loader keeps uses acyclic, so this ends. Any other part was deployed
     // before: its exports are the descriptor's values, recorded so the preview can show where a value came from.
     private Value? ResolvePart(string[] segments, string path, Action<string> fail)
     {
-        if (context.Parts.TryGetValue(segments[0], out var exports))
+        if (context.Scope.Parts.TryGetValue(segments[0], out var exports))
         {
             if (segments.Length == 2 && exports.TryGetValue(segments[1], out var export))
             {
@@ -360,13 +380,13 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
             return new Value(deployed, NoReferences, new HashSet<string> { path });
         }
 
-        fail($"'{path}' refers to unknown node '{segments[0]}', and environment '{context.Environment.Name}' has no value '{path}'; nodes in scope: {string.Join(", ", context.NodeNames.Append(RuntimeNode).Order())}.");
+        fail($"'{path}' refers to unknown node '{segments[0]}', and environment '{context.Environment.Name}' has no value '{path}'; nodes in scope: {string.Join(", ", context.Scope.NodeNames.Append(RuntimeNode).Order())}.");
         return null;
     }
 
     // A deploy-time value: resolved if the caller already knows it, otherwise pending on it.
     private Value Await(Reference reference) =>
-        context.KnownOutputs.TryGetValue(reference, out var known) ? Known(known) : new Value(null, new HashSet<Reference> { reference }, NoPartReads);
+        context.Scope.KnownOutputs.TryGetValue(reference, out var known) ? Known(known) : new Value(null, new HashSet<Reference> { reference }, NoPartReads);
 
     private static Value Known(string text) => new(text, NoReferences, NoPartReads);
 }

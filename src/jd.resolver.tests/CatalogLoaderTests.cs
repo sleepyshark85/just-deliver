@@ -4,7 +4,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-public class CatalogParserTests
+public sealed class CatalogLoaderTests
 {
     private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
 
@@ -15,7 +15,7 @@ public class CatalogParserTests
         $"kind: Policy\nname: {name}\nreason: because\nmatch: {{ kind: runtime }}\nset: {{ runtime.b: 1 }}\n";
 
     private static Task<LoadResult<Catalog>> Parse(params (string Path, string Content)[] files) =>
-        CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files.Select(f => new SourceDocument(f.Path, Encoding.UTF8.GetBytes(f.Content)))]));
+        CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files.Select(f => new SourceDocument(f.Path, Encoding.UTF8.GetBytes(f.Content)))]));
 
     // The environment types (docs/architecture/components.md section 2): declared in the Catalog file, named like requirement types, `default`
     // excluded (the implementations' fallback key).
@@ -51,20 +51,33 @@ public class CatalogParserTests
         Assert.Equal([("dev", false), ("stage", true)], catalog.EnvironmentTypes.Select(t => (t.Key, t.Value.Approval)).OrderBy(t => t.Key, StringComparer.Ordinal));
         var component = Assert.Single(catalog.Components).Value;
         Assert.Equal(("alpha-db", "components/a.yaml"), (component.Name, component.Source));
-        Assert.Equal(["endpoint"], component.Exports);
-        var part = Assert.Single(Assert.Single(component.Implementations, i => i.Key == "default").Value.Classes, c => c.Key == "standard").Value;
+        Assert.Equal(["endpoint"], component.Contract);
+        var part = TestCatalog.PartAt(component, "implementations.default.classes.standard");
         Assert.Equal(NodeKind.Create, part.Nodes["db"].Kind);
         Assert.Equal(1, (int)part.Nodes["db"].Config["size"]);
         Assert.Equal("${db.endpoint}", part.Exports["endpoint"]);
         var runtime = Assert.Single(catalog.Runtimes).Value;
-        var implementation = Assert.Single(runtime.Implementations, i => i.Key == "default").Value;
-        Assert.Equal(("container-app", "runtimes/r.yaml", TestCatalog.Probe, TestCatalog.Release), (runtime.Name, runtime.Source, implementation.Probe, implementation.Release));
+        var implementation = TestCatalog.PartAt(runtime, "implementations.default");
+        Assert.Equal(("container-app", "runtimes/r.yaml", (TestCatalog.Probe, TestCatalog.Release)), (runtime.Name, runtime.Source, catalog.Rollouts[("container-app", "default")]));
         Assert.Equal("t/runtime", implementation.Nodes["runtime"].Template);
         var policy = Assert.Single(catalog.Policies);
-        Assert.Equal("alpha-db", policy.Require);
-        Assert.True(policy.Set.ContainsKey("runtime.b"));
+        Assert.Equal("alpha-db", policy.Require.Value);
+        Assert.Contains(policy.Set.Entries, entry => entry.Path == "runtime.b");
         Assert.Equal(20, catalog.Naming["thing"].MaxLength);
         Assert.Equal("00000000-0000-0000-0000-000000000001", catalog.Roles["reader"]);
+    }
+
+    // Each runtime's rollout is read from its own file.
+    [Fact]
+    public async Task Each_runtime_has_the_probe_its_own_file_declares()
+    {
+        const string nodes = "nodes:\n  runtime: { template: t/rt, config: {} }\n";
+        var other = TestCatalog.Runtime(nodes).Replace("name: container-app", "name: job-runner", StringComparison.Ordinal).Replace("path: /health", "path: /ready", StringComparison.Ordinal);
+        var result = await Parse(("catalog.yaml", CatalogFile), ("runtimes/a.yaml", TestCatalog.Runtime(nodes)), ("runtimes/b.yaml", other));
+
+        Assert.Empty(result.Errors);
+        var rollouts = Assert.IsType<Catalog>(result.Value).Rollouts;
+        Assert.Equal(("/health", "/ready"), (rollouts[("container-app", "default")].Probe.Path, rollouts[("job-runner", "default")].Probe.Path));
     }
 
     [Fact]
@@ -143,6 +156,18 @@ public class CatalogParserTests
         Assert.Null(result.Value);
     }
 
+    // Locations are the document's JSON paths: a key that is not a plain name is written in brackets.
+    [Fact]
+    public async Task A_location_under_a_key_with_a_dot_writes_the_key_in_brackets()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile),
+            ("components/a.yaml", TestCatalog.Component("alpha-db", "[endpoint]", "nodes:\n  db:\n    template: t/db\n    config: {}\nexports: {}\n", className: "big.one")));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("components/a.yaml", "implementations.default.classes['big.one'].exports"), (error.File, error.Location));
+        Assert.Equal("must export exactly the contract of component 'alpha-db' (endpoint); missing endpoint.", error.Message);
+    }
+
     [Theory]
     [InlineData("components/a.yaml")]
     [InlineData("runtimes/r.yaml")]
@@ -166,6 +191,31 @@ public class CatalogParserTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal((file, "implementations.shared"), (error.File, error.Location));
+        Assert.Equal("'shared' is a shared-layer environment type; implementations are keyed by environment-layer types or 'default'.", error.Message);
+    }
+
+    // A catalog file that failed its schema is reported on its own: its types are not read, so no key is judged against them.
+    [Fact]
+    public async Task A_catalog_file_that_fails_its_schema_is_not_checked_against_its_types()
+    {
+        var catalog = CatalogFile.Replace("environmentTypes: {", "environmentTypes: { shared: { layer: shared },", StringComparison.Ordinal).Replace("version: \"1\"\n", string.Empty, StringComparison.Ordinal);
+        var result = await Parse(("catalog.yaml", catalog), ("components/a.yaml", ComponentFile("alpha-db", key: "shared")));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("catalog.yaml", error.File);
+        Assert.StartsWith("schema violation: PropertyRequired: #/version", error.Message, StringComparison.Ordinal);
+    }
+
+    // The parts of one implementation share its key: the key is reported once, not once per class.
+    [Fact]
+    public async Task An_implementation_keyed_by_a_shared_layer_type_with_two_classes_is_one_error()
+    {
+        const string part = "{ nodes: { db: { template: t/db, config: {} } }, exports: { endpoint: x } }";
+        var component = $"kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n  shared:\n    classes: {{ standard: {part}, isolated: {part} }}\n";
+        var result = await Parse(("catalog.yaml", CatalogFile.Replace("environmentTypes: {", "environmentTypes: { shared: { layer: shared },", StringComparison.Ordinal)), ("components/a.yaml", component));
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(("components/a.yaml", "implementations.shared"), (error.File, error.Location));
         Assert.Equal("'shared' is a shared-layer environment type; implementations are keyed by environment-layer types or 'default'.", error.Message);
     }
 
@@ -224,18 +274,20 @@ public class CatalogParserTests
     }
 
     [Theory]
-    [InlineData("{ kind: grant }", "set: { a: 1 }", "match.kind")]
-    [InlineData("{ runtime: container-app }", "set: { a: 1 }", "match.runtime")]
-    [InlineData("{ kind: runtime, type: sqldb }", "set: { runtime.a: 1 }", "match")]
-    [InlineData("{ kind: runtime, template: t/x }", "set: { runtime.a: 1 }", "match")]
-    [InlineData("{ kind: runtime }", "set: { size: 1 }", "set.size")]
-    [InlineData("{ kind: runtime }", "default: { size: 1 }", "default.size")]
-    public async Task A_policy_that_fits_neither_scope_is_an_error(string match, string body, string location)
+    [InlineData("{ kind: grant }", "set: { a: 1 }", "match.kind", "'grant' is not a policy scope; the only 'kind' a policy can match is 'runtime'.")]
+    [InlineData("{ runtime: container-app }", "set: { a: 1 }", "match.runtime", "'runtime' needs 'kind: runtime'; node-scope policies match type, class, environmentType and template.")]
+    [InlineData("{ kind: runtime, type: sqldb }", "set: { runtime.a: 1 }", "match", "a 'kind: runtime' policy cannot also match type.")]
+    [InlineData("{ kind: runtime, template: t/x }", "set: { runtime.a: 1 }", "match", "a 'kind: runtime' policy cannot also match template.")]
+    [InlineData("{ kind: runtime, type: sqldb, class: standard, template: t/x, environmentType: dev }", "set: { runtime.a: 1 }", "match", "a 'kind: runtime' policy cannot also match class, template, type.")]
+    [InlineData("{ kind: runtime }", "set: { size: 1 }", "set.size", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'size'.")]
+    [InlineData("{ kind: runtime }", "default: { size: 1 }", "default.size", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'size'.")]
+    [InlineData("{ kind: runtime }", "set: { runtimes.a: 1 }", "set['runtimes.a']", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'runtimes.a'.")]
+    public async Task A_policy_that_fits_neither_scope_is_an_error(string match, string body, string location, string message)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {match}\n{body}\n"));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("p.yaml", location), (error.File, error.Location));
+        Assert.Equal(("p.yaml", location, message), (error.File, error.Location, error.Message));
     }
 
     [Theory]
@@ -249,15 +301,23 @@ public class CatalogParserTests
     }
 
     [Theory]
-    [InlineData("set:\n  a:\n    b: 1\n  a.b: 2", "set.a")]
-    [InlineData("default: { x.y: 1, x.y.z: 2 }", "default.x.y")]
-    public async Task A_policy_whose_own_paths_overlap_is_an_error(string body, string location)
+    [InlineData("set:\n  a:\n    b: 1\n  a.b: 2", "set.a", "a.b")]
+    [InlineData("default: { x.y: 1, x.y.z: 2 }", "default['x.y']", "x.y.z")]
+    public async Task A_policy_whose_own_paths_overlap_is_an_error(string body, string location, string inner)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", $"kind: Policy\nname: pol-a\nreason: r\nmatch: {{ template: t/x }}\n{body}\n"));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("p.yaml", location), (error.File, error.Location));
-        Assert.Contains("overlaps", error.Message);
+        Assert.Equal(("p.yaml", location, $"overlaps '{inner}' in the same policy; give one of them."), (error.File, error.Location, error.Message));
+    }
+
+    // A name that only begins with another's (a, ab) is not under it.
+    [Fact]
+    public async Task A_policy_whose_paths_only_share_a_name_prefix_loads()
+    {
+        var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { template: t/x }\nset: { a: 1, ab: 2 }\n"));
+
+        Assert.Empty(result.Errors);
     }
 
     [Fact]
@@ -266,7 +326,7 @@ public class CatalogParserTests
         var result = await Parse(("catalog.yaml", CatalogFile), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { kind: runtime }\nset: { runtime: 1 }\n"));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("p.yaml", "set.runtime"), (error.File, error.Location));
+        Assert.Equal(("p.yaml", "set.runtime", "a 'kind: runtime' policy can only set or default fields under 'runtime.', not 'runtime'."), (error.File, error.Location, error.Message));
     }
 
     // The part schema's message (shared by every part kind), located at the node: a name with a dot in the validator's bracket form.
@@ -346,7 +406,7 @@ public class CatalogParserTests
     }
 
     [Theory]
-    [InlineData(ComponentHead + ClassesWith + "runtime: { template: t/rt, config: {} }\n", TestCatalog.PartPath + ".nodes.runtime", "'runtime' is the runtime node, declared only by a Runtime.")]
+    [InlineData(ComponentHead + ClassesWith + "runtime: { template: t/rt, config: {} }\n", TestCatalog.PartPath + ".nodes.runtime", "'runtime' is the runtime node, declared only by a runtime.")]
     [InlineData(RuntimeHead + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 6 }\n" + Release + RuntimeNode, "implementations.default.probe.intervalSeconds", "must not exceed timeoutSeconds.")]
     [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      runtime:\n        template: t/rt\n        config: { suffix: x }\n", "implementations.default.nodes.runtime.config.suffix", "the release flow sets this input; the runtime node must not.")]
     [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      runtime:\n        template: t/rt\n        config: { traffic: [] }\n", "implementations.default.nodes.runtime.config.traffic", "the release flow sets this input; the runtime node must not.")]
@@ -357,6 +417,16 @@ public class CatalogParserTests
         var error = Assert.Single(result.Errors);
         Assert.Equal(("f.yaml", location), (error.File, error.Location));
         Assert.Contains(message, error.Message);
+    }
+
+    [Fact]
+    public async Task A_probe_whose_interval_equals_its_timeout_loads()
+    {
+        var probe = "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 5 }\n";
+
+        var result = await Parse(("catalog.yaml", CatalogFile), ("f.yaml", RuntimeHead + probe + Release + RuntimeNode));
+
+        Assert.Empty(result.Errors);
     }
 
     [Theory]
@@ -444,8 +514,7 @@ public class CatalogParserTests
         var result = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", ComponentFile("alpha-db")), ("p.yaml", "kind: Policy\nname: pol-a\nreason: r\nmatch: { template: t/x }\nrequire: alpha-db\n"));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("p.yaml", "require"), (error.File, error.Location));
-        Assert.Contains("a node-scope policy cannot require a component", error.Message);
+        Assert.Equal(("p.yaml", "require", "a node-scope policy cannot require a component; use 'kind: runtime' to make every workload require it."), (error.File, error.Location, error.Message));
     }
 
     [Fact]
@@ -525,6 +594,33 @@ public class CatalogParserTests
         Assert.Equal("naming.yaml", error.File);
         Assert.Equal("rules.thing.allowed", error.Location);
         Assert.Contains(message, error.Message);
+    }
+
+    // The location is the document path of the value, so a kind whose key holds a JSONPath special character is bracket-quoted.
+    [Fact]
+    public async Task Naming_allowed_of_a_kind_with_a_special_character_is_located_with_a_bracketed_key()
+    {
+        const string naming = "kind: Naming\nrules:\n  a/b:\n    pattern: \"{id}\"\n    maxLength: 20\n    allowed: \"[a-z]\"\n";
+        var result = await Parse(("catalog.yaml", CatalogFile), ("naming.yaml", naming));
+
+        Assert.Equal(
+            [new LoadError("naming.yaml", "rules['a/b'].allowed", "'[a-z]' must allow every hash digit 0-9a-f; it rejects 0123456789.")],
+            result.Errors);
+    }
+
+    // The define rule keeps the first file's rule; the second's allowed characters are still checked, in its own file.
+    [Fact]
+    public async Task Naming_allowed_is_checked_in_a_second_file_that_rules_the_same_kind()
+    {
+        const string naming = "kind: Naming\nrules:\n  thing:\n    pattern: \"{id}\"\n    maxLength: 20\n    allowed: \"{0}\"\n";
+        var result = await Parse(("catalog.yaml", CatalogFile), ("n1.yaml", naming.Replace("{0}", "[a-z0-9]", StringComparison.Ordinal)), ("n2.yaml", naming.Replace("{0}", "[a-z]", StringComparison.Ordinal)));
+
+        Assert.Equal(
+            [
+                new LoadError("n2.yaml", "rules.thing", "'thing' is already declared in n1.yaml."),
+                new LoadError("n2.yaml", "rules.thing.allowed", "'[a-z]' must allow every hash digit 0-9a-f; it rejects 0123456789."),
+            ],
+            result.Errors);
     }
 
     [Fact]

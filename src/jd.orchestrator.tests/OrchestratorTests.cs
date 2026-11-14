@@ -1,14 +1,13 @@
 using System.Globalization;
 using System.Text;
 using jd.core.bp;
-using jd.definitionvalidator;
 using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.environment;
 using jd.resolver.expansion;
 using jd.resolver.expressions;
 using jd.resolver.graph;
-using Newtonsoft.Json.Linq;
+using jd.resolver.workload;
 using Xunit;
 
 namespace jd.orchestrator.tests;
@@ -58,6 +57,8 @@ public partial class OrchestratorTests
 
     private const string DefaultRequires = "  - type: thing\n";
 
+    private const string DefaultContainer = "container:\n  image: reg/app:1\n";
+
     // The tests write the component's one class and the runtime's one implementation as top-level lines; ResolveAsync nests them in their files.
     private static string Indent(string text, int spaces) =>
         string.Join('\n', text.TrimEnd('\n').Split('\n').Select(line => line.Length == 0 ? line : new string(' ', spaces) + line)) + "\n";
@@ -75,9 +76,13 @@ public partial class OrchestratorTests
             }
             .Concat(policy.Length > 0 ? [policy] : [])
             .Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
-        var loaded = await CatalogParser.ParseAsync(new SourceCatalog("catalog", [.. files]));
+        var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
-        var workload = (JObject)YamlSchemaValidator.ParseYaml($"metadata: {{ name: {workloadName}, team: crew }}\n{container}requires:\n{requires}");
+        var parsed = await WorkloadFile.ParseAsync(
+            "workload.yaml",
+            $"apiVersion: just-deliver/v1\nkind: Workload\nmetadata: {{ name: {workloadName}, team: crew }}\n{(container.Length > 0 ? container : DefaultContainer)}requires:\n{requires}");
+        Assert.Empty(parsed.Errors);
+        var workload = parsed.Value!;
         var graph = Resolver.Resolve(workload, "workload.yaml", loaded.Value!, Env);
         Assert.Empty(graph.Errors);
         return (graph, loaded.Value!);

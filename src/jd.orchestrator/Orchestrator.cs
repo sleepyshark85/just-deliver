@@ -202,14 +202,12 @@ public sealed class Orchestrator(
                 catalog.Roles,
                 catalog.Naming,
                 environment,
-                graph.Workload,
-                graph.WorkloadTeam,
-                node.Scope == GraphBuilder.WorkloadScope ? node.Name : node.Scope,
-                graph.Nodes.Where(n => n.Scope == node.Scope).Select(n => n.Name).ToHashSet(),
-                known,
-                graph.WorkloadImage,
-                graph.WorkloadPort,
-                graph.Parts);
+                graph.Owner,
+                new ExpressionScope(
+                    node.Scope == GraphBuilder.WorkloadScope ? node.Name : node.Scope,
+                    graph.Nodes.Where(n => n.Scope == node.Scope).Select(n => n.Name).ToHashSet(),
+                    known,
+                    graph.Parts));
         }
 
         private static bool ReadsExport(ConfigValue value) => value switch

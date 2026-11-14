@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using jd.resolver.catalog;
 using jd.resolver.expansion;
 using jd.resolver.expressions;
@@ -58,4 +59,12 @@ public sealed record ResolvedGraph(
     IReadOnlyList<GraphNode> Nodes,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, EvalResult>> Exports,
     IReadOnlyList<LoadError> Errors,
-    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts);
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Parts)
+{
+    /// <summary>Who the graph belongs to, as its expressions read it.</summary>
+    public WorkloadOwner Owner => new(Workload, WorkloadTeam, WorkloadImage, WorkloadPort);
+
+    /// <summary>Where each export of <see cref="Exports"/> is in its component's file, keyed as <see cref="Exports"/> is.</summary>
+    internal IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ExportLocations { get; init; } =
+        ReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>.Empty;
+}

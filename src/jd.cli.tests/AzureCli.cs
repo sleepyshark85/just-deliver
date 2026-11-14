@@ -25,7 +25,7 @@ internal sealed class AzureCli : IDisposable
 
     /// <summary>The region of the Azure tests: the one the sample environment definitions carry (the sandbox's allowed region).</summary>
     public static async Task<string> RegionAsync() =>
-        (await jd.resolver.environment.EnvironmentDefinitionFile.LoadAsync(await Cli.ReadDocumentAsync(Path.Combine(AppContext.BaseDirectory, "samples", "environments", "shared.yaml"), CancellationToken.None), CancellationToken.None)).Value?.Region
+        (await jd.resolver.environment.EnvironmentParser.LoadDefinitionAsync(await Cli.ReadDocumentAsync(Path.Combine(AppContext.BaseDirectory, "samples", "environments", "shared.yaml"), CancellationToken.None), CancellationToken.None)).Value?.Region
         ?? throw new InvalidOperationException("samples/environments/shared.yaml is not a valid environment definition.");
 
     /// <summary>What a jd run of an Azure test sees: the process environment (the <c>ARM_*</c> identity), with jd's data and scratch directories under the test's <paramref name="root"/>.</summary>

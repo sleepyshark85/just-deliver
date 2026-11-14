@@ -87,20 +87,18 @@ public static class ReleaseBuilder
             var loaded = await WorkloadFile.ParseAsync(source.File, source.Definition.TrimStart('\uFEFF'), cancellationToken);
             if (loaded.Value is not { } workload)
             {
-                errors.AddRange(loaded.Errors.Select(e => source.Location.Length == 0 ? e : e with { Location = e.Location.Length == 0 ? source.Location : $"{source.Location}.{e.Location}" }));
+                errors.AddRange(loaded.Errors.Select(e => e with { Location = Within(source.Location, e.Location) }));
                 continue;
             }
 
-            // A valid definition has these (the workload schema requires them).
-            var image = (string)workload["container"]!["image"]!;
+            var image = workload.Image;
             if (!PinnedByDigest.IsMatch(image))
             {
-                var location = source.Location.Length == 0 ? "container.image" : $"{source.Location}.container.image";
-                errors.Add(new LoadError(source.File, location, $"'{image}' is not pinned by digest; a tag can change under a release. Use <image>@sha256:<64 hex digits>."));
+                errors.Add(new LoadError(source.File, Within(source.Location, workload.ImageLocation), $"'{image}' is not pinned by digest; a tag can change under a release. Use <image>@sha256:<64 hex digits>."));
                 continue;
             }
 
-            workloads.Add(new ReleaseWorkload((string)workload["metadata"]!["name"]!, (string)workload["metadata"]!["team"]!, source.Sha256, source.Definition, image, source.DependsOn));
+            workloads.Add(new ReleaseWorkload(workload.Name, workload.Team, source.Sha256, source.Definition, image, source.DependsOn));
         }
 
         // Names and dependencies are only meaningful once every definition loaded; until then they would report false errors.
@@ -123,6 +121,10 @@ public static class ReleaseBuilder
         var seconds = createdAt.ToUniversalTime();
         return new ReleaseSetResult(new ReleaseSet(label, seconds.AddTicks(-seconds.Ticks % TimeSpan.TicksPerSecond), workloads, order), []);
     }
+
+    // A location in a definition, within where the definition sits in its file (WorkloadSource.Location); either may be empty.
+    private static string Within(string definition, string location) =>
+        definition.Length == 0 || location.Length == 0 ? definition + location : $"{definition}.{location}";
 
     private static IEnumerable<LoadError> CheckNames(string file, List<ReleaseWorkload> workloads)
     {

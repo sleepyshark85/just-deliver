@@ -118,7 +118,7 @@ namespace jd.cli.tests
                 [
                     "jd.cli.tests.planted.EnvCommand.ChecksTheType reaches jd.orchestrator.usecases.Checks.EnvironmentType",
                     "jd.cli.tests.planted.EnvCommand.ComposesTheDescriptor reaches jd.resolver.environment.DescriptorComposer..ctor",
-                    "jd.cli.tests.planted.EnvCommand.LoadsTheDefinition reaches jd.resolver.environment.EnvironmentDefinitionFile.LoadAsync",
+                    "jd.cli.tests.planted.EnvCommand.LoadsTheDefinition reaches jd.resolver.environment.EnvironmentParser.LoadDefinitionAsync",
                     "jd.cli.tests.planted.EnvCommand.LocatesTheCatalogErrors reaches jd.resolver.SourceCatalog.Located",
                 ],
                 findings.Select(f => f.Message).Order(StringComparer.Ordinal));
@@ -355,14 +355,14 @@ namespace jd.cli.tests.planted
             return $"{result.Run?.Succeeded}{result.Environment?.Name}{result.Environment?.Region}{result.Descriptor?.Length}{string.Concat(lines)}";
         }
 
-        public static object LoadsTheDefinition() => EnvironmentDefinitionFile.LoadAsync(Document, CancellationToken.None);
+        public static object LoadsTheDefinition() => EnvironmentParser.LoadDefinitionAsync(Document, CancellationToken.None);
 
         public static object ChecksTheType(Catalog catalog, EnvironmentDescriptor environment) => Checks.EnvironmentType(catalog, environment, "x");
 
         public static object LocatesTheCatalogErrors() => new SourceCatalog("c", [Document]).Located([]);
 
-        public static object ComposesTheDescriptor(EnvironmentDefinition definition, Catalog catalog, EnvironmentDescriptor environment, ResolvedGraph graph) =>
-            new DescriptorComposer(definition, "x", catalog, environment, graph);
+        public static object ComposesTheDescriptor(Catalog catalog, EnvironmentDescriptor environment, ResolvedGraph graph) =>
+            new DescriptorComposer("x", catalog, environment, graph);
     }
 
     internal static class ReleaseCommand

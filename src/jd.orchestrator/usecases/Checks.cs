@@ -17,7 +17,7 @@ public static class Checks
     /// name <paramref name="file"/>.
     /// </summary>
     public static IReadOnlyList<LoadError> EnvironmentType(Catalog catalog, EnvironmentDescriptor environment, string file) =>
-        EnvironmentTypeCheck.Check(catalog, environment.Type, environment.Approval, file);
+        EnvironmentTypeCheck.Check(catalog, environment, file);
 
     /// <summary>
     /// An environment whose descriptor carries an approval policy is deployed to only by promotion (docs/architecture/approvals.md section 2): the check
@@ -66,7 +66,7 @@ public static class Checks
     /// <summary>The templates of <paramref name="catalog"/>'s templates part, and every way <paramref name="graphs"/> do not fit them, each once.</summary>
     public static (ITemplates Templates, IReadOnlyList<LoadError> Misfits) Templates(SourceCatalog catalog, IEnumerable<ResolvedGraph> graphs, Connections connections)
     {
-        var templates = connections.Templates(CatalogParser.Templates(catalog));
+        var templates = connections.Templates(CatalogLoader.Templates(catalog));
         return (templates, graphs.SelectMany(templates.Check).Distinct().ToList()); // unreadable templates are repeated by every graph's check
     }
 }
