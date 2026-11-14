@@ -1,3 +1,4 @@
+using jd.resolver.catalog;
 using jd.resolver.expansion;
 using jd.resolver.expressions;
 using Newtonsoft.Json;
@@ -46,40 +47,44 @@ public static class GraphJson
         };
         if (n.Probe is { } probe)
         {
-            node["probe"] = new JObject
-            {
-                ["path"] = probe.Path,
-                ["expectedStatus"] = probe.ExpectedStatus,
-                ["timeoutSeconds"] = probe.TimeoutSeconds,
-                ["intervalSeconds"] = probe.IntervalSeconds,
-                ["scheme"] = probe.Scheme,
-            };
+            node["probe"] = ProbeJson(probe);
         }
 
         if (n.Release is { } release)
         {
-            node["release"] = new JObject
-            {
-                ["suffixInput"] = release.SuffixInput,
-                ["trafficInput"] = release.TrafficInput,
-                ["trafficOutput"] = release.TrafficOutput,
-                ["suffixOutput"] = release.SuffixOutput,
-                ["revisionOutput"] = release.RevisionOutput,
-                ["fqdnOutput"] = release.FqdnOutput,
-                ["revisionKey"] = release.RevisionKey,
-                ["latestKey"] = release.LatestKey,
-                ["weightKey"] = release.WeightKey,
-                ["resourceIdOutput"] = release.ResourceIdOutput,
-                ["suffix"] = new JObject
-                {
-                    ["prefix"] = release.Suffix.Prefix,
-                    ["configDigits"] = release.Suffix.ConfigDigits,
-                    ["saltDigits"] = release.Suffix.SaltDigits,
-                },
-                ["fullWeight"] = release.FullWeight,
-            };
+            node["release"] = ReleaseJson(release);
         }
 
         return node;
     }
+
+    private static JObject ProbeJson(Probe probe) => new()
+    {
+        ["path"] = probe.Path,
+        ["expectedStatus"] = probe.ExpectedStatus,
+        ["timeoutSeconds"] = probe.TimeoutSeconds,
+        ["intervalSeconds"] = probe.IntervalSeconds,
+        ["scheme"] = probe.Scheme,
+    };
+
+    private static JObject ReleaseJson(RuntimeRelease release) => new()
+    {
+        ["suffixInput"] = release.SuffixInput,
+        ["trafficInput"] = release.TrafficInput,
+        ["trafficOutput"] = release.TrafficOutput,
+        ["suffixOutput"] = release.SuffixOutput,
+        ["revisionOutput"] = release.RevisionOutput,
+        ["fqdnOutput"] = release.FqdnOutput,
+        ["revisionKey"] = release.RevisionKey,
+        ["latestKey"] = release.LatestKey,
+        ["weightKey"] = release.WeightKey,
+        ["resourceIdOutput"] = release.ResourceIdOutput,
+        ["suffix"] = new JObject
+        {
+            ["prefix"] = release.Suffix.Prefix,
+            ["configDigits"] = release.Suffix.ConfigDigits,
+            ["saltDigits"] = release.Suffix.SaltDigits,
+        },
+        ["fullWeight"] = release.FullWeight,
+    };
 }

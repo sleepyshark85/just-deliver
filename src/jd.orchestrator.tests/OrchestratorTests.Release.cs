@@ -2,6 +2,7 @@ using jd.core.bp;
 using jd.resolver.catalog;
 using jd.resolver.expansion;
 using jd.resolver.expressions;
+using jd.resolver.graph;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -193,6 +194,72 @@ public partial class OrchestratorTests
         Assert.Equal(deploysBefore + 1, RuntimeDeploys(backend).Count); // only the dark deploy
         Assert.Equal(2, backend.Calls.Count(c => c.Op == "deploy" && c.Package.StackName == "shop.dev.thing.rt"));
         Assert.Contains(report.Nodes, n => n.NodeId == "shop/dev/thing/rt");
+    }
+
+    [Fact]
+    public async Task An_unchanged_runtime_reports_the_dark_deploys_outputs()
+    {
+        var backend = new FakeBackend { DetectChanges = true };
+        SeedLive(backend);
+        var (graph, catalog) = await ResolveAsync();
+        var orchestrator = Create(backend, catalog);
+        await orchestrator.DeployAsync(graph, null, CancellationToken.None);
+
+        var report = await orchestrator.DeployAsync(graph, null, CancellationToken.None);
+
+        var runtime = Runtime(report);
+        Assert.Equal(NodeOutcome.Unchanged, runtime.Outcome);
+        Assert.Equal(Parameter(RuntimeDeploys(backend)[^1], "traffic"), runtime.Outputs["traffic"].Value);
+    }
+
+    [Fact]
+    public async Task A_failing_shift_fails_the_shift_step_and_reports_the_dark_deploys_outputs()
+    {
+        var backend = new FakeBackend { FailOn = RuntimeStack, FailOnDeploy = 2 };
+        SeedLive(backend);
+
+        var report = await ReleaseAsync(backend);
+
+        var runtime = Runtime(report);
+        Assert.Equal("shift: provider exploded", runtime.Message);
+        Assert.Equal(
+            [(Step.Dark, StepOutcome.Done), (Step.Grants, StepOutcome.Done), (Step.Probe, StepOutcome.Done), (Step.Shift, StepOutcome.Failed)],
+            runtime.Steps?.Select(s => (s.Step, s.Outcome)));
+        // The live revision kept the traffic: the dark deploy's.
+        Assert.Equal("""[{"revisionName":"app--old","weight":100}]""", runtime.Outputs["traffic"].Value);
+    }
+
+    // A graph whose runtime reads a node of its own scope and the requirement's export.
+    private static Task<(ResolvedGraph Graph, Catalog Catalog)> ResolveReadingRuntimeAsync() =>
+        ResolveAsync(DefaultRequires, ExportingPart, runtime: RuntimeReadingNodes, container: "container:\n  image: reg/app:1\n  ports:\n    - port: 8080\n");
+
+    [Fact]
+    public async Task A_runtime_whose_config_cannot_be_filled_fails_the_dark_step_before_any_deploy_of_it()
+    {
+        var backend = new FakeBackend { OmitIdOutput = true };
+        var (graph, catalog) = await ResolveReadingRuntimeAsync();
+
+        var report = await Create(backend, catalog).DeployAsync(graph, null, CancellationToken.None);
+
+        var runtime = Runtime(report);
+        Assert.Equal(NodeOutcome.Failed, runtime.Outcome);
+        Assert.Equal("dark: field 'image' references thing.out; field 'label' references thing.out; the upstream node has no deployed output.", runtime.Message);
+        Assert.Equal([(Step.Dark, StepOutcome.Failed)], runtime.Steps?.Select(s => (s.Step, s.Outcome)));
+        Assert.Empty(RuntimeDeploys(backend));
+    }
+
+    [Fact]
+    public async Task A_preview_of_a_runtime_that_waits_on_an_upstream_node_is_pending_with_no_steps()
+    {
+        var backend = new FakeBackend();
+        var (graph, catalog) = await ResolveReadingRuntimeAsync();
+
+        var report = await Create(backend, catalog).PreviewAsync(graph, null, CancellationToken.None);
+
+        var runtime = Runtime(report);
+        Assert.Equal(NodeOutcome.PendingUpstream, runtime.Outcome);
+        Assert.Equal("field 'image' references thing.out; field 'label' references thing.out; field 'own' references group.name; the upstream node has no deployed output.", runtime.Message);
+        Assert.Null(runtime.Steps);
     }
 
     [Fact]

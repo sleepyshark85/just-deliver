@@ -89,8 +89,8 @@ public sealed class Orchestrator(
 
             if (graph.Nodes.SingleOrDefault(n => n.Phase == Phase.Runtime) is { } runtime)
             {
-                var flow = new ReleaseFlow(provider, probe, delay, preview, node => PrepareAsync(node, cancellationToken), outputs => DeployDependantsAsync(runtime, outputs, cancellationToken));
-                await RecordAsync(() => flow.RunAsync(runtime, cancellationToken));
+                var flow = new ReleaseFlow(provider, probe, delay, node => PrepareAsync(node, cancellationToken), outputs => DeployDependantsAsync(runtime, outputs, cancellationToken));
+                await RecordAsync(() => preview ? flow.PreviewAsync(runtime, cancellationToken) : flow.DeployAsync(runtime, cancellationToken));
             }
 
             return new RunReport(_reports);

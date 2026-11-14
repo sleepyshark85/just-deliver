@@ -200,17 +200,17 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
   so the walk does not rely on it. Each node, the grants included, is reported as it completes; the runtime's report comes last.
 - **Release flow (the runtime node).** The `container-app` template takes `revisionSuffix` and `traffic` as inputs and owns no opinion on
   either, so one template deploys all the moves of the flow, in this order: (1) **Dark**: deploy with a revision suffix (below), and `traffic` =
-  `[{revisionName: <live revision>, weight: 100}]`, so the new revision exists and the live one keeps all traffic; the first deploy has no live
-  revision and passes `[{latestRevision: true, weight: 100}]`. The new revision is the dark deploy's `revisionOutput`. (2) **Grants**: the
+  `[{revisionName: <live revision>, weight: <fullWeight>}]`, so the new revision exists and the live one keeps all traffic; the first deploy has no live
+  revision and passes `[{latestRevision: true, weight: <fullWeight>}]`. The new revision is the dark deploy's `revisionOutput`. (2) **Grants**: the
   after-runtime nodes, deployed with the dark deploy's outputs. (3) **Probe**: GET `<probe.scheme>://` + the new revision's `fqdnOutput` + the runtime's `probe.path`
   through `IRevisionProbe`; the orchestrator retries up to `1 + timeoutSeconds / intervalSeconds` times, waiting `intervalSeconds` between
   attempts, because grants may take minutes to propagate. (4) **Shift**: the same suffix with `traffic` = `[{revisionName: <new revision>,
   weight: <fullWeight>}]`, which changes traffic only and creates no revision; it also runs on a first deploy, so the stack's traffic names the
   revision from then on (the template echoes the traffic it was given, and `[{latestRevision: true}]` would never name one). Traffic goes to
   the new revision only here, after a passed probe. A failed step makes the runtime `failed` with `<step>: <reason>`; later steps do not
-  run, so traffic stays on the live revision. **First-deploy exception:** there is no live revision to keep, so the dark deploy puts the
-  latest revision at 100% and it serves before it is probed; a failed probe is still reported `failed`, but nothing protects the traffic.
-  The probe target is built only from the dark deploy's FQDN output and the
+  run, so traffic stays on the live revision. **First-deploy exception:** there is no live revision to keep, so the dark deploy puts all
+  traffic on the latest revision and it serves before it is probed; a failed probe is still reported `failed`, but nothing protects the traffic.
+  The probe target is built only from the runtime's scheme, the dark deploy's FQDN output and the
   runtime's path (a missing or empty FQDN output fails the Probe step without a probe), never from workload data or another node.
   **Suffix:** the runtime's `release.suffix`: its `prefix` + a config part + a salt; container-app's is `r` + 8 + 6 hex digits, 15 characters
   (Azure's rule: lowercase letters, digits and `-`, starting with a letter; the revision name `<app>--<suffix>` at most 54 characters, so the

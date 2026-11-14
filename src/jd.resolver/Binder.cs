@@ -8,8 +8,9 @@ namespace jd.resolver;
 /// <summary>
 /// Fills concept records from a document's roles (docs/architecture/documents.md section 3), located by <see cref="SchemaIndex.RolesOf"/>: each
 /// value with where it was read. No kind or field is spelled here. A role's value belongs to the nearest object that holds one: the record's own
-/// object, else the closest object enclosing it, so a value an owner holds counts for each of its parts. An absent field binds its schema's
-/// <c>default</c>. Only schema-valid documents are bound.
+/// object, else the closest object enclosing it, so a value an owner holds counts for each of its parts. A block a part holds below its own
+/// fields (a runtime part's probe and release) is read at any depth inside the part. An absent field binds its schema's <c>default</c>.
+/// Only schema-valid documents are bound.
 /// </summary>
 internal sealed class Binder(SchemaIndex index)
 {
