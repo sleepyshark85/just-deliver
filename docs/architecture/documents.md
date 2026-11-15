@@ -241,7 +241,7 @@ not written; a required bound field without a value is an error; the result is v
 
 | File | Today | After |
 |---|---|---|
-| Environment descriptor (YAML) | `DescriptorComposer` 56–69 | binder over `environment.schema.json` from the `Environment` record: `env.values` the deployed exports (secrets dropped, concept 3) |
+| Environment descriptor (YAML) | `DescriptorComposer` 56–69 | binder over `environment.schema.json` from the `Environment` record, with `env.values` (the deployed exports, secrets dropped, concept 3) passed beside it as nested mappings: the record's flat dot paths would turn an export named with a dot into a nested key, which the schema could then no longer refuse |
 | Release set (YAML) | `ReleaseSetFile` 36–47, read 76–96 | binder over `release-set.schema.json` from the `ReleaseSet` and `ReleaseWorkload` records; read back by the same bindings |
 | Release manifest (YAML, read only) | `ReleaseBuilder` 47–75 | binder: `release.workloads`, `release.definition-path`, `release.depends-on`, `release.label` |
 | Release record, approval record, graph JSON (`preview --json`, the `graph.sha256` input) | `ReleaseRecordBuilder` 38–178, `ApprovalRecord` 19–46, `GraphJson` 14–75 | **choice 2**: (a) the binder, or (b) unchanged typed code (below) |

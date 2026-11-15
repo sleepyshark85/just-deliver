@@ -33,8 +33,8 @@ public static class ReleaseRecordBuilder
         DeployerIdentity identity, DateTimeOffset startedAt, DateTimeOffset finishedAt, TimeSpan deployElapsed, IqResult? iq)
     {
         var failed = runs.FirstOrDefault(r => !r.Run.Succeeded);
-        var record = Head(ReleaseRecordFile.DeployActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
-            set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), runs.FirstOrDefault(r => r.Workload == name), deploy: true));
+        var record = Head(ReleaseRecordFile.DeployActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Deployed(
+            set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), runs.FirstOrDefault(r => r.Workload == name)));
         record["outcome"] = failed is null ? ReleaseRecordFile.SucceededOutcome : ReleaseRecordFile.FailedOutcome;
         record["deploySeconds"] = Seconds(deployElapsed);
         record["iq"] = Iq(iq);
@@ -53,7 +53,7 @@ public static class ReleaseRecordBuilder
         DateTimeOffset startedAt, DateTimeOffset finishedAt, IqResult iq)
     {
         var record = Head(ReleaseRecordFile.QualifyActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
-            set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), null, deploy: false));
+            set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name)));
         record["iq"] = Iq(iq);
         return record.ToString(Formatting.Indented) + "\n";
     }
@@ -94,34 +94,32 @@ public static class ReleaseRecordBuilder
             ["workloads"] = new JArray(set.Order.Select(workload)),
         };
 
-    // A deploy adds the run (when the workload started) and its OQ; a qualification deployed nothing, so it has neither.
-    private static JObject Workload(ReleaseWorkload workload, ResolvedGraph graph, WorkloadRun? run, bool deploy)
+    // A workload as pinned, with its graph: all a qualification records of it, as it deployed nothing.
+    private static JObject Workload(ReleaseWorkload workload, ResolvedGraph graph) => new()
     {
-        var entry = new JObject
+        ["name"] = workload.Name,
+        ["team"] = workload.Team,
+        ["definitionSha256"] = workload.DefinitionSha256,
+        ["dependsOn"] = new JArray(workload.DependsOn),
+        ["image"] = workload.Image,
+        ["graph"] = new JObject
         {
-            ["name"] = workload.Name,
-            ["team"] = workload.Team,
-            ["definitionSha256"] = workload.DefinitionSha256,
-            ["dependsOn"] = new JArray(workload.DependsOn),
-            ["image"] = workload.Image,
-            ["graph"] = new JObject
+            ["sha256"] = ReleaseHash.Of(Encoding.UTF8.GetBytes(GraphJson.Serialize(graph))),
+            ["nodes"] = new JArray(graph.Nodes.Select(n => new JObject
             {
-                ["sha256"] = ReleaseHash.Of(Encoding.UTF8.GetBytes(GraphJson.Serialize(graph))),
-                ["nodes"] = new JArray(graph.Nodes.Select(n => new JObject
-                {
-                    ["id"] = n.Id,
-                    ["template"] = n.Template,
-                    ["stack"] = n.Stack,
-                    ["phase"] = Name(n.Phase),
-                    ["hash"] = n.Hash,
-                })),
-            },
-        };
-        if (!deploy)
-        {
-            return entry;
-        }
+                ["id"] = n.Id,
+                ["template"] = n.Template,
+                ["stack"] = n.Stack,
+                ["phase"] = Name(n.Phase),
+                ["hash"] = n.Hash,
+            })),
+        },
+    };
 
+    // A deploy adds the run (when the workload started) and its OQ.
+    private static JObject Deployed(ReleaseWorkload workload, ResolvedGraph graph, WorkloadRun? run)
+    {
+        var entry = Workload(workload, graph);
         if (run is not null)
         {
             entry["run"] = new JObject { ["elapsedSeconds"] = Seconds(run.Elapsed), ["nodes"] = new JArray(run.Run.Nodes.Select(Node)) };

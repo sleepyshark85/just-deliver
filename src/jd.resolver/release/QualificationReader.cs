@@ -6,25 +6,14 @@ using Newtonsoft.Json.Linq;
 namespace jd.resolver.release;
 
 /// <summary>
-/// What the records of one label on one environment say (docs/architecture/approvals.md section 5, step 2).
-/// </summary>
-/// <param name="SetSha256">SHA-256 of the label's kept <c>set.yaml</c>; null when the label's set cannot be known: an unknown label (no <c>set.yaml</c>), or a <c>set.yaml</c> or label directory that cannot be read. The <paramref name="Reasons"/> tell which.</param>
-/// <param name="Reasons">Why the label is not qualified, one entry per problem; empty when it is.</param>
-/// <param name="Deployers">The distinct object ids of the principals that ran a <c>deploy</c> of the label, failed attempts included, from the records that passed the consistency checks.</param>
-public sealed record Qualification(string? SetSha256, IReadOnlyList<string> Reasons, IReadOnlyList<string> Deployers)
-{
-    /// <summary>Whether the records show the label qualified: there is no reason it is not.</summary>
-    public bool Qualified => Reasons.Count == 0;
-}
-
-/// <summary>
 /// Reads the records of a label and derives "qualified" from them now; nothing is stored or repaired. The record store is the trust boundary
 /// (approvals.md section 9): every file that is not what its place says is a reason, so a copied, renamed or edited record can only make the answer "not qualified".
 /// </summary>
 public static class QualificationReader
 {
-    // Body passed the release-record schema (LoadAsync), so every field the schema requires is there: each '!' on a Body read below relies on it
-    // (identity.objectId, outcome and workloads of a deploy, each workload's name and oq.status, iq.status).
+    // Every body read below passed the release-record schema first (LoadAsync), so each field the schema requires is there, and each '!' on a body
+    // read relies on it: environment.name, release.label and release.setSha256, identity.objectId, a deploy's workloads, each one's name and
+    // oq.status, and iq.status.
     private sealed record Entry(string Name, string Activity, JObject Body);
 
     private sealed record Expected(string Environment, string Label, string SetSha256);
@@ -107,7 +96,6 @@ public static class QualificationReader
     }
 
     // A record copied from another label or environment, renamed to a later time, or edited to another set is caught here (approvals.md section 5).
-    // A field the body lacks reads null and so differs from what is expected: the check fails closed, with no '!' to rely on the schema.
     private static string? Misplaced(JObject body, string time, string activity, Expected expected)
     {
         if ((string?)body["activity"] is var actual && actual != activity)
@@ -115,19 +103,19 @@ public static class QualificationReader
             return $"records activity '{actual}', not '{activity}' as its name says.";
         }
 
-        if ((string?)body["environment"]?["name"] is var environment && environment != expected.Environment)
+        if ((string?)body["environment"]!["name"] is var environment && environment != expected.Environment)
         {
             return $"is a record of environment '{environment}', not '{expected.Environment}'.";
         }
 
-        if ((string?)body["release"]?["label"] is var label && label != expected.Label)
+        if ((string?)body["release"]!["label"] is var label && label != expected.Label)
         {
             return $"is a record of label '{label}', not '{expected.Label}'.";
         }
 
-        if ((string?)body["release"]?["setSha256"] is var pinned && pinned != expected.SetSha256)
+        if ((string?)body["release"]!["setSha256"] is var pinned && pinned != expected.SetSha256)
         {
-            return $"pins set {pinned}, but set.yaml hashes to {expected.SetSha256}.";
+            return $"pins set {pinned}, but {ReleaseRecordFile.SetFileName} hashes to {expected.SetSha256}.";
         }
 
         var finished = (string?)body["finishedAt"];
