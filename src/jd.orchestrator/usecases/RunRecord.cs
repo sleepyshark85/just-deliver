@@ -5,12 +5,12 @@ namespace jd.orchestrator.usecases;
 // The record of a recorded release run, written last: what the run did stays done whether or not it can be written.
 internal static class RunRecord
 {
-    // The record built at the time the run finished, and its name; or why the records refused it.
+    // The record built from the run's head, at the time the run finished, and its name; or why the records refused it.
     public static async Task<(string? Record, Problem? NotWritten)> WriteAsync(
-        StartedRelease run, Recording recording, string activity, Func<DateTimeOffset, string> build, CancellationToken cancellationToken)
+        StartedRelease run, Recording recording, string activity, Func<ReleaseRecordHead, string> build, CancellationToken cancellationToken)
     {
         var finished = run.Time.GetUtcNow();
-        var json = build(finished);
+        var json = build(new ReleaseRecordHead(run.Set, recording.SetSha256, run.Environment, run.Graphs, recording.Identity, run.Started, finished));
         try
         {
             return (await ReleaseRecordFile.WriteAsync(recording.Records, run.Environment.Name, run.Set.Label, finished, activity, json, cancellationToken), null);

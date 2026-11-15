@@ -81,8 +81,18 @@ public static class ReleaseRecordFile
     }
 
     /// <summary>Splits <c>&lt;time&gt;-&lt;activity&gt;.json</c> into its time part and activity; null when the name is not that of a record.</summary>
-    internal static (string Time, string Activity)? SplitName(string fileName) =>
-        Activities.FirstOrDefault(a => TimeOf(fileName, a) is not null) is { } activity ? (TimeOf(fileName, activity)!, activity) : null;
+    internal static (string Time, string Activity)? SplitName(string fileName)
+    {
+        foreach (var activity in Activities)
+        {
+            if (TimeOf(fileName, activity) is { } time)
+            {
+                return (time, activity);
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>The time part of <c>&lt;time&gt;-&lt;activity&gt;.json</c>; null when the name does not end that way.</summary>
     internal static string? TimeOf(string fileName, string activity) =>

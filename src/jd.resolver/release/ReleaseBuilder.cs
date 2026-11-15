@@ -64,7 +64,7 @@ public static class ReleaseBuilder
     /// (valid definition, image pinned by digest, unique names, known dependencies, no cycle). <paramref name="file"/>
     /// names the manifest or release set <paramref name="release"/> was read from, in errors about names and dependencies, located where it holds them.
     /// </summary>
-    internal static async Task<ReleaseSetResult> ComposeAsync(string file, ReleaseDocument release, DateTimeOffset createdAt, IReadOnlyList<WorkloadSource> sources, CancellationToken cancellationToken)
+    internal static async Task<ReleaseSetResult> ComposeAsync(string file, ReleaseRead release, DateTimeOffset createdAt, IReadOnlyList<WorkloadSource> sources, CancellationToken cancellationToken)
     {
         var errors = new List<LoadError>();
         var workloads = new List<ReleaseWorkload>();

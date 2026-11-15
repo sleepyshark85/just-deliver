@@ -456,7 +456,7 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 
 | File:line | What it knows | Class | Goes |
 |---|---|---|---|
-| `release/ReleaseDocument.cs:10-13` | four schema names | a | S24a1 |
+| `release/ReleaseDocument.cs:10-13`, the loader of that time (not today's binder read, `ReleaseRead`) | four schema names | a | S24a1: deleted |
 | `release/ReleaseBuilder.cs:47-75,98-106` | manifest `workloads`, `definition`, `dependsOn`, `label`; workload `container.image`, `metadata.*` | a | S24c2 (workload), S24f (manifest) |
 | `release/ReleaseSetFile.cs:36-47,76-100` | set layout | a | S24f |
 | `release/ReleaseRecordFile.cs:15-44` | `set.yaml`, activities, outcomes, time formats | c | concept 11, the local store's layout |

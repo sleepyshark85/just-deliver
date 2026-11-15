@@ -147,10 +147,10 @@ internal sealed class Binder(SchemaIndex index)
     /// The release manifest or set <paramref name="document"/> is, by the <c>release.*</c> roles: its label, when a set was created, and one entry
     /// per <see cref="Roles.ReleaseWorkloads"/> item, each with where its definition and its dependencies are held.
     /// </summary>
-    public ReleaseDocument ReadRelease(Document document)
+    public ReleaseRead ReadRelease(Document document)
     {
         var values = ValuesOf(document);
-        return new ReleaseDocument(
+        return new ReleaseRead(
             Text(values.First(Roles.ReleaseLabel)),
             Text(values.First(Roles.ReleaseCreatedAt)),
             [.. values.Every(Roles.ReleaseWorkloads).Select(entry => ReadReleaseEntry(values, entry))])
@@ -326,8 +326,9 @@ internal sealed class Binder(SchemaIndex index)
         var definition = values.Nearest(Roles.ReleaseDefinition, entry);
         return new ReleaseEntry(Text(path), Text(definition), Text(values.Nearest(Roles.ReleaseDefinitionSha256, entry)), Strings(dependsOn))
         {
-            // Safe: both kinds require the entry's definition, a manifest's path or a set's text, and only schema-valid documents are bound.
             Location = entry.Path,
+
+            // Safe: both kinds require the entry's definition, a manifest's path or a set's text, and only schema-valid documents are bound.
             DefinitionLocation = (path ?? definition)!.Path,
             DependsOnLocations = dependsOn is JArray list ? [.. list.Select(item => item.Path)] : [],
         };

@@ -69,7 +69,7 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
                 group[export] = evaluator.Evaluate(text, definitionFile, location, errors) switch
                 {
                     Resolved resolved => resolved.Value,
-                    Pending when outputs is not null => Unusable(part, export, location, errors),
+                    Pending when outputs is not null => ReportUnusable(part, export, location, errors),
                     _ => text, // before the deploy: the text stays, as a placeholder the descriptor rules are checked on
                 };
             }
@@ -98,7 +98,7 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
         return usable;
     }
 
-    private string Unusable(string part, string export, string location, List<LoadError> errors)
+    private string ReportUnusable(string part, string export, string location, List<LoadError> errors)
     {
         errors.Add(new LoadError(definitionFile, location, $"export '{export}' of part '{part}' has no usable deployed output (missing, null or secret); a secret never reaches the descriptor."));
         return string.Empty;

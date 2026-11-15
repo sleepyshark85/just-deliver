@@ -25,7 +25,7 @@ public static class QualifyRelease
         var iq = await recording.Qualifier.QualifyAsync(run.Graphs, cancellationToken);
         var (record, notWritten) = await RunRecord.WriteAsync(
             run, recording, ReleaseRecordFile.QualifyActivity,
-            finished => ReleaseRecordBuilder.BuildQualify(run.Set, recording.SetSha256, run.Environment, run.Graphs, recording.Identity, run.Started, finished, iq),
+            head => ReleaseRecordBuilder.BuildQualify(head, iq),
             cancellationToken);
         return new([], notWritten, iq.Passed && notWritten is null ? Outcome.Succeeded : Outcome.Failed, run.Environment, run.Set, iq, record);
     }

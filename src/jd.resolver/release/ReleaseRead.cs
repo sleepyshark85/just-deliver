@@ -4,7 +4,7 @@ namespace jd.resolver.release;
 /// <param name="Label">The release label (<see cref="Roles.ReleaseLabel"/>).</param>
 /// <param name="CreatedAt">When a set was created, as written (<see cref="Roles.ReleaseCreatedAt"/>); empty for a manifest.</param>
 /// <param name="Workloads">One entry per workload (<see cref="Roles.ReleaseWorkloads"/>), in the document's order.</param>
-internal sealed record ReleaseDocument(string Label, string CreatedAt, IReadOnlyList<ReleaseEntry> Workloads)
+internal sealed record ReleaseRead(string Label, string CreatedAt, IReadOnlyList<ReleaseEntry> Workloads)
 {
     /// <summary>Where <see cref="CreatedAt"/> is held.</summary>
     public required string CreatedAtLocation { get; init; }
