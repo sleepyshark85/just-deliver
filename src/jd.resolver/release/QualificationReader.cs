@@ -6,24 +6,14 @@ using Newtonsoft.Json.Linq;
 namespace jd.resolver.release;
 
 /// <summary>
-/// What the records of one label on one environment say (docs/architecture/approvals.md section 5, step 2).
-/// </summary>
-/// <param name="SetSha256">SHA-256 of the label's kept <c>set.yaml</c>; null when the label's set cannot be known: an unknown label (no <c>set.yaml</c>), or a <c>set.yaml</c> or label directory that cannot be read. The <paramref name="Reasons"/> tell which.</param>
-/// <param name="Reasons">Why the label is not qualified, one entry per problem; empty when it is.</param>
-/// <param name="Deployers">The distinct object ids of the principals that ran a <c>deploy</c> of the label, failed attempts included, from the records that passed the consistency checks.</param>
-public sealed record Qualification(string? SetSha256, IReadOnlyList<string> Reasons, IReadOnlyList<string> Deployers)
-{
-    /// <summary>Whether the records show the label qualified: there is no reason it is not.</summary>
-    public bool Qualified => Reasons.Count == 0;
-}
-
-/// <summary>
 /// Reads the records of a label and derives "qualified" from them now; nothing is stored or repaired. The record store is the trust boundary
 /// (approvals.md section 9): every file that is not what its place says is a reason, so a copied, renamed or edited record can only make the answer "not qualified".
 /// </summary>
 public static class QualificationReader
 {
-    // Body passed the release-record schema (LoadAsync), so every field the schema requires is there: the reads with '!' below rely on it.
+    // Every body read below passed the release-record schema first (LoadAsync), so each field the schema requires is there, and each '!' on a body
+    // read relies on it: environment.name, release.label and release.setSha256, identity.objectId, a deploy's workloads, each one's name and
+    // oq.status, and iq.status.
     private sealed record Entry(string Name, string Activity, JObject Body);
 
     private sealed record Expected(string Environment, string Label, string SetSha256);
@@ -125,7 +115,7 @@ public static class QualificationReader
 
         if ((string?)body["release"]!["setSha256"] is var pinned && pinned != expected.SetSha256)
         {
-            return $"pins set {pinned}, but set.yaml hashes to {expected.SetSha256}.";
+            return $"pins set {pinned}, but {ReleaseRecordFile.SetFileName} hashes to {expected.SetSha256}.";
         }
 
         var finished = (string?)body["finishedAt"];
@@ -156,20 +146,20 @@ public static class QualificationReader
             var name = (string)workload["name"]!;
             var status = (string)workload["oq"]!["status"]!;
             // An unchanged workload counts only on an earlier pass; the newest deploy itself says unchanged here, so it cannot be the pass.
-            if (status != ReleaseRecordFile.PassedStatus && !(status == ReleaseRecordFile.UnchangedStatus && deploys.Any(d => PassedOq(d, name))))
+            if (status != RecordStatus.Passed && !(status == RecordStatus.Unchanged && deploys.Any(d => PassedOq(d, name))))
             {
-                yield return $"workload {name}: OQ is {status}{(status == ReleaseRecordFile.UnchangedStatus ? " and no earlier deploy passed it" : string.Empty)}.";
+                yield return $"workload {name}: OQ is {status}{(status == RecordStatus.Unchanged ? " and no earlier deploy passed it" : string.Empty)}.";
             }
         }
 
         // Every valid record carries an iq, so the newest record is also the newest one with an iq and is not older than the newest deploy.
         var last = records[^1];
-        if ((string?)last.Body["iq"]!["status"] is var iq && iq != ReleaseRecordFile.PassedStatus)
+        if ((string?)last.Body["iq"]!["status"] is var iq && iq != RecordStatus.Passed)
         {
             yield return $"IQ of the newest record ({last.Name}) is {iq}.";
         }
     }
 
     private static bool PassedOq(Entry deploy, string workload) =>
-        deploy.Body["workloads"]!.Any(w => (string?)w["name"] == workload && (string?)w["oq"]!["status"] == ReleaseRecordFile.PassedStatus);
+        deploy.Body["workloads"]!.Any(w => (string?)w["name"] == workload && (string?)w["oq"]!["status"] == RecordStatus.Passed);
 }

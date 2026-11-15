@@ -48,14 +48,14 @@ public partial class OrchestratorTests
         {
             var finished = RecordStart.AddMinutes(minute);
             var identity = new DeployerIdentity("tenant-1", "client-1", objectId);
-            var json = ReleaseRecordBuilder.Build(_set, SetSha256, Env, _graphs, failed ? _failed : _passed, identity, finished.AddSeconds(-90), finished, TimeSpan.FromSeconds(42.5), iq);
+            var json = ReleaseRecordBuilder.Build(new(_set, SetSha256, Env, _graphs, identity, finished.AddSeconds(-90), finished), failed ? _failed : _passed, TimeSpan.FromSeconds(42.5), iq);
             return await ReleaseRecordFile.WriteAsync(Records, "dev", "1.0.0", finished, ReleaseRecordFile.DeployActivity, json);
         }
 
         public async Task<string> QualifyAsync(int minute, IqResult iq)
         {
             var finished = RecordStart.AddMinutes(minute);
-            var json = ReleaseRecordBuilder.BuildQualify(_set, SetSha256, Env, _graphs, Principal, finished.AddSeconds(-90), finished, iq);
+            var json = ReleaseRecordBuilder.BuildQualify(new(_set, SetSha256, Env, _graphs, Principal, finished.AddSeconds(-90), finished), iq);
             return await ReleaseRecordFile.WriteAsync(Records, "dev", "1.0.0", finished, ReleaseRecordFile.QualifyActivity, json);
         }
 

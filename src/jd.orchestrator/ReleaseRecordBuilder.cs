@@ -1,8 +1,6 @@
 using System.Globalization;
 using System.Text;
-using jd.core.identity;
 using jd.resolver;
-using jd.resolver.environment;
 using jd.resolver.graph;
 using jd.resolver.release;
 using Newtonsoft.Json;
@@ -18,24 +16,18 @@ namespace jd.orchestrator;
 /// </summary>
 public static class ReleaseRecordBuilder
 {
-    /// <param name="set">The set that was deployed; its workloads come out in deploy order.</param>
-    /// <param name="setSha256">SHA-256 of the kept <c>set.yaml</c>.</param>
-    /// <param name="environment">The environment deployed to.</param>
-    /// <param name="graphs">The resolved graph of each workload.</param>
+    /// <summary>The record of <c>jd release deploy</c>: the head, each workload's run and OQ, the outcome, the deploy time and the IQ verdict.</summary>
+    /// <param name="head">When, who, where and which release.</param>
     /// <param name="runs">The workloads handled; a failure ends the list, the workloads after it were not started.</param>
-    /// <param name="identity">The principal the run authenticated with, from the identity port.</param>
-    /// <param name="startedAt">When the activity started.</param>
-    /// <param name="finishedAt">When it finished.</param>
     /// <param name="deployElapsed">The time of the deploy walk alone; the IQ time is in <paramref name="iq"/>.</param>
     /// <param name="iq">The qualification run after the deploy; null when it did not run (a workload failed), which the record spells <c>notRun</c>.</param>
-    public static string Build(
-        ReleaseSet set, string setSha256, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, IReadOnlyList<WorkloadRun> runs,
-        DeployerIdentity identity, DateTimeOffset startedAt, DateTimeOffset finishedAt, TimeSpan deployElapsed, IqResult? iq)
+    public static string Build(ReleaseRecordHead head, IReadOnlyList<WorkloadRun> runs, TimeSpan deployElapsed, IqResult? iq)
     {
+        var (set, graphs) = (head.Set, head.Graphs);
         var failed = runs.FirstOrDefault(r => !r.Run.Succeeded);
-        var record = Head(ReleaseRecordFile.DeployActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
-            set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), runs.FirstOrDefault(r => r.Workload == name), deploy: true));
-        record["outcome"] = failed is null ? ReleaseRecordFile.SucceededOutcome : "failed";
+        var record = Head(ReleaseRecordFile.DeployActivity, head, name => DeployedWorkload(
+            set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), runs.FirstOrDefault(r => r.Workload == name)));
+        record["outcome"] = failed is null ? ReleaseRecordFile.SucceededOutcome : ReleaseRecordFile.FailedOutcome;
         record["deploySeconds"] = Seconds(deployElapsed);
         record["iq"] = Iq(iq);
         record["notStarted"] = new JArray(set.Order.Where(name => runs.All(r => r.Workload != name)));
@@ -48,12 +40,10 @@ public static class ReleaseRecordBuilder
     }
 
     /// <summary>The record of <c>jd release qualify</c>: the pinned release and the IQ verdict; nothing was deployed, so there are no runs, no OQ and no deploy time. <c>iq</c> is what the qualification found.</summary>
-    public static string BuildQualify(
-        ReleaseSet set, string setSha256, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, DeployerIdentity identity,
-        DateTimeOffset startedAt, DateTimeOffset finishedAt, IqResult iq)
+    public static string BuildQualify(ReleaseRecordHead head, IqResult iq)
     {
-        var record = Head(ReleaseRecordFile.QualifyActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
-            set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), null, deploy: false));
+        var record = Head(ReleaseRecordFile.QualifyActivity, head, name => Workload(
+            head.Set.Workloads.Single(w => w.Name == name), head.Graphs.Single(g => g.Workload == name)));
         record["iq"] = Iq(iq);
         return record.ToString(Formatting.Indented) + "\n";
     }
@@ -61,67 +51,63 @@ public static class ReleaseRecordBuilder
     // The verdict and every check that ran; a qualification that did not run has no time and no checks.
     private static JObject Iq(IqResult? iq) => new()
     {
-        ["status"] = iq is null ? "notRun" : iq.Passed ? ReleaseRecordFile.PassedStatus : "failed",
+        ["status"] = iq is null ? RecordStatus.NotRun : iq.Passed ? RecordStatus.Passed : RecordStatus.Failed,
         ["elapsedSeconds"] = Seconds(iq?.Elapsed ?? TimeSpan.Zero),
         ["checks"] = new JArray((iq?.Checks ?? []).Select(c => new JObject
         {
             ["workload"] = c.Workload,
             ["kind"] = Name(c.Kind),
             ["subject"] = c.Subject,
-            ["status"] = c.Passed ? ReleaseRecordFile.PassedStatus : "failed",
+            ["status"] = c.Passed ? RecordStatus.Passed : RecordStatus.Failed,
             ["detail"] = c.Failure,
         })),
     };
 
     // What every record has: when, who, where, which release, and the workloads as pinned (in deploy order) with their graphs.
-    private static JObject Head(
-        string activity, ReleaseSet set, string setSha256, EnvironmentDescriptor environment, IReadOnlyList<ResolvedGraph> graphs, DeployerIdentity identity,
-        DateTimeOffset startedAt, DateTimeOffset finishedAt, Func<string, JObject> workload) => new()
-        {
-            [DocumentLoader.KindField] = ReleaseRecordFile.Kind,
-            ["activity"] = activity,
-            ["startedAt"] = Time(startedAt),
-            ["finishedAt"] = Time(finishedAt),
-            ["identity"] = new JObject { ["tenantId"] = identity.TenantId, ["clientId"] = identity.ClientId, ["objectId"] = identity.ObjectId },
-            ["environment"] = new JObject
-            {
-                ["name"] = environment.Name,
-                ["type"] = environment.Type,
-                ["region"] = environment.Region,
-                ["catalogVersion"] = graphs[0].CatalogVersion,
-            },
-            ["release"] = new JObject { ["label"] = set.Label, ["createdAt"] = Time(set.CreatedAt), ["setSha256"] = setSha256 },
-            ["workloads"] = new JArray(set.Order.Select(workload)),
-        };
-
-    // A deploy adds the run (when the workload started) and its OQ; a qualification deployed nothing, so it has neither.
-    private static JObject Workload(ReleaseWorkload workload, ResolvedGraph graph, WorkloadRun? run, bool deploy)
+    private static JObject Head(string activity, ReleaseRecordHead head, Func<string, JObject> workload) => new()
     {
-        var entry = new JObject
+        [DocumentLoader.KindField] = ReleaseRecordFile.Kind,
+        ["activity"] = activity,
+        ["startedAt"] = Time(head.StartedAt),
+        ["finishedAt"] = Time(head.FinishedAt),
+        ["identity"] = new JObject { ["tenantId"] = head.Identity.TenantId, ["clientId"] = head.Identity.ClientId, ["objectId"] = head.Identity.ObjectId },
+        ["environment"] = new JObject
         {
-            ["name"] = workload.Name,
-            ["team"] = workload.Team,
-            ["definitionSha256"] = workload.DefinitionSha256,
-            ["dependsOn"] = new JArray(workload.DependsOn),
-            ["image"] = workload.Image,
-            ["graph"] = new JObject
-            {
-                ["sha256"] = ReleaseHash.Of(Encoding.UTF8.GetBytes(GraphJson.Serialize(graph))),
-                ["nodes"] = new JArray(graph.Nodes.Select(n => new JObject
-                {
-                    ["id"] = n.Id,
-                    ["template"] = n.Template,
-                    ["stack"] = n.Stack,
-                    ["phase"] = Name(n.Phase),
-                    ["hash"] = n.Hash,
-                })),
-            },
-        };
-        if (!deploy)
-        {
-            return entry;
-        }
+            ["name"] = head.Environment.Name,
+            ["type"] = head.Environment.Type,
+            ["region"] = head.Environment.Region,
+            ["catalogVersion"] = head.Graphs[0].CatalogVersion,
+        },
+        ["release"] = new JObject { ["label"] = head.Set.Label, ["createdAt"] = Time(head.Set.CreatedAt), ["setSha256"] = head.SetSha256 },
+        ["workloads"] = new JArray(head.Set.Order.Select(workload)),
+    };
 
+    // A workload as pinned, with its graph: all a qualification records of it, as it deployed nothing.
+    private static JObject Workload(ReleaseWorkload workload, ResolvedGraph graph) => new()
+    {
+        ["name"] = workload.Name,
+        ["team"] = workload.Team,
+        ["definitionSha256"] = workload.DefinitionSha256,
+        ["dependsOn"] = new JArray(workload.DependsOn),
+        ["image"] = workload.Image,
+        ["graph"] = new JObject
+        {
+            ["sha256"] = ReleaseHash.Of(Encoding.UTF8.GetBytes(GraphJson.Serialize(graph))),
+            ["nodes"] = new JArray(graph.Nodes.Select(n => new JObject
+            {
+                ["id"] = n.Id,
+                ["template"] = n.Template,
+                ["stack"] = n.Stack,
+                ["phase"] = Name(n.Phase),
+                ["hash"] = n.Hash,
+            })),
+        },
+    };
+
+    // A deploy adds the run (when the workload started) and its OQ.
+    private static JObject DeployedWorkload(ReleaseWorkload workload, ResolvedGraph graph, WorkloadRun? run)
+    {
+        var entry = Workload(workload, graph);
         if (run is not null)
         {
             entry["run"] = new JObject { ["elapsedSeconds"] = Seconds(run.Elapsed), ["nodes"] = new JArray(run.Run.Nodes.Select(Node)) };
@@ -164,7 +150,7 @@ public static class ReleaseRecordBuilder
         var probe = run?.Run.Nodes.FirstOrDefault(n => n.NodeId == runtime.Id)?.Steps?.FirstOrDefault(s => s.Step == Step.Probe);
         var oq = new JObject
         {
-            ["status"] = probe?.Outcome switch { StepOutcome.Done => ReleaseRecordFile.PassedStatus, StepOutcome.Failed => "failed", StepOutcome.Skipped => ReleaseRecordFile.UnchangedStatus, _ => "notRun" },
+            ["status"] = probe?.Outcome switch { StepOutcome.Done => RecordStatus.Passed, StepOutcome.Failed => RecordStatus.Failed, StepOutcome.Skipped => RecordStatus.Unchanged, _ => RecordStatus.NotRun },
             ["contract"] = new JObject { ["path"] = spec.Path, ["expectedStatus"] = spec.ExpectedStatus },
         };
         if (probe is { Outcome: StepOutcome.Done or StepOutcome.Failed })

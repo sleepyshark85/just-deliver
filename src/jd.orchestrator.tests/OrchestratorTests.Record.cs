@@ -44,7 +44,7 @@ public partial class OrchestratorTests
 
     // The record of a deploy; iq is null when IQ did not run, as after a failed workload.
     private static string Record(ReleaseSet set, IReadOnlyList<ResolvedGraph> graphs, IReadOnlyList<WorkloadRun> runs, DeployerIdentity? identity = null, IqResult? iq = null) =>
-        ReleaseRecordBuilder.Build(set, SetSha, Env, graphs, runs, identity ?? Principal, RecordStart, RecordStart.AddSeconds(90), TimeSpan.FromSeconds(42.5), iq);
+        ReleaseRecordBuilder.Build(new(set, SetSha, Env, graphs, identity ?? Principal, RecordStart, RecordStart.AddSeconds(90)), runs, TimeSpan.FromSeconds(42.5), iq);
 
     // An IQ that took a known time: the shop's runtime node and its one revision, both clean.
     private static readonly IqResult PassingIq = new(

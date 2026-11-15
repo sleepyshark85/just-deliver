@@ -42,7 +42,7 @@ public static class DeployRelease
         var iq = everyWorkloadSucceeded ? await recording.Qualifier.QualifyAsync(run.Graphs, cancellationToken) : null;
         var written = await RunRecord.WriteAsync(
             run, recording, ReleaseRecordFile.DeployActivity,
-            finished => ReleaseRecordBuilder.Build(run.Set, recording.SetSha256, run.Environment, run.Graphs, runs, recording.Identity, run.Started, finished, walked, iq),
+            head => ReleaseRecordBuilder.Build(head, runs, walked, iq),
             cancellationToken);
         return Walked(run, runs, iq is { Passed: true } && written.NotWritten is null ? Outcome.Succeeded : Outcome.Failed, iq, written);
     }

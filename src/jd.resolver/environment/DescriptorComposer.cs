@@ -8,16 +8,13 @@ using YamlDotNet.Serialization;
 
 namespace jd.resolver.environment;
 
-/// <summary>The descriptor as YAML text, set exactly when <see cref="Errors"/> is empty and the text passes <see cref="EnvironmentParser"/>.</summary>
-public sealed record ComposedDescriptor(string? Yaml, IReadOnlyList<LoadError> Errors);
-
 /// <summary>
 /// Composes the descriptor of an environment a definition is resolved in: every part of the run's graph contributes its exports,
 /// evaluated with the deployed outputs and keyed by part and export in the descriptor's values, beside the base descriptor's values (the
 /// expander refuses a part the base already has); the binder writes it (<see cref="Binder.WriteEnvironment"/>) and its text is checked with
-/// <see cref="EnvironmentParser"/>. Pure. Called twice: before
-/// deploying (no outputs, to find every error while nothing exists yet) and after, with the node outputs. The environment is the one the
-/// graph was resolved in (<see cref="EnvironmentDescriptor.Over"/>); its values are the base descriptor's.
+/// <see cref="EnvironmentParser"/>. Pure. Called twice: before deploying (no outputs, to find every error while nothing exists yet) and after,
+/// with the node outputs. The environment is the one the graph was resolved in (<see cref="EnvironmentDescriptor.Over"/>); its values are the
+/// base descriptor's.
 /// </summary>
 public sealed class DescriptorComposer(string definitionFile, Catalog catalog, EnvironmentDescriptor environment, ResolvedGraph graph)
 {
@@ -37,7 +34,7 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
         // The descriptor's kind is the one kind that binds the deployed values.
         var kind = EnvironmentParser.DescriptorKinds(index).Single();
         var errors = new List<LoadError>();
-        var values = Values(outputs, binder.FieldName(kind, Roles.EnvironmentValues), errors);
+        var values = ComposeValues(outputs, binder.FieldName(kind, Roles.EnvironmentValues), errors);
 
         // Workloads deploy in the last layer, so an earlier layer offers them nothing: they deploy on an environment, which reads it as its base.
         var offers = catalog.EnvironmentTypes[environment.Type].Layer != catalog.Layers[^1] ? [] : environment.Offers;
@@ -57,22 +54,22 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
     }
 
     // The base descriptor's values and, beside them, each part's exports evaluated with the usable outputs, by part name. An export is located
-    // where the descriptor holds it, under the values' field (at), which is a root field, so its name is its location.
-    private JObject Values(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>>? outputs, string at, List<LoadError> errors)
+    // where the descriptor holds it, under the values' field, which is a root field, so its name is its location.
+    private JObject ComposeValues(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>>? outputs, string valuesField, List<LoadError> errors)
     {
         var evaluator = new ExpressionEvaluator(new ExpressionContext(
-            catalog.Roles, catalog.Naming, environment, graph.Owner, new ExpressionScope(Expander.SubstrateScope, graph.Nodes.Select(n => n.Name).ToHashSet(), Usable(outputs), graph.Parts)));
+            catalog.Roles, catalog.Naming, environment, graph.Owner, new ExpressionScope(Expander.SubstrateScope, graph.Nodes.Select(n => n.Name).ToHashSet(), UsableOutputs(outputs), graph.Parts)));
         var values = Nest(environment.Values);
         foreach (var (part, exports) in graph.Parts.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
             var group = new JObject();
             foreach (var (export, text) in exports)
             {
-                var location = $"{at}.{part}.{export}";
+                var location = $"{valuesField}.{part}.{export}";
                 group[export] = evaluator.Evaluate(text, definitionFile, location, errors) switch
                 {
                     Resolved resolved => resolved.Value,
-                    Pending when outputs is not null => Unusable(part, export, location, errors),
+                    Pending when outputs is not null => ReportUnusable(part, export, location, errors),
                     _ => text, // before the deploy: the text stays, as a placeholder the descriptor rules are checked on
                 };
             }
@@ -84,7 +81,7 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
     }
 
     // The outputs an export may read, by node reference: a secret or null output is left out, so an export needing it stays pending.
-    private Dictionary<Reference, string> Usable(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>>? outputs)
+    private Dictionary<Reference, string> UsableOutputs(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>>? outputs)
     {
         var usable = new Dictionary<Reference, string>();
         foreach (var node in graph.Nodes)
@@ -101,7 +98,7 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
         return usable;
     }
 
-    private string Unusable(string part, string export, string location, List<LoadError> errors)
+    private string ReportUnusable(string part, string export, string location, List<LoadError> errors)
     {
         errors.Add(new LoadError(definitionFile, location, $"export '{export}' of part '{part}' has no usable deployed output (missing, null or secret); a secret never reaches the descriptor."));
         return string.Empty;

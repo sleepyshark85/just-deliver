@@ -15,7 +15,7 @@ namespace jd.resolver.release;
 /// </summary>
 public static class ApprovalRecord
 {
-    // Bridge: the kind written and read here until the release documents are bound from their schemas (S24f).
+    // The record is jd's JSON evidence, kept as typed code beside its schema (docs/architecture/documents.md section 5, choice 2 (b)).
     private const string Kind = "ApprovalRecord";
 
     // The record's fields, in file order, camelCase as the schema spells them: Build writes it and ReadAsync reads it (after the schema has vouched for it), so the keys are named once.
@@ -113,6 +113,7 @@ public static class ApprovalRecord
             return (null, $"is not a valid approval record: {string.Join("; ", errors)}");
         }
 
+        // Safe: a JSON object deserializes to a record, never to null, and the schema has vouched for each field Stored reads.
         var stored = body.ToObject<Stored>(Serializer)!;
         foreach (var (field, actual, wanted) in new[]
         {
@@ -134,8 +135,3 @@ public static class ApprovalRecord
     internal static ApprovalPolicy Policy(EnvironmentDescriptor target) =>
         target.Approval ?? throw new ArgumentException($"environment '{target.Name}' has no approval policy, so nothing can be approved for it.", nameof(target));
 }
-
-/// <summary>The approval files of one label on a gated environment, as <see cref="ApprovalRecord.ReadAsync"/> read them.</summary>
-/// <param name="Approvers">The distinct object ids (case-insensitive) in the approvals that count as given for this set; whether each may approve is the policy's.</param>
-/// <param name="Ignored">One entry per approval file that was not counted, naming the file and why.</param>
-public sealed record ApprovalReading(IReadOnlyList<string> Approvers, IReadOnlyList<string> Ignored);

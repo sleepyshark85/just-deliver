@@ -270,7 +270,7 @@ public partial class OrchestratorTests
         backend.PreviewSummaries["shop.dev.thing.app"] = new() { ["Update"] = 1, ["Same"] = 3 };
         var live = new FakeLiveRevisions(id => OneAnswer(id, id.Contains("shop", StringComparison.Ordinal) ? Other : Pinned));
         var iq = (await QualifyAsync(backend, graphs, catalog, live)) with { Elapsed = TimeSpan.FromSeconds(12.5) };
-        return (ReleaseRecordBuilder.BuildQualify(PinnedSetOf("shop", "cart"), SetSha, Env, graphs, Principal, RecordStart, RecordStart.AddSeconds(90), iq), iq);
+        return (ReleaseRecordBuilder.BuildQualify(new(PinnedSetOf("shop", "cart"), SetSha, Env, graphs, Principal, RecordStart, RecordStart.AddSeconds(90)), iq), iq);
     }
 
     [Fact]
@@ -324,7 +324,7 @@ public partial class OrchestratorTests
         var iq = await QualifyAsync(backend, graphs, catalog, new FakeLiveRevisions(id => OneAnswer(id)));
         Assert.Contains(iq.Checks, c => !c.Passed); // the drifted stack was previewed with its changes
 
-        var json = ReleaseRecordBuilder.BuildQualify(PinnedSetOf("shop"), SetSha, Env, graphs, Principal, RecordStart, RecordStart.AddSeconds(1), iq);
+        var json = ReleaseRecordBuilder.BuildQualify(new(PinnedSetOf("shop"), SetSha, Env, graphs, Principal, RecordStart, RecordStart.AddSeconds(1)), iq);
 
         foreach (var hidden in new[] { secret!, "old-secret-value", "new-secret-value" })
         {

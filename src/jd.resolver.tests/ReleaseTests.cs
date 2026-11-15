@@ -155,21 +155,21 @@ public sealed class ReleaseTests : IDisposable
     [Fact]
     public async Task A_dependency_on_a_workload_outside_the_manifest_is_rejected()
     {
-        var manifest = WriteManifest(("web-app", ["ghost"]));
+        var manifest = WriteManifest(("web-app", ["web-db", "ghost"]), ("web-db", []));
 
         var error = Assert.Single(await ErrorsAsync(manifest));
 
-        Assert.Equal($"{manifest}: workloads[0].dependsOn[0]: 'ghost' is not a workload in this release.", error);
+        Assert.Equal($"{manifest}: workloads[0].dependsOn[1]: 'ghost' is not a workload in this release.", error);
     }
 
     [Fact]
     public async Task A_workload_cannot_depend_on_itself()
     {
-        var manifest = WriteManifest(("web-app", ["web-app"]));
+        var manifest = WriteManifest(("web-app", ["web-db", "web-app"]), ("web-db", []));
 
         var error = Assert.Single(await ErrorsAsync(manifest));
 
-        Assert.Equal($"{manifest}: workloads[0].dependsOn[0]: 'web-app' cannot depend on itself.", error);
+        Assert.Equal($"{manifest}: workloads[0].dependsOn[1]: 'web-app' cannot depend on itself.", error);
     }
 
     [Fact]

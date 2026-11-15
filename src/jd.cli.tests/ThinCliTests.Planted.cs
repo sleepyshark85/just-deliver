@@ -172,6 +172,7 @@ namespace jd.cli.tests
                     "jd.cli.tests.planted.ReleaseDeployCommand.BuildsTheBackend reaches jd.orchestrator.usecases.Connections.get_Backend",
                     "jd.cli.tests.planted.ReleaseDeployCommand.BuildsTheRecord reaches jd.core.identity.DeployerIdentity..ctor",
                     "jd.cli.tests.planted.ReleaseDeployCommand.BuildsTheRecord reaches jd.orchestrator.ReleaseRecordBuilder.BuildQualify",
+                    "jd.cli.tests.planted.ReleaseDeployCommand.BuildsTheRecord reaches jd.orchestrator.ReleaseRecordHead..ctor",
                     "jd.cli.tests.planted.ReleaseDeployCommand.ChecksTheGate reaches jd.orchestrator.usecases.Checks.Gate",
                     "jd.cli.tests.planted.ReleaseDeployCommand.KeepsTheSet reaches jd.resolver.release.ReleaseRecordFile.KeepSetAsync",
                     "jd.cli.tests.planted.ReleaseDeployCommand.LoadsTheSet reaches jd.resolver.release.ReleaseSetFile.ParseAsync",
@@ -421,7 +422,7 @@ namespace jd.cli.tests.planted
         public static object Qualifies(Qualifier qualifier) => qualifier.QualifyAsync([], CancellationToken.None);
 
         public static object BuildsTheRecord(ReleaseSet set, EnvironmentDescriptor environment, IqResult iq) =>
-            ReleaseRecordBuilder.BuildQualify(set, "x", environment, [], new("t", "c", "o"), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, iq);
+            ReleaseRecordBuilder.BuildQualify(new(set, "x", environment, [], new("t", "c", "o"), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch), iq);
 
         public static object WritesTheRecord(IRecordStore records) => ReleaseRecordFile.WriteAsync(records, "dev", "1.0.0", DateTimeOffset.UnixEpoch, "deploy", "{}");
 

@@ -7,7 +7,7 @@ using YamlDotNet.Serialization.EventEmitters;
 namespace jd.resolver.release;
 
 /// <summary>
-/// Writes a <see cref="ReleaseSet"/> through the binder, by the <c>release.*</c> roles of the release set's schema, and reads it back, re-verifying
+/// Writes a <see cref="ReleaseSet"/> and reads it back through the binder, by the <c>release.*</c> roles of the release set's schema, re-verifying
 /// every embedded definition against its recorded hash.
 /// </summary>
 public static class ReleaseSetFile
@@ -54,38 +54,38 @@ public static class ReleaseSetFile
     /// <summary>Reads <paramref name="set"/>, its byte-order mark detected, and verifies it; errors name it. The result hands back its exact bytes.</summary>
     public static async Task<ReleaseSetResult> ParseAsync(SourceDocument set, CancellationToken cancellationToken = default)
     {
-        var loaded = await DocumentLoader.LoadAsync(set.Name, set.Text(), [Kind(await SchemaIndex.Shipped)], cancellationToken);
-        if (loaded.Value is not { Body: var body })
+        var index = await SchemaIndex.Shipped;
+        var loaded = await DocumentLoader.LoadAsync(set.Name, set.Text(), [Kind(index)], cancellationToken);
+        if (loaded.Value is not { } document)
         {
             return new ReleaseSetResult(null, loaded.Errors);
         }
 
-        // The schema guarantees the shapes read here.
-        if (!DateTimeOffset.TryParseExact((string)body["createdAt"]!, ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var createdAt))
+        var binder = new Binder(index);
+        var release = binder.ReadRelease(document);
+        if (!DateTimeOffset.TryParseExact(release.CreatedAt, ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var createdAt))
         {
-            return new ReleaseSetResult(null, [new LoadError(set.Name, "createdAt", "not a valid UTC time.")]);
+            return new ReleaseSetResult(null, [new LoadError(set.Name, release.CreatedAtLocation, "not a valid UTC time.")]);
         }
 
         // Only the definitions and what pins them are stored. Everything else (name, team, image, order) is derived from
         // the definitions by the same code that created the set, after each definition is checked against its hash.
         var errors = new List<LoadError>();
         var sources = new List<WorkloadSource>();
-        foreach (var (item, i) in body["workloads"]!.Select((item, i) => (item, i)))
+        foreach (var entry in release.Workloads)
         {
-            var definition = (string)item["definition"]!;
-            var recorded = (string)item["definitionSha256"]!;
-            var actual = ReleaseHash.Of(Encoding.UTF8.GetBytes(definition));
-            if (actual != recorded)
+            var actual = ReleaseHash.Of(Encoding.UTF8.GetBytes(entry.Definition));
+            if (actual != entry.DefinitionSha256)
             {
-                errors.Add(new LoadError(set.Name, $"workloads[{i}].definition", $"does not match definitionSha256 (recorded {recorded}, content hashes to {actual}); the release set was modified."));
+                errors.Add(new LoadError(set.Name, entry.DefinitionLocation, $"does not match {binder.FieldName(document.Kind, Roles.ReleaseDefinitionSha256)} (recorded {entry.DefinitionSha256}, content hashes to {actual}); the release set was modified."));
             }
 
-            sources.Add(new WorkloadSource(set.Name, $"workloads[{i}].definition", recorded, definition, item["dependsOn"]!.Select(t => (string)t!).ToList()));
+            sources.Add(new WorkloadSource(set.Name, entry.DefinitionLocation, entry.DefinitionSha256, entry.Definition, entry));
         }
 
         return errors.Count > 0
             ? new ReleaseSetResult(null, errors)
-            : await ReleaseBuilder.ComposeAsync(set.Name, (string)body["label"]!, createdAt, sources, cancellationToken) with { Bytes = set.Content };
+            : await ReleaseBuilder.ComposeAsync(set.Name, release, createdAt, sources, cancellationToken) with { Bytes = set.Content };
     }
 
     // The release set's kind: the one kind that embeds the definitions.

@@ -219,6 +219,9 @@ internal static class Roles
     /// <summary>A release set workload's definition, embedded as received.</summary>
     public const string ReleaseDefinition = "release.definition";
 
+    /// <summary>Where a manifest's workload definition is, relative to the manifest.</summary>
+    public const string ReleaseDefinitionPath = "release.definition-path";
+
     /// <summary>The SHA-256 of a release set workload's definition bytes, which pins it.</summary>
     public const string ReleaseDefinitionSha256 = "release.definition-sha256";
 

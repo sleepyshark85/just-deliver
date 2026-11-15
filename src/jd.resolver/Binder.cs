@@ -143,11 +143,28 @@ internal sealed class Binder(SchemaIndex index)
         };
     }
 
+    /// <summary>
+    /// The release manifest or set <paramref name="document"/> is, by the <c>release.*</c> roles: its label, when a set was created, and one entry
+    /// per <see cref="Roles.ReleaseWorkloads"/> item, each with where its definition and its dependencies are held.
+    /// </summary>
+    public ReleaseRead ReadRelease(Document document)
+    {
+        var values = ValuesOf(document);
+        return new ReleaseRead(
+            Text(values.First(Roles.ReleaseLabel)),
+            Text(values.First(Roles.ReleaseCreatedAt)),
+            [.. values.Every(Roles.ReleaseWorkloads).Select(entry => ReadReleaseEntry(values, entry))])
+        {
+            CreatedAtLocation = values.Locate(Roles.ReleaseCreatedAt),
+            WorkloadsLocation = values.LocateList(Roles.ReleaseWorkloads),
+        };
+    }
+
     /// <summary>The value of <paramref name="role"/> held at the root of <paramref name="document"/>, for a rule on its raw shape; null when it holds none.</summary>
     public JToken? ReadValue(Document document, string role) => ValuesOf(document).Nearest(role, document.Body);
 
     /// <summary>The property a document of <paramref name="kind"/> holds <paramref name="role"/> in, as errors name the field; empty when the kind does not bind it.</summary>
-    public string FieldName(string kind, string role) => new Values(new JObject(), index.RolesOf(kind)).NameOf(role);
+    public string FieldName(string kind, string role) => NameOf(index.RolesOf(kind), role);
 
     /// <summary>
     /// The descriptor of <paramref name="environment"/> as a document of <paramref name="kind"/>, written by the <c>env.*</c> and <c>approval.*</c>
@@ -302,6 +319,21 @@ internal sealed class Binder(SchemaIndex index)
             template?.Path ?? node.Path);
     }
 
+    private static ReleaseEntry ReadReleaseEntry(Values values, JToken entry)
+    {
+        var dependsOn = values.Nearest(Roles.ReleaseDependsOn, entry);
+        var path = values.Nearest(Roles.ReleaseDefinitionPath, entry);
+        var definition = values.Nearest(Roles.ReleaseDefinition, entry);
+        return new ReleaseEntry(Text(path), Text(definition), Text(values.Nearest(Roles.ReleaseDefinitionSha256, entry)), Strings(dependsOn))
+        {
+            Location = entry.Path,
+
+            // Safe: both kinds require the entry's definition, a manifest's path or a set's text, and only schema-valid documents are bound.
+            DefinitionLocation = (path ?? definition)!.Path,
+            DependsOnLocations = dependsOn is JArray list ? [.. list.Select(item => item.Path)] : [],
+        };
+    }
+
     private static Requirement ReadRequirement(Values values, JToken requirement) => new(
         Text(values.Nearest(Roles.RequirementType, requirement)),
         Text(values.Nearest(Roles.RequirementClass, requirement)))
@@ -330,11 +362,17 @@ internal sealed class Binder(SchemaIndex index)
 
     private static string Text(JToken? token) => (string?)token ?? string.Empty;
 
+    // The property the role's field ends in, as errors name it (empty when none).
+    private static string NameOf(IReadOnlyList<RoleField> roles, string role) =>
+        roles.Where(field => field.Role == role).Select(field => field.Name).FirstOrDefault() ?? string.Empty;
+
     private static List<string> Strings(JToken? token) => token is JArray list ? [.. list.Select(Text)] : [];
 
     // Writes a document's bound fields from role values, and collects the required ones without a value. Each object is attached before it is
     // filled, so a missing field is located where the document holds it. A nested record is a JObject by role and a many role holds a list of them:
-    // the binder's writers build them so, which the cast relies on.
+    // the binder's writers build them so, which the cast relies on. It reads the properties each schema declares, after the schema's own $ref
+    // (ActualSchema); unlike SchemaIndex.Walk it does not follow allOf, anyOf or oneOf, so a field bound only inside one is not written. No
+    // shipped output schema binds a field there.
     private sealed class Writer(string source)
     {
         public List<LoadError> Missing { get; } = [];
@@ -343,8 +381,9 @@ internal sealed class Binder(SchemaIndex index)
         {
             foreach (var (name, property) in schema.ActualSchema.Properties)
             {
-                var items = property.ActualSchema.Item is { } item && SchemaIndex.RoleOf(item) is not null ? item : null;
-                if ((SchemaIndex.RoleOf(property) ?? (items is null ? null : SchemaIndex.RoleOf(items))) is not { } role)
+                // A many role sits on a list's items.
+                var items = property.ActualSchema.Item is { } item && SchemaIndex.RoleOf(item) is { } many ? (Schema: item, Role: many) : default((JsonSchema Schema, string Role)?);
+                if ((SchemaIndex.RoleOf(property) ?? items?.Role) is not { } role)
                 {
                     continue;
                 }
@@ -356,11 +395,11 @@ internal sealed class Binder(SchemaIndex index)
                         Missing.Add(new LoadError(source, target.Path.Length == 0 ? name : $"{target.Path}.{name}", $"required, but the record holds no value for role '{role}'."));
                     }
                 }
-                else if (items is not null)
+                else if (items is { Schema: var itemSchema })
                 {
-                    FillList(target, name, items, value);
+                    FillList(target, name, itemSchema, value);
                 }
-                else if (property.ActualSchema.ActualProperties.Values.Any(field => SchemaIndex.RoleOf(field) is not null))
+                else if (property.ActualSchema.Properties.Values.Any(field => SchemaIndex.RoleOf(field) is not null))
                 {
                     var block = new JObject();
                     target[name] = block;
@@ -414,7 +453,6 @@ internal sealed class Binder(SchemaIndex index)
         // Where the list holding a role on a list's items was read; for a document that holds none of its items, the list's property.
         public string LocateList(string role) => First(role)?.Parent?.Path ?? NameOf(role);
 
-        // The property the role's field ends in, as errors name it (empty when none).
-        public string NameOf(string role) => roles.Where(field => field.Role == role).Select(field => field.Name).FirstOrDefault() ?? string.Empty;
+        public string NameOf(string role) => Binder.NameOf(roles, role);
     }
 }
