@@ -25,10 +25,10 @@ public sealed class YamlSchemaValidator
         .Build();
 
     /// <summary>
-    /// Describes a failure of <see cref="ParseYaml"/> for a person. The parser reports a repeated key at the start of
+    /// Describes a parse failure for a person. The parser reports a repeated key at the start of
     /// its mapping and without the key, so that case is located again from the parse events.
     /// </summary>
-    public static string DescribeYamlError(Exception error, string yamlContent)
+    private static string DescribeYamlError(Exception error, string yamlContent)
     {
         if (error is not YamlException yaml)
         {
@@ -94,7 +94,7 @@ public sealed class YamlSchemaValidator
     /// Throws <see cref="YamlException"/> on invalid YAML, a repeated key or more than one document, and <see cref="JsonException"/> on an
     /// alias that contains itself.
     /// </summary>
-    public static JToken ParseYaml(string yamlContent)
+    private static JToken ParseYaml(string yamlContent)
     {
         var parser = new Parser(new StringReader(yamlContent));
         // Consuming the stream start ourselves stops the deserializer reading on past the first document.
@@ -112,8 +112,9 @@ public sealed class YamlSchemaValidator
     }
 
     /// <summary>
-    /// Parses as <see cref="ParseYaml"/> does; YAML that does not parse is false, with <paramref name="error"/> describing it as
-    /// <see cref="DescribeYamlError"/> does.
+    /// Parses YAML into the JSON tree the schemas are validated against (same scalar typing as validation). YAML that does not parse is
+    /// false (invalid YAML, a repeated key, more than one document, an alias that contains itself), with <paramref name="error"/>
+    /// describing it for a person, a repeated key by its key and line.
     /// </summary>
     public static bool TryParseYaml(string yamlContent, [NotNullWhen(true)] out JToken? tree, [NotNullWhen(false)] out string? error)
     {
@@ -132,7 +133,7 @@ public sealed class YamlSchemaValidator
         }
     }
 
-    /// <summary>Validates a document parsed with <see cref="ParseYaml"/> against the schema text; a schema that is not JSON is a failed result.</summary>
+    /// <summary>Validates a document parsed with <see cref="TryParseYaml"/> against the schema text; a schema that is not JSON is a failed result.</summary>
     public async Task<ValidationResult> ValidateTokenAsync(string schemaContent, JToken instance, CancellationToken cancellationToken = default)
     {
         JsonSchema schema;

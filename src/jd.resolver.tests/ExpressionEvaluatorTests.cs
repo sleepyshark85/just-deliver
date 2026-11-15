@@ -322,7 +322,7 @@ public class ExpressionEvaluatorTests
     {
         var catalog = (await SeedCatalog.LoadAsync()).Value;
         Assert.NotNull(catalog);
-        var workload = YamlSchemaValidator.ParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")));
+        Assert.True(YamlSchemaValidator.TryParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")), out var workload, out var error), error);
         var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
         var part = TestCatalog.PartAt(catalog.Components["database"], "implementations.default.classes.standard");
         var monitoring = TestCatalog.PartAt(catalog.Components["monitoring"], "implementations.default.classes.standard");
