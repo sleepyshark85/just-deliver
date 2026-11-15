@@ -30,6 +30,9 @@ Any blocking finding means CHANGES REQUIRED. Findings cite a file and line and t
 - Any resource name, region, SKU, role GUID, template name, environment name, URL or id in C#?
 - Any branching on resource type or workload name?
 - Any knowledge that belongs in the catalog, environment descriptor or configuration?
+- Any document structure in C# (standards §1, formats are data): a field or kind name, a location built from field names, a
+  type mirroring a file? A literal the guard allows by file can still hide one; judge role names against documents.md
+  Appendix B and prose in messages yourself.
 
 ## 3. Simplicity and no unnecessary code — blocking when clear
 - Is there code the slice does not need: speculative abstractions, unused options, interfaces with a

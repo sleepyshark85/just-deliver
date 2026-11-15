@@ -73,7 +73,7 @@ the table is **blocking**.
 
 | Area | Blocking |
 |---|---|
-| Data, not code | Anything standards §1 forbids: a resource name, region, SKU, role id, template or output name, URL or Azure behaviour in C#; a branch on a resource type, template or workload name. Knowledge goes in the catalog (templates, mappings, policies), the environment descriptor or configuration, and the code reads it by the names the data gives |
+| Data, not code | Anything standards §1 forbids: a resource name, region, SKU, role id, template or output name, URL or Azure behaviour in C#; a document's field or kind name, or a location built from one; a branch on a resource type, template or workload name. Knowledge goes in the catalog (templates, mappings, policies), the environment descriptor or configuration, and the code reads it by the names the data gives |
 | Names and comments | A name that doesn't say what a thing is or does. A comment that restates the code, or code so unclear it needs one; a comment saying *why* (an Azure rule, a design-note section, a residual risk) is welcome |
 | Structure | Duplication; a method doing more than one thing; deep nesting; a long parameter list (a record or a smaller seam instead); a helper, option or table entry that does nothing yet; an analyzer warning suppressed to let one of these through |
 | Literals | A string the code depends on spelled inline instead of named once: an environment variable, a CLI command or option, an output or record key written or read in more than one place, an exit code. A one-off message stays inline. Tests spell what they expect themselves, never through the constants of the code under test |
@@ -135,9 +135,12 @@ These hold across slices; a change to one changes its design note or ADR first.
   alternative it rejected and why.
 - **Cohesion, contracts and ownership** ([context.md](../context.md#design-principles) 8–11): one component in one
   place; consumers bind to contracts; a workload definition is the same in every environment; one owner per resource.
-- **Data drives the platform.** Templates, mappings, policies and the environment descriptor carry every resource
-  fact; the code knows formats and names *from the data* (a mapping's `release:` block names the outputs the release
-  flow reads).
+- **Data drives the platform.** Templates, components, policies and the environment descriptor carry every resource fact;
+  the annotated schemas in `schemas/` carry every file's structure ([documents.md](../architecture/documents.md),
+  [ADR 0019](../decisions/0019-engine-knows-concepts.md)). The code knows the engine's concepts (documents.md §2) and reads a
+  document only through the roles its schema binds: no field name, kind name or location is spelled in C#, and an error is
+  located where the binder read the value. The release flow reads the outputs a runtime's `release` block names. The literal
+  guard (`LiteralGuardTests`) fails on a production literal that names a schema field, outside section 2's exceptions.
 - **Ports in `jd.core`, adapters at the edge.** Pulumi only in `jd.bp.pulumi`, Azure SDKs only in `jd.azure`, wiring
   only in `jd.cli`, which holds no rule: parsing, file I/O, formatting and composition over the use cases (standards §3; `verify.sh` and
   `ThinCliTests` enforce it, [application.md](../architecture/application.md) §4).
