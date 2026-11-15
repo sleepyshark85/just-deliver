@@ -42,7 +42,13 @@ public sealed record GraphNode(
     string Hash,
     IReadOnlyList<string> DependsOn,
     Probe? Probe = null,
-    RuntimeRelease? Release = null);
+    RuntimeRelease? Release = null)
+{
+    /// <summary>The config's leaves in ordinal path order, each with its provenance.</summary>
+    public IReadOnlyList<ConfigLeaf> Leaves =>
+        [.. ConfigLeaves.Of(string.Empty, new ConfigObject(Config))
+            .Select(leaf => new ConfigLeaf(leaf.Path, leaf.Value, Provenance.TryGetValue(leaf.Path, out var source) ? source.Describe() : null))];
+}
 
 /// <summary>
 /// The resolver's output. <see cref="Nodes"/> are in topological order (dependencies first, ties broken by id);

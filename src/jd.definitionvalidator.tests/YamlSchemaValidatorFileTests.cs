@@ -4,7 +4,6 @@ namespace jd.definitionvalidator.tests;
 
 public class YamlSchemaValidatorFileTests : IAsyncLifetime
 {
-    private readonly YamlSchemaValidator _validator = new();
     private string _tempDir = string.Empty;
 
     public async Task InitializeAsync()
@@ -22,7 +21,7 @@ public class YamlSchemaValidatorFileTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ValidateAsync_WithValidFiles_ReturnsSuccess()
+    public async Task ValidateYaml_WithValidFiles_ReturnsSuccess()
     {
         var schemaPath = Path.Combine(_tempDir, "schema.json");
         var yamlPath = Path.Combine(_tempDir, "data.yaml");
@@ -30,37 +29,13 @@ public class YamlSchemaValidatorFileTests : IAsyncLifetime
         await File.WriteAllTextAsync(schemaPath, ValidSchema);
         await File.WriteAllTextAsync(yamlPath, ValidYaml);
 
-        var result = await _validator.ValidateAsync(schemaPath, yamlPath);
+        var result = await Validation.ValidateYamlAsync(await File.ReadAllTextAsync(schemaPath), await File.ReadAllTextAsync(yamlPath));
 
         Assert.True(result.IsValid);
     }
 
     [Fact]
-    public async Task ValidateAsync_WithMissingSchemaFile_ReturnsFailed()
-    {
-        var yamlPath = Path.Combine(_tempDir, "data.yaml");
-        await File.WriteAllTextAsync(yamlPath, ValidYaml);
-
-        var result = await _validator.ValidateAsync("/nonexistent/schema.json", yamlPath);
-
-        Assert.False(result.IsValid);
-        Assert.Contains("File not found", result.Errors[0]);
-    }
-
-    [Fact]
-    public async Task ValidateAsync_WithMissingYamlFile_ReturnsFailed()
-    {
-        var schemaPath = Path.Combine(_tempDir, "schema.json");
-        await File.WriteAllTextAsync(schemaPath, ValidSchema);
-
-        var result = await _validator.ValidateAsync(schemaPath, "/nonexistent/data.yaml");
-
-        Assert.False(result.IsValid);
-        Assert.Contains("File not found", result.Errors[0]);
-    }
-
-    [Fact]
-    public async Task ValidateAsync_WithInvalidYamlInFile_ReturnsFailed()
+    public async Task ValidateYaml_WithInvalidYamlInFile_ReturnsFailed()
     {
         var schemaPath = Path.Combine(_tempDir, "schema.json");
         var yamlPath = Path.Combine(_tempDir, "data.yaml");
@@ -68,7 +43,7 @@ public class YamlSchemaValidatorFileTests : IAsyncLifetime
         await File.WriteAllTextAsync(schemaPath, ValidSchema);
         await File.WriteAllTextAsync(yamlPath, InvalidYaml_MissingRequired);
 
-        var result = await _validator.ValidateAsync(schemaPath, yamlPath);
+        var result = await Validation.ValidateYamlAsync(await File.ReadAllTextAsync(schemaPath), await File.ReadAllTextAsync(yamlPath));
 
         Assert.False(result.IsValid);
     }
