@@ -203,7 +203,7 @@ workload gets comes from its `requires`.
 
 The runtime is **not** a `Component`: it has no contract and no classes and is never required. The environment offers exactly one, and every
 workload deployed there gets it. It keeps its own kind so its checks stay in one place: the `probe`, the `release` block, the reserved
-`runtime` node and the inputs the release flow owns (today's checks, per implementation). `MappingMatcher` goes.
+`runtime` node and the inputs the release flow owns (today's checks, per implementation).
 
 `catalog/runtimes/container-app.yaml`: `kind: Runtime`, `uses: [env-group, apps-env]`, `implementations.default` holding today's `probe`,
 `release` and `runtime` node, which now reads `${env-group.name}` and `${apps-env.id}`.
@@ -337,26 +337,25 @@ descriptor without `approval`.
 | N6 deployed-exports registry | the descriptor's `values` are "deployed exports keyed `<name>.<export>`", read by one root syntax | no registry, no workload entries |
 | Name lookup | `requires[].type` resolves a name in the catalog namespace; phase 4 can extend it to workload names | — |
 
-## 4. What changes in the code
+## 4. Where the model lives in the code
 
-| Project / file | Change |
+S21 built this model; phase 1.5 ([documents.md](documents.md)) moved each file's structure out of the code into annotated schemas. The
+code knows the concepts of documents.md §2 (part owners, parts, nodes, scopes, selection, contracts, grants, policies), never a field.
+
+| Concern | Where |
 |---|---|
-| `schemas/catalog/` | + `component`, `sharedresource`, `runtime`, `grants`; `catalog` + `environmentTypes`; `policy` + `require`, − `add`, `tier` → `environmentType`; − `resourcetype`, `mapping` |
-| `jd.resolver/catalog/Catalog.cs` | `Catalog(Version, EnvironmentTypes, Components, SharedResources, Runtimes, GrantTargets, Policies, Naming, Roles)`; records `EnvironmentType`, `Component`, `Implementation`, `SharedResource`, `Runtime`, `Part(Nodes, Exports)`; `Policy.Require`, − `Policy.Add`; − `ResourceType`, `Mapping` |
-| `jd.resolver/catalog/CatalogParser.cs` | new kinds; checks: types and implementation keys, same classes per implementation, class exports equal the contract, unique names and reserved roots, `uses` exist, scope rules, no cycles, node names unique per scope, roots and exports, grant nodes (where, template listed, target form), `require` names a component and is workload scope; the runtime checks move to `Runtime`; − mapping/type checks |
-| `jd.resolver/matching/MappingMatcher.cs` | **deleted** |
-| `jd.resolver/expressions/ExpressionEvaluator.cs`, `ExpressionModel.cs` | `<name>.<export>`: a run's part evaluated in place from `ExpressionContext`'s part exports, else the descriptor's `values`; `env.*` limited to name/region/type; reports `<name>.<export>` reads (replaces the `env.` paths) |
-| `jd.resolver/expansion/ExpandedModel.cs` | `ConfigText.EnvPaths` → `PartReads`, read by the preview |
-| `jd.resolver/expansion/Expander.cs` | requirement → offered component → implementation → class part; runtime from offers; `ExpandEnvironment(definition, base)` collects parts by layer into scope `substrate` |
-| `jd.resolver/policies/PolicyApplier.cs` | − the `add` path (`WorkloadNodes`); + the `require` check; `tier` → `environmentType` |
-| `jd.resolver/graph/GraphBuilder.cs` | the grant target check replaces the `grantable` check; − policy-added workload nodes; edges unchanged. `ExportValues.cs` unchanged |
-| `jd.resolver/environment/*` | definition: `type`, `offers`; − `tier`, `requires`, `values`, `grantable`. Descriptor: `type`, `offers`; − `tier`, `grantable`. Type declared and `approval` coupling checked against the catalog. `DescriptorComposer` walks the collected parts' exports (secrets dropped as today). Schemas `environment*.schema.json` follow (the `anyOf` goes) |
-| `jd.resolver/release/ApprovalRecord.cs`, `jd.orchestrator/ReleaseRecordBuilder.cs` | records write `environment.type`; `release-record` and `approval-record` schemas take `type`, and still accept `tier` so records written before stay readable |
-| `jd.orchestrator/Orchestrator.cs` | `ContextFor` passes the run's part exports (empty for workload runs) |
-| `jd.cli/EnvCli.cs`, `Cli.cs` | wiring and messages (`type` for `tier`) |
-| `jd.cli/PreviewFormatter.cs` | `(from env.cosmos.accountId)` → `(from cosmos-account.id)`: renders `PartReads` |
-| `jd.bp.pulumi` | unchanged |
-| tests | catalog fixtures (`TestCatalog`, the Azure tests' test-only types and mappings) rewritten to the new kinds |
+| Formats | `schemas/catalog/`: `component`, `sharedresource`, `runtime` (each with the shared `part` schema), `grants`, `catalog` (`environmentTypes`), `policy` (`require`; `add` refused), `naming`, `roles`. Their `x-jd` annotations bind each field to a role ([ADR 0019](../decisions/0019-engine-knows-concepts.md)); the `layer` enum's order is the deploy order |
+| Loading | `jd.resolver/catalog/CatalogLoader.cs`: `DocumentLoader` reads each document and picks its schema by `kind`; `NameRules` checks `define`/`ref`/`one`; `Binder` fills the `Catalog`: one collection per concept, `PartOwner`s (components, shared resources, runtimes) with their `Part`s and `Node`s, environment types, grant targets, policies, naming, roles, each runtime part's probe and release block |
+| Checks | concept rules over the bound records, each error located where the binder read the value: `ReadRules` (roots and exports a part reads, boundaries 3, 5), `ScopeRules` (`uses` direction and cycles, node names per scope, boundaries 7, 8), `GrantRules` (where a grant sits, its template listed, its target form; 1, 2), `ContractRules` (class exports equal the contract, same classes per implementation), `PolicyRules` (scope shapes, paths), `RolloutRules` (probe interval within its timeout, revision suffix within its declared length, release inputs the runtime node must not set) |
+| Expressions | `jd.resolver/expressions/ExpressionEvaluator.cs`: `<name>.<export>` evaluated in place from the run's parts, else from the descriptor's `values`; `env.*` limited to name, region and type; each `<name>.<export>` read reported (`PartReads`) |
+| Expansion | `jd.resolver/expansion/Expander.cs`: requirement → offered component → implementation (selected by environment type, fallback `default`) → class part (selected by class); the runtime from the offers; an environment definition's parts collected by layer into scope `substrate` |
+| Policies | `jd.resolver/policies/PolicyApplier.cs`: node-scope and workload-scope policies, layering and provenance; the `require` check |
+| Graph | `jd.resolver/graph/GraphBuilder.cs`: edges, phases, hashes, the grant target check again after policies; `ExportValues.cs` evaluates exports on the orchestrator's second pass |
+| Environment | `jd.resolver/environment/`: `EnvironmentParser` binds a definition or a descriptor into one `EnvironmentDescriptor` (`type`, `offers`, `values`, `approval`); `EnvironmentTypeCheck` checks the type is the catalog's and the approval coupling (13); `DescriptorComposer` writes the descriptor through the binder from the deployed parts' exports, secrets dropped (12) |
+| Records | `jd.resolver/release/ApprovalRecord.cs`, `jd.orchestrator/ReleaseRecordBuilder.cs` write `environment.type`; the record schemas still accept `tier`, so records written before stay readable |
+| Orchestrator | `jd.orchestrator/Orchestrator.cs`: `ContextFor` passes the run's part exports (empty for a workload run) |
+| CLI | `jd.cli/PreviewFormatter.cs` renders `PartReads` (`(from cosmos-account.id)`) |
+| `jd.bp.pulumi` | `TemplateLibrary` checks a graph against the templates; a missing template or an export's misread output is located where the catalog writes it |
 
 ## 5. Behaviour preservation (the refactor's acceptance)
 

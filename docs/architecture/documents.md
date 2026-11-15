@@ -6,7 +6,8 @@
 > N1 (one shape) and N10 (cheap for the platform team), and makes phase 2's "added as components only, no C# change" structural. The user
 > (2026-10-19): *"in general, the code shouldn't know the structure of any yaml file"*; *"check the whole solution for hard-code like that"*;
 > *"applying the quality bar along the refactoring"*. The meaning of the S21 model (kinds, scopes, offers, grants) does not change; only where
-> that meaning lives does.
+> that meaning lives does. **Built:** every slice of section 9, S24a1 to S24g (2026-10-19 to 2026-11-15); the vocabulary is recorded in
+> [ADR 0019](../decisions/0019-engine-knows-concepts.md) (Proposed). The phase ends with its Azure exit gate.
 
 ## 1. Problem
 
@@ -40,7 +41,7 @@ The engine knows **concepts**, never **fields**. A concept is something an algor
 
 - **`kind` and `x-jd`.** The loader reads `kind` to pick a schema and the annotation keyword to learn anything; both are named once, in the loader.
 - **Concept and root names.** The roots of concept 4 and the role names of Appendix B are the engine's interface, code like the grammar.
-  Some equal a field name (`kind`, `name`, `image`, `port`, `runtime`, `release`): the literal guard allows them by name (section 9).
+  Some equal a field name (`kind`, `name`, `image`, `port`, `runtime`, `release`): the literal guard allows them by file (section 9).
 - **External protocols** (class b): Pulumi's `Pulumi.yaml` (`configuration`, `outputs`), Entra claims, ARM SDK shapes, `ARM_*`/`PULUMI_*`,
   HTTP's URI form (`<scheme>://<host><path>`). `Pulumi.yaml` is a YAML file whose structure the code reads: the one stated exception (choice 6).
 - **jd's identifiers**: the id and stack scheme (`@workload`, `substrate`, `@<env>`), `name()` placeholders and hash, the `guid()` namespace,
@@ -307,29 +308,30 @@ evidence.
 
 ## 9. Slices and exit criteria
 
-Each slice leaves `tools/verify.sh` green and the goldens as section 8 says. **Quality**: every slice's acceptance has the item "every touched
+**All done** (each row's slice merged; S24h1–2 not built, choice 2 is (b)). Each slice leaves `tools/verify.sh` green and the goldens as section 8 says. **Quality**: every slice's acceptance has the item "every touched
 file at the full quality bar" (conventions "Code quality bar", standards, review checklist): the reviewer judges each touched file whole, not
 only the diff, and the debt listed for the slice (Appendix A, last table) is fixed in it, not carried. **Bridge**: what each slice leaves in
 place so the next builds on a green tree. Lines are production lines (C#, schemas), estimated, added / removed; the cap is ~250 changed.
 
 | Slice | Content | Bridge | Lines | Azure gate | Acceptance |
 |---|---|---|---|---|---|
-| **S24a1** One loader | First commit: the composed-descriptor golden. `DocumentLoader` (YAML → `Document`, kind → schema from the schemas' `kind` enum) replaces the five parse-and-validate copies; `LoadResult<T>` replaces the `*LoadResult` types | today's models are built from `Document` by today's code | ~+110 / −140 | no | goldens identical; loader negative tests kept; quality |
-| **S24a2** Meta-schema and index | `x-jd.schema.json` (keywords, roles, refused keywords); `SchemaIndex`; `message`; shared `part`/`node`/`approval` schemas; node-name and dotted-key patterns as schema; retired-kind messages deleted. The **literal guard** test, its allowlist of today's literals | annotations are inert except `message` | ~+150 / −90 | no | a negative test per meta-schema refusal and per `message`; quality |
-| **S24a3** Names | `define`, `ref`, `one` as generic rules; `CheckSingleCatalog`, `CheckUnique`, `Merge`, the name parts of `CheckUses`, `CheckPolicyRequires`, `CheckEnvironmentTypes` deleted | `Catalog` still built | ~+110 / −130 | no | one negative test per rule; quality |
-| **S24b1** Binder and parts | `Binder`; `is` for `part…`, `node.*`, `contract`, `select`, `fallback`, `scope`, `layer`; `PartOwner`/`Part` replace `Component`, `SharedResource`, `Runtime`, `Implementation`, `RuntimeImplementation`, `ImplementationKey`, `SharedScope` | `Catalog` holds `PartOwner`s | ~+140 / −110 | no | goldens identical; `select` miss and `fallback` tests; quality |
-| **S24b1b** Catalog-level roles | split from S24b1: `is` for `catalog.version`, `naming.*`, `roles`, `grant.target-input`, `environment-type.layer`, `environment-type.gated`; the binder fills `NamingRule`, roles, grant targets and `EnvironmentType`; the `S24b1b` guard group emptied | — | ~+60 / −60 | no | goldens identical; quality |
-| **S24b2** Reads and scopes | read, node-name, scope-node and `uses`-direction checks out of `CatalogParser` into concept rules over `Part`, locations from the index | — | ~+120 / −130 | no | boundaries 3, 5, 7, 8 by their tests; component named `resource` or `role` refused; quality |
-| **S24b3** Grants, contracts, completeness | grant, contract, same-classes and runtime checks as concept rules; binding completeness; `Catalog` → the concept collections; `CatalogParser` deleted | — | ~+120 / −130 | no | boundaries 1, 2, 9, 10; a test per missing binding; quality |
-| **S24b4** Catalog collections | split from S24b3: `Catalog` → the concept collections; `CatalogParser` deleted (loading = loader + name rules + binder + concept rules); `CheckReservedNames`, the policy and naming checks, `ToRollout`/`ToPolicy` placed; binding completeness identifies the runtime and catalog kinds without kind constants; export locations per export (`JToken.Path`) if the expansion model carries them | — | ~+150 / −200 | no | goldens identical; quality |
-| **S24c1** Environment | `Environment` record bound from a definition or a descriptor; `EnvironmentDefinition`, `EnvironmentDescriptor` field knowledge deleted; descriptor reserved-values check proven or deleted | — | ~+100 / −130 | no | boundaries 4, 13; `${env.values…}`, `${env.offers}` refused; quality |
-| **S24c2** Workload | workload and requirement roles; `Workload`/`Requirement` bound records; `WorkloadRules` moved into jd.resolver on bound values, returning `LoadError`s; `ReleaseBuilder` reads the same bindings; `workload.variables` in binding completeness | — | ~+120 / −130 | no | boundaries 6, 11; an unbound workload field carrying `${cosmos-account.id}` is inert; quality |
-| **S24c3** Expansion model | split from S24c2: `ExpressionContext` takes `Environment`, the workload owner (`WorkloadOwner`) and an `ExpressionScope`; `ExpansionResult` the owner; `Expander.ExpandEnvironment` split along its steps; `WorkloadRules` scans with the evaluator's scanner | — | ~+180 / −140 | no | goldens identical; quality |
-| **S24c4** Expansion locations | split from S24c3: `PolicyApplier` reads the workload's locations (`requires`, the variables' provenance) through the model; per-export locations (`JToken.Path`) carried to `GraphBuilder`/`ExportValues`; the `S24c4` guard group emptied. The `requires` list is located through the `requirement` role on its items: `SchemaIndex` names a list's items after the list, so a workload without one is located at the list it leaves out (lead ruling) | — | ~+80 / −40 | no | goldens identical; quality |
-| **S24d** Policies | `match:` criteria, `policy.*` roles; `MatchCriteria` deleted; scope-shape rules (concept 10) take field names from the binding | — | ~+80 / −110 | no | every policy negative test kept, messages unchanged; quality |
-| **S24e** Rollout data | `probe.*`, `rollout.*` by `is`. **Catalog file change**: `runtimes/container-app.yaml` gains `release.suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }` (a comment gives the derivation: Azure's 54-character revision name − the `ca` rule's `maxLength: 32` in `catalog/naming.yaml:14-17` − the 2-character `--`), `release.fullWeight: 100`, `probe.scheme: https`; `runtime.schema.json` requires them with a `message`, so an older catalog fails at load naming the field (catalogs ship beside the jd they run on), with generic bounds only (`prefix` `pattern: ^[a-z][a-z0-9-]*$`, digits `minimum: 1`); one generic load check, the suffix's parts (`len(prefix) + configDigits + saltDigits`) must not exceed its declared `maxLength` (a sum no schema keyword states), so no Azure or naming number sits in C# (today's suffix: 15); `GraphJson` writes them. The test catalogs' runtimes gain the same required fields | — | ~+90 / −70 | **yes** | snapshot identical; graph goldens differ by exactly those lines; the record goldens (`release-record.json`, `qualify-record.json`) differ by exactly their `graph.sha256` lines; release-flow tests unchanged; a runtime without the fields, and one whose suffix parts add up to 21 against the declared `maxLength: 20`, fail at load naming the field; quality |
-| **S24f** YAML jd writes | the binder writes the descriptor and the release set and reads the manifest and set; `DescriptorComposer` and `ReleaseSetFile` field names gone | — | ~+100 / −90 | no | descriptor and release-set goldens identical; old sets read; quality |
-| **S24g** Docs and standards | standards §1 ("allowed in code: the concepts of documents.md §2; formats are data"); resolver.md, components.md §4, conventions "Data drives the platform"; guard allowlist final; an ADR (Proposed) for the vocabulary | — | docs | **yes**: exit gate | E2E green; allowlist = section 2's exceptions |
+| **S24a1** (done) One loader | First commit: the composed-descriptor golden. `DocumentLoader` (YAML → `Document`, kind → schema from the schemas' `kind` enum) replaces the five parse-and-validate copies; `LoadResult<T>` replaces the `*LoadResult` types | today's models are built from `Document` by today's code | ~+110 / −140 | no | goldens identical; loader negative tests kept; quality |
+| **S24a2** (done) Meta-schema and index | `x-jd.schema.json` (keywords, roles, refused keywords); `SchemaIndex`; `message`; shared `part`/`node`/`approval` schemas; node-name and dotted-key patterns as schema; retired-kind messages deleted. The **literal guard** test, its allowlist of today's literals | annotations are inert except `message` | ~+150 / −90 | no | a negative test per meta-schema refusal and per `message`; quality |
+| **S24a3** (done) Names | `define`, `ref`, `one` as generic rules; `CheckSingleCatalog`, `CheckUnique`, `Merge`, the name parts of `CheckUses`, `CheckPolicyRequires`, `CheckEnvironmentTypes` deleted | `Catalog` still built | ~+110 / −130 | no | one negative test per rule; quality |
+| **S24b1** (done) Binder and parts | `Binder`; `is` for `part…`, `node.*`, `contract`, `select`, `fallback`, `scope`, `layer`; `PartOwner`/`Part` replace `Component`, `SharedResource`, `Runtime`, `Implementation`, `RuntimeImplementation`, `ImplementationKey`, `SharedScope` | `Catalog` holds `PartOwner`s | ~+140 / −110 | no | goldens identical; `select` miss and `fallback` tests; quality |
+| **S24b1b** (done) Catalog-level roles | split from S24b1: `is` for `catalog.version`, `naming.*`, `roles`, `grant.target-input`, `environment-type.layer`, `environment-type.gated`; the binder fills `NamingRule`, roles, grant targets and `EnvironmentType`; the `S24b1b` guard group emptied | — | ~+60 / −60 | no | goldens identical; quality |
+| **S24b2** (done) Reads and scopes | read, node-name, scope-node and `uses`-direction checks out of `CatalogParser` into concept rules over `Part`, locations from the index | — | ~+120 / −130 | no | boundaries 3, 5, 7, 8 by their tests; component named `resource` or `role` refused; quality |
+| **S24b3** (done) Grants, contracts, completeness | grant, contract, same-classes and runtime checks as concept rules; binding completeness; `Catalog` → the concept collections; `CatalogParser` deleted | — | ~+120 / −130 | no | boundaries 1, 2, 9, 10; a test per missing binding; quality |
+| **S24b4** (done) Catalog collections | split from S24b3: `Catalog` → the concept collections; `CatalogParser` deleted (loading = loader + name rules + binder + concept rules); `CheckReservedNames`, the policy and naming checks, `ToRollout`/`ToPolicy` placed; binding completeness identifies the runtime and catalog kinds without kind constants; export locations per export (`JToken.Path`) if the expansion model carries them | — | ~+150 / −200 | no | goldens identical; quality |
+| **S24c1** (done) Environment | `Environment` record bound from a definition or a descriptor; `EnvironmentDefinition`, `EnvironmentDescriptor` field knowledge deleted; descriptor reserved-values check proven or deleted | — | ~+100 / −130 | no | boundaries 4, 13; `${env.values…}`, `${env.offers}` refused; quality |
+| **S24c2** (done) Workload | workload and requirement roles; `Workload`/`Requirement` bound records; `WorkloadRules` moved into jd.resolver on bound values, returning `LoadError`s; `ReleaseBuilder` reads the same bindings; `workload.variables` in binding completeness | — | ~+120 / −130 | no | boundaries 6, 11; an unbound workload field carrying `${cosmos-account.id}` is inert; quality |
+| **S24c3** (done) Expansion model | split from S24c2: `ExpressionContext` takes `Environment`, the workload owner (`WorkloadOwner`) and an `ExpressionScope`; `ExpansionResult` the owner; `Expander.ExpandEnvironment` split along its steps; `WorkloadRules` scans with the evaluator's scanner | — | ~+180 / −140 | no | goldens identical; quality |
+| **S24c4** (done) Expansion locations | split from S24c3: `PolicyApplier` reads the workload's locations (`requires`, the variables' provenance) through the model; per-export locations (`JToken.Path`) carried to `GraphBuilder`/`ExportValues`; the `S24c4` guard group emptied. The `requires` list is located through the `requirement` role on its items: `SchemaIndex` names a list's items after the list, so a workload without one is located at the list it leaves out (lead ruling) | — | ~+80 / −40 | no | goldens identical; quality |
+| **S24d** (done) Policies | `match:` criteria, `policy.*` roles; `MatchCriteria` deleted; scope-shape rules (concept 10) take field names from the binding | — | ~+80 / −110 | no | every policy negative test kept, messages unchanged; quality |
+| **S24e** (done) Rollout data | `probe.*`, `rollout.*` by `is`. **Catalog file change**: `runtimes/container-app.yaml` gains `release.suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }` (a comment gives the derivation: Azure's 54-character revision name − the `ca` rule's `maxLength: 32` in `catalog/naming.yaml:14-17` − the 2-character `--`), `release.fullWeight: 100`, `probe.scheme: https`; `runtime.schema.json` requires them with a `message`, so an older catalog fails at load naming the field (catalogs ship beside the jd they run on), with generic bounds only (`prefix` `pattern: ^[a-z][a-z0-9-]*$`, digits `minimum: 1`); one generic load check, the suffix's parts (`len(prefix) + configDigits + saltDigits`) must not exceed its declared `maxLength` (a sum no schema keyword states), so no Azure or naming number sits in C# (today's suffix: 15); `GraphJson` writes them. The test catalogs' runtimes gain the same required fields | — | ~+90 / −70 | **yes** | snapshot identical; graph goldens differ by exactly those lines; the record goldens (`release-record.json`, `qualify-record.json`) differ by exactly their `graph.sha256` lines; release-flow tests unchanged; a runtime without the fields, and one whose suffix parts add up to 21 against the declared `maxLength: 20`, fail at load naming the field; quality |
+| **S24f** (done) YAML jd writes | the binder writes the descriptor and the release set and reads the manifest and set; `DescriptorComposer` and `ReleaseSetFile` field names gone | — | ~+100 / −90 | no | descriptor and release-set goldens identical; old sets read; quality |
+| **S24f2** (done) Reads of what jd writes | split from S24f: the release set and the manifest read through the binder (`ReleaseRead`) | — | — | no | set and record goldens identical; old sets read; quality |
+| **S24g** (done) Docs and standards | standards §1 ("allowed in code: the concepts of documents.md §2; formats are data"); resolver.md, components.md §4, conventions "Data drives the platform"; guard allowlist final: the graph carries where the catalog writes each node's template and each export (`GraphNode.TemplateSource`, `ResolvedGraph.ExportSources`), so `TemplateLibrary` and the graph builder's grant check spell no location; ADR 0019 (Proposed) for the vocabulary | — | ~+80 / −55, docs | **yes**: exit gate | E2E green; allowlist = section 2's exceptions |
 
 With choice 2 (a), **S24h1** release record and **S24h2** approval record and graph JSON (~+250 / −200 together, no gate): the record concept
 tree, ~45 roles, the three JSON formats through the binder; their goldens identical. Total (b): about +1,240 / −1,260 production lines over
@@ -337,10 +339,15 @@ tree, ~45 roles, the three JSON formats through the binder; their goldens identi
 
 **The literal guard** (S24a2, final in S24g): a test over production C# that fails on any string literal, or text segment of an interpolated
 string, without whitespace, whose dot- or bracket-separated parts include a property name declared in `schemas/` (so `"template"`,
-`".template"`, `$"{location}.template"`, `"implementations."` all count). Its allowlist is by file and literal: class (b), the concept and root
-names of section 2 that equal a property (`kind` `CatalogParser.cs:157`, `release` `Cli.cs:88`, `workload`/`id`/`hash` `BuiltIns.cs:32-35`,
-`runtime` `ExpressionEvaluator.cs:16`, `name`/`team`/`image`/`port` `ExpressionEvaluator.cs:23-26`, `name`/`value` of `fn::entries`), and with
-choice 2 (b) the three evidence writers. **It proves only that no bare field literal remains**: a role named after a path (`"probe.path"`)
+`".template"`, `$"{location}.template"`, `"implementations."` all count). Its allowlist (`LiteralGuardTests.Allowlist.cs`, final in S24g) is by
+file and literal, in two groups. **Section 2's exceptions:** class (b) (`Pulumi.yaml`'s `default` in `TemplateLibrary.cs`, ARM's token scope in
+`ArmDeployerIdentity.cs`); the bootstrap field (`kind` in `DocumentLoader.cs`) and the annotation keyword with its annotations
+(`SchemaIndex.cs`); the role names the engine reads (`Roles.cs`, Appendix B); the concept and root names that equal a property (`release` the
+command in `Cli.cs`, the expression roots in `ExpressionEvaluator.cs`, `name()`'s placeholders in `BuiltIns.cs`, the `fn::entries` item
+`name` in `ConfigJson.cs` and `ConfigFiller.cs` and its source `workload.variables` in `ConfigWalker.cs`); jd's identifiers and node hash
+(`GraphBuilder.cs`: `template`, `kind`, `config`); the local record store's `set.yaml` (`ReleaseRecordFile.cs`); and with choice 2 (b) jd's
+JSON evidence (`ReleaseRecordBuilder.cs`, `ApprovalRecord.cs`, `QualificationReader.cs`, `GraphJson.cs`). **Prose false positives:** a lone
+word in a message (`is` in `ArmCredentials.cs`). **It proves only that no bare field literal remains**: a role named after a path (`"probe.path"`)
 passes it, so the reviewer judges role names against Appendix B, and prose in messages is the reviewer's too (section 6).
 
 **Phase 1.5 exit criteria:** (1) the literal guard passes with only section 2's exceptions allowed; (2) the same Azure resources
@@ -382,7 +389,14 @@ New: one ADR (Proposed) for "the engine knows concepts, schemas bind fields" wit
 ## Appendix A. Inventory: code that knows a document's structure
 
 Class: **(a)** moves to data; **(b)** an external protocol, an adapter constant (standards §1); **(c)** an engine concept of section 2.
-"Goes" names the slice. Paths under `src/`.
+"Goes" names the slice. Paths under `src/`; line numbers are those of 2026-10-19.
+
+**Closed (S24g).** Every row of class (a) went in the slice its "Goes" names, all merged; the literal guard holds that no field literal is
+left. Rows of class (b) and (c) stay by design (section 2). Rows naming choice 2 stay as typed code: the user chose (b), so S24h1–2 were not
+built and jd's JSON evidence is a section 2 exception. No row is open. Debt the track leaves, accepted and recorded in
+[status.md](../plans/status.md) rather than in a slice: `ResolvedGraph` (10 positional fields) and `PolicyResult` (9), whose shape the
+adapter and the qualifier read; `Orchestrator.Walk`'s `preview: bool`; `YamlSchemaValidator` still named for its test-only
+`ValidateTokenAsync` (the YAML parser is its one production use).
 
 ### jd.resolver: catalog kinds
 
@@ -429,7 +443,7 @@ Class: **(a)** moves to data; **(b)** an external protocol, an adapter constant 
 | `expressions/BuiltIns.cs:10-14,32-35` | `name`, `guid`, namespace, placeholders | c | concept 4 |
 | `graph/GraphBuilder.cs:22,198-200` | `@workload`; node hash object | c | concept 3 (H47) |
 | `graph/ConfigJson.cs:17`, `jd.orchestrator/ConfigFiller.cs:66` | `fn::entries` items `name`, `value` | c | concept 4: the form's documented output, inside the node hash |
-| `graph/GraphJson.cs:14-75` | graph JSON layout | a / c | choice 2: S24h2, or (b) kept |
+| `graph/GraphJson.cs:14-75` | graph JSON layout | a / c | choice 2 (b): kept, a section 2 exception |
 | `LoadError.cs:11` | NJsonSchema's error text | b | library |
 
 ### Locations and messages (field names inside errors)
@@ -444,13 +458,13 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 | `catalog/CatalogParser.cs:515,531,539,588` | `….classes`, `….exports.<e>`, `<property>.<key>` | a | S24a3, S24b3 |
 | `policies/PolicyApplier.cs:51,130` | `requires`, `default`/`set` | a | S24c4, S24d |
 | `expansion/Expander.cs:72,76,86,92,107,114,159,208,261` | `offers[<i>]`, `offers`, `requires[<i>]`, `implementations.<k>.…` | a | S24b1, S24c1 |
-| `graph/GraphBuilder.cs:37,161` | `exports.<n>`, `template` | a | S24c4 |
-| `backend-providers/jd.bp.pulumi/TemplateLibrary.cs:104` | `template` (jd's node field, in an adapter) | a | S24b3: the node's catalog location from the binding |
+| `graph/GraphBuilder.cs:37,161` | `exports.<n>`, `template` | a | S24c4; the grant check's `template` location in S24g (`TemplateSource`) |
+| `backend-providers/jd.bp.pulumi/TemplateLibrary.cs:104` | `template` (jd's node field, in an adapter), and `exports.<name>` | a | S24g: the node's catalog location from the binding (`GraphNode.TemplateSource`), the export's (`ResolvedGraph.ExportSources`) |
 | `release/ReleaseBuilder.cs:53,101,123,138-150` | `workloads[<i>].definition`, `container.image`, `workloads`, `….dependsOn[<j>]` | a | S24c2 (`container.image`), S24f (the manifest's) |
 | `release/ReleaseSetFile.cs:78,92` | `createdAt`, `workloads[<i>].definition` | a | S24f |
 | `environment/EnvironmentParser.cs:39,57,62,75` | `values.<k>`, `approval.qualifiedOn`, `approval.required` | a | S24c1 |
 | `environment/EnvironmentTypeCheck.cs:16,20` | `type`, `approval` | a | S24c1 |
-| `release/ApprovalRecord.cs:116-119` | `environment`, `label`, `set`, `qualifiedOn` | a / c | choice 2 |
+| `release/ApprovalRecord.cs:116-119` | `environment`, `label`, `set`, `qualifiedOn` | a / c | choice 2 (b): kept |
 
 ### jd.resolver and jd.orchestrator: release manifest, set, records
 
@@ -460,9 +474,9 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 | `release/ReleaseBuilder.cs:47-75,98-106` | manifest `workloads`, `definition`, `dependsOn`, `label`; workload `container.image`, `metadata.*` | a | S24c2 (workload), S24f (manifest) |
 | `release/ReleaseSetFile.cs:36-47,76-100` | set layout | a | S24f |
 | `release/ReleaseRecordFile.cs:15-44` | `set.yaml`, activities, outcomes, time formats | c | concept 11, the local store's layout |
-| `release/QualificationReader.cs:80-172` | record fields | a / c | choice 2 |
-| `release/ApprovalRecord.cs:19-46` | `Stored*` = the approval record layout | a / c | choice 2 |
-| `jd.orchestrator/ReleaseRecordBuilder.cs:38-178` | the release-record layout (~45 fields), `"failed"`, `"notRun"` | a / c | choice 2 |
+| `release/QualificationReader.cs:80-172` | record fields | a / c | choice 2 (b): kept |
+| `release/ApprovalRecord.cs:19-46` | `Stored*` = the approval record layout | a / c | choice 2 (b): kept |
+| `jd.orchestrator/ReleaseRecordBuilder.cs:38-178` | the release-record layout (~45 fields), `"failed"`, `"notRun"` | a / c | choice 2 (b): kept; the literals named once in S24f |
 | `jd.orchestrator/ReleaseFlow.cs:27-32` | suffix rule: prefix `r`, 8 + 6 hex digits (Azure's revision-name rule, comment :27-28), full weight `100` | a | S24e: the runtime's data, whole |
 | `jd.orchestrator/ReleaseFlow.cs:36-190`, `Qualifier.cs:73` | release block and probe by concept | c | concept 11 |
 
@@ -476,7 +490,7 @@ Location: from the index (S24a2 onwards); field names in code messages: from the
 | `jd.cli/EnvCli.cs:101`, `PreviewFormatter.cs`, `DeployFormatter.cs` | messages over concepts | c | — |
 | `jd.definitionvalidator/WorkloadRules.cs:16-78` | `requires`, `id`, `type`, `container.variables`, `resource.` | a / c | S24c2 |
 | `jd.definitionvalidator/WorkloadSchema.cs:8` | embedded schema name | a | S24a1 |
-| `jd.definitionvalidator/YamlSchemaValidator.cs` | YAML → JSON, validation | c | the loader's parser |
+| `jd.definitionvalidator/YamlSchemaValidator.cs` | YAML → JSON, validation | c | the loader's parser; the rename and `ValidateTokenAsync` left as accepted debt (above) |
 | `jd.core/**` | ports and DTOs | c | no document structure |
 | `backend-providers/jd.bp.pulumi/TemplateLibrary.cs:21,67-69,88` | `Pulumi.yaml`, `configuration`, `outputs`, `default` | b | stays (choice 6) |
 | `backend-providers/jd.bp.pulumi/StackNames.cs:15-17`, `PulumiBackendOptions.cs:8`, `EnvironmentVariableAttribute.cs`, `PulumiResourceChangeParser.cs` | stack name length, `PULUMI_*`, change types | b | stays |

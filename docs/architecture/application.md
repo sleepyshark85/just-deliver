@@ -5,7 +5,9 @@
 > will use the API for everything. So make sure don't leak any logic to the CLI and keep it thin"*. Serves [ADR 0001](../decisions/0001-custom-build-api-and-clients.md)
 > ("each client is a thin layer over the API"), principles 6–14 ([context.md](../context.md#design-principles)) and the non-negotiable on clean
 > architecture. Makes a hosted API possible and builds none of it: no HTTP, no hosting, no DTOs. Line numbers are `main` at `b9d5531`, after
-> S24a1 (one document loader: `.Value`, `EnvironmentParser.LoadAsync`, `ReleaseHash.Of`, `DocumentLoader`), whose names this note uses.
+> S24a1 (one document loader: `.Value`, `EnvironmentParser.LoadAsync`, `ReleaseHash.Of`, `DocumentLoader`), whose names this note uses. **Built:** S25a to S25g. The S24
+> track since deleted `CatalogParser`, `CatalogSource` and `EnvironmentDefinitionFile` (a catalog loads through `CatalogLoader`, an
+> environment through `EnvironmentParser`; [documents.md](documents.md) §3), so those names are of that time.
 
 ## 1. Problem
 
@@ -66,7 +68,7 @@ input one to one. A use case checks its plain values first, before it loads any 
 |---|---|---|
 | A document | `SourceDocument(string Name, ReadOnlyMemory<byte> Content)`: the name errors print (the CLI passes the argument as typed, so messages stay the same), the exact bytes (hashes and the strict UTF-8 check need bytes) | `jd.resolver`, beside `LoadError` |
 | Decoding | `SourceDocument.Text()`: UTF-8 with the byte-order mark detected, the decoder `File.ReadAllText` (`DocumentLoader.cs:29`, `CatalogDirectory.cs:26`, `TemplateLibrary.cs:49`) and `ReleaseSetFile.cs:72` use today. Each kind's loader decodes; the CLI never does. Every kind keeps its decoding: the definitions a manifest names stay strict UTF-8 with the mark kept (`ReleaseBuilder.cs:31,60`), decoded by the builder from `Content` | `jd.resolver` |
-| A catalog | `SourceCatalog(string Name, IReadOnlyList<SourceDocument> Documents)`: the catalog argument as typed, and every `*.yaml` under it, named relative to it (`templates/…` included) | the catalog loader splits off the templates by the one layout rule (`CatalogDirectory.cs:7`, moved to `CatalogParser`) into a `SourceCatalog` of their own, named `Path.Combine(<catalog>, "templates")` as `Cli.cs:231` names it, documents relative to it |
+| A catalog | `SourceCatalog(string Name, IReadOnlyList<SourceDocument> Documents)`: the catalog argument as typed, and every `*.yaml` under it, named relative to it (`templates/…` included) | the catalog loader splits off the templates by the one layout rule (`CatalogDirectory.cs:7`, now `CatalogLoader.Templates`) into a `SourceCatalog` of their own, named `Path.Combine(<catalog>, "templates")` as `Cli.cs:231` names it, documents relative to it |
 | Documents a manifest names | `DocumentReader`: `delegate Task<(string Name, ReadOnlyMemory<byte>? Content)> DocumentReader(string reference, CancellationToken)`, no content when nothing is there; the name is what errors print | `jd.resolver`; the CLI's resolves against the manifest's directory |
 
 | Action | Use case | Input | Result (besides `Errors`, `Problem`, `Outcome`) |
@@ -176,7 +178,9 @@ S24's literal guard finds nothing in `jd.cli` except its commands and options (d
 - `LoadError` (`file: location: message`) is unchanged. It is produced where it is today (loaders, resolver, template check), returned in
   `Errors`, and printed by the CLI one per line on stderr, in the same order. The catalog loader's errors (and only those: a resolver error
   naming a catalog document prints as today) are made full paths by the use case, through `SourceCatalog.Located`, since a result has one
-  `Errors` list and the CLI cannot tell them apart (lead ruling, S25b2); the template errors already carry their names (section 5), as today.
+  `Errors` list and the CLI cannot tell them apart (lead ruling, S25b2). The template misfits that name a catalog file get full paths
+  too (a missing template, an export misfit: `<catalog>/components/x.yaml: …`), because the catalog is where the template is named;
+  the other template errors already carry their names (section 5), as today.
 - Expected failures inside a run are `Problem`s at the step where they arise today: the identity adapter's `InvalidOperationException`
   (`Cli.cs:287`), a store's `ArgumentException` (`ReleaseDeployCli.cs:246`), a reader that cannot be built (`:153`), a record write
   (`:264`). The CLI prints `jd: <its words>: <values>` as today.

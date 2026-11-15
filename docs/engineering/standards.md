@@ -12,11 +12,19 @@ infrastructure. Code that bakes in what should be data defeats the MVP.
   knowledge ("Cosmos needs X"), template names, ordering of resources, environment names, URLs,
   subscription/tenant ids. These live in the catalog, the environment descriptor, or configuration.
 - **Must not** branch on resource types or workload names (`if (type == "database")`). Add a
-  catalog file or a matching rule instead ([resolver.md](../architecture/resolver.md)).
+  catalog file or a policy instead ([resolver.md](../architecture/resolver.md)).
 - Configuration comes from options/environment variables bound at the composition root, never read
   ad hoc deep in the code.
-- Allowed in code: the catalog/schema *formats*, the expression syntax, built-in functions, and
-  defaults that are part of a format's contract (documented next to the format).
+- **Formats are data.** No document's structure in C#: no field name, kind name, location built from field names, or type
+  mirroring a file. Each kind's schema in `schemas/` is its shape, and its `x-jd` annotations say which field holds which
+  concept; a default that is part of a format's contract is the schema's `default`
+  ([documents.md](../architecture/documents.md) §3, [ADR 0019](../decisions/0019-engine-knows-concepts.md)).
+- Allowed in code: the engine's **concepts** ([documents.md](../architecture/documents.md) §2): the document and its `kind`, names
+  and references, parts, nodes and exports, the expression syntax with its closed root list and built-in functions, scopes and the
+  layers' order, selection, contracts, grants, policies, release, gates and evidence; and the exceptions section 2 names: the
+  `kind` and `x-jd` keywords, concept and root names that equal a field, external protocols (`Pulumi.yaml`, Entra claims, ARM),
+  jd's identifiers and node hash, and jd's JSON evidence (release record, approval record, graph JSON). The literal guard
+  (`LiteralGuardTests`) enforces it: its allowlist is those exceptions plus prose a lone word cannot be told apart from.
 - Exception: Azure protocol constants (an endpoint, a token scope) may be named constants inside an Azure adapter project (`jd.azure`),
   with a comment saying so. The MVP is public cloud only; sovereign clouds need configuration (E53).
 - Tests may contain literal fixtures; production code may not.

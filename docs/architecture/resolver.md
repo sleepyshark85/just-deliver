@@ -5,8 +5,10 @@
 
 The resolver turns a workload definition into a graph of concrete, backend-renderable resources.
 It is a **generic engine**: all Azure knowledge lives in a versioned **catalog** of YAML files that
-platform engineers maintain. The C# code knows only the file formats, a substitution-only expression
-syntax and a few built-in functions.
+platform engineers maintain. The C# code knows the engine's **concepts** ([documents.md](documents.md) §2: documents, names and
+references, parts and nodes, the substitution-only expression syntax and its built-in functions, scopes, selection, contracts, grants,
+policies, release), never a file's fields: each kind's annotated schema in `schemas/` says which field holds which concept
+([ADR 0019](../decisions/0019-engine-knows-concepts.md)).
 
 ```
 resolve(workload, environment, catalog@version) → ResolvedGraph     pure, deterministic, no Azure calls
@@ -55,8 +57,8 @@ catalog/
 The directory layout is organisational only. The loader takes every `*.yaml` under the catalog root
 (except `templates/`, which holds Pulumi YAML) as **one YAML document per file** (no `---`
 multi-document files) and finds out what it is from the required top-level `kind`: `Catalog`,
-`Component`, `Runtime`, `SharedResource`, `Policy`, `Naming`, `Roles` or `Grants`. An unknown or missing `kind` is an error; the retired kinds `ResourceType` and
-`Mapping` are rejected with a message saying what replaced them.
+`Component`, `Runtime`, `SharedResource`, `Policy`, `Naming`, `Roles` or `Grants`. A missing `kind` is an error, and so is an unknown one (the retired kinds `ResourceType` and
+`Mapping` included): it is refused with the expected kinds.
 
 The catalog is versioned as one unit; a deployment records the catalog version next to the
 definition SHA ([ADR 0007](../decisions/0007-definition-upload-snapshot.md)).
@@ -65,7 +67,8 @@ definition SHA ([ADR 0007](../decisions/0007-definition-upload-snapshot.md)).
 
 Each kind has a JSON Schema in [`schemas/catalog/`](../../schemas/catalog/) (`<kind>.schema.json`),
 so editors and CI validate it; the schemas are also embedded in `jd.resolver`, which validates every
-file against its kind's schema. `${…}` expressions and config values are kept as written by the
+file against its kind's schema and reads it through the schema's `x-jd` annotations ([documents.md](documents.md) §3): a field
+renamed in a schema is a schema change, not a C# change. `${…}` expressions and config values are kept as written by the
 loader; the expression evaluator interprets them later.
 
 | Kind | Required fields | Cardinality |
@@ -74,7 +77,7 @@ loader; the expression evaluator interprets them later.
 | `Component` | `name`, `description`, `exports`, `implementations` | `name` unique among shared resources, components and runtimes, and not a reserved root (`env`, `role`, `workload`, `resource`, `runtime`). `implementations` is keyed by a declared environment type or `default` (an undeclared key would never be selected, so it is rejected); each implementation has `classes`, and every implementation declares the same classes. Each class has `nodes` and `exports`, whose keys equal the component's `exports` exactly; an implementation may also have an `environment` part (`nodes`, `exports`), deployed once per environment. `runtime` is reserved: no class declares a node of that name. Optional `uses`: see `SharedResource`. |
 | `Runtime` | `name`, `description`, `implementations` | `name` as for a component; optional `uses`; keys as for a component. Each implementation has a `probe`, a `release` and `nodes` with a node named `runtime` ([below](#runtime)); no `exports`. Only a runtime has a `probe` (`path` starting with `/`, `expectedStatus` 100-599, `timeoutSeconds` and `intervalSeconds` at least 1 with the interval not above the timeout) or a `release`. The `runtime` node's config must not set the two inputs `release` names, since the release flow sets them. |
 | `SharedResource` | `name`, `description`, `scope` (`shared` \| `environment`), `nodes`, `exports` | `name` as for a component. `uses` (here and on components and runtimes) lists shared resources only: a `shared` one uses only `shared` ones, no cycles. Every root a part reads is its own node, a reserved root, a name in its `uses` or (a class part) its own component, and `<name>.<export>` is a declared export; no node takes a name its part reads as a root; node names are unique across the parts of one shared or environment scope ([components.md](components.md) §2–3). Loaded and checked; deployed from S21e. |
-| `Policy` | `name`, `reason`, `match`, and at least one of `set` / `default` / `require` | `name` unique. `require` names a declared component, only on a workload-scope policy. `add` is retired: a policy with it is rejected with a message saying `require` replaces it |
+| `Policy` | `name`, `reason`, `match`, and at least one of `set` / `default` / `require` | `name` unique. `require` names a declared component, only on a workload-scope policy. `add` is retired: the schema refuses it as an unknown field |
 | `Naming` | `rules` (resource kind → `pattern`, `maxLength`, `allowed`) | files merge; a rule is defined once; `allowed` must be a valid regex character class that accepts every hex digit `0-9a-f` |
 | `Roles` | `roles` (name → role-definition GUID) | files merge; a role is defined once |
 | `Grants` | `targets` (grant template → the input that names its target) | files merge; a template is listed once. Every `grant` node's template must be listed ([Engine rules](#engine-rules-generic-code-written-once), Security) |
@@ -418,8 +421,8 @@ Per node:
 | Field | Meaning |
 |---|---|
 | id | `<workload>/<env>/<scope>/<node>`. Scope is the requirement's effective id, or `@workload` for the runtime's nodes (requirement ids cannot contain `@`); the runtime node is `<workload>/<env>/@workload/runtime`. |
-| stack | The id with `/` replaced by `.` and `@` by `_` (Pulumi stack names allow `[A-Za-z0-9_.-]`), for example `shop.dev.orders.database` and `shop.dev._workload.runtime`: one backend stack per node, so workloads never share a stack. Unique by construction: ids contain no `.` or `_`, and `_workload` cannot be a requirement id. Node names (component and runtime `nodes:` keys) must match `^[a-z]([a-z0-9-]*[a-z0-9])?$`; the catalog loader enforces it in code, since the schema validator ignores `propertyNames`. Length limits of the backend are the adapter's concern. |
-| scope, name, template, kind | As expanded (`kind`: `create` or `grant`). |
+| stack | The id with `/` replaced by `.` and `@` by `_` (Pulumi stack names allow `[A-Za-z0-9_.-]`), for example `shop.dev.orders.database` and `shop.dev._workload.runtime`: one backend stack per node, so workloads never share a stack. Unique by construction: ids contain no `.` or `_`, and `_workload` cannot be a requirement id. Node names (component and runtime `nodes:` keys) must match `^[a-z]([a-z0-9-]*[a-z0-9])?$`; the shared part schema states it as `patternProperties` with `additionalProperties: false` and its `message`, since the schema validator ignores `propertyNames`. Length limits of the backend are the adapter's concern. |
+| scope, name, template, kind | As expanded (`kind`: `create` or `grant`). The node also carries where its catalog file names the template (`TemplateSource`), for errors; it is not part of the graph JSON or the hash. |
 | config, provenance | Values (`Resolved` or `Pending`) and where each leaf came from. |
 | depends-on | Ids of nodes in the same scope referenced by a pending `${node.output}`, the runtime node's id when the config references `runtime.*`, and, for the runtime node reading `${resource.<id>.<export>}`, the nodes that export waits on (its own `${node.output}` references, in the requirement's scope); sorted. |
 | phase | `infrastructure`, `runtime` or `after-runtime`, derived (see [Engine rules](#engine-rules-generic-code-written-once)). |
@@ -447,8 +450,10 @@ A cycle is an error naming the nodes in it (`a -> b -> a`); a node referencing i
    Pulumi-specific, so the resolver stays backend-agnostic). It checks a `ResolvedGraph` against the template
    directory: every node's template exists; every config key a node sets is declared in the template's
    `configuration:`; every input without a default is set; every `${node.output}` reference (in node config and in
-   exports) names an output the referenced node's template declares. Errors carry node id, template and key. The
-   seed catalog and sample workload are checked in the test suite.
+   exports) names an output the referenced node's template declares. A missing template and an export's misread output
+   are located where the catalog writes them (the graph's `TemplateSource` and `ExportSources`, read by the binder); a
+   node's inputs by node id and input key, since a value may come from a policy. The seed catalog and sample workload are
+   checked in the test suite.
 2. **Golden tests:** sample workloads resolved and snapshotted; PR diffs show resolution changes.
 3. **Fleet dry-run:** resolve every registered workload against the PR's catalog and report which change.
 4. **`pulumi preview` in a sandbox** for changed templates.
@@ -458,8 +463,11 @@ Adding a component = one component file + its templates + one golden test.
 
 ## Engine components (C#, backend-agnostic, ~1–1.5k LOC)
 
-`CatalogParser` (parser over a `SourceCatalog` the client reads; reuse `YamlSchemaValidator`) · `Matcher` · `Expander` · `PolicyApplier` (policies, layering, provenance) ·
-`ExpressionEvaluator` · `Namer` · `GraphBuilder` (cycle detection, topological sort, phases).
+`CatalogLoader` (over a `SourceCatalog` the client reads: `DocumentLoader` reads each document and picks its schema by `kind`; `SchemaIndex`
+holds each schema's annotations; `NameRules` checks names and references; `Binder` fills the concept records; the concept rules
+`ReadRules`, `ScopeRules`, `GrantRules`, `ContractRules`, `PolicyRules`, `RolloutRules` check them) · `Expander` · `PolicyApplier` (policies,
+layering, provenance) · `ExpressionEvaluator` with `BuiltIns` (`name()`, `guid()`) · `GraphBuilder` (cycle detection, topological sort,
+phases). [documents.md](documents.md) §3 describes the loader, the index and the binder.
 `Resolver.Resolve(workload, file, catalog, environment)` runs expand → policies → graph in one call (used by the CLI and the orchestrator). The orchestrator (`jd.orchestrator`) evaluates pending config again with deployed outputs: see [provisioning.md](provisioning.md#orchestrator).
 `TemplateLibrary` (in `jd.bp.pulumi`) checks the graph against the templates. `DeploymentPackage` carries the stack name (`StackName`) separately from the template (`DeploymentContent`).
 

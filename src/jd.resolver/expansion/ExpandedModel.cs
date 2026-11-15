@@ -26,8 +26,11 @@ public sealed record ConfigObject(IReadOnlyDictionary<string, ConfigValue> Prope
 /// <summary>A list from the catalog, each item evaluated; item order is kept, and the graph treats its strings as one provenance leaf.</summary>
 public sealed record ConfigArray(IReadOnlyList<ConfigValue> Items) : ConfigValue;
 
-/// <summary>A catalog node with its config evaluated, named as its part names it; policies apply to it next.</summary>
-public sealed record ExpandedNode(string Name, string Template, NodeKind Kind, IReadOnlyDictionary<string, ConfigValue> Config);
+/// <summary>
+/// A catalog node with its config evaluated, named as its part names it; policies apply to it next. <see cref="TemplateSource"/> is where its
+/// catalog file names its template.
+/// </summary>
+public sealed record ExpandedNode(string Name, string Template, SourceLocation TemplateSource, NodeKind Kind, IReadOnlyDictionary<string, ConfigValue> Config);
 
 /// <summary>
 /// One requirement expanded from the component in <see cref="Source"/> (catalog-relative path of its file), or one part of an environment

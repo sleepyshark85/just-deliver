@@ -29,5 +29,6 @@ supersede it with a new one.
 | [0016](0016-portal-deep-links.md) | Portal deep-link permissions | G43 |
 | [0017](0017-catalog-layer-policies-require.md) | Team definitions over a platform catalog; policies require, never add (supersedes 0004) | S21 |
 | [0018](0018-environment-offers-runtime.md) | The environment offers the runtime (supersedes 0013's first decision) | S21 |
+| [0019](0019-engine-knows-concepts.md) | The engine knows concepts, schemas bind fields | S24 |
 
 Origin IDs refer to [open-questions.md](../open-questions.md).

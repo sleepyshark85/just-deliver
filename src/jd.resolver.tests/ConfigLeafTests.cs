@@ -13,7 +13,7 @@ namespace jd.resolver.tests;
 public sealed class ConfigLeafTests
 {
     private static GraphNode Node(Dictionary<string, ConfigValue> config, Dictionary<string, Provenance> provenance) =>
-        new("w/e/s/n", "s", "n", "template", NodeKind.Create, "w.e.s.n", Phase.Infrastructure, config, provenance, "hash", []);
+        new("w/e/s/n", "s", "n", "template", new SourceLocation("c.yaml", "nodes.n.template"), NodeKind.Create, "w.e.s.n", Phase.Infrastructure, config, provenance, "hash", []);
 
     [Fact]
     public void A_nodes_leaves_are_in_ordinal_path_order_each_with_its_provenance_or_none()

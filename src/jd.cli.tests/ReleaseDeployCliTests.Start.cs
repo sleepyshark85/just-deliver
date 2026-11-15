@@ -141,10 +141,17 @@ public sealed partial class ReleaseDeployCliTests
 
         await AssertQualifyRefusedAsync(
             () => RunAsync(backend, ["release", "qualify", set, "--env", Environment, "--catalog", catalog]),
+            // Each node once, where the catalog names its template, though both workloads deploy it (S24g; before: per node id, at "template").
             $"{Path.Combine(catalog, "templates")}: template directory not found.\n" + string.Concat(
-                from workload in new[] { Worker, App }
-                from node in new (string Node, string Template)[] { ("database/container", "cosmos-sql-container"), ("monitoring/appinsights", "application-insights"), ("@workload/runtime", "container-app"), ("database/access", "cosmos-sql-role-assignment"), ("monitoring/access", "role-assignment") }
-                select $"{workload}/dev/{node.Node}: template: template 'azure/{node.Template}' is not in the template library.\n"));
+                from node in new (string File, string Location, string Template)[]
+                {
+                    ("components/database.yaml", "implementations.default.classes.standard.nodes.container.template", "cosmos-sql-container"),
+                    ("components/monitoring.yaml", "implementations.default.classes.standard.nodes.appinsights.template", "application-insights"),
+                    ("runtimes/container-app.yaml", "implementations.default.nodes.runtime.template", "container-app"),
+                    ("components/database.yaml", "implementations.default.classes.standard.nodes.access.template", "cosmos-sql-role-assignment"),
+                    ("components/monitoring.yaml", "implementations.default.classes.standard.nodes.access.template", "role-assignment"),
+                }
+                select $"{Path.Combine(catalog, node.File)}: {node.Location}: template 'azure/{node.Template}' is not in the template library.\n"));
         Assert.Empty(backend.Calls);
     }
 

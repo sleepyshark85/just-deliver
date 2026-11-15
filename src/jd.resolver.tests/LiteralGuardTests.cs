@@ -4,7 +4,7 @@ using Xunit;
 namespace jd.resolver.tests;
 
 // The literal guard of docs/architecture/documents.md section 9: no production C# literal names a field the schemas declare. Its allowlist holds
-// section 2's exceptions and today's other literals; each later S24 slice removes its entries, and a stale entry fails, so the list only shrinks.
+// section 2's exceptions and the prose false positives only; a stale entry fails.
 public sealed partial class LiteralGuardTests
 {
     // A literal of a production source that names a field; File is relative to src/.

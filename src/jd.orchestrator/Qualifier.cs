@@ -5,33 +5,6 @@ using jd.resolver.graph;
 
 namespace jd.orchestrator;
 
-/// <summary>What an installation-qualification check compares with the live deployment.</summary>
-public enum IqCheckKind
-{
-    /// <summary>A node of the workload's graph, previewed against what is deployed: any change means the deployment drifted.</summary>
-    Drift,
-
-    /// <summary>A revision that holds traffic runs the pinned image.</summary>
-    Image,
-}
-
-/// <param name="Kind">What was checked.</param>
-/// <param name="Workload">The workload it belongs to.</param>
-/// <param name="Subject">The node (drift), the revision (image) or, when there is none to name, the workload.</param>
-/// <param name="Failure">Why it failed, naming the node or revision; empty when it passed.</param>
-public sealed record IqCheck(IqCheckKind Kind, string Workload, string Subject, string Failure)
-{
-    /// <summary>True when the check found the deployment as the release pins it.</summary>
-    public bool Passed => Failure.Length == 0;
-}
-
-/// <summary>Installation qualification: every check that ran, none left out because another failed.</summary>
-public sealed record IqResult(IReadOnlyList<IqCheck> Checks, TimeSpan Elapsed)
-{
-    /// <summary>True when every check passed, so the release is qualified.</summary>
-    public bool Passed => Checks.All(c => c.Passed);
-}
-
 /// <summary>
 /// Installation qualification of a deployed release (docs/architecture/release-record.md sections 5 and 6): the deployment still matches its
 /// graphs (the preview walk reports no change anywhere) and every revision that serves traffic runs the pinned image, observed live.
@@ -60,8 +33,8 @@ public sealed class Qualifier(Orchestrator orchestrator, IBackEndProvider provid
         var failure = report switch
         {
             null => "not checked: the preview of the workload stopped before it.",
-            { Outcome: NodeOutcome.Previewed } when !DeploymentResult.ChangedOperations(report.Summary).Any() => string.Empty,
-            { Outcome: NodeOutcome.Previewed } => "differs from what is deployed: " + string.Join(", ", DeploymentResult.ChangedOperations(report.Summary).Select(c => $"{c.Key} {c.Value.ToString(CultureInfo.InvariantCulture)}")),
+            { Outcome: NodeOutcome.Previewed, ChangedOperations: [] } => string.Empty,
+            { Outcome: NodeOutcome.Previewed } => "differs from what is deployed: " + string.Join(", ", report.ChangedOperations.Select(c => $"{c.Key} {c.Value.ToString(CultureInfo.InvariantCulture)}")),
             _ => $"cannot be previewed ({report.Outcome}): {report.Message}",
         };
         return new IqCheck(IqCheckKind.Drift, graph.Workload, node.Id, failure.Length == 0 ? failure : $"node {node.Id} {failure}");
