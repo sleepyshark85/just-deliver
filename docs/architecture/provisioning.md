@@ -178,8 +178,8 @@ hand-authors it. YAML runtime gotcha: numeric-looking strings such as `"1.2"` ar
 
 ### Orchestrator
 
-`jd.orchestrator` (application layer: depends on `jd.core` and `jd.resolver`, never on Pulumi) walks a `ResolvedGraph`
-in graph order through `IBackEndProvider`, one node at a time. Template content comes from `ITemplateStore`
+`jd.orchestrator` (application layer: depends on `jd.core` and `jd.resolver`, never on Pulumi) holds the use cases each command calls
+([application.md](application.md)) and the walk: it walks a `ResolvedGraph` in graph order through `IBackEndProvider`, one node at a time. Template content comes from `ITemplateStore`
 (implemented by `TemplateLibrary` over `<catalog>/templates`).
 
 - **Deploy.** Per infrastructure-phase node: evaluate the node's pending config again with the same
@@ -257,7 +257,7 @@ in graph order through `IBackEndProvider`, one node at a time. Template content 
 
 A release set ([release.md](release.md)) is deployed by the same path as one workload, once per workload. `ReleaseResolver`
 (`jd.resolver`) parses each embedded definition and runs `Resolver.Resolve` in `Order`, naming errors `<set>#<workload>`;
-the CLI checks every graph against the templates; then `Orchestrator.DeployReleaseAsync` walks the graphs in that order
+the use case checks every graph against the templates ([application.md](application.md)); then `Orchestrator.DeployReleaseAsync` walks the graphs in that order
 (`DeployAsync`, or `PreviewAsync` with `--preview`) and stops after the first workload that fails (a revision that fails its probe included), so later workloads are
 never touched. All resolution and checks come before the first node, so a resolve error in the last workload creates nothing.
 Rollback of the workloads before a failure is not part of the walk (open question E31): the run reports where it stopped and
