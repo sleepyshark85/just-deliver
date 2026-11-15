@@ -138,7 +138,7 @@ These hold across slices; a change to one changes its design note or ADR first.
 - **Data drives the platform.** Templates, components, policies and the environment descriptor carry every resource fact;
   the annotated schemas in `schemas/` carry every file's structure ([documents.md](../architecture/documents.md),
   [ADR 0019](../decisions/0019-engine-knows-concepts.md)). The code knows the engine's concepts (documents.md §2) and reads a
-  document only through the roles its schema binds: no field name, kind name or location is spelled in C#, and an error is
+  document only through the roles its schema binds: no field name, kind name or location is spelled in C#, and a document's error is
   located where the binder read the value. The release flow reads the outputs a runtime's `release` block names. The literal
   guard (`LiteralGuardTests`) fails on a production literal that names a schema field, outside section 2's exceptions.
 - **Ports in `jd.core`, adapters at the edge.** Pulumi only in `jd.bp.pulumi`, Azure SDKs only in `jd.azure`, wiring

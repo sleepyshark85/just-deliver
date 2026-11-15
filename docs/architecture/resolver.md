@@ -57,8 +57,8 @@ catalog/
 The directory layout is organisational only. The loader takes every `*.yaml` under the catalog root
 (except `templates/`, which holds Pulumi YAML) as **one YAML document per file** (no `---`
 multi-document files) and finds out what it is from the required top-level `kind`: `Catalog`,
-`Component`, `Runtime`, `SharedResource`, `Policy`, `Naming`, `Roles` or `Grants`. An unknown or missing `kind` is an error; the retired kinds `ResourceType` and
-`Mapping` are rejected with a message saying what replaced them.
+`Component`, `Runtime`, `SharedResource`, `Policy`, `Naming`, `Roles` or `Grants`. A missing `kind` is an error, and so is an unknown one (the retired kinds `ResourceType` and
+`Mapping` included): it is refused with the expected kinds.
 
 The catalog is versioned as one unit; a deployment records the catalog version next to the
 definition SHA ([ADR 0007](../decisions/0007-definition-upload-snapshot.md)).

@@ -178,7 +178,9 @@ S24's literal guard finds nothing in `jd.cli` except its commands and options (d
 - `LoadError` (`file: location: message`) is unchanged. It is produced where it is today (loaders, resolver, template check), returned in
   `Errors`, and printed by the CLI one per line on stderr, in the same order. The catalog loader's errors (and only those: a resolver error
   naming a catalog document prints as today) are made full paths by the use case, through `SourceCatalog.Located`, since a result has one
-  `Errors` list and the CLI cannot tell them apart (lead ruling, S25b2); the template errors already carry their names (section 5), as today.
+  `Errors` list and the CLI cannot tell them apart (lead ruling, S25b2). The template misfits that name a catalog file get full paths
+  too (a missing template, an export misfit: `<catalog>/components/x.yaml: …`), because the catalog is where the template is named;
+  the other template errors already carry their names (section 5), as today.
 - Expected failures inside a run are `Problem`s at the step where they arise today: the identity adapter's `InvalidOperationException`
   (`Cli.cs:287`), a store's `ArgumentException` (`ReleaseDeployCli.cs:246`), a reader that cannot be built (`:153`), a record write
   (`:264`). The CLI prints `jd: <its words>: <values>` as today.
