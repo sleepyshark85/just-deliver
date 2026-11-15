@@ -42,7 +42,8 @@ public sealed class DeployedConfigSnapshotTests : IDisposable
         public Task<DeploymentResult> DeployAsync(DeploymentPackage package, CancellationToken cancellationToken)
         {
             Packages.Add(package);
-            var outputs = ((YamlSchemaValidator.ParseYaml(package.DeploymentContent) as JObject)?["outputs"] as JObject)?.Properties()
+            Assert.True(YamlSchemaValidator.TryParseYaml(package.DeploymentContent, out var tree, out var error), error);
+            var outputs = ((tree as JObject)?["outputs"] as JObject)?.Properties()
                 .ToDictionary(p => p.Name, p => new ConfigEntry(p.Name == "traffic" ? """[{"revisionName":"app--r1","weight":100}]""" : $"{package.StackName}/{p.Name}")) ?? [];
             _deployed[package.StackName] = outputs;
             return Task.FromResult(new DeploymentResult { Outputs = outputs, Summary = new() { ["Create"] = 1 } });

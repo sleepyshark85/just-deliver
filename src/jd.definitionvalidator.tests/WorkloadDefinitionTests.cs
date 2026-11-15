@@ -8,8 +8,6 @@ public class WorkloadDefinitionTests
     private static readonly string SchemaPath = Path.Combine(AppContext.BaseDirectory, "workload.schema.json");
     private static readonly string SamplePath = Path.Combine(AppContext.BaseDirectory, "sample-workload.yaml");
 
-    private readonly YamlSchemaValidator _validator = new();
-
     private const string Header = @"
 apiVersion: just-deliver/v1
 kind: Workload
@@ -18,8 +16,8 @@ metadata:
   team: platform-team
 ";
 
-    private async Task<ValidationResult> ValidateAsync(string yaml) =>
-        await _validator.ValidateContentAsync(await File.ReadAllTextAsync(SchemaPath), yaml);
+    private static async Task<ValidationResult> ValidateAsync(string yaml) =>
+        await Validation.ValidateYamlAsync(await File.ReadAllTextAsync(SchemaPath), yaml);
 
     private static string Workload(string containerExtras, string requires) =>
         Header + "container:\n  image: registry.example/app:1.0.0\n" + containerExtras + "requires:\n" + requires;
@@ -35,7 +33,7 @@ metadata:
     [Fact]
     public async Task SampleWorkload_IsValid()
     {
-        var result = await _validator.ValidateAsync(SchemaPath, SamplePath);
+        var result = await ValidateAsync(await File.ReadAllTextAsync(SamplePath));
 
         Assert.True(result.IsValid, result.ToString());
     }
@@ -80,18 +78,14 @@ metadata:
     [Fact]
     public async Task BrokenYaml_IsReportedNotThrown()
     {
-        var result = await ValidateAsync(Header + "container: [x\nother: 1\n");
-
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.StartsWith("Validation error:"));
+        Assert.False(YamlSchemaValidator.TryParseYaml(Header + "container: [x\nother: 1\n", out _, out var error));
+        Assert.NotEmpty(error);
     }
 
     [Fact]
     public async Task RepeatedKey_IsRejected()
     {
-        var result = await ValidateAsync(Header + "container:\n  image: registry.example/app:1.0.0\n  image: other:2\n");
-
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Contains("duplicate key 'image' at line 9."));
+        Assert.False(YamlSchemaValidator.TryParseYaml(Header + "container:\n  image: registry.example/app:1.0.0\n  image: other:2\n", out _, out var error));
+        Assert.Equal("duplicate key 'image' at line 9.", error);
     }
 }

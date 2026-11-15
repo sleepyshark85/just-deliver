@@ -60,7 +60,7 @@ environmentTypes:
 - **Load checks:** implementation keys are declared types (S21e: of layer `environment`), or `default`; every implementation declares the same
   classes (so a workload's `class` is valid in every environment); every class part exports exactly the contract.
 - `approval: true` replaces the schema coupling `tier: protected` → `approval` ([approvals.md](approvals.md) §2): a definition or descriptor
-  of such a type without the block is an error. As today, any type may carry a block, and the CLI gates on the block, never on the type.
+  of such a type without the block is an error. As today, any type may carry a block, and the use cases gate on the block, never on the type ([application.md](application.md)).
 - Policies may match the type (`match: { environmentType: prod }`). `env.tier` becomes `env.type`.
 
 ### Scopes

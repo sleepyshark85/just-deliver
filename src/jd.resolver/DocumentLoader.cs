@@ -1,6 +1,5 @@
 using jd.definitionvalidator;
 using Newtonsoft.Json.Linq;
-using YamlDotNet.Core;
 
 namespace jd.resolver;
 
@@ -26,20 +25,10 @@ public static class DocumentLoader
         await ValidatedAsync(Read(source, tree, kinds), kinds, cancellationToken);
 
     /// <summary>Parses YAML text into a document with a kind, without validating it; <paramref name="kinds"/> are named when the kind is missing.</summary>
-    internal static LoadResult<Document> Parse(string source, string text, IReadOnlyCollection<string> kinds)
-    {
-        JToken tree;
-        try
-        {
-            tree = YamlSchemaValidator.ParseYaml(text);
-        }
-        catch (YamlException ex)
-        {
-            return new LoadResult<Document>(null, [new LoadError(source, string.Empty, $"not valid YAML: {YamlSchemaValidator.DescribeYamlError(ex, text)}")]);
-        }
-
-        return Read(source, tree, kinds);
-    }
+    internal static LoadResult<Document> Parse(string source, string text, IReadOnlyCollection<string> kinds) =>
+        YamlSchemaValidator.TryParseYaml(text, out var tree, out var error)
+            ? Read(source, tree, kinds)
+            : new LoadResult<Document>(null, [new LoadError(source, string.Empty, $"not valid YAML: {error}")]);
 
     /// <summary>Refuses a kind outside <paramref name="kinds"/>, else validates the document against the schema of its kind.</summary>
     internal static async Task<IReadOnlyList<LoadError>> ValidateAsync(Document document, IReadOnlyCollection<string> kinds, CancellationToken cancellationToken)

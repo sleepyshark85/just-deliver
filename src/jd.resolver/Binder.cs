@@ -13,7 +13,8 @@ namespace jd.resolver;
 /// value with where it was read. No kind or field is spelled here. A role's value belongs to the nearest object that holds one: the record's own
 /// object, else the closest object enclosing it, so a value an owner holds counts for each of its parts. A block a part holds below its own
 /// fields (a runtime part's probe and release) is read at any depth inside the part. An absent field binds its schema's <c>default</c>.
-/// Only schema-valid documents are bound.
+/// Only schema-valid documents are bound. The other direction writes a document of a kind from role values, walking its schema
+/// (<see cref="Write"/>, documents.md section 5).
 /// </summary>
 internal sealed class Binder(SchemaIndex index)
 {
