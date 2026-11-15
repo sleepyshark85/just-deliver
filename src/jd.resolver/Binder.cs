@@ -1,7 +1,10 @@
+using System.Globalization;
 using jd.resolver.catalog;
 using jd.resolver.environment;
+using jd.resolver.release;
 using jd.resolver.workload;
 using Newtonsoft.Json.Linq;
+using NJsonSchema;
 
 namespace jd.resolver;
 
@@ -139,8 +142,90 @@ internal sealed class Binder(SchemaIndex index)
         };
     }
 
+    /// <summary>
+    /// The release manifest or set <paramref name="document"/> is, by the <c>release.*</c> roles: its label, when a set was created, and one entry
+    /// per <see cref="Roles.ReleaseWorkloads"/> item, each with where its definition and its dependencies are held.
+    /// </summary>
+    public ReleaseDocument ReadRelease(Document document)
+    {
+        var values = ValuesOf(document);
+        return new ReleaseDocument(
+            Text(values.First(Roles.ReleaseLabel)),
+            Text(values.First(Roles.ReleaseCreatedAt)),
+            [.. values.Every(Roles.ReleaseWorkloads).Select(entry => ReadReleaseEntry(values, entry))])
+        {
+            CreatedAtLocation = values.Locate(Roles.ReleaseCreatedAt),
+            WorkloadsLocation = values.LocateList(Roles.ReleaseWorkloads),
+        };
+    }
+
     /// <summary>The value of <paramref name="role"/> held at the root of <paramref name="document"/>, for a rule on its raw shape; null when it holds none.</summary>
     public JToken? ReadValue(Document document, string role) => ValuesOf(document).Nearest(role, document.Body);
+
+    /// <summary>The property a document of <paramref name="kind"/> holds <paramref name="role"/> in, as errors name the field; empty when the kind does not bind it.</summary>
+    public string FieldName(string kind, string role) => new Values(new JObject(), index.RolesOf(kind)).NameOf(role);
+
+    /// <summary>
+    /// The descriptor of <paramref name="environment"/> as a document of <paramref name="kind"/>, written by the <c>env.*</c> and <c>approval.*</c>
+    /// roles (<see cref="Write"/>); its values are <paramref name="values"/>, the deployed exports as nested mappings of strings, which the
+    /// environment's flat <see cref="EnvironmentDescriptor.Values"/> cannot hold apart from a dotted key the schema refuses.
+    /// </summary>
+    public LoadResult<Document> WriteEnvironment(string source, string kind, EnvironmentDescriptor environment, JObject values) => Write(source, kind, new JObject
+    {
+        [Roles.EnvironmentName] = environment.Name,
+        [Roles.EnvironmentRegion] = environment.Region,
+        [Roles.EnvironmentType] = environment.Type,
+        [Roles.EnvironmentOffers] = new JArray(environment.Offers),
+        [Roles.EnvironmentValues] = values,
+        [Roles.EnvironmentApproval] = environment.Approval is { } approval
+            ? new JObject
+            {
+                [Roles.ApprovalQualifiedOn] = approval.QualifiedOn,
+                [Roles.ApprovalRequired] = approval.Required,
+                [Roles.ApprovalApprovers] = new JArray(approval.Approvers),
+                [Roles.ApprovalSeparate] = approval.SeparateFromDeployer,
+            }
+            : null,
+    });
+
+    /// <summary>
+    /// <paramref name="set"/> as a document of <paramref name="kind"/>, written by the <c>release.*</c> roles (<see cref="Write"/>): its label, the
+    /// time it was created in the documents' time form, and per workload the definition, the hash that pins it and its dependencies.
+    /// </summary>
+    public LoadResult<Document> WriteReleaseSet(string source, string kind, ReleaseSet set) => Write(source, kind, new JObject
+    {
+        [Roles.ReleaseLabel] = set.Label,
+        [Roles.ReleaseCreatedAt] = set.CreatedAt.ToString(ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture),
+        [Roles.ReleaseWorkloads] = new JArray(set.Workloads.Select(workload => new JObject
+        {
+            [Roles.ReleaseDefinition] = workload.Definition,
+            [Roles.ReleaseDefinitionSha256] = workload.DefinitionSha256,
+            [Roles.ReleaseDependsOn] = new JArray(workload.DependsOn),
+        })),
+    });
+
+    /// <summary>
+    /// A document of <paramref name="kind"/> written from <paramref name="record"/>, its values by role (docs/architecture/documents.md section 5):
+    /// the kind first, then each field the schema binds in the schema's property order. A field whose subschema binds fields of its own is written
+    /// from the nested record the role holds, a <c>many</c> role on a list's items writes one item per record of the list it holds, and any other
+    /// value is written as given, so a map keeps its order. A null or absent value is not written, nor is a field the schema does not bind, so the
+    /// schema is the allowlist of what reaches the file. A required field without a value is an error at its location; else the document is
+    /// validated against the schema. <paramref name="source"/> names the document in its errors; it is set exactly when there are none.
+    /// </summary>
+    public LoadResult<Document> Write(string source, string kind, JObject record)
+    {
+        var body = new JObject { [DocumentLoader.KindField] = kind };
+        var writer = new Writer(source);
+        writer.Fill(body, index.SchemaOf(kind), record);
+        if (writer.Missing.Count > 0)
+        {
+            return new LoadResult<Document>(null, writer.Missing);
+        }
+
+        var document = new Document(source, kind, body);
+        var invalid = index.Validate(document);
+        return new LoadResult<Document>(invalid.Count == 0 ? document : null, invalid);
+    }
 
     private Values ValuesOf(Document document) => new(document.Body, index.RolesOf(document.Kind));
 
@@ -233,6 +318,20 @@ internal sealed class Binder(SchemaIndex index)
             template?.Path ?? node.Path);
     }
 
+    private static ReleaseEntry ReadReleaseEntry(Values values, JToken entry)
+    {
+        var dependsOn = values.Nearest(Roles.ReleaseDependsOn, entry);
+        var path = values.Nearest(Roles.ReleaseDefinitionPath, entry);
+        var definition = values.Nearest(Roles.ReleaseDefinition, entry);
+        return new ReleaseEntry(Text(path), Text(definition), Text(values.Nearest(Roles.ReleaseDefinitionSha256, entry)), Strings(dependsOn))
+        {
+            // Safe: both kinds require the entry's definition, a manifest's path or a set's text, and only schema-valid documents are bound.
+            Location = entry.Path,
+            DefinitionLocation = (path ?? definition)!.Path,
+            DependsOnLocations = dependsOn is JArray list ? [.. list.Select(item => item.Path)] : [],
+        };
+    }
+
     private static Requirement ReadRequirement(Values values, JToken requirement) => new(
         Text(values.Nearest(Roles.RequirementType, requirement)),
         Text(values.Nearest(Roles.RequirementClass, requirement)))
@@ -262,6 +361,60 @@ internal sealed class Binder(SchemaIndex index)
     private static string Text(JToken? token) => (string?)token ?? string.Empty;
 
     private static List<string> Strings(JToken? token) => token is JArray list ? [.. list.Select(Text)] : [];
+
+    // Writes a document's bound fields from role values, and collects the required ones without a value. Each object is attached before it is
+    // filled, so a missing field is located where the document holds it. A nested record is a JObject by role and a many role holds a list of them:
+    // the binder's writers build them so, which the cast relies on.
+    private sealed class Writer(string source)
+    {
+        public List<LoadError> Missing { get; } = [];
+
+        public void Fill(JObject target, JsonSchema schema, JObject record)
+        {
+            foreach (var (name, property) in schema.ActualSchema.Properties)
+            {
+                var items = property.ActualSchema.Item is { } item && SchemaIndex.RoleOf(item) is not null ? item : null;
+                if ((SchemaIndex.RoleOf(property) ?? (items is null ? null : SchemaIndex.RoleOf(items))) is not { } role)
+                {
+                    continue;
+                }
+
+                if (record[role] is not { Type: not JTokenType.Null } value)
+                {
+                    if (property.IsRequired)
+                    {
+                        Missing.Add(new LoadError(source, target.Path.Length == 0 ? name : $"{target.Path}.{name}", $"required, but the record holds no value for role '{role}'."));
+                    }
+                }
+                else if (items is not null)
+                {
+                    FillList(target, name, items, value);
+                }
+                else if (property.ActualSchema.ActualProperties.Values.Any(field => SchemaIndex.RoleOf(field) is not null))
+                {
+                    var block = new JObject();
+                    target[name] = block;
+                    Fill(block, property, (JObject)value);
+                }
+                else
+                {
+                    target[name] = value.DeepClone();
+                }
+            }
+        }
+
+        private void FillList(JObject target, string name, JsonSchema items, JToken records)
+        {
+            var list = new JArray();
+            target[name] = list;
+            foreach (var record in records.Children<JObject>())
+            {
+                var item = new JObject();
+                list.Add(item);
+                Fill(item, items, record);
+            }
+        }
+    }
 
     // A document's role values: every token at a role's paths, and the role's default.
     private sealed class Values(JObject body, IReadOnlyList<RoleField> roles)

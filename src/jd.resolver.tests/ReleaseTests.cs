@@ -85,7 +85,7 @@ public sealed class ReleaseTests : IDisposable
     {
         var set = await BuildAsync(WriteManifest(("web-app", ["web-db"]), ("web-db", [])));
         var path = Path.Combine(_temp, "set.yaml");
-        await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
+        await File.WriteAllBytesAsync(path, await ReleaseSetFile.SerializeAsync(set));
 
         var loaded = await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path));
 
@@ -220,7 +220,7 @@ public sealed class ReleaseTests : IDisposable
 
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(bytes)), set.Workloads[0].DefinitionSha256);
         var path = Path.Combine(_temp, "set.yaml");
-        await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
+        await File.WriteAllBytesAsync(path, await ReleaseSetFile.SerializeAsync(set));
         var loaded = await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path));
         Assert.Empty(loaded.Errors);
         Assert.Equal(Key(set), Key(loaded.Set!));
@@ -231,7 +231,7 @@ public sealed class ReleaseTests : IDisposable
     {
         var set = await BuildAsync(WriteManifest(("web-app", []), ("web-db", [])));
         var path = Path.Combine(_temp, "set.yaml");
-        await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
+        await File.WriteAllBytesAsync(path, await ReleaseSetFile.SerializeAsync(set));
         await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(path)).Replace("team: team-a", "team: team-b"));
 
         var errors = (await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path))).Errors.Select(e => e.ToString()).ToList();
@@ -247,7 +247,7 @@ public sealed class ReleaseTests : IDisposable
     {
         var set = await BuildAsync(WriteManifest(("web-app", []), ("web-db", [])));
         var path = Path.Combine(_temp, "set.yaml");
-        await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
+        await File.WriteAllBytesAsync(path, await ReleaseSetFile.SerializeAsync(set));
         return (path, await File.ReadAllTextAsync(path), set);
     }
 
@@ -270,7 +270,7 @@ public sealed class ReleaseTests : IDisposable
     {
         var set = await BuildAsync(WriteManifest(("web-app", [])));
         var path = Path.Combine(_temp, "set.yaml");
-        await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
+        await File.WriteAllBytesAsync(path, await ReleaseSetFile.SerializeAsync(set));
         var text = await File.ReadAllTextAsync(path);
         const string Pin = "@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9";
         var rehash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Definition("web-app").Replace(Pin, ":latest"))));
@@ -287,7 +287,7 @@ public sealed class ReleaseTests : IDisposable
     {
         var set = await BuildAsync(WriteManifest(("web-app", [])));
         var path = Path.Combine(_temp, "set.yaml");
-        await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
+        await File.WriteAllBytesAsync(path, await ReleaseSetFile.SerializeAsync(set));
         var text = await File.ReadAllTextAsync(path);
         var rehash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Definition("web-app").Replace("team: team-a", "team: [team-a"))));
         await File.WriteAllTextAsync(path, text.Replace("team: team-a", "team: [team-a").Replace(set.Workloads[0].DefinitionSha256, rehash));
@@ -318,7 +318,7 @@ public sealed class ReleaseTests : IDisposable
 
         var set = await BuildAsync(manifest);
         var path = Path.Combine(_temp, "set.yaml");
-        await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set));
+        await File.WriteAllBytesAsync(path, await ReleaseSetFile.SerializeAsync(set));
         var loaded = await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path));
 
         Assert.Equal("web-app", set.Workloads[0].Name);
@@ -342,7 +342,7 @@ public sealed class ReleaseTests : IDisposable
         var manifest = Path.Combine(AppContext.BaseDirectory, "samples", "releases", "sample.manifest.yaml");
         var set = await BuildAsync(manifest);
         var path = Path.Combine(_temp, "sample.release-set.yaml");
-        await File.WriteAllBytesAsync(path, ReleaseSetFile.Serialize(set with { CreatedAt = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero) }));
+        await File.WriteAllBytesAsync(path, await ReleaseSetFile.SerializeAsync(set with { CreatedAt = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero) }));
 
         var actual = await File.ReadAllTextAsync(path);
         if (System.Environment.GetEnvironmentVariable("JD_UPDATE_GOLDEN") == "1")

@@ -11,6 +11,7 @@
     "label": {
       "description": "Release label, semantic-version shaped.",
       "type": "string",
+      "x-jd": { "is": "release.label" },
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z0-9.]+)?$"
     },
     "workloads": {
@@ -18,17 +19,20 @@
       "minItems": 1,
       "items": {
         "type": "object",
+        "x-jd": { "is": "release.workloads" },
         "additionalProperties": false,
         "required": ["definition"],
         "properties": {
           "definition": {
             "description": "Path of the workload definition, relative to this manifest.",
             "type": "string",
+            "x-jd": { "is": "release.definition-path" },
             "minLength": 1
           },
           "dependsOn": {
             "description": "Names (metadata.name) of workloads in this manifest that must be deployed first. Ordering only: it grants no access to their resources.",
             "type": "array",
+            "x-jd": { "is": "release.depends-on" },
             "uniqueItems": true,
             "items": { "type": "string", "minLength": 1 }
           }

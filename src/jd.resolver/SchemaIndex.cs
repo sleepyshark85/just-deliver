@@ -103,6 +103,12 @@ internal sealed class SchemaIndex
         }
     }
 
+    /// <summary>The schema of <paramref name="kind"/>, which must be one the schemas declare: the shape the binder writes a document of the kind in.</summary>
+    public JsonSchema SchemaOf(string kind) => _byKind[kind];
+
+    /// <summary>The role <paramref name="schema"/> holds (<c>is</c>), on it or on the schema it refers to; null when it holds none.</summary>
+    public static string? RoleOf(JsonSchema schema) => Keyword(schema, IsKeyword) as string ?? (schema.Reference is { } referred ? RoleOf(referred) : null);
+
     /// <summary>The kinds whose schema binds <paramref name="role"/> (<c>is</c>).</summary>
     public IReadOnlyList<string> KindsBinding(string role) => [.. _roles.Keys.Where(kind => BindsRole(kind, role))];
 

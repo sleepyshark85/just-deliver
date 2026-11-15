@@ -35,13 +35,19 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
             .ToDictionary(o => o.Reference, o => o.Value!);
         var evaluator = new ExpressionEvaluator(new ExpressionContext(
             catalog.Roles, catalog.Naming, environment, graph.Owner, new ExpressionScope(Expander.SubstrateScope, graph.Nodes.Select(n => n.Name).ToHashSet(), known, graph.Parts)));
+        var index = await SchemaIndex.Shipped;
+        var binder = new Binder(index);
+        // The descriptor's kind is the one kind that binds the deployed values; an export is located where the descriptor holds it, under the
+        // values' field at the descriptor's root.
+        var kind = EnvironmentParser.DescriptorKinds(index).Single();
+        var at = binder.FieldName(kind, Roles.EnvironmentValues);
         var values = Nest(environment.Values);
         foreach (var (part, exports) in graph.Parts.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
             var group = new JObject();
             foreach (var (export, text) in exports)
             {
-                var location = $"values.{part}.{export}";
+                var location = $"{at}.{part}.{export}";
                 group[export] = evaluator.Evaluate(text, definitionFile, location, errors) switch
                 {
                     Resolved resolved => resolved.Value,
@@ -55,25 +61,16 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
 
         // Workloads deploy in the last layer, so an earlier layer offers them nothing: they deploy on an environment, which reads it as its base.
         var offers = catalog.EnvironmentTypes[environment.Type].Layer != catalog.Layers[^1] ? [] : environment.Offers;
-        // The descriptor's kind is the one kind that binds the deployed values.
-        var kind = EnvironmentParser.DescriptorKinds(await SchemaIndex.Shipped).Single();
-        var document = new JObject
+        var written = binder.WriteEnvironment(definitionFile, kind, environment with { Offers = offers }, values);
+        errors.AddRange(written.Errors);
+        if (written.Value is not { } document)
         {
-            [DocumentLoader.KindField] = kind,
-            ["name"] = environment.Name,
-            ["region"] = environment.Region,
-            ["type"] = environment.Type,
-            ["offers"] = new JArray(offers),
-            ["values"] = values,
-        };
-        if (environment.Approval is { } approval)
-        {
-            document["approval"] = approval.ToJson();
+            return new ComposedDescriptor(null, errors);
         }
 
-        var yaml = Serializer.Serialize(Plain(document));
-
-        // The descriptor rules (reserved keys, dotted keys) are the loader's, applied to the composed document.
+        // The written document fits the schema; the descriptor rules (reserved keys, the approval policy) are the loader's, applied to the text
+        // as a reader of the descriptor reads it.
+        var yaml = DocumentYaml.Serialize(Serializer, document);
         var parsed = await EnvironmentParser.ParseAsync(definitionFile, yaml, cancellationToken);
         errors.AddRange(parsed.Errors);
         return new ComposedDescriptor(errors.Count == 0 ? yaml : null, errors);
@@ -103,11 +100,4 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
 
         return root;
     }
-
-    private static object? Plain(JToken token) => token switch
-    {
-        JObject obj => obj.Properties().ToDictionary(p => p.Name, p => Plain(p.Value)),
-        JArray array => array.Select(Plain).ToList(),
-        _ => ((JValue)token).Value, // a string, or the number or boolean of an approval block
-    };
 }
