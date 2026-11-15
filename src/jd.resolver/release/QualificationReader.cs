@@ -23,8 +23,7 @@ public sealed record Qualification(string? SetSha256, IReadOnlyList<string> Reas
 /// </summary>
 public static class QualificationReader
 {
-    // Body passed the release-record schema (LoadAsync), so every field the schema requires is there: each '!' on a Body read below relies on it
-    // (identity.objectId, outcome and workloads of a deploy, each workload's name and oq.status, iq.status).
+    // Body passed the release-record schema (LoadAsync), so every field the schema requires is there: the reads with '!' below rely on it.
     private sealed record Entry(string Name, string Activity, JObject Body);
 
     private sealed record Expected(string Environment, string Label, string SetSha256);
@@ -107,7 +106,6 @@ public static class QualificationReader
     }
 
     // A record copied from another label or environment, renamed to a later time, or edited to another set is caught here (approvals.md section 5).
-    // A field the body lacks reads null and so differs from what is expected: the check fails closed, with no '!' to rely on the schema.
     private static string? Misplaced(JObject body, string time, string activity, Expected expected)
     {
         if ((string?)body["activity"] is var actual && actual != activity)
@@ -115,17 +113,17 @@ public static class QualificationReader
             return $"records activity '{actual}', not '{activity}' as its name says.";
         }
 
-        if ((string?)body["environment"]?["name"] is var environment && environment != expected.Environment)
+        if ((string?)body["environment"]!["name"] is var environment && environment != expected.Environment)
         {
             return $"is a record of environment '{environment}', not '{expected.Environment}'.";
         }
 
-        if ((string?)body["release"]?["label"] is var label && label != expected.Label)
+        if ((string?)body["release"]!["label"] is var label && label != expected.Label)
         {
             return $"is a record of label '{label}', not '{expected.Label}'.";
         }
 
-        if ((string?)body["release"]?["setSha256"] is var pinned && pinned != expected.SetSha256)
+        if ((string?)body["release"]!["setSha256"] is var pinned && pinned != expected.SetSha256)
         {
             return $"pins set {pinned}, but set.yaml hashes to {expected.SetSha256}.";
         }
@@ -158,20 +156,20 @@ public static class QualificationReader
             var name = (string)workload["name"]!;
             var status = (string)workload["oq"]!["status"]!;
             // An unchanged workload counts only on an earlier pass; the newest deploy itself says unchanged here, so it cannot be the pass.
-            if (status != RecordStatus.Passed && !(status == RecordStatus.Unchanged && deploys.Any(d => PassedOq(d, name))))
+            if (status != ReleaseRecordFile.PassedStatus && !(status == ReleaseRecordFile.UnchangedStatus && deploys.Any(d => PassedOq(d, name))))
             {
-                yield return $"workload {name}: OQ is {status}{(status == RecordStatus.Unchanged ? " and no earlier deploy passed it" : string.Empty)}.";
+                yield return $"workload {name}: OQ is {status}{(status == ReleaseRecordFile.UnchangedStatus ? " and no earlier deploy passed it" : string.Empty)}.";
             }
         }
 
         // Every valid record carries an iq, so the newest record is also the newest one with an iq and is not older than the newest deploy.
         var last = records[^1];
-        if ((string?)last.Body["iq"]!["status"] is var iq && iq != RecordStatus.Passed)
+        if ((string?)last.Body["iq"]!["status"] is var iq && iq != ReleaseRecordFile.PassedStatus)
         {
             yield return $"IQ of the newest record ({last.Name}) is {iq}.";
         }
     }
 
     private static bool PassedOq(Entry deploy, string workload) =>
-        deploy.Body["workloads"]!.Any(w => (string?)w["name"] == workload && (string?)w["oq"]!["status"] == RecordStatus.Passed);
+        deploy.Body["workloads"]!.Any(w => (string?)w["name"] == workload && (string?)w["oq"]!["status"] == ReleaseRecordFile.PassedStatus);
 }

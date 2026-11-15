@@ -142,23 +142,6 @@ internal sealed class Binder(SchemaIndex index)
         };
     }
 
-    /// <summary>
-    /// The release manifest or set <paramref name="document"/> is, by the <c>release.*</c> roles: its label, when a set was created, and one entry
-    /// per <see cref="Roles.ReleaseWorkloads"/> item, each with where its definition and its dependencies are held.
-    /// </summary>
-    public ReleaseDocument ReadRelease(Document document)
-    {
-        var values = ValuesOf(document);
-        return new ReleaseDocument(
-            Text(values.First(Roles.ReleaseLabel)),
-            Text(values.First(Roles.ReleaseCreatedAt)),
-            [.. values.Every(Roles.ReleaseWorkloads).Select(entry => ReadReleaseEntry(values, entry))])
-        {
-            CreatedAtLocation = values.Locate(Roles.ReleaseCreatedAt),
-            WorkloadsLocation = values.LocateList(Roles.ReleaseWorkloads),
-        };
-    }
-
     /// <summary>The value of <paramref name="role"/> held at the root of <paramref name="document"/>, for a rule on its raw shape; null when it holds none.</summary>
     public JToken? ReadValue(Document document, string role) => ValuesOf(document).Nearest(role, document.Body);
 
@@ -316,20 +299,6 @@ internal sealed class Binder(SchemaIndex index)
             node.Path,
             config?.Path ?? node.Path,
             template?.Path ?? node.Path);
-    }
-
-    private static ReleaseEntry ReadReleaseEntry(Values values, JToken entry)
-    {
-        var dependsOn = values.Nearest(Roles.ReleaseDependsOn, entry);
-        var path = values.Nearest(Roles.ReleaseDefinitionPath, entry);
-        var definition = values.Nearest(Roles.ReleaseDefinition, entry);
-        return new ReleaseEntry(Text(path), Text(definition), Text(values.Nearest(Roles.ReleaseDefinitionSha256, entry)), Strings(dependsOn))
-        {
-            // Safe: both kinds require the entry's definition, a manifest's path or a set's text, and only schema-valid documents are bound.
-            Location = entry.Path,
-            DefinitionLocation = (path ?? definition)!.Path,
-            DependsOnLocations = dependsOn is JArray list ? [.. list.Select(item => item.Path)] : [],
-        };
     }
 
     private static Requirement ReadRequirement(Values values, JToken requirement) => new(
