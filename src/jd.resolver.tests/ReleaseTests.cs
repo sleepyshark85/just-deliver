@@ -356,6 +356,41 @@ public sealed class ReleaseTests : IDisposable
         Assert.Empty((await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path))).Errors);
     }
 
+    // The committed golden was written before the binder wrote sets (S24f), byte for byte as now: a set an earlier jd kept still reads.
+    [Fact]
+    public async Task A_set_written_by_an_earlier_jd_still_reads()
+    {
+        var loaded = await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(Path.Combine(AppContext.BaseDirectory, "golden", "sample.release-set.yaml")));
+
+        Assert.Empty(loaded.Errors);
+        Assert.Equal(("1.0.0", new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero)), (loaded.Set!.Label, loaded.Set.CreatedAt));
+        Assert.Equal(["just-deliver-sample-worker", "just-deliver-sample-app"], loaded.Set.Order);
+        Assert.Equal(["just-deliver-sample-worker"], loaded.Set.Workloads.Single(w => w.Name == "just-deliver-sample-app").DependsOn);
+    }
+
+    // The schema checks the time's form only; a form that names no instant is refused where the set holds it.
+    [Fact]
+    public async Task A_set_created_at_a_time_that_does_not_exist_is_an_error()
+    {
+        var (path, text, _) = await WriteSetAsync();
+        await File.WriteAllTextAsync(path, text.Replace("createdAt: 2026-10-09T10:30:15Z", "createdAt: 2026-02-30T10:30:15Z", StringComparison.Ordinal));
+
+        var error = Assert.Single((await ReleaseSetFile.ParseAsync(await SourceFiles.ReadAsync(path))).Errors);
+
+        Assert.Equal((path, "createdAt", "not a valid UTC time."), (error.File, error.Location, error.Message));
+    }
+
+    // A set is written only as its schema allows: one that does not fit is a mistake in jd, and nothing is written.
+    [Fact]
+    public async Task Writing_a_set_that_does_not_fit_its_schema_throws()
+    {
+        var (_, _, set) = await WriteSetAsync();
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => ReleaseSetFile.SerializeAsync(set with { Label = "v1" }));
+
+        Assert.Equal("The release set 'v1' does not fit its schema: ReleaseSet: label: schema violation: PatternMismatch: #/label", error.Message);
+    }
+
     private static string SnapshotSource([CallerFilePath] string testFile = "") => Path.Combine(Path.GetDirectoryName(testFile)!, "golden", "sample.release-set.yaml");
 
     // Records compare their lists by reference, so compare the content.

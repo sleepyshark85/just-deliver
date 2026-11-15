@@ -12,7 +12,7 @@ namespace jd.resolver.release;
 public static class ReleaseRecordFile
 {
     /// <summary>The kind of a release record, read by <see cref="QualificationReader"/> and written by the orchestrator.</summary>
-    // Bridge: the kind read and written until the release documents are bound from their schemas (S24f).
+    // The record is jd's JSON evidence, kept as typed code beside its schema (docs/architecture/documents.md section 5, choice 2 (b)).
     public const string Kind = "ReleaseRecord";
 
     /// <summary>The name of the set kept beside a label's records.</summary>
@@ -33,11 +33,8 @@ public static class ReleaseRecordFile
     /// <summary>The outcome of a deploy in which every workload succeeded.</summary>
     public const string SucceededOutcome = "succeeded";
 
-    /// <summary>The status a passing OQ or IQ has in a record.</summary>
-    public const string PassedStatus = "passed";
-
-    /// <summary>The OQ status of a workload that was not changed by the deploy, so its OQ did not run again.</summary>
-    public const string UnchangedStatus = "unchanged";
+    /// <summary>The outcome of a deploy in which a workload failed.</summary>
+    public const string FailedOutcome = "failed";
 
     /// <summary>The format of the times inside a release set and a release record (UTC, to the second).</summary>
     public const string DocumentTimeFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";

@@ -35,7 +35,7 @@ public static class ReleaseRecordBuilder
         var failed = runs.FirstOrDefault(r => !r.Run.Succeeded);
         var record = Head(ReleaseRecordFile.DeployActivity, set, setSha256, environment, graphs, identity, startedAt, finishedAt, name => Workload(
             set.Workloads.Single(w => w.Name == name), graphs.Single(g => g.Workload == name), runs.FirstOrDefault(r => r.Workload == name), deploy: true));
-        record["outcome"] = failed is null ? ReleaseRecordFile.SucceededOutcome : "failed";
+        record["outcome"] = failed is null ? ReleaseRecordFile.SucceededOutcome : ReleaseRecordFile.FailedOutcome;
         record["deploySeconds"] = Seconds(deployElapsed);
         record["iq"] = Iq(iq);
         record["notStarted"] = new JArray(set.Order.Where(name => runs.All(r => r.Workload != name)));
@@ -61,14 +61,14 @@ public static class ReleaseRecordBuilder
     // The verdict and every check that ran; a qualification that did not run has no time and no checks.
     private static JObject Iq(IqResult? iq) => new()
     {
-        ["status"] = iq is null ? "notRun" : iq.Passed ? ReleaseRecordFile.PassedStatus : "failed",
+        ["status"] = iq is null ? RecordStatus.NotRun : iq.Passed ? RecordStatus.Passed : RecordStatus.Failed,
         ["elapsedSeconds"] = Seconds(iq?.Elapsed ?? TimeSpan.Zero),
         ["checks"] = new JArray((iq?.Checks ?? []).Select(c => new JObject
         {
             ["workload"] = c.Workload,
             ["kind"] = Name(c.Kind),
             ["subject"] = c.Subject,
-            ["status"] = c.Passed ? ReleaseRecordFile.PassedStatus : "failed",
+            ["status"] = c.Passed ? RecordStatus.Passed : RecordStatus.Failed,
             ["detail"] = c.Failure,
         })),
     };
@@ -164,7 +164,7 @@ public static class ReleaseRecordBuilder
         var probe = run?.Run.Nodes.FirstOrDefault(n => n.NodeId == runtime.Id)?.Steps?.FirstOrDefault(s => s.Step == Step.Probe);
         var oq = new JObject
         {
-            ["status"] = probe?.Outcome switch { StepOutcome.Done => ReleaseRecordFile.PassedStatus, StepOutcome.Failed => "failed", StepOutcome.Skipped => ReleaseRecordFile.UnchangedStatus, _ => "notRun" },
+            ["status"] = probe?.Outcome switch { StepOutcome.Done => RecordStatus.Passed, StepOutcome.Failed => RecordStatus.Failed, StepOutcome.Skipped => RecordStatus.Unchanged, _ => RecordStatus.NotRun },
             ["contract"] = new JObject { ["path"] = spec.Path, ["expectedStatus"] = spec.ExpectedStatus },
         };
         if (probe is { Outcome: StepOutcome.Done or StepOutcome.Failed })
