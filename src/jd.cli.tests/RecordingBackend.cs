@@ -3,6 +3,7 @@ using jd.definitionvalidator;
 using jd.orchestrator;
 using jd.resolver.catalog;
 using Newtonsoft.Json.Linq;
+using Xunit;
 
 namespace jd.cli.tests;
 
@@ -62,9 +63,12 @@ internal sealed class RecordingBackend : IBackEndProvider, IRevisionProbe
     private bool IsUnchanged(string stack) => Unchanged.Contains(stack.Split('.')[0]);
 
     // An unchanged workload's traffic is already on the revision its deploy reports, so its release flow has nothing to probe or shift.
-    private Dictionary<string, ConfigEntry> OutputsOf(string stack, string deploymentContent) =>
-        ((YamlSchemaValidator.ParseYaml(deploymentContent) as JObject)?["outputs"] as JObject)?.Properties()
+    private Dictionary<string, ConfigEntry> OutputsOf(string stack, string deploymentContent)
+    {
+        Assert.True(YamlSchemaValidator.TryParseYaml(deploymentContent, out var tree, out var error), error);
+        return ((tree as JObject)?["outputs"] as JObject)?.Properties()
             .ToDictionary(p => p.Name, p => new ConfigEntry(p.Name == "traffic" ? Traffic(IsUnchanged(stack) ? "out-latestRevisionName" : "app--r1") : "out-" + p.Name, SecretOutputs.Contains(p.Name))) ?? [];
+    }
 
     private static string Traffic(string revision) => $$"""[{"revisionName":"{{revision}}","weight":100}]""";
 

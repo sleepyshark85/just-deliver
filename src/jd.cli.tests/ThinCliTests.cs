@@ -10,7 +10,7 @@ using Xunit;
 namespace jd.cli.tests;
 
 // The thin-CLI rules of docs/architecture/application.md section 4, as an IL scan of jd.dll and of the inner assemblies. Each rule has an allowlist of
-// the references it finds today, by type: a later S25 slice removes the entries its move makes obsolete, and a stale entry fails, so the lists only shrink.
+// the references it lets through, by type (ThinCliTests.Allowlists.cs): every list is empty, and a stale entry fails.
 public sealed partial class ThinCliTests
 {
     private static readonly Assembly[] InnerAssemblies = [typeof(IRecordStore).Assembly, typeof(YamlSchemaValidator).Assembly, typeof(Resolver).Assembly, typeof(Orchestrator).Assembly];
@@ -171,14 +171,14 @@ public sealed partial class ThinCliTests
         allowlist.SelectMany(entry => entry.Value.Select(reached => $"{entry.Key}{separator}{reached}"));
 
     [Fact]
-    public void Command_code_reaches_the_inner_assemblies_only_through_the_use_cases_beyond_todays_allowlist() =>
+    public void Command_code_reaches_the_inner_assemblies_only_through_the_use_cases() =>
         AssertOnly(R1(Scan(typeof(Cli).Assembly), type => !IsComposition(type), UseCaseSurface(UseCases(typeof(Connections)))), Keys(R1Allowlist, " -> ").ToList());
 
     [Fact]
-    public void Only_the_composition_names_a_port_and_it_reaches_the_inner_assemblies_only_through_the_ports_beyond_todays_allowlist() =>
+    public void Only_the_composition_names_a_port_and_it_reaches_the_inner_assemblies_only_through_the_ports() =>
         AssertOnly(R2(Scan(typeof(Cli).Assembly), _ => true, IsComposition), Keys(R2Allowlist, " names ").ToList());
 
     [Fact]
-    public void The_inner_assemblies_touch_no_file_environment_or_console_beyond_todays_allowlist() =>
+    public void The_inner_assemblies_touch_no_file_environment_or_console() =>
         AssertOnly(InnerFindings(), Keys(R3Allowlist, " -> ").ToList());
 }
