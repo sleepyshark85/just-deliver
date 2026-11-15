@@ -206,4 +206,22 @@ internal static class Roles
 
     /// <summary>The traffic weight that sends all traffic to one revision.</summary>
     public const string RolloutFullWeight = "rollout.full-weight";
+
+    /// <summary>A release's label.</summary>
+    public const string ReleaseLabel = "release.label";
+
+    /// <summary>When a release set was created, as UTC text to the second.</summary>
+    public const string ReleaseCreatedAt = "release.created-at";
+
+    /// <summary>A workload of a release, one per item.</summary>
+    public const string ReleaseWorkloads = "release.workloads";
+
+    /// <summary>A release set workload's definition, embedded as received.</summary>
+    public const string ReleaseDefinition = "release.definition";
+
+    /// <summary>The SHA-256 of a release set workload's definition bytes, which pins it.</summary>
+    public const string ReleaseDefinitionSha256 = "release.definition-sha256";
+
+    /// <summary>The names of the workloads of the release a workload deploys after.</summary>
+    public const string ReleaseDependsOn = "release.depends-on";
 }

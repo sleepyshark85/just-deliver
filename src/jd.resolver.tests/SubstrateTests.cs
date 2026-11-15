@@ -391,6 +391,40 @@ public class SubstrateTests
         Assert.DoesNotContain("s3cr3t", string.Join('\n', composed.Errors.Select(e => e.ToString())));
     }
 
+    // The descriptor is written only as its schema allows: an export whose name has a dot would be a dotted key, which the schema refuses, so no
+    // descriptor is written, before or after the deploy.
+    [Fact]
+    public async Task An_export_named_with_a_dot_fails_the_descriptors_schema_and_no_descriptor_is_written()
+    {
+        var catalog = await SeedCatalogWithAsync(("components/cache.yaml",
+            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  default:\n"
+            + "    environment: { nodes: { c: { template: t/c, config: {} } }, exports: { a.b: x } }\n"
+            + "    classes:\n      standard: { nodes: { s: { template: t/s, config: {} } }, exports: { host: x } }\n"));
+        var (_, composer) = await PrepareAsync(await OfferingAsync("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog);
+
+        var composed = await composer.ComposeAsync(null);
+
+        Assert.Null(composed.Yaml);
+        var error = Assert.Single(composed.Errors);
+        Assert.Equal(("definition.yaml", "values.cache['a.b']", "keys must be non-empty and must not contain '.'; nest a mapping instead (a: { b: … })."), (error.File, error.Location, error.Message));
+    }
+
+    // The descriptor holds the parts' exports and nothing else a node outputs: a secret output no export reads is not written (boundary 12).
+    [Fact]
+    public async Task A_secret_output_that_no_export_reads_is_not_written_to_the_descriptor()
+    {
+        var (_, composer) = await PrepareAsync(await DefinitionAsync());
+        var outputs = Outputs(SharedOutputs).ToDictionary(o => o.Key, o => (IReadOnlyDictionary<string, ConfigEntry>)new Dictionary<string, ConfigEntry>(o.Value));
+        outputs["@shared/shared/substrate/cosmos"] = new Dictionary<string, ConfigEntry>(outputs["@shared/shared/substrate/cosmos"]) { ["primaryKey"] = new("s3cr3t-key", isSecret: true) };
+
+        var composed = await composer.ComposeAsync(outputs);
+
+        Assert.Empty(composed.Errors);
+        Assert.Contains("endpoint: https://cosmos-1.documents.azure.com:443/\n", composed.Yaml);
+        Assert.DoesNotContain("s3cr3t", composed.Yaml);
+        Assert.DoesNotContain("primaryKey", composed.Yaml);
+    }
+
     [Fact]
     public async Task A_workload_named_like_the_environment_shares_no_id_stack_or_generated_name_with_its_substrate()
     {

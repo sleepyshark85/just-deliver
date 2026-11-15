@@ -6,7 +6,7 @@ namespace jd.resolver.tests;
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
-        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3, S24f }.SelectMany(Entries)];
+        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3, S24f2 }.SelectMany(Entries)];
 
     private static IEnumerable<(string File, string Literal)> Entries(Dictionary<string, string[]> group) =>
         group.SelectMany(entry => entry.Value.Select(literal => (entry.Key, literal)));
@@ -35,8 +35,9 @@ public sealed partial class LiteralGuardTests
             "env.name", "env.offers", "env.region", "env.type", "env.values", "environment-type.layer", "layer", "naming.allowed", "naming.pattern",
             "naming.rules", "node.config", "node.kind", "node.template", "part.exports", "part.nodes", "part.scope", "policy.default", "policy.name",
             "policy.reason", "policy.require", "policy.runtime", "policy.scope", "policy.set", "probe.expected-status", "probe.interval", "probe.path",
-            "probe.scheme", "probe.timeout", "requirement.class", "requirement.id", "requirement.type", "roles", "runtime.part", "workload.image",
-            "workload.name", "workload.port", "workload.team", "workload.variables",
+            "probe.scheme", "probe.timeout", "release.created-at", "release.definition", "release.definition-sha256",
+            "release.depends-on", "release.label", "release.workloads", "requirement.class", "requirement.id", "requirement.type", "roles", "runtime.part",
+            "workload.image", "workload.name", "workload.port", "workload.team", "workload.variables",
         ],
         ["jd.resolver/expansion/ConfigWalker.cs"] = ["workload.variables"], // the fn::entries source (Appendix A: concept 4)
         // the annotation keyword and the annotations it reads (each named once); JSON Schema's own keyword
@@ -73,9 +74,8 @@ public sealed partial class LiteralGuardTests
         ["backend-providers/jd.bp.pulumi/TemplateLibrary.cs"] = ["exports.", "template"],
     };
 
-    private static readonly Dictionary<string, string[]> S24f = new()
+    private static readonly Dictionary<string, string[]> S24f2 = new()
     {
-        ["jd.resolver/environment/DescriptorComposer.cs"] = ["approval", "name", "offers", "region", "type", "values", "values."],
         ["jd.resolver/release/ReleaseBuilder.cs"] = ["].definition", "].dependsOn[", "definition", "dependsOn", "label", "workloads", "workloads["], // the manifest
         ["jd.resolver/release/ReleaseSetFile.cs"] = ["].definition", "createdAt", "definition", "definitionSha256", "dependsOn", "label", "workloads", "workloads["],
     };

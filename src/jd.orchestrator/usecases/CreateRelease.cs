@@ -13,7 +13,7 @@ public static class CreateRelease
     {
         var built = await ReleaseBuilder.BuildAsync(input.Manifest, input.Definitions, connections.Time().GetUtcNow(), cancellationToken);
         return built.Set is { } set
-            ? new CreateReleaseResult([], Outcome.Succeeded, set, ReleaseSetFile.Serialize(set))
+            ? new CreateReleaseResult([], Outcome.Succeeded, set, await ReleaseSetFile.SerializeAsync(set))
             : new CreateReleaseResult(built.Errors, Outcome.Failed, null, null);
     }
 }

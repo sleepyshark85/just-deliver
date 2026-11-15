@@ -6,12 +6,12 @@ using YamlDotNet.Serialization.EventEmitters;
 
 namespace jd.resolver.release;
 
-/// <summary>Serializes a <see cref="ReleaseSet"/> and reads it back, re-verifying every embedded definition against its recorded hash.</summary>
+/// <summary>
+/// Writes a <see cref="ReleaseSet"/> through the binder, by the <c>release.*</c> roles of the release set's schema, and reads it back, re-verifying
+/// every embedded definition against its recorded hash.
+/// </summary>
 public static class ReleaseSetFile
 {
-    // Bridge: the kind written and read here until the release documents are bound from their schemas (S24f).
-    private const string Kind = "ReleaseSet";
-
     private static readonly ISerializer Serializer = new SerializerBuilder()
         .WithQuotingNecessaryStrings()
         .WithEventEmitter(next => new MultilineEmitter(next))
@@ -33,30 +33,28 @@ public static class ReleaseSetFile
         }
     }
 
-    /// <summary>The set's document, as UTF-8 without a byte-order mark: what is written once and never changed.</summary>
-    public static byte[] Serialize(ReleaseSet set)
+    /// <summary>
+    /// The set's document, as UTF-8 without a byte-order mark: what is written once and never changed. A set <see cref="ReleaseBuilder"/> made fits
+    /// the schema, so an error writing it is a mistake in jd: throws <see cref="InvalidOperationException"/> naming each. Nothing it awaits can be
+    /// cancelled: the schemas are built once for the process.
+    /// </summary>
+    public static async Task<byte[]> SerializeAsync(ReleaseSet set)
     {
-        var document = new Dictionary<string, object>
+        var index = await SchemaIndex.Shipped;
+        var written = new Binder(index).WriteReleaseSet(nameof(ReleaseSet), Kind(index), set);
+        if (written.Value is not { } document)
         {
-            [DocumentLoader.KindField] = Kind,
-            ["label"] = set.Label,
-            ["createdAt"] = set.CreatedAt.ToString(ReleaseRecordFile.DocumentTimeFormat, CultureInfo.InvariantCulture),
-            ["workloads"] = set.Workloads.Select(w => new Dictionary<string, object>
-            {
-                ["definitionSha256"] = w.DefinitionSha256,
-                ["dependsOn"] = w.DependsOn,
-                ["definition"] = w.Definition,
-            }).ToList(),
-        };
+            throw new InvalidOperationException($"The release set '{set.Label}' does not fit its schema: {string.Join("; ", written.Errors)}");
+        }
 
         // GetBytes writes no byte-order mark.
-        return Encoding.UTF8.GetBytes(Serializer.Serialize(document));
+        return Encoding.UTF8.GetBytes(DocumentYaml.Serialize(Serializer, document));
     }
 
     /// <summary>Reads <paramref name="set"/>, its byte-order mark detected, and verifies it; errors name it. The result hands back its exact bytes.</summary>
     public static async Task<ReleaseSetResult> ParseAsync(SourceDocument set, CancellationToken cancellationToken = default)
     {
-        var loaded = await DocumentLoader.LoadAsync(set.Name, set.Text(), [Kind], cancellationToken);
+        var loaded = await DocumentLoader.LoadAsync(set.Name, set.Text(), [Kind(await SchemaIndex.Shipped)], cancellationToken);
         if (loaded.Value is not { Body: var body })
         {
             return new ReleaseSetResult(null, loaded.Errors);
@@ -89,4 +87,7 @@ public static class ReleaseSetFile
             ? new ReleaseSetResult(null, errors)
             : await ReleaseBuilder.ComposeAsync(set.Name, (string)body["label"]!, createdAt, sources, cancellationToken) with { Bytes = set.Content };
     }
+
+    // The release set's kind: the one kind that embeds the definitions.
+    private static string Kind(SchemaIndex index) => index.KindsBinding(Roles.ReleaseDefinition).Single();
 }

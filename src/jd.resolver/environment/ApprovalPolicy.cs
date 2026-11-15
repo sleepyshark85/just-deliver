@@ -1,7 +1,3 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
-
 namespace jd.resolver.environment;
 
 /// <summary>
@@ -15,11 +11,6 @@ namespace jd.resolver.environment;
 /// <param name="SeparateFromDeployer">An approver may not be a principal that deployed the label on <paramref name="QualifiedOn"/>.</param>
 public sealed record ApprovalPolicy(string QualifiedOn, int Required, IReadOnlyList<string> Approvers, bool SeparateFromDeployer)
 {
-    private static readonly JsonSerializer CamelCase = JsonSerializer.Create(new JsonSerializerSettings { ContractResolver = new CamelCasePropertyNamesContractResolver() });
-
-    /// <summary>The block as the schema writes it. Bridge: the descriptor writer's until the binder writes the descriptor (S24f).</summary>
-    internal JObject ToJson() => JObject.FromObject(this, CamelCase);
-
     /// <summary>Whether <paramref name="approver"/>'s approval may count: listed in <see cref="Approvers"/>, and not among <paramref name="deployers"/> when they must be separate.</summary>
     public bool Counts(string approver, IReadOnlyCollection<string> deployers) =>
         Approvers.Contains(approver, StringComparer.OrdinalIgnoreCase) && !(SeparateFromDeployer && deployers.Contains(approver, StringComparer.OrdinalIgnoreCase));

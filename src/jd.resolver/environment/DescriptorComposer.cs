@@ -13,14 +13,17 @@ public sealed record ComposedDescriptor(string? Yaml, IReadOnlyList<LoadError> E
 
 /// <summary>
 /// Composes the descriptor of an environment a definition is resolved in: every part of the run's graph contributes its exports,
-/// evaluated with the deployed outputs and keyed <c>values.&lt;part&gt;.&lt;export&gt;</c>, beside the base descriptor's values (the
-/// expander refuses a part the base already has); the result is validated with <see cref="EnvironmentParser"/>. Pure. Called twice: before
+/// evaluated with the deployed outputs and keyed by part and export in the descriptor's values, beside the base descriptor's values (the
+/// expander refuses a part the base already has); the binder writes it (<see cref="Binder.WriteEnvironment"/>) and its text is checked with
+/// <see cref="EnvironmentParser"/>. Pure. Called twice: before
 /// deploying (no outputs, to find every error while nothing exists yet) and after, with the node outputs. The environment is the one the
 /// graph was resolved in (<see cref="EnvironmentDescriptor.Over"/>); its values are the base descriptor's.
 /// </summary>
 public sealed class DescriptorComposer(string definitionFile, Catalog catalog, EnvironmentDescriptor environment, ResolvedGraph graph)
 {
     private static readonly ISerializer Serializer = new SerializerBuilder().WithQuotingNecessaryStrings().Build();
+
+    private static readonly IReadOnlyDictionary<string, ConfigEntry> Unproduced = new Dictionary<string, ConfigEntry>();
 
     /// <summary>The environment's descriptor, with every part export the deployed outputs settle, or the errors that keep it from being written.</summary>
     /// <param name="outputs">The deployed outputs by node id; null before the deploy, when an export waiting on an output is only checked. Secret
@@ -29,19 +32,43 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
     /// <param name="cancellationToken">Cancels the composition.</param>
     public async Task<ComposedDescriptor> ComposeAsync(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>>? outputs, CancellationToken cancellationToken = default)
     {
+        var index = await SchemaIndex.Shipped;
+        var binder = new Binder(index);
+        // The descriptor's kind is the one kind that binds the deployed values.
+        var kind = EnvironmentParser.DescriptorKinds(index).Single();
         var errors = new List<LoadError>();
-        var known = graph.Nodes.Where(n => outputs?.ContainsKey(n.Id) == true)
-            .SelectMany(n => outputs![n.Id].Where(o => o.Value.Value is not null && !o.Value.IsSecret).Select(o => (Reference: new Reference(ReferenceKind.Node, n.Name, o.Key), o.Value.Value)))
-            .ToDictionary(o => o.Reference, o => o.Value!);
+        var values = Values(outputs, binder.FieldName(kind, Roles.EnvironmentValues), errors);
+
+        // Workloads deploy in the last layer, so an earlier layer offers them nothing: they deploy on an environment, which reads it as its base.
+        var offers = catalog.EnvironmentTypes[environment.Type].Layer != catalog.Layers[^1] ? [] : environment.Offers;
+        var written = binder.WriteEnvironment(definitionFile, kind, environment with { Offers = offers }, values);
+        errors.AddRange(written.Errors);
+        if (written.Value is not { } document)
+        {
+            return new ComposedDescriptor(null, errors);
+        }
+
+        // The written document fits the schema; the descriptor rules (reserved keys, the approval policy) are the loader's, applied to the text
+        // as a reader of the descriptor reads it.
+        var yaml = DocumentYaml.Serialize(Serializer, document);
+        var parsed = await EnvironmentParser.ParseAsync(definitionFile, yaml, cancellationToken);
+        errors.AddRange(parsed.Errors);
+        return new ComposedDescriptor(errors.Count == 0 ? yaml : null, errors);
+    }
+
+    // The base descriptor's values and, beside them, each part's exports evaluated with the usable outputs, by part name. An export is located
+    // where the descriptor holds it, under the values' field (at), which is a root field, so its name is its location.
+    private JObject Values(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>>? outputs, string at, List<LoadError> errors)
+    {
         var evaluator = new ExpressionEvaluator(new ExpressionContext(
-            catalog.Roles, catalog.Naming, environment, graph.Owner, new ExpressionScope(Expander.SubstrateScope, graph.Nodes.Select(n => n.Name).ToHashSet(), known, graph.Parts)));
+            catalog.Roles, catalog.Naming, environment, graph.Owner, new ExpressionScope(Expander.SubstrateScope, graph.Nodes.Select(n => n.Name).ToHashSet(), Usable(outputs), graph.Parts)));
         var values = Nest(environment.Values);
         foreach (var (part, exports) in graph.Parts.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
             var group = new JObject();
             foreach (var (export, text) in exports)
             {
-                var location = $"values.{part}.{export}";
+                var location = $"{at}.{part}.{export}";
                 group[export] = evaluator.Evaluate(text, definitionFile, location, errors) switch
                 {
                     Resolved resolved => resolved.Value,
@@ -53,30 +80,25 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
             values[part] = group;
         }
 
-        // Workloads deploy in the last layer, so an earlier layer offers them nothing: they deploy on an environment, which reads it as its base.
-        var offers = catalog.EnvironmentTypes[environment.Type].Layer != catalog.Layers[^1] ? [] : environment.Offers;
-        // The descriptor's kind is the one kind that binds the deployed values.
-        var kind = EnvironmentParser.DescriptorKinds(await SchemaIndex.Shipped).Single();
-        var document = new JObject
+        return values;
+    }
+
+    // The outputs an export may read, by node reference: a secret or null output is left out, so an export needing it stays pending.
+    private Dictionary<Reference, string> Usable(IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>>? outputs)
+    {
+        var usable = new Dictionary<Reference, string>();
+        foreach (var node in graph.Nodes)
         {
-            [DocumentLoader.KindField] = kind,
-            ["name"] = environment.Name,
-            ["region"] = environment.Region,
-            ["type"] = environment.Type,
-            ["offers"] = new JArray(offers),
-            ["values"] = values,
-        };
-        if (environment.Approval is { } approval)
-        {
-            document["approval"] = approval.ToJson();
+            foreach (var (name, entry) in outputs?.GetValueOrDefault(node.Id) ?? Unproduced)
+            {
+                if (entry is { Value: { } value, IsSecret: false })
+                {
+                    usable.Add(new Reference(ReferenceKind.Node, node.Name, name), value);
+                }
+            }
         }
 
-        var yaml = Serializer.Serialize(Plain(document));
-
-        // The descriptor rules (reserved keys, dotted keys) are the loader's, applied to the composed document.
-        var parsed = await EnvironmentParser.ParseAsync(definitionFile, yaml, cancellationToken);
-        errors.AddRange(parsed.Errors);
-        return new ComposedDescriptor(errors.Count == 0 ? yaml : null, errors);
+        return usable;
     }
 
     private string Unusable(string part, string export, string location, List<LoadError> errors)
@@ -103,11 +125,4 @@ public sealed class DescriptorComposer(string definitionFile, Catalog catalog, E
 
         return root;
     }
-
-    private static object? Plain(JToken token) => token switch
-    {
-        JObject obj => obj.Properties().ToDictionary(p => p.Name, p => Plain(p.Value)),
-        JArray array => array.Select(Plain).ToList(),
-        _ => ((JValue)token).Value, // a string, or the number or boolean of an approval block
-    };
 }

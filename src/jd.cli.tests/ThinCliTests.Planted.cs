@@ -135,7 +135,7 @@ namespace jd.cli.tests
                 [
                     "jd.cli.tests.planted.ReleaseCommand.BuildsTheSet reaches jd.resolver.release.ReleaseBuilder.BuildAsync",
                     "jd.cli.tests.planted.ReleaseCommand.ReadsTheClock reaches jd.orchestrator.usecases.Connections.get_Time",
-                    "jd.cli.tests.planted.ReleaseCommand.SerializesTheSet reaches jd.resolver.release.ReleaseSetFile.Serialize",
+                    "jd.cli.tests.planted.ReleaseCommand.SerializesTheSet reaches jd.resolver.release.ReleaseSetFile.SerializeAsync",
                 ],
                 findings.Select(f => f.Message).Order(StringComparer.Ordinal));
         }
@@ -380,7 +380,7 @@ namespace jd.cli.tests.planted
 
         public static object BuildsTheSet() => ReleaseBuilder.BuildAsync(Document, Nothing, DateTimeOffset.UnixEpoch, CancellationToken.None);
 
-        public static object SerializesTheSet(ReleaseSet set) => ReleaseSetFile.Serialize(set);
+        public static object SerializesTheSet(ReleaseSet set) => ReleaseSetFile.SerializeAsync(set);
 
         public static object ReadsTheClock(Connections connections) => connections.Time();
     }
