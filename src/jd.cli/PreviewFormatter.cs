@@ -27,21 +27,20 @@ internal static class PreviewFormatter
             }
 
             text.AppendLine($"  depends on: {(node.DependsOn.Count == 0 ? "nothing" : string.Join(", ", node.DependsOn))}");
-            foreach (var (path, value) in ConfigLeaves.Of(string.Empty, new ConfigObject(node.Config)))
+            foreach (var leaf in node.Leaves)
             {
-                var provenance = node.Provenance.TryGetValue(path, out var source) ? source.Describe() : "no provenance";
-                text.AppendLine($"  {path} = {Render(value)}   [{provenance}]");
+                text.AppendLine($"  {leaf.Path} = {Render(leaf)}   [{leaf.Provenance ?? "no provenance"}]");
             }
         }
 
         return text.ToString();
     }
 
-    private static string Render(ConfigValue value) => value switch
+    private static string Render(ConfigLeaf leaf) => leaf.Value switch
     {
         ConfigText { Result: Pending pending } => $"pending: {pending.Original}",
         ConfigText { Result: Resolved resolved, PartReads.Count: > 0 } text => $"{resolved.Value} (from {string.Join(", ", text.PartReads.Order(StringComparer.Ordinal))})",
         ConfigText { Result: Resolved resolved } => resolved.Value,
-        _ => ConfigJson.ToToken(value).ToString(Formatting.None),
+        _ => leaf.Json.ToString(Formatting.None),
     };
 }

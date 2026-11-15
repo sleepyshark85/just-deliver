@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using jd.core.bp;
 using jd.orchestrator;
 
 namespace jd.cli;
@@ -11,10 +10,10 @@ internal static class DeployFormatter
     public static string Format(NodeReport report)
     {
         var text = new StringBuilder();
-        var changes = DeploymentResult.ChangedOperations(report.Summary).OrderBy(s => s.Key, StringComparer.Ordinal).ToList();
+        var changes = report.ChangedOperations.OrderBy(s => s.Key, StringComparer.Ordinal).ToList();
         var summary = changes.Count == 0 ? "no changes" : string.Join(", ", changes.Select(c => $"{c.Key.ToLowerInvariant()} {c.Value.ToString(CultureInfo.InvariantCulture)}"));
         text.AppendLine($"{report.NodeId}: {Describe(report.Outcome)} ({summary}, {report.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture)}s)");
-        foreach (var change in report.Changes.Where(c => DeploymentResult.IsChange(c.Operation)))
+        foreach (var change in report.ChangedResources)
         {
             text.AppendLine($"  {change.Operation.ToLowerInvariant()} {change.Type}");
         }

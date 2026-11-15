@@ -111,7 +111,8 @@ public sealed class BindingCompletenessTests
         var environment = (await EnvironmentParser.LoadAsync(await SourceFiles.ReadAsync(Path.Combine(AppContext.BaseDirectory, "golden", "seed-environment.yaml")), CancellationToken.None)).Value!;
         string Resolve(string yaml)
         {
-            var document = new Document("workload.yaml", "Workload", (JObject)definitionvalidator.YamlSchemaValidator.ParseYaml(yaml));
+            Assert.True(definitionvalidator.YamlSchemaValidator.TryParseYaml(yaml, out var tree, out var error), error);
+            var document = new Document("workload.yaml", "Workload", (JObject)tree);
             Assert.Empty(index.Validate(document));
             var graph = Resolver.Resolve(new Binder(index).ReadWorkload(document), "workload.yaml", catalog, environment);
             Assert.Empty(graph.Errors);

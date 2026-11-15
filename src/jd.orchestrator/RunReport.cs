@@ -79,6 +79,12 @@ public sealed record NodeReport(
     IReadOnlyDictionary<string, ConfigEntry> Outputs,
     IReadOnlyList<StepReport>? Steps = null)
 {
+    /// <summary>The operations of <see cref="Summary"/> that changed at least one resource (<see cref="DeploymentResult.ChangedOperations"/>).</summary>
+    public IReadOnlyList<KeyValuePair<string, int>> ChangedOperations => [.. DeploymentResult.ChangedOperations(Summary)];
+
+    /// <summary>The resources of <see cref="Changes"/> whose operation is a change (<see cref="DeploymentResult.IsChange"/>).</summary>
+    public IReadOnlyList<ResourceChange> ChangedResources => [.. Changes.Where(change => DeploymentResult.IsChange(change.Operation))];
+
     internal static NodeReport For(GraphNode node, NodeOutcome outcome, string message, DeploymentResult? result = null, IReadOnlyList<StepReport>? steps = null) =>
         new(node.Id, outcome, result?.Summary ?? [], result?.Changes ?? [], message, TimeSpan.Zero,
             result?.Outputs.Where(o => !o.Value.IsSecret).ToDictionary(o => o.Key, o => o.Value) ?? [], steps);

@@ -175,4 +175,16 @@ public sealed class DocumentLoaderTests : IDisposable
         Assert.StartsWith("schema violation: NoAdditionalPropertiesAllowed", error.Message, StringComparison.Ordinal);
     }
 
+    // An alias that contains itself parses as YAML but cannot become a JSON tree; it once escaped the loader as Newtonsoft's JsonException.
+    [Fact]
+    public async Task An_alias_that_contains_itself_is_a_located_error_not_an_exception()
+    {
+        var result = await EnvironmentParser.ParseAsync("e.yaml", "a: &x [*x]\n");
+
+        Assert.Null(result.Value);
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(
+            ("e.yaml", "", "not valid YAML: Self referencing loop detected with type 'System.Collections.Generic.List`1[System.Object]'. Path 'a'."),
+            (error.File, error.Location, error.Message));
+    }
 }
