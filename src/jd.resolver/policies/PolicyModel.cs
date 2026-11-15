@@ -30,12 +30,13 @@ public sealed record Provenance(string Source, string Rule, Layer Layer)
 
 /// <summary>
 /// A node after the policies: its final config and where each field came from. <see cref="Provenance"/>: one entry per leaf config field,
-/// keyed by dotted path (consistencyPolicy.level); an array is one leaf. <see cref="Probe"/> and <see cref="Release"/> are the runtime's, on
-/// the runtime node only.
+/// keyed by dotted path (consistencyPolicy.level); an array is one leaf. <see cref="TemplateSource"/> is where its catalog file names its
+/// template. <see cref="Probe"/> and <see cref="Release"/> are the runtime's, on the runtime node only.
 /// </summary>
 public sealed record ResolvedNode(
     string Name,
     string Template,
+    SourceLocation TemplateSource,
     NodeKind Kind,
     IReadOnlyDictionary<string, ConfigValue> Config,
     IReadOnlyDictionary<string, Provenance> Provenance,

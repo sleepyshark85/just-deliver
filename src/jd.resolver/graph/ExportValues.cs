@@ -20,11 +20,10 @@ public sealed record ExportValues(IReadOnlyDictionary<Reference, string> Values,
     /// <param name="catalog">The catalog the graph was resolved from.</param>
     /// <param name="environment">The environment the graph was resolved for.</param>
     /// <param name="outputs">The deployed outputs by node id; a secret output counts as known and is tracked in <see cref="Secrets"/>.</param>
-    /// <param name="file">Reported in errors about an export.</param>
-    /// <param name="errors">Receives every export that cannot be evaluated.</param>
+    /// <param name="errors">Receives every export that cannot be evaluated, located where its component's file holds it.</param>
     public static ExportValues Evaluate(
         ResolvedGraph graph, Catalog catalog, EnvironmentDescriptor environment,
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>> outputs, string file, ICollection<LoadError> errors)
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, ConfigEntry>> outputs, ICollection<LoadError> errors)
     {
         var values = new Dictionary<Reference, string>();
         var secrets = new HashSet<Reference>();
@@ -51,7 +50,8 @@ public sealed record ExportValues(IReadOnlyDictionary<Reference, string> Values,
                 catalog.Roles, catalog.Naming, environment, graph.Owner, new ExpressionScope(scope, nodes.Select(n => n.Name).ToHashSet(), known, graph.Parts)));
             foreach (var (export, result) in exports)
             {
-                var resolved = result is Pending pending ? evaluator.Evaluate(pending.Original, file, graph.ExportLocations[scope][export], errors) : result;
+                var source = graph.ExportSources[scope][export];
+                var resolved = result is Pending pending ? evaluator.Evaluate(pending.Original, source.File, source.Location, errors) : result;
                 if (resolved is Resolved value)
                 {
                     var reference = new Reference(ReferenceKind.Resource, scope, export);

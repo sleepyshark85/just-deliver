@@ -35,7 +35,7 @@ public partial class TemplateLibraryTests
         new(new Pending($"${{{node}.{output}}}", new HashSet<Reference> { new(ReferenceKind.Node, node, output) }), new HashSet<string>());
 
     private static GraphNode Node(string name, string template, Dictionary<string, ConfigValue> config) =>
-        new($"w/dev/s/{name}", "s", name, template, NodeKind.Create, $"w.dev.s.{name}", Phase.Infrastructure,
+        new($"w/dev/s/{name}", "s", name, template, new SourceLocation("components/s.yaml", $"nodes.{name}.template"), NodeKind.Create, $"w.dev.s.{name}", Phase.Infrastructure,
             config, new Dictionary<string, Provenance>(), "hash", []);
 
     private static ResolvedGraph Graph(IEnumerable<GraphNode> nodes, IReadOnlyDictionary<string, IReadOnlyDictionary<string, EvalResult>>? exports = null) =>
@@ -120,13 +120,13 @@ public partial class TemplateLibraryTests
         Assert.Empty(Library.Check(graph));
     }
 
+    // Located where the catalog names the template (S24g; before: the node id and "template").
     [Fact]
-    public void An_unknown_template_is_an_error()
+    public void An_unknown_template_is_an_error_where_the_catalog_names_it()
     {
         var error = Assert.Single(Library.Check(Graph([Node("x", "t/missing", [])])));
 
-        Assert.Equal(("w/dev/s/x", "template"), (error.File, error.Location));
-        Assert.Contains("'t/missing'", error.Message);
+        Assert.Equal(("components/s.yaml", "nodes.x.template", "template 't/missing' is not in the template library."), (error.File, error.Location, error.Message));
     }
 
     [Fact]
@@ -169,17 +169,26 @@ public partial class TemplateLibraryTests
         Assert.Equal("other", error.Location);
     }
 
+    // Located where the component's file holds the export (S24g; before: "<workload>/<env>/<scope>" and "exports.<name>").
     [Fact]
-    public void An_export_that_references_an_undeclared_output_is_an_error()
+    public void An_export_that_references_an_undeclared_output_is_an_error_where_its_component_holds_it()
     {
         var exports = new Dictionary<string, IReadOnlyDictionary<string, EvalResult>>
         {
             ["s"] = new Dictionary<string, EvalResult> { ["ok"] = Ref("x", "id").Result, ["bad"] = Ref("x", "nope").Result },
         };
+        var graph = Graph([Node("x", "t/a", new() { ["name"] = Text("n") })], exports) with
+        {
+            ExportSources = new Dictionary<string, IReadOnlyDictionary<string, SourceLocation>>
+            {
+                ["s"] = new Dictionary<string, SourceLocation> { ["ok"] = new("components/db.yaml", "classes.a.exports.ok"), ["bad"] = new("components/db.yaml", "classes.a.exports.bad") },
+            },
+        };
 
-        var error = Assert.Single(Library.Check(Graph([Node("x", "t/a", new() { ["name"] = Text("n") })], exports)));
+        var error = Assert.Single(Library.Check(graph));
 
-        Assert.Equal(("w/dev/s", "exports.bad"), (error.File, error.Location));
+        Assert.Equal(("components/db.yaml", "classes.a.exports.bad"), (error.File, error.Location));
+        Assert.Contains("references x.nope", error.Message);
     }
 
     [Fact]
@@ -253,7 +262,7 @@ public partial class TemplateLibraryTests
     }
 
     private static GraphNode RuntimeNode(RuntimeRelease? release) =>
-        new("w/dev/@workload/runtime", "@workload", "runtime", "t/rt", NodeKind.Create, "w.dev._workload.runtime", Phase.Runtime,
+        new("w/dev/@workload/runtime", "@workload", "runtime", "t/rt", new SourceLocation("runtimes/rt.yaml", "nodes.runtime.template"), NodeKind.Create, "w.dev._workload.runtime", Phase.Runtime,
             new Dictionary<string, ConfigValue> { ["image"] = Text("i") }, new Dictionary<string, Provenance>(), "hash", [], null, release);
 
     [Fact]

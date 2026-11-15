@@ -214,15 +214,16 @@ public class GraphBuilderTests
     public void A_grant_whose_template_has_no_target_or_whose_target_waits_on_another_node_is_refused_at_graph_build()
     {
         var target = new ConfigText(new Pending("${c.id}", new HashSet<Reference> { new(ReferenceKind.Node, "c", "id") }), new HashSet<string>());
-        var grant = new ResolvedNode("g", "t/g", NodeKind.Grant, new Dictionary<string, ConfigValue> { ["scope"] = target }, new Dictionary<string, Provenance>());
-        var create = new ResolvedNode("c", "t/c", NodeKind.Create, new Dictionary<string, ConfigValue>(), new Dictionary<string, Provenance>());
+        var grant = new ResolvedNode("g", "t/g", new SourceLocation("m.yaml", "classes.standard.nodes.g.template"), NodeKind.Grant, new Dictionary<string, ConfigValue> { ["scope"] = target }, new Dictionary<string, Provenance>());
+        var create = new ResolvedNode("c", "t/c", new SourceLocation("m.yaml", "classes.standard.nodes.c.template"), NodeKind.Create, new Dictionary<string, ConfigValue>(), new Dictionary<string, Provenance>());
         var policy = new PolicyResult(
             "1", "shop", "crew", null, null, [new ResolvedRequirement("sqldb", "sqldb", "standard", "m.yaml", new Dictionary<string, EvalResult>(), [create, grant])],
             [], [], new Dictionary<string, IReadOnlyDictionary<string, string>>());
 
         Assert.Empty(new GraphBuilder(Env, new Dictionary<string, string> { ["t/g"] = "scope" }).Build(policy).Errors);
         var error = Assert.Single(new GraphBuilder(Env, new Dictionary<string, string>()).Build(policy).Errors);
-        Assert.Equal((Id("sqldb", "g"), "template"), (error.File, error.Location));
+        // Located where the catalog names the template (S24g; before: the node id and "template").
+        Assert.Equal(("m.yaml", "classes.standard.nodes.g.template"), (error.File, error.Location));
         Assert.Contains("'t/g' is not a grant template", error.Message);
 
         // A part of the run read in place is written as one reference but waits on another part's node: not the grant's own.

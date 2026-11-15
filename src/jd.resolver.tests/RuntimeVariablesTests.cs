@@ -219,7 +219,7 @@ public class RuntimeVariablesTests
         // The loader stops this catalog, so the policy result is built by hand.
         var export = new Pending("${resource.other.x}", new HashSet<Reference> { new(ReferenceKind.Resource, "other", "x") });
         var variable = new ConfigText(new Pending("${resource.db.endpoint}", new HashSet<Reference> { new(ReferenceKind.Resource, "db", "endpoint") }), new HashSet<string>());
-        var runtime = new ResolvedNode("runtime", "t/runtime", NodeKind.Create, new Dictionary<string, ConfigValue> { ["v"] = variable }, new Dictionary<string, Provenance>());
+        var runtime = new ResolvedNode("runtime", "t/runtime", new SourceLocation("runtimes/r.yaml", "nodes.runtime.template"), NodeKind.Create, new Dictionary<string, ConfigValue> { ["v"] = variable }, new Dictionary<string, Provenance>());
         var policy = new PolicyResult(
             "1", "shop", "crew", null, null,
             [new ResolvedRequirement("db", "sqldb", "standard", "m.yaml", new Dictionary<string, EvalResult> { ["endpoint"] = export }, [])
@@ -248,10 +248,11 @@ public class RuntimeVariablesTests
         };
         var errors = new List<LoadError>();
 
-        ExportValues.Evaluate(broken, await LoadAsync(), Env, new Dictionary<string, IReadOnlyDictionary<string, jd.core.bp.ConfigEntry>>(), "shop/dev/@workload/runtime", errors);
+        ExportValues.Evaluate(broken, await LoadAsync(), Env, new Dictionary<string, IReadOnlyDictionary<string, jd.core.bp.ConfigEntry>>(), errors);
 
         var error = Assert.Single(errors);
-        Assert.Equal(("shop/dev/@workload/runtime", "implementations.default.classes.standard.exports.dyn"), (error.File, error.Location));
+        // The component's own file (S24g; before: the node id the orchestrator passed).
+        Assert.Equal(("f2.yaml", "implementations.default.classes.standard.exports.dyn"), (error.File, error.Location));
         Assert.StartsWith("'gone.out' refers to unknown node 'gone'", error.Message);
     }
 

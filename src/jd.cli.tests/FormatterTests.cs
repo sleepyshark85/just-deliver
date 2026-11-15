@@ -1,5 +1,6 @@
 using jd.core.bp;
 using jd.orchestrator;
+using jd.resolver;
 using jd.resolver.catalog;
 using jd.resolver.expansion;
 using jd.resolver.expressions;
@@ -28,7 +29,7 @@ public sealed class FormatterTests
     [Fact]
     public void A_config_leaf_without_provenance_is_listed_as_such()
     {
-        var node = new GraphNode("w/e/s/n", "s", "n", "template", NodeKind.Create, "w.e.s.n", Phase.Infrastructure,
+        var node = new GraphNode("w/e/s/n", "s", "n", "template", new SourceLocation("c.yaml", "nodes.n.template"), NodeKind.Create, "w.e.s.n", Phase.Infrastructure,
             new Dictionary<string, ConfigValue> { ["size"] = new ConfigScalar(new JValue(3)) }, new Dictionary<string, Provenance>(), "0123456789abcdef", []);
         var graph = new ResolvedGraph("1.0.0", "e", "w", "team", null, null, [node], new Dictionary<string, IReadOnlyDictionary<string, EvalResult>>(), [],
             new Dictionary<string, IReadOnlyDictionary<string, string>>());

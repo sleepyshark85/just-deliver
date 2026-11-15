@@ -62,13 +62,14 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
         {
             phases[draft.Id] = draft.Id == runtimeId ? Phase.Runtime : draft.DependsOn.Any(d => phases[d] != Phase.Infrastructure) ? Phase.AfterRuntime : Phase.Infrastructure;
             nodes.Add(new GraphNode(
-                draft.Id, draft.Scope, draft.Node.Name, draft.Node.Template, draft.Node.Kind, draft.Stack, phases[draft.Id],
+                draft.Id, draft.Scope, draft.Node.Name, draft.Node.Template, draft.Node.TemplateSource, draft.Node.Kind, draft.Stack, phases[draft.Id],
                 draft.Node.Config, draft.Node.Provenance, Hash(draft.Node), draft.DependsOn, draft.Node.Probe, draft.Node.Release));
         }
 
         return new ResolvedGraph(policy.CatalogVersion, environment.Name, policy.WorkloadName, policy.WorkloadTeam, policy.WorkloadImage, policy.WorkloadPort, nodes, exports, errors, policy.Parts)
         {
-            ExportLocations = typed.ToDictionary(r => r.Id, r => r.ExportLocations),
+            ExportSources = typed.ToDictionary(
+                r => r.Id, r => (IReadOnlyDictionary<string, SourceLocation>)r.ExportLocations.ToDictionary(e => e.Key, e => new SourceLocation(r.Source, e.Value))),
         };
     }
 
@@ -173,7 +174,7 @@ public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDic
     {
         if (!grantTargets.TryGetValue(node.Template, out var input))
         {
-            errors.Add(new LoadError(id, "template", $"node '{id}': '{node.Template}' is not a grant template in the catalog's grant targets."));
+            errors.Add(new LoadError(node.TemplateSource.File, node.TemplateSource.Location, $"node '{id}': '{node.Template}' is not a grant template in the catalog's grant targets."));
             return;
         }
 

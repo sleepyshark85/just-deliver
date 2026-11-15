@@ -26,14 +26,15 @@ public enum Phase
 /// [A-Za-z0-9_.-]): one backend stack per node, unique because ids contain neither '.' nor '_'. <see cref="Hash"/> is lowercase hex SHA-256 of
 /// the node's template, kind and canonical config (<see cref="ConfigJson"/>). <see cref="DependsOn"/> holds the ids of the nodes whose outputs
 /// this node references, sorted; a runtime.* reference is an edge to the runtime node (scope <see cref="GraphBuilder.WorkloadScope"/>, name
-/// <see cref="ExpressionEvaluator.RuntimeNode"/>). <see cref="Probe"/> and <see cref="Release"/> are set on the runtime node only; neither is part of
-/// the hash.
+/// <see cref="ExpressionEvaluator.RuntimeNode"/>). <see cref="TemplateSource"/> is where its catalog file names its template. <see cref="Probe"/>
+/// and <see cref="Release"/> are set on the runtime node only; neither is part of the hash.
 /// </summary>
 public sealed record GraphNode(
     string Id,
     string Scope,
     string Name,
     string Template,
+    SourceLocation TemplateSource,
     NodeKind Kind,
     string Stack,
     Phase Phase,
@@ -70,7 +71,7 @@ public sealed record ResolvedGraph(
     /// <summary>Who the graph belongs to, as its expressions read it.</summary>
     public WorkloadOwner Owner => new(Workload, WorkloadTeam, WorkloadImage, WorkloadPort);
 
-    /// <summary>Where each export of <see cref="Exports"/> is in its component's file, keyed as <see cref="Exports"/> is.</summary>
-    internal IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ExportLocations { get; init; } =
-        ReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>.Empty;
+    /// <summary>Where each export of <see cref="Exports"/> is written: its component's file and its location there, keyed as <see cref="Exports"/> is.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, SourceLocation>> ExportSources { get; init; } =
+        ReadOnlyDictionary<string, IReadOnlyDictionary<string, SourceLocation>>.Empty;
 }

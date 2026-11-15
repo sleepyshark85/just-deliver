@@ -111,7 +111,7 @@ public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environ
         // Sets replace whatever is there; defaults only fill what is absent after the sets.
         config = ApplyLayer(config, provenance, Entries(p => p.Set), Layer.PolicySet, run);
         config = ApplyLayer(config, provenance, Entries(p => p.Default), Layer.PolicyDefault, run);
-        return new ResolvedNode(node.Name, node.Template, node.Kind, config.Properties, provenance);
+        return new ResolvedNode(node.Name, node.Template, node.TemplateSource, node.Kind, config.Properties, provenance);
     }
 
     private static ConfigObject ApplyLayer(ConfigObject config, Dictionary<string, Provenance> provenance, List<NodeEntry> all, Layer layer, NodeRun run)

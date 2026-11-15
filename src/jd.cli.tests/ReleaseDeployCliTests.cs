@@ -211,8 +211,10 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
         Assert.Equal(1, code);
         Assert.Empty(backend.Calls);
         Assert.Empty(stdout);
-        Assert.Contains("template 'azure/no-such-template' is not in the template library", stderr);
-        Assert.Contains(App, stderr);
+        // Only the app requires the component: the error is located where the catalog names the template (S24g; before: the app's node id).
+        Assert.Contains(
+            $"{Path.Combine(catalog, "components", "cache.yaml")}: implementations.default.classes.standard.nodes.n.template: template 'azure/no-such-template' is not in the template library.",
+            stderr);
     }
 
     [Fact]

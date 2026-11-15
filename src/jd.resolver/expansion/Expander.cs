@@ -315,7 +315,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         foreach (var (nodeName, node) in partNodes)
         {
             var (evaluator, variables) = contextFor(nodeName, node.Kind);
-            nodes.Add(new ExpandedNode(nodeName, node.Template, node.Kind,
+            nodes.Add(new ExpandedNode(nodeName, node.Template, new SourceLocation(source, node.TemplateLocation), node.Kind,
                 ConfigWalker.WalkConfig(node.Config, evaluator, source, node.ConfigLocation, found, variables).Properties));
         }
 

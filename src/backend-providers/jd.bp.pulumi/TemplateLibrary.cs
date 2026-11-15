@@ -75,7 +75,10 @@ public sealed class TemplateLibrary : ITemplateStore
     public string GetContent(string templateName) =>
         _content.TryGetValue(templateName, out var content) ? content : throw new KeyNotFoundException($"template '{templateName}' is not in the template library.");
 
-    /// <summary>Every way the graph does not fit the library, with node id, template and key; empty when it fits. It starts with the templates that could not be read, each with its file.</summary>
+    /// <summary>
+    /// Every way the graph does not fit the library; empty when it fits. It starts with the templates that could not be read, each with its file;
+    /// a missing template and an export's misread output are located where the catalog writes them, a node's input by node id and key.
+    /// </summary>
     public IReadOnlyList<LoadError> Check(ResolvedGraph graph)
     {
         var errors = new List<LoadError>(_loadErrors);
@@ -85,7 +88,7 @@ public sealed class TemplateLibrary : ITemplateStore
         {
             if (!_templates.TryGetValue(node.Template, out var template))
             {
-                errors.Add(new LoadError(node.Id, "template", $"template '{node.Template}' is not in the template library."));
+                errors.Add(new LoadError(node.TemplateSource.File, node.TemplateSource.Location, $"template '{node.Template}' is not in the template library."));
                 continue;
             }
 
@@ -100,7 +103,8 @@ public sealed class TemplateLibrary : ITemplateStore
         {
             foreach (var (name, result) in exports)
             {
-                CheckOutputs(scope, (result as Pending)?.References ?? (IEnumerable<Reference>)[], $"{graph.Workload}/{graph.Environment}/{scope}", $"exports.{name}");
+                var source = graph.ExportSources[scope][name];
+                CheckOutputs(scope, (result as Pending)?.References ?? (IEnumerable<Reference>)[], source.File, source.Location);
             }
         }
 

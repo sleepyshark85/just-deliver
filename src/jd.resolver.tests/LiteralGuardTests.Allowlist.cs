@@ -1,12 +1,11 @@
 namespace jd.resolver.tests;
 
-// The literals the guard allows, by file (relative to src/). Section 2's exceptions stay; every other group holds today's literals, named after
-// the slice Appendix A expects to remove them (for a literal that several slices remove from one file, the last of them). A slice deletes its
-// group, and a stale entry fails, so the list only shrinks; S24g leaves section 2's exceptions and the prose false positives.
+// The literals the guard allows, by file (relative to src/): section 2's exceptions and the prose false positives, nothing else (documents.md
+// section 9, phase 1.5 exit). A stale entry fails, so a literal that goes takes its entry with it.
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
-        [.. new[] { SectionTwoExceptions, ProseFalsePositives, S24b3 }.SelectMany(Entries)];
+        [.. new[] { SectionTwoExceptions, ProseFalsePositives }.SelectMany(Entries)];
 
     private static IEnumerable<(string File, string Literal)> Entries(Dictionary<string, string[]> group) =>
         group.SelectMany(entry => entry.Value.Select(literal => (entry.Key, literal)));
@@ -67,10 +66,5 @@ public sealed partial class LiteralGuardTests
     private static readonly Dictionary<string, string[]> ProseFalsePositives = new()
     {
         ["jd.azure/ArmCredentials.cs"] = ["is"], // "X is not set"; 'is' is also an x-jd keyword
-    };
-
-    private static readonly Dictionary<string, string[]> S24b3 = new()
-    {
-        ["backend-providers/jd.bp.pulumi/TemplateLibrary.cs"] = ["exports.", "template"],
     };
 }

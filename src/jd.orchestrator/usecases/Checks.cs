@@ -63,10 +63,14 @@ public static class Checks
         return principal is null ? (null, [], identityRefusal) : (new GatedTarget(environment, policy, principal), [], null);
     }
 
-    /// <summary>The templates of <paramref name="catalog"/>'s templates part, and every way <paramref name="graphs"/> do not fit them, each once.</summary>
+    /// <summary>
+    /// The templates of <paramref name="catalog"/>'s templates part, and every way <paramref name="graphs"/> do not fit them, each once, one in a
+    /// catalog file named by its path under the catalog.
+    /// </summary>
     public static (ITemplates Templates, IReadOnlyList<LoadError> Misfits) Templates(SourceCatalog catalog, IEnumerable<ResolvedGraph> graphs, Connections connections)
     {
         var templates = connections.Templates(CatalogLoader.Templates(catalog));
-        return (templates, graphs.SelectMany(templates.Check).Distinct().ToList()); // unreadable templates are repeated by every graph's check
+        // Unreadable templates are repeated by every graph's check, and a catalog node by every graph that deploys it.
+        return (templates, catalog.Located(graphs.SelectMany(templates.Check)).Distinct().ToList());
     }
 }
