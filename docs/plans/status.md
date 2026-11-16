@@ -124,7 +124,12 @@ Take when touching the code named; remove once done.
   `BinderWriteTests`, `SchemaIndexTests`, `NameRulesTests`); `Binder`'s `Holder`/`KeyOf`/`Values.Every` are nouns; `PolicyApplier.ReportOverlaps`
   adds errors and returns a `HashSet`; `ReleaseRecordBuilder.Build` unpacks `head.Set`/`head.Graphs` into locals while `BuildQualify` reads
   them directly; `CatalogLoader` is hard-wired to `SchemaIndex.Shipped`, `new Bound(...)` takes 12 positional arguments, `Build` uses `is not var (version, types)`;
-  `GraphBuilder` errors on a policy-set value locate the node field, not the policy path as written; directory `IOException`s could carry a `release records:` prefix (`Cli.cs` prints .NET's message).
+  `GraphBuilder` errors on a policy-set value locate the node field, not the policy path as written; directory `IOException`s could carry a `release records:` prefix (`Cli.cs` prints .NET's message);
+  `CatalogLoader.ReadDocumentAsync` returns `[.. parsed.Errors, .. schemaErrors]` where `schemaErrors` suffices; `SubstrateTests` derives expected
+  names from the message (`e.Message.Split('\'')`); "only `env.type` is known without a node" is said twice (`PolicyRules.WorkloadCriteria`,
+  `PolicyApplier.ValuesAt(null, null, null)`); `Binder.CriteriaLocation` is the holder of `policy.scope`; `Expander.EvaluateParts` takes a `List`;
+  `Checks` is `public static` with no caller outside jd.orchestrator; an unbound gated record reads "requires an '' block" (`EnvironmentTypeCheck`);
+  `ResolvedGraph.Owner` is a computed bridge.
 
 ## Environment
 
