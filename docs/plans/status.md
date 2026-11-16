@@ -106,19 +106,24 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 Take when touching the code named; remove once done.
 
 - Loader: a scanner failure reads only "Exception during deserialization (line N)" (pinned in `YamlSchemaValidatorTests`); add the inner message.
-- Deeply nested YAML (~6,000 levels) overflows the stack in YamlDotNet; a depth guard before parsing would make it a load error.
-- `ContainerAppAzureTests`: hard-codes `management.azure.com` (use a resource-id URL as `EnvUpAzureTests` does); builds two stacks;
-  repeats ~60 lines of `DeployAzureTests` setup.
+  Deeply nested YAML (~6,000 levels) overflows the stack in YamlDotNet; a depth guard before parsing would make it a load error.
+- `ContainerAppAzureTests`: hard-codes `management.azure.com` (use a resource-id URL as `EnvUpAzureTests` does); builds two stacks; repeats
+  ~60 lines of `DeployAzureTests` setup; `Tag => "s15a"` is not neutral. `EnvUpAzureTests` per-container throughput only asserts
+  `Assert.NotEqual(0, own.Code)` (assert Azure's error text once seen in a run). No test variable reads `${resource.database.engine}`.
 - A secret in workload `variables` is plain text in the Container App's `env`: make it a Container App secret with `secretRef`
-  (ADR 0013 runtime port); the revision suffix hashes secret values; no test pins that the suffix tells null from empty.
+  (ADR 0013 runtime port; then an offline check that preview masks it); the revision suffix hashes secret values; no test pins that the suffix tells null from empty.
 - Accepted phase-1.5 debt: `ResolvedGraph`/`PolicyResult` shapes (`GraphNode` positional); `Orchestrator.Walk`'s `preview: bool`;
   `YamlSchemaValidator` → a parser, `ValidateTokenAsync`/`ValidationResult` deleted (touches `TemplateLibrary`: Azure gate);
   `PolicyApplier.Apply`/`ApplyLayer` length; `EnvironmentParser.LoadAsync(SourceDocument)` repeats `ParseAsync`.
-- `Expander`, `PolicyApplier`, `GraphBuilder` are public only for jd.bp.pulumi.tests; test classes are public; `CA1031` is not on.
-- `ReleaseFlow`: `StepLog.Dark` assigned inside an expression; `Prepared` is a second top-level type in the file.
-- `PreviewFormatter` prints the probe as "GET <path>" without the scheme; `HttpRevisionProbe` accepts any URI scheme.
-- `CatalogLoader` is hard-wired to `SchemaIndex.Shipped`; `new Bound(...)` takes 12 positional arguments.
-- CI downloads azure-native on every run (cache `~/.pulumi/plugins`); templates do not pin the azure-native version.
+- Visibility and tooling: `Expander`, `PolicyApplier`, `GraphBuilder` are public only for jd.bp.pulumi.tests; test classes are public; `CA1031` is not on;
+  CI downloads azure-native on every run (cache `~/.pulumi/plugins`); templates do not pin the azure-native version.
+- Release flow: `ReleaseFlow.StepLog.Dark` is assigned inside an expression; `Prepared` is a second top-level type in the file; `PreviewFormatter`
+  prints the probe as "GET <path>" without the scheme; `HttpRevisionProbe` accepts any URI scheme.
+- Review minors, take when touched: `Shipped` schema loading is copied in five test files (`PlantedPolicySchema`, `BinderTests`,
+  `BinderWriteTests`, `SchemaIndexTests`, `NameRulesTests`); `Binder`'s `Holder`/`KeyOf`/`Values.Every` are nouns; `PolicyApplier.ReportOverlaps`
+  adds errors and returns a `HashSet`; `ReleaseRecordBuilder.Build` unpacks `head.Set`/`head.Graphs` into locals while `BuildQualify` reads
+  them directly; `CatalogLoader` is hard-wired to `SchemaIndex.Shipped`, `new Bound(...)` takes 12 positional arguments, `Build` uses `is not var (version, types)`;
+  `GraphBuilder` errors on a policy-set value locate the node field, not the policy path as written; directory `IOException`s could carry a `release records:` prefix (`Cli.cs` prints .NET's message).
 
 ## Environment
 

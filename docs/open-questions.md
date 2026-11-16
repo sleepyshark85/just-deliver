@@ -59,7 +59,7 @@ The shared environment tier (SQL server, Log Analytics workspace, Service Bus na
 ### B10. RBAC split inside a team-owned subscription — see [ADR 0009](decisions/0009-rbac-split-team-subscription.md)
 
 ### B59. Landing zone shape `OPEN`
-- How a landing zone is defined and provisioned: its definition format, management-group hierarchy, tenant model (one Entra tenant with administrative units, or several), budgets and the policy set per zone. Ownership is [ADR 0008](decisions/0008-enforcement-in-landing-zone.md)'s.
+- How a landing zone is defined and provisioned: its definition format, management-group hierarchy, tenant model (one Entra tenant with administrative units, or several), budgets and the policy set per zone. A draft format is `definitions/landing-zone-definition.{json,yaml}`, now referenced by nothing else. Ownership is [ADR 0008](decisions/0008-enforcement-in-landing-zone.md)'s.
 
 ### B60. Network topology and address plan `OPEN`
 - Hub-and-spoke per region (Virtual WAN, firewall, private DNS) or something lighter; the CIDR plan allocated up front (a Container Apps environment needs its own subnet, B5); a separate-cloud region such as China (E53).

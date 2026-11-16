@@ -20,9 +20,6 @@ Every resource requirement carries an optional `id`, defaulting to the type name
   `^[a-z][a-z0-9-]{1,14}[a-z0-9]$` — 3 to 16 characters, lowercase letters, digits and hyphens, starting with a letter, not ending
   with a hyphen. Hyphens are allowed so a hyphenated type can be its own default id. A target's own limits (length, allowed
   characters) are the catalog's naming rules' job, not the id's.
-
-**Changed since first written (for the user's review):** the id was to be about 12 lowercase alphanumerics; the schema allows up to
-16 characters with hyphens, and the catalog's naming rules fit each name to its target.
 - **`id` is an identity, not a label.** Renaming is delete plus create: `id: db` → `id: primary` drops a database and provisions a fresh empty one. [0010](0010-replacement-protection-classes.md)'s `protect` catches it and C16 turns it into an approval, so it fails safely, but it must be documented rather than discovered.
 
 Isolation is **not** expressed through `id`: `id` says *which* resource, `class` says *how isolated* (C12).
@@ -36,6 +33,9 @@ requires:
     id: ledger
     class: dedicated               # its own server - different substrate tier
 ```
+
+**Changed since first written (for the user's review):** the id was to be about 12 lowercase alphanumerics; the schema allows up to
+16 characters with hyphens, and the catalog's naming rules fit each name to its target.
 
 ## Consequences
 - Resource identity is `(workload, id, type)`, never position in `requires` (reordering must not destroy resources; see C52).

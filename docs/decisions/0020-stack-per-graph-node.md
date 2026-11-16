@@ -13,7 +13,8 @@ template would hold two nodes' resources, or one workload's resources in every e
 ## Decision
 - **Every node of the resolved graph is its own stack.** A node's id is `<owner>/<environment>/<scope>/<node>` (the workload or the
   environment's owner, the environment, the requirement or layer scope, the node's name); its stack name is that id made valid for
-  Pulumi (`GraphBuilder`, `/` → `.`, `@` → `_`). Ids are unique in a graph, so stacks are unique by construction.
+  Pulumi (`GraphBuilder`, `/` → `.`, `@` → `_`; `StackNames.ToPulumi` shortens a name over 100 characters to a prefix plus a 16-hex
+  hash of the full name). Ids are unique in a graph, so stacks are unique by construction.
 - **The environment is part of the stack name**, so the same workload in `dev` and `stage` has separate stacks and separate state.
 - The template is the node's input, not its stack's identity: two nodes on one template are two stacks.
 
