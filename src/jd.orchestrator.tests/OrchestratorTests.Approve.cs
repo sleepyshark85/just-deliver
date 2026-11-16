@@ -8,7 +8,7 @@ using Xunit;
 namespace jd.orchestrator.tests;
 
 // The Approve use case over the Ledger's records (dev, deployed by Carol) and a gated `stage` descriptor: the order of its checks, the refusal each
-// returns, and that a refusal writes nothing into stage's directory (docs/architecture/approvals.md sections 4 and 7).
+// returns, and that a refusal writes nothing into stage's directory (docs/architecture/approvals.md section 4).
 public partial class OrchestratorTests
 {
     private const string Carol = "cccccccc-cccc-cccc-cccc-cccccccccccc";

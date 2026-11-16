@@ -10,7 +10,7 @@ namespace jd.orchestrator.usecases;
 // against the catalog. WorkloadName names the workload's document as its errors do.
 internal sealed record WorkloadInputs(Workload Workload, string WorkloadName, Catalog Catalog, EnvironmentDescriptor Environment)
 {
-    // Null with the errors in the order a person fixes them: the workload's alone, then the catalog's (located: application.md section 7) and the
+    // Null with the errors in the order a person fixes them: the workload's alone, then the catalog's (located: application.md section 4) and the
     // environment's together, then the type's.
     public static async Task<LoadResult<WorkloadInputs>> LoadAsync(SourceDocument workload, SourceDocument environment, SourceCatalog catalog, CancellationToken cancellationToken)
     {

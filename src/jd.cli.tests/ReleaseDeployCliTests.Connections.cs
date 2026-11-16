@@ -4,7 +4,7 @@ namespace jd.cli.tests;
 
 // Nothing set on the machine (docs/architecture/connections.md): a run whose environment holds only jd's data directory deploys, qualifies, approves and
 // promotes, with every record in the data directory's store. The variables jd read before point elsewhere here, and nothing reaches them.
-// Each connection is built lazily, at the step that needs it (docs/architecture/application.md section 5): a run that stops earlier builds none of the later ones.
+// Each connection is built lazily, at the step that needs it (docs/architecture/application.md section 3): a run that stops earlier builds none of the later ones.
 public sealed partial class ReleaseDeployCliTests
 {
     [Fact]
@@ -83,7 +83,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Empty(Directory.GetFileSystemEntries(_records));
     }
 
-    // Risk c of application.md section 8: every reader is built before the first backend call, so one that cannot be built stops the run before anything is deployed.
+    // As application.md section 1 says: every reader is built before the first backend call, so one that cannot be built stops the run before anything is deployed.
     [Fact]
     public async Task A_reader_that_cannot_be_built_stops_the_run_before_any_backend_call()
     {

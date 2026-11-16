@@ -9,7 +9,7 @@ namespace jd.cli;
 
 /// <summary>
 /// The CLI's composition root: the <see cref="Connections"/> every command runs with, from the environment variables and jd's data directory
-/// (docs/architecture/application.md section 5). The one place the adapters and the DI container are named.
+/// (docs/architecture/application.md section 3). The one place the adapters and the DI container are named.
 /// </summary>
 internal static class Composition
 {

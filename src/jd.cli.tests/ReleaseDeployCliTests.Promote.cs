@@ -372,7 +372,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal(0, _identity.Calls);
     }
 
-    // Edge 1 (docs/architecture/application.md section 8): the label is the use case's to check, after the command has its options and its inputs
+    // Plain values first (docs/architecture/application.md section 1): the label is the use case's to check, after the command has its options and its inputs
     // exist, so a missing --to or an unreadable one is reported first; before, the label was.
     [Fact]
     public async Task A_missing_or_unreadable_target_is_reported_before_a_label_that_cannot_name_a_release()
@@ -387,7 +387,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal(0, _identity.Calls);
     }
 
-    // Edge 2 (docs/architecture/application.md section 8): an I/O failure that escapes approve or promote before its walk (here: the records cannot be
+    // The I/O mapping (docs/architecture/application.md section 2): an I/O failure that escapes approve or promote before its walk (here: the records cannot be
     // reached) is exit 2 with its message, as for every other command; before, it escaped jd as an unhandled exception.
     [Theory]
     [InlineData("promote", "1.0.0", "--to", StagePath, "--catalog", CatalogPath)]
@@ -407,7 +407,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Empty(StageFiles("*"));
     }
 
-    // The edge of the catalog read (docs/architecture/application.md section 8): the CLI reads the catalog before the use case, so a catalog that exists but
+    // The catalog read (docs/architecture/application.md section 1): the CLI reads the catalog before the use case, so a catalog that exists but
     // cannot be read is exit 2 with .NET's message before the identity is asked or the approvals are checked; before, it was read only at the walk.
     [Fact]
     public async Task A_catalog_that_exists_but_cannot_be_read_is_exit_2_before_the_identity_or_the_approvals()

@@ -2,7 +2,7 @@ namespace jd.orchestrator.usecases;
 
 /// <summary>
 /// How a use case ended: the decision is the use case's, the number a client shows for it is the client's (an exit code, an HTTP status;
-/// docs/architecture/application.md section 3).
+/// docs/architecture/application.md section 1).
 /// </summary>
 public enum Outcome
 {

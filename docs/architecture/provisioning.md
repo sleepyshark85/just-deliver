@@ -4,7 +4,7 @@
 
 How a workload definition ([workload-definition.md](workload-definition.md)) becomes Azure resources, and
 how the Pulumi Automation API is operated. Proposed resolver design: [resolver.md](resolver.md). Flow
-diagram: [workload_deployment_flow.html](workload_deployment_flow.html). Rationale for the tooling and model
+diagram: [walkthrough.md](../walkthrough.md#1-the-flow). Rationale for the tooling and model
 is in [0002 Pulumi Automation API](../decisions/0002-pulumi-automation-api.md),
 [0003 Pulumi YAML template library](../decisions/0003-pulumi-yaml-template-library.md) and
 [0004 two-layer definition model](../decisions/0004-two-layer-definition-model.md) — not repeated here.

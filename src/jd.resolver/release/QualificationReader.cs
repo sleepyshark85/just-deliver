@@ -7,7 +7,7 @@ namespace jd.resolver.release;
 
 /// <summary>
 /// Reads the records of a label and derives "qualified" from them now; nothing is stored or repaired. The record store is the trust boundary
-/// (approvals.md section 9): every file that is not what its place says is a reason, so a copied, renamed or edited record can only make the answer "not qualified".
+/// (release-record.md section 3): every file that is not what its place says is a reason, so a copied, renamed or edited record can only make the answer "not qualified".
 /// </summary>
 public static class QualificationReader
 {

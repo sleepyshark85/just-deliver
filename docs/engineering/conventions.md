@@ -143,7 +143,7 @@ These hold across slices; a change to one changes its design note or ADR first.
   guard (`LiteralGuardTests`) fails on a production literal that names a schema field, outside section 2's exceptions.
 - **Ports in `jd.core`, adapters at the edge.** Pulumi only in `jd.bp.pulumi`, Azure SDKs only in `jd.azure`, wiring
   only in `jd.cli`, which holds no rule: parsing, file I/O, formatting and composition over the use cases (standards §3; `verify.sh` and
-  `ThinCliTests` enforce it, [application.md](../architecture/application.md) §4).
+  `ThinCliTests` enforce it, [application.md](../architecture/application.md) §2).
 - **A bad revision never gets traffic.** Dark deploy, grants, probe, then shift; a failed step stops the walk and
   leaves traffic where it was ([provisioning.md](../architecture/provisioning.md)).
 - **Evidence is written once.** Release records and `set.yaml` are created with `CreateNew` and never edited; a re-run

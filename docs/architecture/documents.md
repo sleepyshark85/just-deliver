@@ -35,7 +35,7 @@ The engine knows **concepts**, never **fields**. A concept is something an algor
 | 8 | **Contract**: a declared export list every selected part exports exactly | load check | a cross-document equality rule |
 | 9 | **Grant**: a node kind whose target input is named by data and must be the workload's own node | boundaries 1, 2 | a security rule must not be switchable off by data |
 | 10 | **Policy**: match, `set`, `default`, `require`, its two scopes and their shapes, layering, conflicts | the policy step | an ordering and conflict algorithm; the shape rules need messages JSON Schema cannot give (section 3) |
-| 11 | **Release, gate and evidence**: dark/probe/shift, IQ/OQ, approval counting, records written once | release flow, qualification, promotion | algorithms with security weight (approvals.md §9) |
+| 11 | **Release, gate and evidence**: dark/probe/shift, IQ/OQ, approval counting, records written once | release flow, qualification, promotion | algorithms with security weight (release-record.md §3) |
 
 **Where "the code knows no structure" stops being literal**, and why:
 
@@ -208,7 +208,7 @@ Every check keeps a negative test; a moved check keeps its test.
 | Image pinned by digest | 98–104 | C concept 11 | trust |
 | Workload names unique; `dependsOn` not itself, known; no cycle | 120–154 | C concept 11 | names come from the definitions, so no `define` can see them |
 | Set: `createdAt` a UTC time; `definitionSha256` matches | `ReleaseSetFile` 76–96 | C concept 11 (the one time form; the pin) | trust boundary |
-| Records: schema + "is what its place says" (approvals.md §9) | `QualificationReader` 99–129, `ApprovalRecord` 107–126 | S + C concept 11 | trust boundary |
+| Records: schema + "is what its place says" (release-record.md §3) | `QualificationReader` 99–129, `ApprovalRecord` 107–126 | S + C concept 11 | trust boundary |
 
 ### Security boundaries (D19, components.md §3)
 
