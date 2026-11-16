@@ -2,7 +2,7 @@ namespace jd.core.records;
 
 /// <summary>
 /// Where the release, qualification and approval records are kept: a folder of files per environment and label, each file written once
-/// (docs/architecture/connections.md). The store knows names and bytes only; what a file means is its reader's. Every name is one path
+/// (docs/architecture/provisioning.md, Backend and state). The store knows names and bytes only; what a file means is its reader's. Every name is one path
 /// segment: an environment, label or file name that <see cref="SegmentProblem"/> refuses throws <see cref="ArgumentException"/>.
 /// </summary>
 public interface IRecordStore

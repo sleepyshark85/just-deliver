@@ -12,7 +12,7 @@ infrastructure. Code that bakes in what should be data defeats the MVP.
   knowledge ("Cosmos needs X"), template names, ordering of resources, environment names, URLs,
   subscription/tenant ids. These live in the catalog, the environment descriptor, or configuration.
 - **Must not** branch on resource types or workload names (`if (type == "database")`). Add a
-  catalog file or a policy instead ([resolver.md](../architecture/resolver.md)).
+  catalog file or a policy instead ([model.md](../architecture/model.md)).
 - Configuration comes from options/environment variables bound at the composition root, never read
   ad hoc deep in the code.
 - **Formats are data.** No document's structure in C#: no field name, kind name, location built from field names, or type

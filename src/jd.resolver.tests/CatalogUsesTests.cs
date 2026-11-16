@@ -4,7 +4,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-// Shared resources, `uses` and what a part may read (docs/architecture/components.md section 2, "Checked at load"): each check is a load
+// Shared resources, `uses` and what a part may read (docs/architecture/model.md sections 4 and 6): each check is a load
 // error at the file and location, and the catalog does not load.
 public class CatalogUsesTests
 {

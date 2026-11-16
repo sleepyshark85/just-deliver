@@ -119,7 +119,7 @@ public sealed class ApprovalRecordTests
         return Path.GetFileName(await ReleaseRecordFile.WriteAsync(_records, environment, label, at, ReleaseRecordFile.ApproveActivity, record.ToString(Formatting.Indented)));
     }
 
-    // Records written before environment types carry a tier; they stay valid and count (components.md section 6).
+    // Records written before environment types carry a tier; the record schemas still accept it, so they stay valid and count.
     [Fact]
     public async Task An_approval_written_with_a_tier_before_environment_types_still_validates_and_counts()
     {

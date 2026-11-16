@@ -7,7 +7,7 @@ namespace jd.resolver.expansion;
 
 /// <summary>
 /// Turns each requirement of a validated workload into the nodes of its component's class, in the implementation for the environment's
-/// type, with config and exports evaluated. Pure; the catalog is never modified. Rules: docs/architecture/resolver.md.
+/// type, with config and exports evaluated. Pure; the catalog is never modified. Rules: docs/architecture/model.md sections 3 and 5.
 /// </summary>
 public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 {
@@ -60,7 +60,7 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 
     /// <summary>
     /// Collects what the offers of the environment, a definition resolved over <paramref name="baseDescriptor"/>, reach in its type's layer into the one scope <see cref="SubstrateScope"/>
-    /// (docs/architecture/components.md section 3): the layer's shared resources reached through <c>uses</c> and, in the last layer (where
+    /// (docs/architecture/model.md section 5): the layer's shared resources reached through <c>uses</c> and, in the last layer (where
     /// workloads deploy), the offered components' parts of that layer. Every resource of an earlier layer it reaches must be in
     /// <paramref name="baseDescriptor"/>, which it reads but never deploys. The definition has no team and no runtime.
     /// </summary>

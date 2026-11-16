@@ -13,7 +13,7 @@ The MVP must prove six things. Items 5 and 6 were added after the [Viedoc use ca
 approvals, so the MVP proves the shape of that early, when it is cheap to change.
 
 1. **Data-driven resolution** — `requires` becomes a graph from catalog files; no Azure knowledge in C#
-   ([resolver.md](../architecture/resolver.md), C52).
+   ([model.md](../architecture/model.md), C52).
 2. **Identity without secrets** — system-assigned identity, grants, dark revision, traffic shift only
    after grants work ([0012](../decisions/0012-system-assigned-identity.md), [0013](../decisions/0013-container-apps-runtime.md), D21).
 3. **Multi-workload safety** — two workloads share an environment without collisions.
@@ -113,7 +113,7 @@ with file-level detail at dispatch time.
 | ID | Slice | Depends | Acceptance |
 |---|---|---|---|
 | S20 | **E2E run and docs**: all success criteria verified on the sandbox; usage guide; teardown | S19 | Success criteria 1–9 evidenced in status.md |
-| S23 | **Nothing set on the machine** (user, 2026-10-18; [connections.md](../architecture/connections.md)): state store, record store and identity behind abstractions, local by default under jd's data directory; region in the environment definition; `PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE`, `JD_RECORDS_DIR`, `JD_REGION` no longer read; `ARM_*` optional (else the Azure CLI sign-in) | S21f | A CLI run with only an `az login` works offline-tested and on Azure; walkthrough setup is `az login` |
+| S23 | **Nothing set on the machine** (user, 2026-10-18; [provisioning.md](../architecture/provisioning.md#backend-and-state)): state store, record store and identity behind abstractions, local by default under jd's data directory; region in the environment definition; `PULUMI_BACKEND_URL`, `PULUMI_CONFIG_PASSPHRASE`, `JD_RECORDS_DIR`, `JD_REGION` no longer read; `ARM_*` optional (else the Azure CLI sign-in) | S21f | A CLI run with only an `az login` works offline-tested and on Azure; walkthrough setup is `az login` |
 
 ## Known blockers to resolve when reached
 

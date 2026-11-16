@@ -1,7 +1,7 @@
 # Using the CLI
 
 `jd` (project `src/jd.cli`) is the composition root: it parses arguments, wires the validator and the
-resolver ([resolver.md](architecture/resolver.md)), prints results and sets the exit code. It holds no
+resolver ([model.md](architecture/model.md)), prints results and sets the exit code. It holds no
 resolution logic. Every input is an argument; only the deploy backend settings come from environment variables.
 
 ```
@@ -75,7 +75,7 @@ cost nothing and go with the environment's resource group at teardown. To remove
 ### `jd env up`
 
 Provisions an environment's **substrate** from an environment definition and writes the environment descriptor
-([resolver.md](architecture/resolver.md#environment-descriptor)) from the real outputs, so no Azure id is typed by hand.
+([model.md](architecture/model.md#5-environments)) from the real outputs, so no Azure id is typed by hand.
 It uses the same resolver and orchestrator as `jd deploy`, the same state in jd's data directory and the same sign-in. **It creates real Azure resources**: free tier only,
 see [standards §6](engineering/standards.md).
 
@@ -254,7 +254,7 @@ stay refused on the gated environment.
 
 ## Data and identity
 
-Nothing needs to be set on the machine ([connections.md](architecture/connections.md)).
+Nothing needs to be set on the machine ([provisioning.md](architecture/provisioning.md#backend-and-state)).
 
 - **jd's data directory** `<data>` is `jd` in the local application data folder (`~/.local/share/jd` on Linux), created on first use;
   `JD_DATA_DIR` moves it (to keep runs apart). It holds:

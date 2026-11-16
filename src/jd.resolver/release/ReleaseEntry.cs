@@ -1,7 +1,7 @@
 namespace jd.resolver.release;
 
 /// <summary>
-/// One workload entry of a release manifest or a release set, bound by the <c>release.*</c> roles (docs/architecture/documents.md section 5): a
+/// One workload entry of a release manifest or a release set, bound by the <c>release.*</c> roles (docs/architecture/documents.md section 3): a
 /// manifest names where the definition is, a set embeds it with the hash that pins it. A role the entry's kind does not bind reads empty.
 /// </summary>
 /// <param name="DefinitionPath">Where the definition is, relative to the manifest (<see cref="Roles.ReleaseDefinitionPath"/>).</param>

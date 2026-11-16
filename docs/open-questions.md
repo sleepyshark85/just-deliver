@@ -69,7 +69,7 @@ Two prerequisite spikes remain (when `protect` fails; whether Pulumi YAML can dr
 
 ### C12. Shared vs dedicated resources `PARTIAL`
 - **Leaning so far:** shared resources belong to the environment and live and die with it — one database server per environment, one Azure Monitor workspace so telemetry correlates; each workload gets its own database and App Insights component inside them. Three ownership tiers: landing zone → environment → workload; the isolation dial is the *environment*, not the resource.
-- **Settled within this item:** isolation is expressed as `class`, not by naming or `id`. "Dedicated" means its own *server* (noisy-neighbour isolation, compliance boundary, different engine version) — a different substrate tier, expressed by the `class` field ([architecture/workload-definition.md](architecture/workload-definition.md)). Example in [ADR 0011](decisions/0011-requirement-id.md).
+- **Settled within this item:** isolation is expressed as `class`, not by naming or `id`. "Dedicated" means its own *server* (noisy-neighbour isolation, compliance boundary, different engine version) — a different substrate tier, expressed by the `class` field ([architecture/model.md](architecture/model.md#1-workload-and-requirements)). Example in [ADR 0011](decisions/0011-requirement-id.md).
 - **Open:** which classes exist per resource type; whether `class: dedicated` in production requires approval given the cost difference.
 
 ### C13. Multiple resources of the same type — see [ADR 0011](decisions/0011-requirement-id.md)
@@ -94,7 +94,7 @@ A team removes `- type: database` from a prod workload; today the platform delet
 - **Open:** backup semantics per resource type (what "backup" means for a Service Bus namespace or a workspace); retention window before the backup is discarded.
 
 ### C52. The resolution layer — mapping definitions to resources `OPEN`
-How `requires: [{type, id, class}]` plus environment, mappings and policies becomes a concrete resource graph. Currently unowned — the most load-bearing component not yet specified, and it constrains the schema. **Proposed design in progress: [architecture/resolver.md](architecture/resolver.md).**
+How `requires: [{type, id, class}]` plus environment, mappings and policies becomes a concrete resource graph. Currently unowned — the most load-bearing component not yet specified, and it constrains the schema. **Proposed design in progress: [architecture/model.md](architecture/model.md).**
 
 **Hard parts**
 1. **A matcher, not a map.** Selection depends on type, class, tier, possibly team or region. Needs a specificity ordering with ties as errors, or the same definition resolves unpredictably.
@@ -103,7 +103,7 @@ How `requires: [{type, id, class}]` plus environment, mappings and policies beco
 4. **Pure function, separate from provisioning:** `resolve(definition, environment, mappings, policies) → graph + provenance`. Preview screen, audit chain, approval diff and destructive-change gate all consume the resolved graph *before* anything is applied; resolve-as-you-go makes all four impossible.
 
 **Pitfalls**
-- **Overrides applied after policies** — present in the current design ([architecture/workload-definition.md](architecture/workload-definition.md)): a whitelisted override beats a compliance policy.
+- **Overrides applied after policies** — present in the current design ([architecture/model.md](architecture/model.md#1-workload-and-requirements)): a whitelisted override beats a compliance policy.
 - **Shallow merge, no provenance** — two policies touching one field conflict silently. Provenance per field (`{value, source, rule}`), not per stage.
 - **Over-abstraction** — `type: database` breaks when it resolves to an engine the team's driver doesn't expect. The earlier rule was: the type names the interface the code binds to, the class the operational shape the code cannot see (`type: postgres`, `class: dedicated`).
   **User decision (S12a), overriding that rule:** workloads ask for `database`; the platform team's mapping decides the engine (Cosmos DB SQL API today). To keep the code honest the type exports an `engine` value (`cosmos-sql`, from the mapping's data) that the workload can read. Consequence still open: changing the engine behind a type for an existing workload is a data-moving, breaking change and must later route to approval (F54). C52 is not resolved by this.

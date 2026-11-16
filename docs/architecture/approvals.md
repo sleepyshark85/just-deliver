@@ -48,7 +48,7 @@ types; scale may differ) holds trivially; per-type SKUs are out of the MVP.
 
 The gate is **data-driven: an environment whose descriptor carries an `approval` block (section 3) accepts deploys only through `jd promote`.** The CLI
 tests for the block, never for a type name; there is no type constant and no type rule in C#. Since S21a the environment's `type` is one the
-catalog declares ([components.md](components.md) section 2), and the only coupling is in the catalog: **a type declared with `approval: true`
+catalog declares ([model.md](model.md) section 2), and the only coupling is in the catalog: **a type declared with `approval: true`
 (`stage`, `prod`) requires the definition (and the descriptor) to carry `approval`**, so such an environment cannot be written without a gate
 (`EnvironmentTypeCheck`, at `env up` and before any resolve). Before S21a the schemas held this coupling for `tier: protected`. (A `dev` environment
 may carry a block too and is then gated the same way; nothing forbids it.)

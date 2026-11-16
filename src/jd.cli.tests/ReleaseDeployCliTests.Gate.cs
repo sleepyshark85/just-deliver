@@ -43,7 +43,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Empty(Directory.GetFileSystemEntries(_records));
     }
 
-    // The catalog's type rules (docs/architecture/components.md section 2, boundary 13) hold before anything is touched, also for a preview,
+    // The catalog's type rules (docs/architecture/model.md section 5, boundary 13) hold before anything is touched, also for a preview,
     // which the gate lets through: a declared type, and the block on a type with approval: true (stage).
     [Theory]
     [InlineData("release deploy", "gold", "type: 'gold' is not an environment type of the catalog (declared: dev, prod, shared, stage).")]

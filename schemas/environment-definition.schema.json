@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/environment-definition.schema.json",
   "title": "just-deliver environment definition",
-  "description": "What `jd env up` provisions for an environment: the parts its offers reach in its type's layer (docs/architecture/components.md section 3); the descriptor's values are those parts' exports, keyed by part name. Checked against the catalog, not here: the type is declared, a type with `approval: true` carries the `approval` block, and the offers name declared components and at most one runtime.",
+  "description": "What `jd env up` provisions for an environment: the parts its offers reach in its type's layer (docs/architecture/model.md section 5); the descriptor's values are those parts' exports, keyed by part name. Checked against the catalog, not here: the type is declared, a type with `approval: true` carries the `approval` block, and the offers name declared components and at most one runtime.",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "name", "region", "type", "offers"],

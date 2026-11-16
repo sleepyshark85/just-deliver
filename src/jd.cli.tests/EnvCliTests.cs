@@ -97,7 +97,7 @@ public sealed class EnvCliTests : IDisposable
         Assert.Contains($"{dev}: environment dev (southeastasia, dev) written.", second.Out);
     }
 
-    // What jd writes is pinned byte for byte (docs/architecture/documents.md section 8). Regenerate with JD_UPDATE_GOLDEN=1 and review the diff.
+    // What jd writes is pinned byte for byte. Regenerate with JD_UPDATE_GOLDEN=1 and review the diff.
     [Fact]
     public async Task Up_of_the_sample_shared_and_dev_writes_the_committed_golden_descriptors()
     {
@@ -152,7 +152,7 @@ public sealed class EnvCliTests : IDisposable
         Assert.Equal(["_stage.stage.substrate.apps", "_stage.stage.substrate.database", "_stage.stage.substrate.group", "_stage.stage.substrate.logs"], backend.Calls.Order().ToList());
     }
 
-    // The catalog declares the types (docs/architecture/components.md section 2): the definition's and the base's are checked before anything is
+    // The catalog declares the types (docs/architecture/model.md section 5): the definition's and the base's are checked before anything is
     // created, and each error names its file as typed (here relative to the working directory).
     [Fact]
     public async Task Up_of_an_undeclared_type_or_on_a_base_of_one_creates_nothing_and_names_the_type_and_the_declared_ones()

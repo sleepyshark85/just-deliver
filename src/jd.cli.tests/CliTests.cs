@@ -351,7 +351,7 @@ public sealed class CliTests : IDisposable
             lines[(runtime + 1)..].ToList());
     }
 
-    // The policy only requires monitoring (docs/architecture/components.md section 3): the runtime gets the connection string through the
+    // The policy only requires monitoring (docs/architecture/model.md section 7): the runtime gets the connection string through the
     // workload's own mapping, and a secret output stays secret through the export into the variables entry.
     [Fact]
     public async Task The_connection_string_reaches_the_runtime_through_the_workloads_variable_and_stays_secret()

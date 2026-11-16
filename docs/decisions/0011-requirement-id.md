@@ -35,5 +35,5 @@ requires:
 - Naming scheme (C14) must be derived from the tightest target; it currently does not close.
 
 ## Related
-- [0004](0004-two-layer-definition-model.md), [0010](0010-replacement-protection-classes.md), [architecture/workload-definition.md](../architecture/workload-definition.md), [architecture/resolver.md](../architecture/resolver.md)
+- [0004](0004-two-layer-definition-model.md), [0010](0010-replacement-protection-classes.md), [architecture/model.md](../architecture/model.md#1-workload-and-requirements)
 - [open-questions](../open-questions.md): C12, C14, C16, C52, H50

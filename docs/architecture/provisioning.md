@@ -1,332 +1,148 @@
 # Provisioning
 
-> Status: design reference — not yet reviewed as decisions. Proposed decisions live in [decisions/](../decisions/).
+How a resolved graph ([model.md](model.md#9-the-resolved-graph)) becomes Azure resources: the orchestrator's walk, the release flow of the
+runtime node, preview, the substrate, and how jd operates Pulumi. Rationale: [ADR 0002](../decisions/0002-pulumi-automation-api.md)
+(Automation API), [ADR 0003](../decisions/0003-pulumi-yaml-template-library.md) (static YAML templates, one stack per node),
+[ADR 0006](../decisions/0006-infra-deployed-with-app.md) (infrastructure ships with the app).
 
-How a workload definition ([workload-definition.md](workload-definition.md)) becomes Azure resources, and
-how the Pulumi Automation API is operated. Proposed resolver design: [resolver.md](resolver.md). Flow
-diagram: [workload_deployment_flow.html](workload_deployment_flow.html). Rationale for the tooling and model
-is in [0002 Pulumi Automation API](../decisions/0002-pulumi-automation-api.md),
-[0003 Pulumi YAML template library](../decisions/0003-pulumi-yaml-template-library.md) and
-[0004 two-layer definition model](../decisions/0004-two-layer-definition-model.md) — not repeated here.
-
-## Two-layer model
-
-Provisioning is definition-driven: there is no fixed infrastructure template; what gets built depends on
-what the team declares, merged with what IT Ops mandates.
-
-| Layer | Owner | Example | Merged |
-|---|---|---|---|
-| Team definition | Workload team | `requires: [database, ...]` — the platform provisions exactly what is declared, nothing more | at deploy time |
-| Platform mapping | Platform team | `database` → concrete type + blessed properties per environment | at deploy time |
-| Global policy | IT Ops | "all workloads receive traffic through Azure Application Gateway"; encryption, monitoring, tags | at deploy time; teams never declare them |
-
-Minimal team definitions, centralised mapping intelligence, policy-enforced standards, a visible resolution chain, and an override escape hatch whose usage drives mapping improvements — scaling to many resource types without teams changing how they write definitions.
-
-## Platform mappings
-
-A mapping is the "blessed" configuration for a resource type. Illustrative values from the original design:
-
-| Type | Target | Properties |
-|---|---|---|
-| `database` | `azure-sql-database` | sku `Standard_S1`, backup_retention_days 30, encryption_at_rest true, high_availability false, connection_timeout 30, monitoring true |
-| `cache` | `azure-redis` | sku `Basic`, eviction_policy `allkeys-lru`, persistence false, monitoring true |
-| `queue` | `azure-service-bus` | sku `Standard`, max_message_size 256 KB, default_ttl 14 days, monitoring true |
-
-The only component implemented today resolves `database` to a **Cosmos DB** SQL container (partition key `/id`) in
-the environment's shared database, with a container-scoped grant, and exports `engine: cosmos-sql` so the code
-knows what it got — see `catalog/components/database.yaml` and `catalog/templates/azure`. The implementation, not the contract,
-picks the engine (user decision, C52); changing it for an existing workload must later route to approval (F54).
-
-**Environment-specific values** (illustrative, `database`):
-
-| Env | sku | backup_retention_days | high_availability |
-|---|---|---|---|
-| dev | Standard_S1 | 7 | false |
-| staging | Standard_S2 | 14 | false |
-| production | Premium_P2 | 30 | true |
-
-**Governance:** single source of truth (one or few files), version-controlled with reviewed changes,
-each mapping documents *why* it is configured that way, and is validated by the platform team before use.
-Mappings and policies are **data, versioned independently** of the engine; a deployment records the mapping
-version that resolved it alongside the definition SHA (C52, [resolver.md](resolver.md)).
-
-**Shared vs dedicated (C12):** shared resources belong to the environment tier (one database server, one
-Azure Monitor workspace per environment so telemetry correlates); each workload gets its own database and
-App Insights component inside them. Ownership tiers: landing zone → environment → workload.
-
-## Global IT Ops policies
-
-| Policy | Applies to | Effect | Reason |
-|---|---|---|---|
-| `enforce-encryption` | database, cache, queue | `encryption_at_rest`, `encryption_in_transit` = true | Compliance: all data encrypted at rest and in transit |
-| `enforce-geo-redundancy-prod` | database, when env = production | `high_availability`, `geo_redundancy` = true | SLA: prod databases highly available |
-| `enforce-monitoring` | database, cache, queue (and every workload) | `monitoring`, `app_insights` = true | Observability: everything reports to App Insights |
-| `enforce-compliance-tags` | `*` | inject tags `cost-center: platform-ops`, `compliance: sox-2-compliant`, `data-classification: internal` | Billing and compliance tracking |
-
-Policies have `applies_to`, optional `condition`, and `enforce` (set fields) or `inject` (merge tags). Platform-side policy is the paved road and UX; real guardrails are Azure Policy/RBAC in the landing zone
-([0008](../decisions/0008-enforcement-in-landing-zone.md); F41 split still open).
-
-### Precedence
-
-Intended order, lowest to highest: **team definition → platform mapping (same environment) → global
-policy**. Example: team says `database`; dev mapping sets `encryption_at_rest: false` for cost; policy sets
-it `true`; result is encrypted — policy wins.
-
-**Known pitfall (C52):** the original algorithm applied team overrides *after* policies, so a whitelisted
-override beat a compliance policy, contradicting the stated precedence. Overrides must sit between mapping
-and policy (or be rejected when they touch a policy-enforced field). Second pitfall: shallow merge with no
-provenance — two policies touching one field conflict silently. Provenance must be per field
-(`{value, source, rule}`), not per stage. Both are addressed in [resolver.md](resolver.md).
-
-## Resolution transparency
-
-For each resource the platform shows the chain: (1) team definition, (2) platform mapping for type +
-environment, (3) policies applied (e.g. `enforce-encryption: encryption_at_rest = true (enforced)`,
-`enforce-monitoring: already enabled (no change)`), (4) team overrides, (5) final configuration with
-generated resource id (e.g. `sql-my-service-staging-001`), each value marked with its source, plus outputs
-such as the endpoint.
-
-| Where shown | Purpose |
-|---|---|
-| Deployment preview, before provisioning | Team sees what they will get |
-| Deployment status, after provisioning | Ops confirms what was created |
-| Release record (permanent) | Audit: workload, environment, timestamp, per resource: type, resourceId, teamDefinition, platformMapping, globalPoliciesApplied, finalConfig |
-
-Why: teams understand why a resource is configured that way; ops see which policies applied and where
-conflicts were resolved; debugging; compliance evidence; and teams who disagree with a policy know whom to
-talk to. Secret values must never appear in the chain (D23).
-
-## Provisioning flow
-
-Original flow: team submits definition → API parses and validates → global policies merged → dynamic
-resource graph constructed → background worker executes via Pulumi Automation API → status streamed back
-(never a blocking API call; the API enqueues a job, the worker runs Pulumi in-process).
-
-Refined by settled decisions ([0006](../decisions/0006-infra-deployed-with-app.md), D17, E28, C52):
-
-1. Validate schema (pre-upload too, H50); store the uploaded definition and its SHA ([0007](../decisions/0007-definition-upload-snapshot.md)).
-2. Resolve — pure, backend-agnostic `resolve(definition, environment, mappings, policies) → graph + provenance`
-   with open references ([resolver.md](resolver.md)). Per requirement: look up the component's implementation (env-type-specific, else
-   `default`; none → error), apply overrides (whitelist, prod approval), apply policies, validate final config,
-   generate resource id, record chain.
-3. Preview and approval gate on the resolved graph and `PreviewAsync`: sensitive-diff approval, replacement of
-   protected resources ([0010](../decisions/0010-replacement-protection-classes.md)), destructive removals (C16).
-4. Durable step loop (E29/E30), filling each step's inputs from prior outputs: infra → new app revision with
-   no traffic + migration job (identities created) → grants → verify propagation → `preDeploy` (migration) →
-   `verify` → shift traffic → `postDeploy` ([0014](../decisions/0014-hook-points.md)).
-5. End states: live, degraded (`postDeploy` failed), failed-partial (infra kept, traffic unchanged; retry
-   resumes at the failed step). Infra is forward-only; rollback is app-only (A1 rider 2).
-
-**B/C → D:** the resolution chain and override structure stay identical; only the executor changes
-([0005](../decisions/0005-build-bc-first-design-for-d.md)). B: platform generates a precise runbook, ops
-execute it and can approve/reject overrides, audit compares done vs planned. C: chain becomes a structured
-work order, ops system validates overrides, runbooks generated. D: Automation API executes the graph;
-overrides auto-approved in dev/staging, IT Ops approval in production.
-
-**Questions carried from the original design**, now tracked in [open-questions.md](../open-questions.md):
-how many resource types (database, cache, queue, storage, secrets, cdn, service-bus, app-insights, ...);
-inter-resource dependencies such as a read replica (C52 graph); naming (C14); runtime config injection
-(D22); references in code (C13); partial failure (E31); scaling a resource without redeploying the app
-(no answer yet — under [0006](../decisions/0006-infra-deployed-with-app.md) infra changes ship with a deploy).
-
-## Pulumi operational notes
-
-### Concepts and workspaces
-
-- **Project** (`Pulumi.yaml`) = resource definitions. **Stack** (`Pulumi.<stack>.yaml` + state) = one
-  parameterised, independently deployable instance. Stack size is arbitrary; small per-resource-type stacks
-  trade orchestration complexity for failure isolation and independent lifecycles.
-- Convention: **one stack per graph node**, named from the node id ([resolver.md](resolver.md#output-resolvedgraph));
-  the project is the template. Stacks of one template are independent.
-- `LocalWorkspace` shells out to a locally installed `pulumi` CLI — used here, no Pulumi Cloud account.
-  `RemoteWorkspace` is Pulumi Deployments (managed remote execution from git) — not used.
-  `InlineProgramArgs` = program as a C# `PulumiFn`; `LocalProgramArgs` = `Pulumi.yaml` on disk (`WorkDir`) — used.
-- **YAML vs inline C#:** YAML has no provider-SDK coupling (plugins resolved at runtime) but only `fn::each`
-  for logic; inline C# needs every provider's NuGet package but has full logic. Chosen: static YAML templates,
-  only config generated per run (0003). Orchestrator references only `Pulumi.Automation`, no cloud SDK.
-
-### Config file behaviour
-
-`SetConfigAsync` / `SetAllConfigAsync` write straight into `Pulumi.<stack>.yaml` on disk, overwriting the key
-(same as `pulumi config set`), and persist after the process exits. There is no separate runtime-override
-layer — at `UpAsync()` the file already holds what the code wrote. Config is always driven from code; nobody
-hand-authors it. YAML runtime gotcha: numeric-looking strings such as `"1.2"` are coerced to numbers by
-`${}` substitution (so a version such as `1.2` is better written as a literal in the template).
-
-### Stack naming, outputs and work directories
-
-- `DeploymentPackage.DeploymentContent` is the template (its `name:` is the Pulumi project); `DeploymentPackage.StackName` is the graph's stack.
-- Pulumi limits stack names to 100 characters of `[A-Za-z0-9_.-]`. The provider passes names up to 100 unchanged;
-  a longer name becomes its first 83 characters + `-` + the first 16 hex characters of the SHA-256 of the full
-  name (`StackNames`): deterministic, 100 characters, distinct for different graph stacks. Callers always use the
-  graph name, also with `GetOutputsAsync`. Names that Pulumi or the file system cannot take are rejected.
-- `GetOutputsAsync(stackName, deploymentContent)` takes the stack name and template content `DeployAsync` was given
-  (so the project always matches; the config is not needed), lists the project's stacks and reads the matching stack's
-  outputs from state: no refresh, no preview, no provider plugin.
-  It returns null when the stack is "not deployed": it does not exist, or it has no resources recorded
-  (`PreviewAsync` creates an empty stack, so a preview alone does not make a node deployed). The orchestrator uses
-  it to fill references to already-deployed nodes during preview; there are no fake or placeholder values in the
-  provider.
-- Refresh runs before every deploy and preview but its events are not recorded: `DeploymentResult.Changes` holds only the deploy or preview changes, so a no-op re-deploy has none.
-- Every operation runs in `<ScratchDirectory>/just-deliver/<pulumi stack name>`, created for the operation and
-  removed afterwards, on success, failure and cancellation. Everything durable is in the backend, and config is
-  rewritten from code on every run, so nothing is kept between operations. Two concurrent operations on one stack
-  would share the directory, so callers must not run two operations on one stack at once (the orchestrator is sequential).
-- Secret config values are written with `--secret` semantics (`ConfigEntry.IsSecret`), come back as secret
-  outputs (`IsSecret`), and do not appear in clear text in state.
-- `CancellationToken` flows from every public provider method to the Automation API calls.
-
-### Orchestrator
+## Orchestrator
 
 `jd.orchestrator` (application layer: depends on `jd.core` and `jd.resolver`, never on Pulumi) holds the use cases each command calls
-([application.md](application.md)) and the walk: it walks a `ResolvedGraph` in graph order through `IBackEndProvider`, one node at a time. Template content comes from `ITemplateStore`
-(implemented by `TemplateLibrary` over `<catalog>/templates`).
+([application.md](application.md)) and walks a `ResolvedGraph` through `IBackEndProvider`, one node at a time. Template content comes from
+`ITemplateStore` (`TemplateLibrary` over `<catalog>/templates`). It refuses a graph whose catalog version or environment differs from the
+catalog and environment it was given.
 
-- **Deploy.** Per infrastructure-phase node: evaluate the node's pending config again with the same
-  `ExpressionEvaluator` and a context whose known outputs are the outputs captured from the nodes deployed before it (the
-  workload name, team, image and port, the current id and the node names in scope are the node's scope, as in the first pass).
-  Node outputs are read by node name and only from the node's own scope and from the runtime, since two scopes may share a node name;
-  what another scope exports arrives through its exports: `${resource.<id>.<export>}` (read only by the runtime node, e.g. a workload
-  variable) is known once its requirement's nodes are deployed, the exports being evaluated with those nodes' outputs by `ExportValues`,
-  the helper `DescriptorComposer` uses too.
-  Every value must be resolved before the node is deployed; otherwise the walk stops and the error names node, field and
-  reference. Config becomes backend entries: strings as they are, numbers and booleans in invariant form (`0.15`,
-  `true`), objects and arrays as compact JSON (a Pulumi config value is always a string; templates read maps and lists
-  as JSON; an `fn::entries` object, the workload's variables, as a list of `{name, value}` items sorted by name). A value built
-  from a secret output, directly or through an export, is a secret; a secret variable makes the whole `variables` entry secret. The walk stops at the first failure and reports what was deployed.
-- **Walk order.** The infrastructure-phase nodes first, in graph order; then the runtime node (phase `runtime`, the Container App from the
-  runtime) through the release flow below; the **after-runtime nodes** (phase `after-runtime`: grants that reference `runtime.*`) are
-  deployed inside that flow, in its Grants step. Topological order can put the runtime before unrelated infrastructure (its id sorts first),
-  so the walk does not rely on it. Each node, the grants included, is reported as it completes; the runtime's report comes last.
-- **Release flow (the runtime node).** The `container-app` template takes `revisionSuffix` and `traffic` as inputs and owns no opinion on
-  either, so one template deploys all the moves of the flow, in this order: (1) **Dark**: deploy with a revision suffix (below), and `traffic` =
-  `[{revisionName: <live revision>, weight: <fullWeight>}]`, so the new revision exists and the live one keeps all traffic; the first deploy has no live
-  revision and passes `[{latestRevision: true, weight: <fullWeight>}]`. The new revision is the dark deploy's `revisionOutput`. (2) **Grants**: the
-  after-runtime nodes, deployed with the dark deploy's outputs. (3) **Probe**: GET `<probe.scheme>://` + the new revision's `fqdnOutput` + the runtime's `probe.path`
-  through `IRevisionProbe`; the orchestrator retries up to `1 + timeoutSeconds / intervalSeconds` times, waiting `intervalSeconds` between
-  attempts, because grants may take minutes to propagate. (4) **Shift**: the same suffix with `traffic` = `[{revisionName: <new revision>,
-  weight: <fullWeight>}]`, which changes traffic only and creates no revision; it also runs on a first deploy, so the stack's traffic names the
-  revision from then on (the template echoes the traffic it was given, and `[{latestRevision: true}]` would never name one). Traffic goes to
-  the new revision only here, after a passed probe. A failed step makes the runtime `failed` with `<step>: <reason>`; later steps do not
-  run, so traffic stays on the live revision. **First-deploy exception:** there is no live revision to keep, so the dark deploy puts all
-  traffic on the latest revision and it serves before it is probed; a failed probe is still reported `failed`, but nothing protects the traffic.
-  The probe target is built only from the runtime's scheme, the dark deploy's FQDN output and the
-  runtime's path (a missing or empty FQDN output fails the Probe step without a probe), never from workload data or another node.
-  **Suffix:** the runtime's `release.suffix`: its `prefix` + a config part + a salt; container-app's is `r` + 8 + 6 hex digits, 15 characters
-  (Azure's rule: lowercase letters, digits and `-`, starting with a letter; the revision name `<app>--<suffix>` at most 54 characters, so the
-  file declares `maxLength: 20` and the catalog refuses parts that exceed it). The config part is the first `configDigits` hex digits of the SHA-256 of the template content and the
-  filled runtime parameters (key, value, secret flag, in key order; the suffix and traffic inputs excluded). Azure rejects any template
-  change whose suffix names an existing revision, even when the template equals that revision's old one, so the engine reads the previous
-  suffix from the stack (the runtime's `suffixOutput`, which the template echoes like the traffic): if it starts with the prefix + this config part,
-  it is reused (the same config as the last deploy: a re-run is `unchanged`, and a re-run after a probe failure finds the failed revision
-  and probes and shifts it, creating no other); otherwise (first deploy, changed config or template, a revert) the salt is the first `saltDigits` hex
-  digits of the SHA-256 of the previous suffix (of the empty string when there is none), so A to B to A gives A a new suffix and the old
-  config is redeployed as a new revision. Residual: a 24-bit salt collision on a config deployed before names an existing revision, and
-  Azure rejects it at the dark step. The salt depends only on the previous suffix, so if a dark deploy fails after Azure has created the
-  revision (an image that cannot be pulled, a transient ARM error), the outputs keep the old suffix and a same-config re-run computes the
-  same suffix and is rejected until the config changes, which a fixed image does; traffic is unaffected.
-  **Live revision:** read from the stack before the dark deploy: the template echoes the traffic it was last given as an output (the
-  runtime's `trafficOutput`), and the live revision is the last item with a `revisionKey` (none on a first deploy, or when only
-  `latestKey` items are there); the app's `latestReadyRevisionName` is the newest revision, not the live one, so it cannot tell. **Unchanged:** the dark deploy
-  reports no changes and the new revision is the live one: the runtime is `unchanged`, Probe and Shift are `skipped`, and the grants still
-  deploy; this holds for a same-config re-run after a first deploy too, since that deploy's shift named the revision. The runtime's `release` block names the inputs, outputs and the shape of a traffic item, so none is in code, and
-  its `probe` carries the retry bound. The engine alone sets the suffix and the traffic: `TemplateLibrary.Check` rejects a runtime node whose
-  config sets either (a workload-scope policy could otherwise), and the engine's values replace any that reach the walk.
-  **Known limitation:** old revisions are not deactivated. Container Apps keeps a 0%-traffic revision active in multiple-revision mode,
-  where it scales to zero and costs nothing; deactivating one is an API action Pulumi YAML cannot express. `maxInactiveRevisions` bounds
-  only revisions that are already inactive (open question E32).
-- **Preview.** Same order, nothing is created. A reference to a node this run has not deployed is filled from
-  `GetOutputsAsync` (state of an earlier deploy); if the node was never deployed the value is missing and the node is
-  reported "pending upstream" and not previewed (never a fake value). Template `fn::invoke`s still run during preview, so
-  previewing a new environment's substrate needs its upstream deployed first. For the runtime, only the dark package is previewed (with the
-  live revision read from state); its Dark, Grants, Probe and Shift steps are `planned`, and the probe is never called. The grants (the nodes after the runtime) are
-  previewed too, with the runtime's outputs read from state like any upstream node's; a runtime never deployed has none, so they are reported
-  "pending upstream". This is what lets `jd release qualify` see a drifted grant ([release-record.md](release-record.md) section 5).
-- **Result.** Per node: outcome (`deployed`, `unchanged`, `previewed`, `pending upstream`, `failed`), the provider's change summary and
-  per-resource changes, and the time. A node is `unchanged` when its summary has no operation other than `Same`; "re-run = zero changes"
-  means every deployed node is `unchanged` (the runtime as described above). The runtime's report also carries its steps (`dark`, `grants`,
-  `probe`, `shift`, each `done`, `planned`, `skipped` or `failed` with a detail), printed one line each under the node.
-- **Configuration.** Nothing is read from the machine ([connections.md](connections.md)): the composition root hands the backend
-  provider the state store in jd's data directory, `file://<data>/state`, and its passphrase file `<data>/state.key` (random, generated
-  once, mode 600), which the provider passes to Pulumi as `PULUMI_CONFIG_PASSPHRASE_FILE`, removing an ambient
-  `PULUMI_CONFIG_PASSPHRASE` (Pulumi would prefer it). The state stays in one place between runs. Optional: `PULUMI_HOME`, `JD_SCRATCH_DIR`.
-  Pulumi's Azure provider authenticates with the `ARM_*` service principal when it is set, else the Azure CLI sign-in. The orchestrator
-  refuses a graph whose catalog version or environment differs from the catalog and environment it was given.
+- **Deploy.** Per infrastructure-phase node, the node's pending config is evaluated again with the same `ExpressionEvaluator`, its known
+  outputs being those of the nodes deployed before it (the scope is the node's, as in resolution). Outputs are read by node name only from the
+  node's own scope and the runtime; another requirement's values arrive through its exports (`${resource.<id>.<export>}`, read only by the
+  runtime node), evaluated by `ExportValues` once that requirement's nodes are deployed. Every value must be resolved before the node deploys;
+  otherwise the walk stops and the error names node, field and reference.
+- **Config entries.** A Pulumi config value is a string: strings as they are, numbers and booleans in invariant form (`0.15`, `true`),
+  objects and arrays as compact JSON, the `fn::entries` variables as a list of `{name, value}` sorted by name. A value built from a secret
+  output, directly or through an export, is secret; a secret variable makes the whole `variables` entry secret.
+- **Walk order.** The `Infrastructure` nodes first, in graph order; then the runtime node through the release flow; the `AfterRuntime` nodes
+  (the grants) inside that flow. Topological order can put the runtime before unrelated infrastructure, so the walk does not rely on it. Each
+  node is reported as it completes, the runtime last. The walk stops at the first failure and reports what was deployed.
 
-### Release sets (`jd release deploy`)
+### Release flow (the runtime node)
 
-A release set ([release.md](release.md)) is deployed by the same path as one workload, once per workload. `ReleaseResolver`
-(`jd.resolver`) parses each embedded definition and runs `Resolver.Resolve` in `Order`, naming errors `<set>#<workload>`;
-the use case checks every graph against the templates ([application.md](application.md)); then `Orchestrator.DeployReleaseAsync` walks the graphs in that order
-(`DeployAsync`, or `PreviewAsync` with `--preview`) and stops after the first workload that fails (a revision that fails its probe included), so later workloads are
-never touched. All resolution and checks come before the first node, so a resolve error in the last workload creates nothing.
-Rollback of the workloads before a failure is not part of the walk (open question E31): the run reports where it stopped and
-running it again resumes. The workloads' containers share the environment database's throughput (no per-container RU/s).
+The `container-app` template takes the revision suffix and the traffic as inputs and has no opinion on either, so one template deploys every
+step. The runtime's `release` block names those inputs, the outputs the flow reads and the shape of a traffic item; its `probe` carries the
+retry bound; nothing of them is in code. The engine alone sets the suffix and the traffic: `TemplateLibrary.Check` rejects a runtime node whose
+config sets either (a workload-scope policy could), and the engine's values replace any that reach the walk.
 
-### Substrate (`jd env up`)
+1. **Dark:** deploy with the new suffix and all traffic (`fullWeight`) on the live revision, so the new revision exists and serves nothing.
+   On a first deploy there is no live revision and the traffic is `[{latestRevision: true, weight: <fullWeight>}]`.
+2. **Grants:** the `AfterRuntime` nodes, deployed with the dark deploy's outputs.
+3. **Probe:** GET `<probe.scheme>://` + the new revision's FQDN output + `probe.path` through `IRevisionProbe`, retried up to
+   `1 + timeoutSeconds / intervalSeconds` times `intervalSeconds` apart, because grants take minutes to propagate. The target is built only from
+   the runtime's data and the dark deploy's FQDN output (missing or empty fails the step without a probe).
+4. **Shift:** the same suffix with all traffic on the new revision; this changes traffic only. It runs on a first deploy too, so the stack's
+   traffic names the revision from then on.
 
-An environment's substrate is provisioned by the same path as a workload's infrastructure: `Resolver.ResolveSubstrate` resolves an
-**environment definition** (its `type` and `offers`: the parts are what the offered components and runtime reach through `uses`, per the
-type's layer, collected into one scope `substrate` ([resolver.md](resolver.md#environment-definition)); the owner is
-named `@<name>`, so its ids and stacks (`_dev.dev.substrate.group`) can never collide with a workload's, and it has no runtime, so
-workload-scope policies add nothing) and the orchestrator deploys the graph.
-There is no second resolution or deploy path. Because Azure allows one free-tier Cosmos account per subscription there are two
-layers: `shared` (layer `shared`, once per subscription, deploying the shared resources: resource group, Log Analytics workspace with a daily cap, the Cosmos account with free
-tier, `totalThroughputLimit: 1000` and key (local) authentication disabled) and one definition per environment on top of the shared descriptor (`--base`),
-which never deploys a shared resource (one it reaches must be in the base, else an error before anything is created): resource
-group, Container Apps environment (Consumption) whose diagnostic setting sends its logs to the shared workspace (no workspace key), and a Cosmos SQL database with 400 RU/s shared throughput
-in the shared account. Two environments use 800 of the 1,000 free RU/s. These values live in the catalog components, not in code.
+A failed step makes the runtime `failed` with `<step>: <reason>`; later steps do not run and traffic stays on the live revision. **First-deploy
+exception:** the dark step already serves the latest revision, so a failed probe is reported but protects no traffic.
 
-After the deploy, `DescriptorComposer` writes `values.<part>.<export>`: each part's export evaluated with the node outputs
-(`NodeReport.Outputs` holds only non-secret outputs; null and secret ones are dropped, as `ExportValues` does for the orchestrator's
-second pass), so an export reading a secret, directly or through another part's export, fails and nothing is written. The values are
-merged into the base descriptor's (new keys only), and the result is validated with the
-descriptor loader before it is written. The same composition runs once **before** the deploy with the values still pending, so
-every error that does not need an output is found while nothing exists yet.
+- **Live revision:** the last traffic item with a `revisionKey` in the stack's traffic output (the template echoes the traffic it was given);
+  none on a first deploy. The app's latest ready revision is the newest one, not the live one.
+- **Suffix:** `prefix` + `configDigits` hex digits of the SHA-256 of the template content and the filled runtime parameters (key, value,
+  secret flag, in key order; suffix and traffic excluded) + `saltDigits` of a salt; `r` + 8 + 6 for container-app (Azure: lowercase letters,
+  digits and `-`, starting with a letter; the declared `maxLength` keeps the revision name within Azure's limit). Azure rejects any change whose
+  suffix names an existing revision, so the previous suffix (the suffix output) is reused when it has the same prefix and config part (a re-run
+  is `unchanged`; a re-run after a failed probe probes and shifts the same revision); otherwise the salt is the SHA-256 of the previous suffix,
+  so A → B → A deploys A as a new revision. Residual: a salt collision on an earlier config is rejected by Azure at the dark step, and a dark
+  deploy that fails after Azure created the revision keeps being rejected until the config changes; traffic is unaffected either way.
+- **Unchanged:** the dark deploy has no changes and the new revision is the live one: Probe and Shift are `skipped`, the grants still deploy.
+- **Known limitation:** old revisions are not deactivated. A 0%-traffic revision stays active, scaled to zero at no cost; deactivation is an
+  API action Pulumi YAML cannot express, and `maxInactiveRevisions` bounds only inactive ones (open question E32).
 
-### Chaining stacks
+### Preview
 
-Provision stack A → read `UpResult.Outputs` → `SetConfigAsync` into stack B → provision B. Alternative:
-`StackReference` reads another stack's outputs live from inside a program via `<org>/<project>/<stack>`
-(`organization` is fixed on the local backend), read-only, no staleness. **Chosen: config-passing by the
-orchestrator**, because one orchestrator already sequences everything and holds the values;
-`StackReference` pays off only when stacks are provisioned independently. In preview, references to already-deployed
-nodes are filled from `GetOutputsAsync`; references to nodes not yet deployed stay pending (never fake values). See [Orchestrator](#orchestrator).
+Same order, nothing created. A reference to a node this run has not deployed is filled from `GetOutputsAsync` (the state of an earlier
+deploy); a node never deployed leaves the value missing and its dependents `pending upstream`, never a fake value. Template `fn::invoke`s still
+run, so previewing a new environment's substrate needs its upstream deployed. For the runtime only the dark package is previewed (live revision
+from state) and its steps are `planned`; the probe is never called. The grants are previewed with the runtime's outputs from state, which
+lets `jd release qualify` see a drifted grant ([release-record.md](release-record.md)).
 
-### Backend and state
+### Result
 
-- Backend set in code (`file://<data>/state` locally, jd's data directory), never in `Pulumi.yaml`, keeping
-  templates backend-agnostic. Target: Azure Blob Storage, self-hosted, no Pulumi Cloud
-  (`azblob://pulumi-state`, see [phase-0-bootstrap.md](../plans/phase-0-bootstrap.md)).
-- The local backend still encrypts secrets, so a passphrase is required non-interactively: jd generates `<data>/state.key` once and
-  keeps it beside the state (D25's empty passphrase is no longer used).
-- Local state is incompatible with ephemeral hosting (Container Apps Jobs, CI runners); switch to a remote
-  backend before moving execution off a persistent machine.
+Per node: outcome (`deployed`, `unchanged`, `previewed`, `pending upstream`, `failed`), the provider's change summary and per-resource
+changes, and the time. A node is `unchanged` when its summary has no operation other than `Same`, so "re-run = zero changes" means every node
+`unchanged`. The runtime's report also carries its steps (`dark`, `grants`, `probe`, `shift`, each `done`, `planned`, `skipped` or `failed`).
 
-### Scaling and performance
+## Release sets (`jd release deploy`)
 
-- Fixed cost per stack operation: CLI process start + provider plugin start; `azure-native` has a very large
-  schema and is slow to initialise. No hard limit on stack count, but cost is linear in stacks × workloads.
-- Mitigate by parallelising independent workloads, not by merging stacks with independent lifecycles. Also
-  (H47): hash config + template per stack and skip unchanged ones, keep a warm plugin cache.
-- Azure ARM rate limits are a separate concern at high concurrency.
-- Reading outputs / `StackReference` is cheap (state read or one small API call, no plugin start), unlike
-  `up`/`refresh`/`preview`.
+A release set ([release.md](release.md)) deploys by the same path as one workload, once per workload. `ReleaseResolver` parses each
+embedded definition and resolves it in the set's order, naming errors `<set>#<workload>`; the use case checks every graph against the
+templates; then `Orchestrator.DeployReleaseAsync` walks the graphs in that order and stops after the first workload that fails (a failed
+probe included), so later workloads are never touched. All resolution and checks come before the first node. Rollback of the workloads
+before a failure is not part of the walk (open question E31): the run reports where it stopped and a re-run resumes.
 
-### Hosting the orchestrator (future; not needed for local MVP)
+## Substrate (`jd env up`)
 
-Ranked: **CI/CD pipeline first** (approval gates + logs for free) → **Container Apps Jobs** once a self-serve
-API exists. Avoid Azure Functions (timeout risk with sequential multi-stack runs). All options give a writable
-temp dir; on GCP Cloud Run/Functions `/tmp` is memory-backed and counts against container memory. The real
-serverless bottleneck is the plugin cache (`PULUMI_HOME`): re-downloading a 100+ MB provider per cold start is
-slow, so prefer compute with a warm cache or plugins baked into a custom image (Container Apps Jobs, ACI, CI
-runner).
+An environment's substrate deploys by the same path as a workload's infrastructure: `Resolver.ResolveSubstrate` resolves the environment
+definition ([model.md](model.md#5-environments)) and the orchestrator deploys the graph; there is no second path. Azure allows one free-tier
+Cosmos account per subscription, hence two layers: `shared` once per subscription (resource group, Log Analytics workspace with a daily cap,
+the free-tier Cosmos account with a throughput cap and local authentication disabled), and one definition per environment on top of the
+shared descriptor (`--base`): resource group, Container Apps environment (Consumption) whose logs go to the shared workspace, and a Cosmos
+SQL database with 400 RU/s shared throughput, so two environments use 800 of the 1,000 free RU/s. These values are catalog data. The
+workloads' containers share their environment database's throughput.
 
-### Current implementation vs this design
+`DescriptorComposer` then writes `values.<part>.<export>`: each part's export evaluated with the deployed outputs (`NodeReport.Outputs` holds
+non-secret outputs only, so an export reading a secret fails and nothing is written), merged into the base's values (new keys only), and
+written by the binder through the descriptor schema. The same composition runs once **before** the deploy with the values pending, so every
+error that needs no output is found while nothing exists yet.
 
-| Design | Code today (`src/backend-providers/jd.bp.pulumi`, `catalog/templates`) |
-|---|---|
-| Templates at `templates/<provider>/<resource-type>/Pulumi.yaml` | `catalog/templates/<provider>/<resource-type>/Pulumi.yaml`; no per-template default config (the orchestrator sets every input) |
-| One stack per graph node | `DeploymentPackage.StackName` (shortened above 100 characters); the project is the template's `name:` |
-| Fresh temp dir, cleaned up | `<ScratchDirectory>/just-deliver/<stack>`, removed after every operation |
-| — | Every `DeployAsync`/`PreviewAsync` runs `RefreshAsync` first; per-property changes captured from the deploy or preview engine events (not the refresh) into `DeploymentResult.Changes` |
+## Pulumi operation
+
+- **Workspaces.** `LocalWorkspace` with `LocalProgramArgs`: the template's `Pulumi.yaml` on disk is the program and its `name:` the
+  project; the locally installed `pulumi` CLI runs it; no Pulumi Cloud, no `RemoteWorkspace`. The orchestrator references no cloud SDK, and
+  only config is generated per run (ADR 0003). One stack per graph node; stacks of one template are independent.
+- **Config.** `SetAllConfigAsync` writes into `Pulumi.<stack>.yaml`, overwriting keys; config is always written from code. Secret entries
+  (`ConfigEntry.IsSecret`) are written as secrets, come back as secret outputs and are encrypted in state. Pulumi YAML coerces
+  numeric-looking strings substituted by `${}` to numbers, so a value such as a version `1.2` is better a literal in the template.
+- **Stack names.** `DeploymentPackage` carries the template (`DeploymentContent`) and the graph's stack name (`StackName`). Pulumi allows 100
+  characters of `[A-Za-z0-9_.-]`; a longer name becomes its first 83 characters + `-` + 16 hex characters of its SHA-256 (`StackNames`):
+  deterministic and distinct. Callers always use the graph's name.
+- **Outputs.** `GetOutputsAsync(stackName, deploymentContent)` reads a stack's outputs from state (no refresh, no preview, no plugin); it
+  returns null when the stack does not exist or records no resources (a preview alone creates an empty stack).
+- **Refresh.** Every deploy and preview refreshes first; only the deploy or preview events are recorded in `DeploymentResult.Changes`, so a
+  no-op re-deploy has none.
+- **Work directories.** Each operation runs in `<ScratchDirectory>/just-deliver/<stack>`, created for it and removed afterwards, on success,
+  failure and cancellation; everything durable is in the backend. Two operations on one stack at once would share it; the orchestrator is
+  sequential. `CancellationToken` flows from every provider method to the Automation API.
+- **Chaining stacks.** The orchestrator passes outputs into the next stack's config; it already sequences every node and holds the values, so
+  `StackReference` (reading another stack from inside a program) is not used.
+
+## Backend and state
+
+Nothing is set on the machine but a signed-in identity: jd decides where it connects.
+
+- **Data directory** `<data>`: `jd` in the local application data folder (`~/.local/share/jd` on Linux), created on first use, or
+  `JD_DATA_DIR` (tests and separate runs use it); never required.
+- **State:** the composition root hands the backend provider `file://<data>/state`, set in code and never in `Pulumi.yaml`, so templates stay
+  backend-agnostic. The local backend still encrypts secrets: `<data>/state.key` holds a random passphrase, generated once with mode 600 and
+  never replaced, passed to Pulumi as `PULUMI_CONFIG_PASSPHRASE_FILE`; an ambient `PULUMI_CONFIG_PASSPHRASE` is removed, since Pulumi would
+  prefer it.
+- **Records:** `<data>/records`, through `IRecordStore` ([release-record.md](release-record.md)).
+- **Region:** the environment definition's `region`, copied to the descriptor; not a machine setting.
+- **Identity:** the `ARM_*` service principal when all its variables are set (CI, the Azure gate), else the Azure CLI sign-in; a partial
+  `ARM_*` set is an error naming the missing ones. Pulumi's Azure provider authenticates the same way.
+- **Optional:** `PULUMI_HOME` (plugin cache) and `JD_SCRATCH_DIR` (work directories). The user-facing list: [usage.md](../usage.md).
+
+Each concern has one implementation, local; an Azure-backed state or record store plugs in behind the same abstractions. Local state does not
+suit ephemeral hosting (Container Apps Jobs, CI runners): a remote backend comes first.
+
+## Scaling and performance
+
+- Each stack operation pays a CLI process start and a provider plugin start; `azure-native` is slow to initialise. Cost is linear in stacks ×
+  workloads. Reading outputs is cheap (a state read, no plugin).
+- Mitigate by running independent workloads in parallel, not by merging stacks with independent lifecycles; skip stacks whose node hash is
+  unchanged and keep a warm plugin cache (H47). ARM rate limits matter at high concurrency.
+
+## Hosting the orchestrator
+
+Today jd runs on the deployer's machine or a CI runner. Ranked options for later: a **CI/CD pipeline** (approval gates and logs for free),
+then **Container Apps Jobs** once a self-serve API exists; not Azure Functions (timeouts on sequential multi-stack runs). The bottleneck of
+serverless hosting is the plugin cache: re-downloading a 100+ MB provider per cold start is slow, so prefer a warm cache or plugins baked
+into the image.

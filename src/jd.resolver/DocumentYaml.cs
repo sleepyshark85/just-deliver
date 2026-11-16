@@ -3,7 +3,7 @@ using YamlDotNet.Serialization;
 
 namespace jd.resolver;
 
-/// <summary>A written document as YAML text, for the files jd writes (docs/architecture/documents.md section 5).</summary>
+/// <summary>A written document as YAML text, for the files jd writes (docs/architecture/documents.md section 3).</summary>
 internal static class DocumentYaml
 {
     /// <summary><paramref name="document"/>'s body as YAML by <paramref name="serializer"/>, each mapping's keys in the order the body holds them.</summary>

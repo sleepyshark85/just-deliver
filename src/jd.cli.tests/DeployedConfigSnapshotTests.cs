@@ -11,7 +11,7 @@ using Xunit;
 
 namespace jd.cli.tests;
 
-// The refactor's acceptance (docs/architecture/components.md section 5): `env up` of the sample shared, dev and stage definitions, then
+// A refactor's proof that what reaches Azure is unchanged: `env up` of the sample shared, dev and stage definitions, then
 // `jd deploy` of the seed workload on dev, `jd release deploy` of the walkthrough's v1 release (two workloads) on dev and its `jd promote` to
 // the gated stage (approved by the sample's approver, whose approval is placed by hand), against a fake
 // backend whose outputs are deterministic. Every package the backend is handed (stack, every config entry, its secret flag, and the SHA-256

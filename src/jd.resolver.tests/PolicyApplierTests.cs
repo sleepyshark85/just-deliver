@@ -201,7 +201,7 @@ public class PolicyApplierTests
         Assert.Equal(new Provenance("f4.yaml", "everywhere", Layer.PolicySet), runtime.Provenance["runtime.k"]);
     }
 
-    // A policy requires, it never adds (docs/architecture/components.md section 3): a workload the policy matches must declare the component.
+    // A policy requires, it never adds (docs/architecture/model.md section 7): a workload the policy matches must declare the component.
     [Fact]
     public async Task A_workload_without_a_required_component_is_an_error_naming_the_policy_and_its_file()
     {

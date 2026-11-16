@@ -15,7 +15,7 @@ namespace jd.resolver.release;
 /// </summary>
 public static class ApprovalRecord
 {
-    // The record is jd's JSON evidence, kept as typed code beside its schema (docs/architecture/documents.md section 5, choice 2 (b)).
+    // The record is jd's JSON evidence, kept as typed code beside its schema (docs/architecture/documents.md section 2).
     private const string Kind = "ApprovalRecord";
 
     // The record's fields, in file order, camelCase as the schema spells them: Build writes it and ReadAsync reads it (after the schema has vouched for it), so the keys are named once.

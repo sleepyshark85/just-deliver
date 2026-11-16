@@ -10,7 +10,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-// An environment definition's offers reach the parts of its layer (docs/architecture/components.md section 3), which resolve through the same
+// An environment definition's offers reach the parts of its layer (docs/architecture/model.md section 5), which resolve through the same
 // engine as workloads into one scope; the descriptor is composed from the parts' exports with the (here faked) node outputs.
 public class SubstrateTests
 {

@@ -14,7 +14,7 @@ public class SeedCatalogTests
         Assert.NotNull(result.Value);
     }
 
-    // The shared resources and database's environment part (docs/architecture/components.md section 2) are loaded and checked, and
+    // The shared resources and database's environment part (docs/architecture/model.md section 3) are loaded and checked, and
     // nothing consumes them yet (S21e). A chained read passes the checks: database's environment part reads cosmos-account.resourceGroup,
     // which is shared-group.name.
     [Fact]
