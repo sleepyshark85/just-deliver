@@ -91,7 +91,7 @@ A release is one label over a pinned set of workloads ([release.md](architecture
 before the first node; then deploys each workload in deploy order.
 
 - Output per workload: `workload <name>`, then the `deploy` node lines. Then
-  `release <label> on <env>: <n> deployed, <n> unchanged, <n> failed, <n> not started (<names>).`; a workload counts as deployed when any
+  `release <label> on <env>: <n> deployed, <n> unchanged, <n> failed, <n> not started.`, with ` (<names>)` after "not started" only when some were not started; a workload counts as deployed when any
   node changed. `--preview` creates nothing and records nothing; its summary says `<n> previewed`.
 - The first failed node stops the run: `jd: stopped at <workload>, node <node id>: <reason>`, exit 1; later workloads are not started.
 - A recorded run names the principal, then keeps the set as `set.yaml` beside the records; a different set under the label is refused (exit 1)
@@ -126,8 +126,10 @@ Whoever runs it is not checked against `approvers`.
 | `separateFromDeployer` and the principal deployed the label | `…requires approvers separate from the deployer.` | the approval does not count |
 | The principal already approved this set | `…already approved <label> for '<env>'.` | counted once |
 | Fewer than `required` approvals count | (not checked) | `  <n> of <required> required approvals for '<env>' count.` |
+| The approval file cannot be created | `jd: approve: the approval could not be written: <reason> If the file already exists, run the command again.` | (not applicable) |
+| The kept set changed after it was checked | (not applicable) | `jd: promote: the kept set '<set>' changed since it was checked (expected sha256 <h>).` |
 
-Usage errors (exit 2): a missing or invalid `--meaning`; a label that cannot name a records directory (empty, or containing `..`, `/` or `\`).
+Usage errors (exit 2): a missing or invalid `--meaning`; a label that is not a release label (like 1.0.0 or 1.0.0-rc.1), or one that cannot name a records directory (empty, or containing `..`, `/` or `\`).
 
 ## Exit codes
 

@@ -387,7 +387,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal(0, _identity.Calls);
     }
 
-    // The I/O mapping (docs/architecture/application.md section 2): an I/O failure that escapes approve or promote before its walk (here: the records cannot be
+    // The I/O mapping (docs/architecture/application.md section 4): an I/O failure that escapes approve or promote before its walk (here: the records cannot be
     // reached) is exit 2 with its message, as for every other command; before, it escaped jd as an unhandled exception.
     [Theory]
     [InlineData("promote", "1.0.0", "--to", StagePath, "--catalog", CatalogPath)]

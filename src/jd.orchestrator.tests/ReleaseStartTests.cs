@@ -202,7 +202,7 @@ public sealed class ReleaseStartTests
         Assert.DoesNotContain("backend", _built);
     }
 
-    // As application.md section 1 says: every connection is built before the first backend call, so one that cannot be built stops the run with
+    // As application.md section 3 says: every connection is built before the first backend call, so one that cannot be built stops the run with
     // nothing deployed.
     [Theory]
     [InlineData("backend")]

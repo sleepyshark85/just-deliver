@@ -83,7 +83,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Empty(Directory.GetFileSystemEntries(_records));
     }
 
-    // As application.md section 1 says: every reader is built before the first backend call, so one that cannot be built stops the run before anything is deployed.
+    // As application.md section 3 says: every reader is built before the first backend call, so one that cannot be built stops the run before anything is deployed.
     [Fact]
     public async Task A_reader_that_cannot_be_built_stops_the_run_before_any_backend_call()
     {

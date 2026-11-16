@@ -472,7 +472,7 @@ public sealed class CliTests : IDisposable
         Assert.Single(stderr.Split('\n'), line => line == $"{Path.Combine(catalog, "templates")}: template directory not found.");
     }
 
-    // As docs/architecture/application.md section 1 says: an empty templates directory holds no template documents, so it reads as a
+    // As docs/architecture/application.md section 3 says: an empty templates directory holds no template documents, so it reads as a
     // missing one; before, it gave only each node's "not in the template library".
     [Fact]
     public async Task Deploy_reports_an_empty_template_directory_as_not_found()

@@ -2,7 +2,7 @@ using Xunit;
 
 namespace jd.cli.tests;
 
-// The start release deploy and release qualify share (docs/architecture/application.md section 1): the gate before the identity, the identity before
+// The start release deploy and release qualify share (docs/architecture/application.md section 3): the gate before the identity, the identity before
 // set.yaml is kept, set.yaml before the backend is built; and every refusal of the start, met by a qualification, word for word.
 public sealed partial class ReleaseDeployCliTests
 {
