@@ -14,7 +14,7 @@ The team decides where to author and store the definition; keeping it in the wor
 - **The upload identity is the trust boundary.** Whatever credential a team's pipeline holds can submit any definition for that workload, so the approval gate on sensitive diffs catches a bad submission, not the storage location.
 - **Storage and enforcement reinforce each other.** Holding the previous deployment's definition lets the platform diff an incoming one and route sensitive changes (a new dependency, an override, a policy-relevant field) into an approval gate, regardless of how the file was edited or reviewed upstream. Enforcement sits at the deploy gate, consistent with [0006](0006-infra-deployed-with-app.md) and [0008](0008-enforcement-in-landing-zone.md).
 - **The platform owns the workload registry even though it does not own the file**: workload name, owning team, environments, and where its definition is expected to come from. Without a registry there is no inventory, and E51 and G42 are impossible.
-- **Templates are scaffolding, not inheritance.** A platform template helps a team author a valid definition; it is copied and diverged from. "Platform decides how" logic lives in mappings and policies resolved at deploy time. Propagating templates would create two overlapping inheritance systems and contradict lazy propagation in [0006](0006-infra-deployed-with-app.md).
+- **Templates are scaffolding, not inheritance.** A platform template helps a team author a valid definition; it is copied and diverged from. "Platform decides how" logic lives in the catalog's components and policies resolved at deploy time. Propagating templates would create two overlapping inheritance systems and contradict lazy propagation in [0006](0006-infra-deployed-with-app.md).
 
 ## Consequences
 - Release record holds the full definition content, so definition retention is bounded by audit retention (F39), not by a team repo's lifetime.
@@ -25,5 +25,5 @@ The team decides where to author and store the definition; keeping it in the wor
 - **Open:** the registration flow — whether a workload is registered explicitly before its first deployment or created implicitly by it, and who may register one.
 
 ## Related
-- [0004](0004-two-layer-definition-model.md), [architecture/workload-definition.md](../architecture/workload-definition.md)
+- [0017](0017-catalog-layer-policies-require.md), [architecture/workload-definition.md](../architecture/workload-definition.md)
 - [open-questions](../open-questions.md): E51, F39, G42, H50

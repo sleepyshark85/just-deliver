@@ -197,7 +197,7 @@ From the original gap analysis; MVP priority as originally assessed.
 | Multi-environment promotion | Same artifact or per env, who promotes, per-env gates, rollback trigger, env-specific config | Needed | E34, E32, E35 |
 | Secrets declaration & lifecycle | Explicit vs inferred secrets, B-phase value collection, rotation, access (env/file/direct KV) | Needed | D22, D23, D24 |
 | Configuration management | Env-specific config, storage (KV / app config / DB), redeploy on change, versioning | Nice-to-have (env vars first) | E34 |
-| Networking & exposure | Ingress, routing/hostnames, service-to-service auth, DNS, network policies; team or policy? mesh? | Defer | F41, [network.md](network.md) |
+| Networking & exposure | Ingress, routing/hostnames, service-to-service auth, DNS, network policies; team or policy? mesh? | Defer | F41, B60 |
 | Observability | Declared metrics/logs, dashboards, alerting ownership, UI troubleshooting | Defer | G44, B8 |
 | Manifest schema | One clear format, versioning, validation feedback | Needed | H50 (schema exists) |
 | Audit & compliance | Events, retention, access to sensitive records, SOC 2 reporting, all infra changes | — | F39 |

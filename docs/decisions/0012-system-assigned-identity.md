@@ -17,7 +17,7 @@ Each workload needs an identity for data-plane access. User-assigned identities 
 
 **The real cost, accepted:** grants necessarily come after the identity exists, so the container starts before it can reach anything. Multiple-revision mode ([0013](0013-container-apps-runtime.md)) absorbs most of this: the new revision is created with no traffic, its identity comes into existence, grants are applied and verified, the migration runs, and only then does traffic shift. Crashlooping happens on a revision serving nobody, and success is judged after grants land. Exception: a workload's *first* deployment has no previous revision — acceptable, since a new workload has no users.
 
-This revises the step order in [0006](0006-infra-deployed-with-app.md): infra → app revision (no traffic) + migration job → grants → verify propagation → migration → shift traffic → post-deploy.
+The deploy step order that follows is [0006](0006-infra-deployed-with-app.md)'s.
 
 **Platform contract:** applications must tolerate and retry authentication failures on startup. `DefaultAzureCredential` does not do this; it needs application code. A documented obligation on teams, belonging in onboarding material.
 

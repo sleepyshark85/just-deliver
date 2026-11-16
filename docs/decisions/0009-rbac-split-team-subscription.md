@@ -21,5 +21,4 @@ Guardrails at the subscription, ownership at the resource group.
 
 ## Related
 - [0008](0008-enforcement-in-landing-zone.md), [0016](0016-portal-deep-links.md)
-- [architecture/landing-zone.md](../architecture/landing-zone.md)
 - [open-questions](../open-questions.md): D19, D20, F41

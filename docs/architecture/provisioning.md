@@ -297,7 +297,7 @@ nodes are filled from `GetOutputsAsync`; references to nodes not yet deployed st
 
 - Backend set in code (`file://<data>/state` locally, jd's data directory), never in `Pulumi.yaml`, keeping
   templates backend-agnostic. Target: Azure Blob Storage, self-hosted, no Pulumi Cloud
-  (`azblob://pulumi-state`, see [phase-0-bootstrap.md](../plans/phase-0-bootstrap.md)).
+  (`azblob://pulumi-state`; D25 in [open-questions.md](../open-questions.md)).
 - The local backend still encrypts secrets, so a passphrase is required non-interactively: jd generates `<data>/state.key` once and
   keeps it beside the state (D25's empty passphrase is no longer used).
 - Local state is incompatible with ephemeral hosting (Container Apps Jobs, CI runners); switch to a remote

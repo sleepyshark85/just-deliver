@@ -30,24 +30,23 @@ source ~/.just-deliver/<subscription>.env
 az login --service-principal --username "$ARM_CLIENT_ID" --password="$ARM_CLIENT_SECRET" --tenant "$ARM_TENANT_ID"
 ```
 
-The Azure tests (`tools/verify.sh --azure`, Category=Azure) run as this team identity, never as a personal login: they require `ARM_CLIENT_ID`,
-`ARM_CLIENT_SECRET`, `ARM_TENANT_ID` and `ARM_SUBSCRIPTION_ID` in the environment (the credentials file sets them), fail with a message if any
-is missing, and run every `az` command against a temporary `AZURE_CONFIG_DIR` they log in to themselves. They also need a subscription
-without an existing free-tier Cosmos account.
+The Azure tests run as this identity; their rules are in [standards §6](../../docs/engineering/standards.md#6-azure-and-the-free-tier).
 
-## Free-tier constraints the team must design for
+## What the guardrails enforce
 
-Verify figures on Azure's pricing pages; grants change.
+The free-tier rules a slice must keep are [standards §6](../../docs/engineering/standards.md#6-azure-and-the-free-tier). `apply`
+enforces only this much of them (Deny, at subscription scope):
 
-| Service | Free allowance | Design consequence |
-|---|---|---|
-| Cosmos DB | 1,000 RU/s + 25 GB on one free-tier account, provisioned throughput only (no serverless) | One shared account; total RU/s across all databases/containers ≤ 1,000 |
-| Container Apps (Consumption) | Monthly per-subscription grant (~180k vCPU-s, 360k GiB-s, 2M requests) | `minReplicas: 0`, smallest CPU/memory size; inactive revisions scale to zero |
-| Log Analytics / App Insights | ~5 GB ingestion/month, 31-day retention | Daily cap enforced by policy; sample telemetry |
-| Container registry | ACR is not free (and denied) | Use a public registry (GHCR / Docker Hub) |
+| Service | Enforced by `apply` |
+|---|---|
+| Cosmos DB | Free tier on, so at most one account per subscription |
+| Container Apps | Consumption workload profiles only |
+| Log Analytics | Daily cap set, between 0.01 GB and `--law-daily-cap` (default 0.15 GB) |
+| Container registry, VMs, AKS, SQL, Postgres, Redis, gateways, … | Denied ([not-allowed-resource-types.json](config/not-allowed-resource-types.json)) |
+| Region | `--region` only |
 
-Check Cost Management after the first day of real deployments. The guardrails are a safety net,
-not a guarantee: a Pay-As-You-Go subscription has no spending limit.
+RU/s totals, replica counts, CPU/memory sizes and sampling are not enforced here. The guardrails and the budget are a safety net,
+not a guarantee: a Pay-As-You-Go subscription has no spending limit; check Cost Management after the first day of real deployments.
 
 ## Adding a subscription later
 
