@@ -21,11 +21,11 @@ When the brief is ambiguous or cannot be done as written, **stop and report back
 ## While implementing
 
 - Branch from `main` ([standards §7](../../docs/engineering/standards.md#7-git-and-prs)).
-- Do the simplest thing that meets the acceptance criteria; no code for future slices.
+- Do the simplest thing that meets the acceptance criteria ([standards §2](../../docs/engineering/standards.md#2-simplest-thing-that-works)).
 - Write tests with the code, and prove each can fail ([standards §5](../../docs/engineering/standards.md#5-tests)).
 - Run only the default gate; the lead runs Azure ([gate](../../docs/engineering/conventions.md#azure-gate)). Credentials are
   never printed, copied or committed.
-- Commit in small conventional commits; the commit hook runs `tools/verify.sh`.
+- Commit as [standards §7](../../docs/engineering/standards.md#7-git-and-prs) says.
 
 ## When done
 

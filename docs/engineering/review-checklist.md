@@ -30,9 +30,9 @@ suggestion; suggestions never block, and a broken rule is never a suggestion.
    allows that still hides structure.
 3. **Simplicity.** Anything [standards §2](standards.md#2-simplest-thing-that-works) forbids; name the simpler design.
 4. **Architecture.** A dependency, port or responsibility against [standards §3](standards.md#3-architecture-and-separation-of-concerns);
-   a divergence from an ADR or design note that was not escalated.
+   a divergence from an ADR or design note ([standards §3](standards.md#3-architecture-and-separation-of-concerns)).
 5. **Design invariants.** A change that breaks one of [standards §4](standards.md#4-design-invariants) or a design principle it
-   points to, unless the brief says the user approved it.
+   points to, unless its design note or ADR was changed first ([standards §4](standards.md#4-design-invariants)).
 6. **C#.** Anything [csharp.md](csharp.md) forbids, beyond its *aim* numbers without a reason.
 7. **Tests.** Anything [standards §5](standards.md#5-tests) forbids; a branch, guard or error path whose mutation survives.
 8. **Free tier and Azure safety.** Anything [standards §6](standards.md#6-azure-and-the-free-tier) forbids.

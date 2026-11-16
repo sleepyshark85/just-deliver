@@ -56,7 +56,7 @@ fields and `I`-prefixed interfaces. Beyond that:
 - **Nullability is the contract.** No `!` without a comment saying why it is safe; return a result or throw rather
   than `null` where the caller cannot act on `null`.
 - **Plain values.** A value with rules (an id, a path inside a root, a UTC time) is parsed once at the boundary into a
-  type that keeps them; a file is never mirrored by a type ([standards §1](standards.md#1-nothing-hard-coded)).
+  type that keeps them (file shapes: [standards §1](standards.md#1-nothing-hard-coded)).
 
 ## 4. Design
 

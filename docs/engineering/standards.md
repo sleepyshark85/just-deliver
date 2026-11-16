@@ -27,7 +27,7 @@ should be data defeats it.
   jd's identifiers and node hash, and jd's JSON evidence (release record, approval record, graph JSON).
 - **The literal guard** (`LiteralGuardTests`) fails on a production literal that names a schema field; its allowlist is section
   2's exceptions plus prose a lone word cannot be told apart from. A literal the guard allows can still hide structure: the
-  reviewer judges role names and message prose.
+  reviewer judges role names (against [documents.md](../architecture/documents.md) Appendix B) and message prose.
 - **Literals are named once.** A string the code depends on is a named constant, not spelled inline: an environment variable, a
   CLI command or option, an output or record key written or read in more than one place, an exit code. A one-off message stays
   inline.
@@ -122,11 +122,6 @@ privilege (12), prove then extend (13), serve the north star (14). In code:
   `dotnet test` never reaches Azure. The script holds an exclusive per-host, per-user lock
   (`${XDG_RUNTIME_DIR:-/tmp}/just-deliver-azure.lock`) because the subscription has one free-tier Cosmos account; a run from
   another machine on the same subscription is not covered.
-- Azure tests run as the sandbox team identity, never a personal login: they require `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`,
-  `ARM_TENANT_ID` and `ARM_SUBSCRIPTION_ID` in the environment (`source ~/.just-deliver/<subscription>.env`), fail clearly if any is
-  missing, and log `az` in to a per-test temporary `AZURE_CONFIG_DIR` (`src/jd.cli.tests/AzureCli.cs`). Never fall back to the
-  ambient `az` login.
-
 ## 6. Azure and the free tier
 
 The test subscription is guarded by policy ([tools/sandbox](../../tools/sandbox/README.md)), but the guardrails are a safety net,
@@ -140,6 +135,10 @@ not the plan. Every resource a change can create must fit the free tier — bloc
 | Anything else | Must be free (role assignments, managed identities) or explicitly approved by the user first. |
 
 - Region comes from the environment definition's `region`; never hard-coded.
+- Azure tests run as the sandbox team identity, never a personal login: they require `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`,
+  `ARM_TENANT_ID` and `ARM_SUBSCRIPTION_ID` in the environment (`source ~/.just-deliver/<subscription>.env`), fail clearly if any is
+  missing, and log `az` in to a per-test temporary `AZURE_CONFIG_DIR` (`src/jd.cli.tests/AzureCli.cs`). Never fall back to the
+  ambient `az` login.
 - Every resource has a teardown path. Tag every resource group `project=just-deliver-mvp`; the shared and environment groups also
   `tier=substrate`. Test resources are torn down after the Azure run: `tools/azure/cleanup.sh --yes`.
 - Never change policies, role definitions, app registrations or the sandbox setup. A guardrail in the way is escalated
