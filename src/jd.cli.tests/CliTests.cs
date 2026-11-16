@@ -92,7 +92,7 @@ public sealed class CliTests : IDisposable
         Assert.Contains($"{path}: not valid YAML: duplicate key 'a'", stderr);
     }
 
-    // Risk b of docs/architecture/application.md section 8: the workload is decoded as File.ReadAllText decodes it, whoever reads the file.
+    // As docs/architecture/application.md section 1 says: the workload is decoded as File.ReadAllText decodes it, whoever reads the file.
     [Fact]
     public async Task Validate_gives_the_same_output_for_a_workload_with_a_utf8_byte_order_mark()
     {
@@ -265,7 +265,7 @@ public sealed class CliTests : IDisposable
         Assert.Contains(Path.Combine(catalog, "components/oops.yaml"), stderr);
     }
 
-    // Only the catalog loader's errors are given the path under the catalog (docs/architecture/application.md section 7); the resolver's name a
+    // Only the catalog loader's errors are given the path under the catalog (docs/architecture/application.md section 4); the resolver's name a
     // catalog document as the catalog names it.
     [Theory]
     [InlineData("preview")]
@@ -472,7 +472,7 @@ public sealed class CliTests : IDisposable
         Assert.Single(stderr.Split('\n'), line => line == $"{Path.Combine(catalog, "templates")}: template directory not found.");
     }
 
-    // Edge 3 of docs/architecture/application.md section 8 (S25b2): an empty templates directory holds no template documents, so it reads as a
+    // As docs/architecture/application.md section 3 says: an empty templates directory holds no template documents, so it reads as a
     // missing one; before, it gave only each node's "not in the template library".
     [Fact]
     public async Task Deploy_reports_an_empty_template_directory_as_not_found()

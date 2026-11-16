@@ -2,7 +2,7 @@ using jd.resolver.release;
 
 namespace jd.orchestrator.usecases;
 
-/// <summary><c>release create</c>: builds an immutable release set from a manifest and the definitions it names (docs/architecture/application.md section 3).</summary>
+/// <summary><c>release create</c>: builds an immutable release set from a manifest and the definitions it names (docs/architecture/application.md section 1).</summary>
 public static class CreateRelease
 {
     /// <summary>Builds the set <paramref name="input"/>'s manifest describes, stamped with the time of <paramref name="connections"/>.</summary>

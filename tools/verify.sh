@@ -69,7 +69,7 @@ if [[ -f src/jd.azure/jd.azure.csproj ]]; then
     identities "$frameworks" | grep -v -x 'Microsoft\.NETCore\.App'; } || true)
   [[ -z "$outside" ]] || fail "src/jd.azure/jd.azure.csproj may reference only jd.core (ProjectReference), Azure.* packages (PackageReference) and the .NET runtime (FrameworkReference), not: ${outside//$'\n'/; } (see docs/engineering/standards.md)"
 fi
-# R2 (docs/architecture/application.md section 4): only the CLI's composition files name the adapters, the backend providers or the container.
+# R2 (docs/architecture/application.md section 2): only the CLI's composition files name the adapters, the backend providers or the container.
 composition='^src/jd\.cli/(Composition|DataDirectory|LocalRecordStore|PulumiTemplates|HttpRevisionProbe)\.cs$'
 pattern='jd\.azure|jd\.bp\.|Microsoft\.Extensions\.DependencyInjection'
 outside=$(grep -rl -E "$pattern" --include=*.cs --exclude-dir=bin --exclude-dir=obj src/jd.cli | grep -v -E "$composition" || true)

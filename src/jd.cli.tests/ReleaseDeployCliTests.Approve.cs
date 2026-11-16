@@ -186,7 +186,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal(0, _identity.Calls);
     }
 
-    // Edge 1 of docs/architecture/application.md section 8: the label and the meaning are the use case's to check, after the command has checked that
+    // As docs/architecture/application.md section 1 says: the label and the meaning are the use case's to check, after the command has checked that
     // --env can be read, so a descriptor that cannot be read is reported first (before S25f1, the label or the meaning was).
     [Theory]
     [InlineData("foo", "m")]

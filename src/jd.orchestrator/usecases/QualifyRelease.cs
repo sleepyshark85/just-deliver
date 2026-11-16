@@ -4,7 +4,7 @@ namespace jd.orchestrator.usecases;
 
 /// <summary>
 /// <c>release qualify</c>: starts as <see cref="DeployRelease"/> does, a recorded run, then checks the deployment (IQ) without changing it, and writes
-/// the record whether IQ passed or not (docs/architecture/application.md section 3; release-record.md sections 5 to 7).
+/// the record whether IQ passed or not (docs/architecture/application.md section 1; release-record.md sections 5 to 7).
 /// </summary>
 public static class QualifyRelease
 {

@@ -4,7 +4,7 @@ namespace jd.orchestrator.usecases;
 
 /// <summary>
 /// <c>deploy</c>: resolves a workload, checks the graph against the catalog's templates, then walks it: provisions the infrastructure nodes in
-/// order and releases the runtime, or with <see cref="DeployInput.Preview"/> only shows the changes (docs/architecture/application.md section 3).
+/// order and releases the runtime, or with <see cref="DeployInput.Preview"/> only shows the changes (docs/architecture/application.md section 1).
 /// </summary>
 public static class Deploy
 {

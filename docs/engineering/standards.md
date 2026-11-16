@@ -62,7 +62,7 @@ Dependencies point inward. Inner layers know nothing about Pulumi, Azure or the 
 | Validation | `jd.definitionvalidator` | `jd.core`, schema libs | Pulumi, Azure SDKs |
 | Infrastructure adapters | `backend-providers/jd.bp.pulumi` | `jd.core`, Pulumi Automation, the resolver's public output contract (`ResolvedGraph`, config values, references, `LoadError`) | resolver internals beyond that contract, CLI |
 | Infrastructure adapters (Azure) | `jd.azure` | `jd.core` (the ports it implements, e.g. `IDeployerIdentity`), Azure SDKs | `jd.resolver`, `jd.orchestrator`, Pulumi, backend providers, CLI |
-| Composition root | `jd.cli` | everything | — (only parsing, file I/O, formatting, composition: [application.md](../architecture/application.md) §4) |
+| Composition root | `jd.cli` | everything | — (only parsing, file I/O, formatting, composition: [application.md](../architecture/application.md) §2) |
 
 - Pulumi only in `jd.bp.pulumi`, Azure SDKs only in `jd.azure`, wiring only in `jd.cli`, which holds no rule. `tools/verify.sh`
   and `ThinCliTests` enforce part of this mechanically; the reviewer checks the rest.

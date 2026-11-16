@@ -7,7 +7,7 @@ namespace jd.orchestrator.usecases;
 
 /// <summary>
 /// <c>env up</c>: provisions what an environment definition's offers reach in its type's layer, then composes the environment's descriptor from
-/// the outputs (docs/architecture/application.md section 3). Everything that can be known before anything is created is checked first.
+/// the outputs (docs/architecture/application.md section 1). Everything that can be known before anything is created is checked first.
 /// </summary>
 public static class EnvUp
 {

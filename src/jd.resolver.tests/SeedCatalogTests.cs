@@ -34,7 +34,7 @@ public class SeedCatalogTests
         Assert.Equal(["databaseName", "databaseId"], environment.Exports.Keys);
     }
 
-    // The templates are a part of their own (docs/architecture/application.md section 3): a template file is no catalog document.
+    // The templates are a part of their own (docs/architecture/application.md section 1): a template file is no catalog document.
     [Fact]
     public async Task Templates_directory_is_not_loaded()
     {

@@ -125,7 +125,7 @@ wiring:
 
 **Fork 2 — resolve to a graph or straight to stack configs?** Current architecture emits `(template, stack, config)` triples, losing dependency edges. Recommend an explicit graph that the orchestrator topologically sorts; otherwise ordering lives implicitly in the orchestrator loop and breaks on the third resource type needing a parent.
 
-**Review of the first flow sketch** ([architecture/workload_deployment_flow.html](architecture/workload_deployment_flow.html), redrawn from the excalidraw). Skeleton is buildable — schemas, Pulumi templates and `IBackEndProvider` exist — with these changes:
+**Review of the first flow sketch** (since deleted; the built flow: [walkthrough.md](walkthrough.md#1-the-flow)). Skeleton is buildable — schemas, Pulumi templates and `IBackEndProvider` exist — with these changes:
 1. **Parse emits a graph with open references, not finished backend yml.** The orchestrator fills each step's inputs from prior outputs (hard part 3), matching the config-passing choice in [architecture/provisioning.md](architecture/provisioning.md).
 2. **The resolver is backend-agnostic.** The sketch put the parser inside the backend provider, making resolution Pulumi-specific and unusable for preview, approval diff and destructive gate. Only rendering a graph node into template + config belongs to the provider.
 3. **The orchestrator is a durable step loop, not one call.** Each step in ADR 0006's order is one queue round trip, checkpointed (E29). A queue session keyed on workload + environment gives E30's serialization. End states: live; degraded (postDeploy failed); failed-partial (infra kept, traffic unchanged, retry re-enters at the failed step — E31).

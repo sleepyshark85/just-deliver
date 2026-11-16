@@ -7,7 +7,7 @@ using jd.resolver;
 namespace jd.orchestrator.usecases;
 
 /// <summary>
-/// What a run reaches outside jd through, built once by a host's composition root (docs/architecture/application.md section 5). Each member is a
+/// What a run reaches outside jd through, built once by a host's composition root (docs/architecture/application.md section 3). Each member is a
 /// factory, invoked at the step that needs what it builds, so a run that stops earlier, or a preview, builds nothing it does not reach.
 /// </summary>
 /// <param name="Records">The release, qualification and approval records.</param>
