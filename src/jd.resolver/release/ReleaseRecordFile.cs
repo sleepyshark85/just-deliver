@@ -12,7 +12,7 @@ namespace jd.resolver.release;
 public static class ReleaseRecordFile
 {
     /// <summary>The kind of a release record, read by <see cref="QualificationReader"/> and written by the orchestrator.</summary>
-    // The record is jd's JSON evidence, kept as typed code beside its schema (docs/architecture/documents.md section 5, choice 2 (b)).
+    // The record is jd's JSON evidence, kept as typed code beside its schema (docs/architecture/documents.md section 2).
     public const string Kind = "ReleaseRecord";
 
     /// <summary>The name of the set kept beside a label's records.</summary>

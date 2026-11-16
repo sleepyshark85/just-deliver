@@ -5,7 +5,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-// Binding completeness (docs/architecture/documents.md section 4): a security boundary reads only what a schema binds, so jd stops when a shipped
+// Binding completeness (docs/architecture/documents.md section 3): a security boundary reads only what a schema binds, so jd stops when a shipped
 // schema does not bind a role one reads. Each test plants one shipped schema with one binding taken out (its keyword turned into a message,
 // which binds nothing) beside the other shipped schemas as they are.
 public sealed class BindingCompletenessTests

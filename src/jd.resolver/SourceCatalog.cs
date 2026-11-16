@@ -1,7 +1,7 @@
 namespace jd.resolver;
 
 /// <summary>
-/// A catalog handed to jd as it was read: its name and every document in it (docs/architecture/application.md section 3). The catalog loader
+/// A catalog handed to jd as it was read: its name and every document in it (docs/architecture/application.md section 1). The catalog loader
 /// and the templates each take their part of it.
 /// </summary>
 /// <param name="Name">The name its parts and errors are named under: the CLI passes the catalog argument as typed.</param>

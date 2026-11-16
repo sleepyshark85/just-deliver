@@ -2,7 +2,7 @@ kind: SharedResource
 name: env-group
 description: The environment's resource group, holding its environment-scope resources and its workloads.
 scope: environment
-# Deployed by an environment's `jd env up` when what it offers uses it (docs/architecture/components.md section 3).
+# Deployed by an environment's `jd env up` when what it offers uses it (docs/architecture/model.md section 5).
 nodes:
   group:
     template: azure/resource-group

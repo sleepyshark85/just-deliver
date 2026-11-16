@@ -9,7 +9,7 @@ using jd.resolver.release;
 namespace jd.orchestrator.usecases;
 
 /// <summary>
-/// The start <c>release deploy</c> and <c>release qualify</c> share (docs/architecture/application.md sections 5 and 8), in this order: the set, the
+/// The start <c>release deploy</c> and <c>release qualify</c> share (docs/architecture/application.md section 3), in this order: the set, the
 /// catalog and the environment loaded; the environment's type checked; the gate; a promotion's kept set re-hashed; every workload resolved and checked
 /// against the templates; for a recorded run the principal named, then the set kept; then the backend, the orchestrator and the qualifier built
 /// together, before any backend call. The first step of <see cref="DeployRelease"/> and <see cref="QualifyRelease"/>.

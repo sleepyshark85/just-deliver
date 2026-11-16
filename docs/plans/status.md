@@ -5,9 +5,10 @@
 ## Now
 
 - **Phase 1.5 done** (2026-11-16, Azure exit gate green). Next: the phase 2 design note ([roadmap](roadmap.md)) for the user.
-- **In progress:** S27a–S27d, the docs restructure (user, 2026-11-17), in parallel; S27a merges last.
+- **Docs restructure done** (S27a–S27d, user, 2026-11-17): one owner per fact; `model.md` replaces five notes; usage.md is the command reference.
 - **Waiting for the user:** ADR 0019 says "approved by the user" but is Proposed; the new ADR 0020 (stack per graph node,
-  supersedes 0003 decision 3); ADR 0011's id rule rewritten to the schema's (see its note).
+  supersedes 0003 decision 3); ADR 0011's id rule rewritten to the schema's (see its note); CLAUDE.md "work one slice at a time" and conventions'
+  "one slice in review at a time" vs the user's "max parallelism".
 - **Sandbox secret expires 2026-12-14** (renew: `tools/sandbox/sandbox.sh apply … --rotate-secret`, the user as Owner).
 - **Team:** developer Opus from S20 (after a Sonnet trial S17c2–S19b), fixer Sonnet, reviewer Opus.
 
@@ -96,10 +97,10 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S24f | YAML jd writes | done | #101 | 1 | |
 | S24f2 | Release set and manifest reads | done | #102 | 2 | |
 | S24g | Docs and standards | done | #103 | 2 | Phase 1.5 done; ADR 0019 |
-| S27a | Docs: entry, framing, plans, decisions | in-progress | | | |
-| S27b | Docs: agent entry and engineering | in-progress | | | |
-| S27c | Docs: model, documents, provisioning | in-progress | | | |
-| S27d | Docs: release, approvals, application, usage | in-progress | | | |
+| S27a | Docs: entry, framing, plans, decisions | done | S27a PR | 2 | ADR 0020 drafted; status trimmed |
+| S27b | Docs: agent entry and engineering | done | PR #104 | 2 | Each rule once, in its owner |
+| S27c | Docs: model, documents, provisioning | done | PR #106 | 2 | model.md replaces resolver/components/workload-definition/connections |
+| S27d | Docs: release, approvals, application, usage | done | PR #105 | 2 | usage.md is the command reference; flow sketch deleted |
 
 ## Open items
 
@@ -139,10 +140,11 @@ Take when touching the code named; remove once done.
 
 Newest first; the last five sessions.
 
+- **2026-11-17 (S27a–d, docs restructure)** — User asked for concise docs, one responsibility each, no repetition. Seven
+  read-only reviews, then four parallel slices (2 rounds each). User decisions: slice history deleted, not archived;
+  landing-zone/network folded into ADR 0008 and deleted; ADR mismatches drafted as Proposed (0020, 0011 note), statuses untouched.
 - **2026-11-16 (S24g, phase 1.5 exit)** — S24g merged (2 rounds) after the user's Azure exit gate (jd.cli.tests 341, 1 h 23 m).
   Phase 1.5 done. ADR 0019 (Proposed) awaits the user. Next: the phase 2 design note.
 - **2026-11-15 (S24f2)** — S24f2 merged (2 rounds). Next: S24g.
 - **2026-11-15 (S24f)** — S24f merged (1 round, split taken: S24f2 for the release set and manifest reads).
 - **2026-11-15 (S25g)** — S25g merged (2 rounds); the S25 track is done.
-- **2026-11-15 (S24e)** — S24e merged (2 rounds) after the user's Azure gate (jd.cli.tests 339, 1 h 19 m). Lead removed 13 stale
-  worktrees and 29 merged branches; `origin/mappings-sample-approach` and `origin/typing-sample-approach` left for the user.

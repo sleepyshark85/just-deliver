@@ -12,7 +12,7 @@ using static jd.orchestrator.tests.WorkloadUseCaseTests;
 namespace jd.orchestrator.tests;
 
 // The start release deploy and release qualify share, over documents and fakes only: the order of its checks and of the connections it builds, what
-// each refusal returns, and that a refused start keeps no set and makes no backend call (docs/architecture/application.md sections 5 and 8).
+// each refusal returns, and that a refused start keeps no set and makes no backend call (docs/architecture/application.md section 3).
 public sealed class ReleaseStartTests
 {
     private const string SetName = "r.set.yaml";
@@ -202,7 +202,7 @@ public sealed class ReleaseStartTests
         Assert.DoesNotContain("backend", _built);
     }
 
-    // Risk c (application.md section 8): every connection is built before the first backend call, so one that cannot be built stops the run with
+    // As application.md section 3 says: every connection is built before the first backend call, so one that cannot be built stops the run with
     // nothing deployed.
     [Theory]
     [InlineData("backend")]

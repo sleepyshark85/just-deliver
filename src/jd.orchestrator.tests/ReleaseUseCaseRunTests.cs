@@ -10,7 +10,7 @@ using static jd.orchestrator.tests.WorkloadUseCaseTests;
 namespace jd.orchestrator.tests;
 
 // DeployRelease and QualifyRelease after their start, over documents and fakes only: the walk's progress, IQ only after every workload deployed, the
-// record written whether IQ passed or not, and what each use case decides (docs/architecture/application.md section 3).
+// record written whether IQ passed or not, and what each use case decides (docs/architecture/application.md section 1).
 public sealed class ReleaseUseCaseRunTests
 {
     internal const string Image = "registry.example/shop@sha256:0000000000000000000000000000000000000000000000000000000000000000";

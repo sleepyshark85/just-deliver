@@ -1,6 +1,6 @@
 namespace jd.orchestrator.usecases;
 
-/// <summary><c>preview</c>: resolves a workload for an environment over a catalog, creating nothing (docs/architecture/application.md section 3).</summary>
+/// <summary><c>preview</c>: resolves a workload for an environment over a catalog, creating nothing (docs/architecture/application.md section 1).</summary>
 public static class Preview
 {
     /// <summary>Resolves <paramref name="input"/>'s workload; the graph when it resolves, else the errors.</summary>

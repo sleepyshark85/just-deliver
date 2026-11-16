@@ -10,7 +10,7 @@ namespace jd.resolver.policies;
 /// Applies the catalog's policies to expanded requirements and records where every config field came from. Pure; the
 /// catalog is never modified. Workload-scope policies apply to a workload only (an environment definition has no runtime): they set and
 /// default fields of the runtime node and require components, never add nodes.
-/// Rules: docs/architecture/resolver.md (Engine rules, Policies).
+/// Rules: docs/architecture/model.md section 7.
 /// </summary>
 public sealed class PolicyApplier(Catalog catalog, EnvironmentDescriptor environment)
 {

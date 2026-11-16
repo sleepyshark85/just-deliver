@@ -4,7 +4,7 @@ using Xunit;
 namespace jd.resolver.tests;
 
 // The binder reads the release manifest and the release set by the release.* roles of their shipped schemas (docs/architecture/documents.md
-// section 5): each value with where the document holds it, as the release rules locate their errors.
+// section 3): each value with where the document holds it, as the release rules locate their errors.
 public sealed class BinderReleaseReadTests
 {
     private static async Task<ReleaseRead> ReadAsync(string kind, string yaml)

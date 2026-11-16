@@ -3,7 +3,7 @@ using jd.resolver.catalog;
 namespace jd.resolver.environment;
 
 /// <summary>
-/// The catalog's rules for an environment's type (docs/architecture/components.md section 2): the type is declared, and a gated type's
+/// The catalog's rules for an environment's type (docs/architecture/model.md section 5): the type is declared, and a gated type's
 /// environment carries the approval block (security boundary 13). The block is what gates, not the type. The type is another document set's
 /// name, so this stays code (docs/architecture/documents.md section 2, concept 11); the locations and the block's field come from the binding.
 /// </summary>

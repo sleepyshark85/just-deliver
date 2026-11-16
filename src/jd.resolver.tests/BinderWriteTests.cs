@@ -4,7 +4,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-// The binder writes a document from role values (docs/architecture/documents.md section 5), knowing no kind or field: a planted schema binds
+// The binder writes a document from role values (docs/architecture/documents.md section 3), knowing no kind or field: a planted schema binds
 // roles on fields of its own names, in an order of its own, and the binder writes it with no C# change. The shipped kinds are written through
 // the descriptor composer (SubstrateTests) and the release set (ReleaseTests), whose goldens are byte-identical.
 public sealed class BinderWriteTests
@@ -94,7 +94,7 @@ public sealed class BinderWriteTests
         Assert.Equal("""{"kind":"Parcel","tag":"one","items":[{"body":"x"}]}""", await WrittenAsync(record));
     }
 
-    // The output schema is the allowlist (records are built from an allowlist, conventions): a value under a role the kind does not bind, or under
+    // The output schema is the allowlist (records are built from an allowlist, standards §4): a value under a role the kind does not bind, or under
     // the name of a field the schema leaves unbound, never reaches the document.
     [Fact]
     public async Task A_value_with_no_binding_in_the_schema_is_not_written()

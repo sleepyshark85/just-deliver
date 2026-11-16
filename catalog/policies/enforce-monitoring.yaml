@@ -2,6 +2,6 @@ kind: Policy
 name: enforce-monitoring
 reason: Every workload reports to the environment workspace
 match: { kind: runtime }
-# Requires, never adds (docs/architecture/components.md section 3): each workload declares `- type: monitoring` and maps
+# Requires, never adds (docs/architecture/model.md section 7): each workload declares `- type: monitoring` and maps
 # APPLICATIONINSIGHTS_CONNECTION_STRING to ${resource.monitoring.connectionString} itself.
 require: monitoring

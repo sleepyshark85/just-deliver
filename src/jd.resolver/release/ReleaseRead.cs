@@ -1,6 +1,6 @@
 namespace jd.resolver.release;
 
-/// <summary>A release manifest or a release set as the binder reads it, by the <c>release.*</c> roles (docs/architecture/documents.md section 5).</summary>
+/// <summary>A release manifest or a release set as the binder reads it, by the <c>release.*</c> roles (docs/architecture/documents.md section 3).</summary>
 /// <param name="Label">The release label (<see cref="Roles.ReleaseLabel"/>).</param>
 /// <param name="CreatedAt">When a set was created, as written (<see cref="Roles.ReleaseCreatedAt"/>); empty for a manifest.</param>
 /// <param name="Workloads">One entry per workload (<see cref="Roles.ReleaseWorkloads"/>), in the document's order.</param>

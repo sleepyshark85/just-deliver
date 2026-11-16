@@ -1,7 +1,7 @@
 namespace jd.resolver.tests;
 
 // The literals the guard allows, by file (relative to src/): section 2's exceptions and the prose false positives, nothing else (documents.md
-// section 9, phase 1.5 exit). A stale entry fails, so a literal that goes takes its entry with it.
+// section 5, phase 1.5 exit). A stale entry fails, so a literal that goes takes its entry with it.
 public sealed partial class LiteralGuardTests
 {
     private static IReadOnlyCollection<(string File, string Literal)> Allowlist =>
@@ -38,7 +38,7 @@ public sealed partial class LiteralGuardTests
             "release.depends-on", "release.label", "release.workloads", "requirement.class", "requirement.id", "requirement.type", "roles", "runtime.part",
             "workload.image", "workload.name", "workload.port", "workload.team", "workload.variables",
         ],
-        ["jd.resolver/expansion/ConfigWalker.cs"] = ["workload.variables"], // the fn::entries source (Appendix A: concept 4)
+        ["jd.resolver/expansion/ConfigWalker.cs"] = ["workload.variables"], // the fn::entries source (concept 4)
         // the annotation keyword and the annotations it reads (each named once); JSON Schema's own keyword
         ["jd.resolver/SchemaIndex.cs"] = ["define", "fallback", "is", "match", "message", "one", "properties", "ref", "scope", "select", "x-jd"],
         ["jd.resolver/expressions/BuiltIns.cs"] = ["hash", "id", "name", "workload"], // name() and its placeholders

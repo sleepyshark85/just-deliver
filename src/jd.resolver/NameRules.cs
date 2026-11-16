@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 namespace jd.resolver;
 
 /// <summary>
-/// The generic name rules over a set of documents (docs/architecture/documents.md sections 3 and 4): <c>one</c>, <c>define</c> and <c>ref</c>,
+/// The generic name rules over a set of documents (docs/architecture/documents.md sections 1 and 3): <c>one</c>, <c>define</c> and <c>ref</c>,
 /// driven by the fields <see cref="SchemaIndex"/> finds annotated. No field, kind or namespace is spelled here; each error is located at the
 /// value the index's path found.
 /// </summary>

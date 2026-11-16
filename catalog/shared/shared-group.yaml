@@ -2,7 +2,7 @@ kind: SharedResource
 name: shared-group
 description: The shared layer's resource group, holding every shared-scope resource.
 scope: shared
-# Deployed by the shared layer's `jd env up` when what it offers reaches it through uses (docs/architecture/components.md section 3).
+# Deployed by the shared layer's `jd env up` when what it offers reaches it through uses (docs/architecture/model.md section 5).
 nodes:
   group:
     template: azure/resource-group

@@ -3,7 +3,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-// A document's text is what File.ReadAllText gives for the same bytes (docs/architecture/application.md section 8, risk b).
+// A document's text is what File.ReadAllText gives for the same bytes (docs/architecture/application.md section 1).
 public sealed class SourceDocumentTests : IDisposable
 {
     private readonly string _temp = Directory.CreateTempSubdirectory("jd-source-document-tests").FullName;

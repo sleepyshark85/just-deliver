@@ -5,7 +5,7 @@ namespace jd.resolver.catalog;
 
 /// <summary>
 /// What a policy's shape must be (docs/architecture/documents.md section 2, concept 10), over the policies bound: it applies to node scope or
-/// workload scope (resolver.md, Policy scope), and no path it sets or defaults is under another of its own. Code, since JSON Schema cannot give
+/// workload scope (model.md section 7), and no path it sets or defaults is under another of its own. Code, since JSON Schema cannot give
 /// these messages (documents.md section 3); the field names and locations come from the binding.
 /// </summary>
 internal static class PolicyRules

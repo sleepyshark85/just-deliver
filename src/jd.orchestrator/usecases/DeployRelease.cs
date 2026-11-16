@@ -5,7 +5,7 @@ namespace jd.orchestrator.usecases;
 /// <summary>
 /// <c>release deploy</c>, and the walk of a promotion: starts the run (<see cref="ReleaseStart"/>), walks the workloads in deploy order, stopping at
 /// the first that fails, or only previews them; then, for a recorded run, IQ if every workload deployed, and the record, written whether IQ passed or
-/// not (docs/architecture/application.md section 3; release-record.md section 7).
+/// not (docs/architecture/application.md section 1; release-record.md section 7).
 /// </summary>
 public static class DeployRelease
 {

@@ -9,7 +9,7 @@ using Xunit;
 
 namespace jd.cli.tests;
 
-// The thin-CLI rules of docs/architecture/application.md section 4, as an IL scan of jd.dll and of the inner assemblies. Each rule has an allowlist of
+// The thin-CLI rules of docs/architecture/application.md section 2, as an IL scan of jd.dll and of the inner assemblies. Each rule has an allowlist of
 // the references it lets through, by type (ThinCliTests.Allowlists.cs): every list is empty, and a stale entry fails.
 public sealed partial class ThinCliTests
 {
