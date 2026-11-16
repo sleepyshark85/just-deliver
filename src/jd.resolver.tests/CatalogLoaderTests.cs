@@ -17,7 +17,7 @@ public sealed class CatalogLoaderTests
     private static Task<LoadResult<Catalog>> Parse(params (string Path, string Content)[] files) =>
         CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files.Select(f => new SourceDocument(f.Path, Encoding.UTF8.GetBytes(f.Content)))]));
 
-    // The environment types (docs/architecture/components.md section 2): declared in the Catalog file, named like requirement types, `default`
+    // The environment types (docs/architecture/model.md section 5): declared in the Catalog file, named like requirement types, `default`
     // excluded (the implementations' fallback key).
     [Theory]
     [InlineData("", "catalog.yaml: environmentTypes: ")]
@@ -358,7 +358,7 @@ public sealed class CatalogLoaderTests
         Assert.Empty(result.Errors);
     }
 
-    // A refused node name does not hide the part's other problems (documents.md section 6): each is reported where it is, the one without a
+    // A refused node name does not hide the part's other problems (documents.md section 4): each is reported where it is, the one without a
     // message in the validator's text.
     [Theory]
     [InlineData("nodes:\n  db:\n    config: {}\n", "nodes.db", "AdditionalPropertiesNotValid: #/implementations.default.classes.standard.nodes.db { PropertyRequired: #/implementations.default.classes.standard.nodes.db.template }")]
@@ -473,7 +473,7 @@ public sealed class CatalogLoaderTests
         Assert.Contains($"#/implementations.default.release.{name}", Assert.Single(blank.Errors).Message);
     }
 
-    // A policy requires, it never adds (docs/architecture/components.md section 3): the schema refuses an earlier policy's `add` like any field it
+    // A policy requires, it never adds (docs/architecture/model.md section 7): the schema refuses an earlier policy's `add` like any field it
     // does not declare, and the policy does not load.
     [Fact]
     public async Task A_policy_with_add_is_refused_by_the_schema()

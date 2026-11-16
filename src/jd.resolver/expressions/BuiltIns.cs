@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace jd.resolver.expressions;
 
-// The built-in functions. Their behaviour is a format contract, documented in docs/architecture/resolver.md.
+// The built-in functions. Their behaviour is a format contract, documented in docs/architecture/model.md section 6.
 internal static partial class BuiltIns
 {
     internal const string NameFunction = "name";

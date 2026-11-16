@@ -7,7 +7,7 @@ namespace jd.resolver.catalog;
 /// <param name="Keys">The keys the map has.</param>
 internal sealed record SelectMiss(string Map, string Value, string? Fallback, IReadOnlyList<string> Keys)
 {
-    /// <summary>The miss as a message about <paramref name="owner"/> (documents.md section 6).</summary>
+    /// <summary>The miss as a message about <paramref name="owner"/> (documents.md section 4).</summary>
     public string Message(string owner) =>
         $"{owner} has no {Map} entry for '{Value}'{(Fallback is null ? string.Empty : $" and no '{Fallback}' entry")} (keys: {string.Join(", ", Keys)}).";
 }

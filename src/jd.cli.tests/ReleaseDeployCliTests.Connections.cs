@@ -2,7 +2,7 @@ using Xunit;
 
 namespace jd.cli.tests;
 
-// Nothing set on the machine (docs/architecture/connections.md): a run whose environment holds only jd's data directory deploys, qualifies, approves and
+// Nothing set on the machine (docs/architecture/provisioning.md, Backend and state): a run whose environment holds only jd's data directory deploys, qualifies, approves and
 // promotes, with every record in the data directory's store. The variables jd read before point elsewhere here, and nothing reaches them.
 // Each connection is built lazily, at the step that needs it (docs/architecture/application.md section 3): a run that stops earlier builds none of the later ones.
 public sealed partial class ReleaseDeployCliTests

@@ -7,7 +7,7 @@ namespace jd.resolver.expressions;
 
 /// <summary>
 /// Evaluates the <c>${…}</c> expressions inside a string. Pure: no I/O. Grammar, namespaces and built-ins
-/// are documented in docs/architecture/resolver.md.
+/// are documented in docs/architecture/model.md section 6.
 /// </summary>
 public sealed partial class ExpressionEvaluator(ExpressionContext context)
 {
@@ -85,7 +85,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
 
     /// <summary>
     /// The node and output of <paramref name="text"/> when it is exactly one <c>${&lt;node&gt;.&lt;output&gt;}</c>: no text around it, no function,
-    /// no literal, two segments. Null otherwise. What a grant's target must be (docs/architecture/components.md section 3).
+    /// no literal, two segments. Null otherwise. What a grant's target must be (docs/architecture/model.md section 7).
     /// </summary>
     internal static (string Node, string Output)? SingleReference(string text) =>
         text.StartsWith("${", StringComparison.Ordinal) && FindClosingBrace(text, 2) == text.Length - 1
@@ -360,7 +360,7 @@ public sealed partial class ExpressionEvaluator(ExpressionContext context)
     };
 
     // A part of this run is read by evaluating its export in place, so the read becomes the node references it is made of
-    // (docs/architecture/components.md section 2); the catalog loader keeps uses acyclic, so this ends. Any other part was deployed
+    // (docs/architecture/model.md section 6); the catalog loader keeps uses acyclic, so this ends. Any other part was deployed
     // before: its exports are the descriptor's values, recorded so the preview can show where a value came from.
     private Value? ResolvePart(string[] segments, string path, Action<string> fail)
     {

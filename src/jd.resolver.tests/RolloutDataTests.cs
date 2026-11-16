@@ -4,7 +4,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-// The runtime's rollout data (docs/architecture/documents.md section 9, S24e): the probe scheme, the revision suffix rule and the full traffic weight
+// The runtime's rollout data (docs/architecture/model.md section 3, Runtime): the probe scheme, the revision suffix rule and the full traffic weight
 // are the runtime's, required at load, bound per implementation, and the suffix's parts must fit its declared longest length.
 public sealed class RolloutDataTests
 {

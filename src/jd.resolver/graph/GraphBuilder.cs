@@ -14,7 +14,7 @@ namespace jd.resolver.graph;
 /// <summary>
 /// Turns a <see cref="PolicyResult"/> into the <see cref="ResolvedGraph"/>: node ids and stacks, edges from pending
 /// references, topological order, phases, hashes and the grant target check. Pure and deterministic.
-/// Rules: docs/architecture/resolver.md (Output: ResolvedGraph). <paramref name="grantTargets"/>: the catalog's grant template to target input.
+/// Rules: docs/architecture/model.md section 9. <paramref name="grantTargets"/>: the catalog's grant template to target input.
 /// </summary>
 public sealed class GraphBuilder(EnvironmentDescriptor environment, IReadOnlyDictionary<string, string> grantTargets)
 {

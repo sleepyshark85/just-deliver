@@ -3,7 +3,7 @@ using Xunit;
 
 namespace jd.cli.tests;
 
-// jd's data directory (docs/architecture/connections.md): where it is, and the state's folder and key, created once and kept.
+// jd's data directory (docs/architecture/provisioning.md, Backend and state): where it is, and the state's folder and key, created once and kept.
 public sealed class DataDirectoryTests : IDisposable
 {
     private readonly string _temp = Directory.CreateTempSubdirectory("jd-data-tests").FullName;

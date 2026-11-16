@@ -162,15 +162,15 @@ Agreed direction:
 
 Related, not decided: `kind` stays on every file; `types` merge into the component (one contract per component, many classes).
 
-Decided by the user (2026-10-18; [components.md §8](architecture/components.md#8-choices-taken-by-the-user-2026-10-18)): a separate
+Decided by the user (2026-10-18; [ADR 0017](decisions/0017-catalog-layer-policies-require.md), [ADR 0018](decisions/0018-environment-offers-runtime.md)): a separate
 shared layer read through `--base`; offers are names only; **environment types** (dev, stage, prod, declared in the catalog) replace tier
 matching, with one contract and implementations per type; **no `grantable` list**, a grant targets only the workload's own nodes (this
 replaces the "grantable from `uses`" bullet above); **monitoring is an explicit component**, policies require it and add nothing.
 
-Design: [architecture/components.md](architecture/components.md) (S21).
+Design: [architecture/model.md](architecture/model.md) (S21).
 
 ## Related
 
 - Decisions: [0001 custom build](decisions/0001-custom-build-api-and-clients.md), [0002 Pulumi Automation API](decisions/0002-pulumi-automation-api.md), [0004 two-layer definitions](decisions/0004-two-layer-definition-model.md), [0005 B/C first](decisions/0005-build-bc-first-design-for-d.md)
-- Architecture: [landing-zone.md](architecture/landing-zone.md), [provisioning.md](architecture/provisioning.md), [workload-definition.md](architecture/workload-definition.md)
+- Architecture: [landing-zone.md](architecture/landing-zone.md), [provisioning.md](architecture/provisioning.md), [model.md](architecture/model.md#1-workload-and-requirements)
 - Plans: [mvp.md](plans/mvp.md)

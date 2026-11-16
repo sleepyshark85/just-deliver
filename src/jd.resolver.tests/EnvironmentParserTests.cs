@@ -119,7 +119,7 @@ public class EnvironmentParserTests
         Assert.StartsWith("schema violation: AdditionalPropertiesNotValid: #/values.logAnalytics", error.Message);
     }
 
-    // A dotted key does not hide a bad leaf beside it (documents.md section 6), and the mapping it sits in is not also reported as a string that
+    // A dotted key does not hide a bad leaf beside it (documents.md section 4), and the mapping it sits in is not also reported as a string that
     // is not one: of the failed anyOf, only the branch with the message counts.
     [Fact]
     public async Task A_dotted_key_and_a_bad_leaf_beside_it_are_both_reported()

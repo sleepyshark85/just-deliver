@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/catalog/sharedresource.schema.json",
   "title": "just-deliver catalog shared resource",
-  "description": "A platform-owned part (for example the Cosmos DB account), deployed once per scope and read by the parts that name it in 'uses' as ${<name>.<export>} (docs/architecture/components.md section 2). Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across shared resources, components and runtimes.",
+  "description": "A platform-owned part (for example the Cosmos DB account), deployed once per scope and read by the parts that name it in 'uses' as ${<name>.<export>} (docs/architecture/model.md section 3). Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across shared resources, components and runtimes.",
   "type": "object",
   "x-jd": { "is": "owner" },
   "allOf": [{ "x-jd": { "is": "part" } }],

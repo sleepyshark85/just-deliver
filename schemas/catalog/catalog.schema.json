@@ -16,7 +16,7 @@
       "x-jd": { "is": "catalog.version" }
     },
     "environmentTypes": {
-      "description": "The environment types, declared once: an environment definition or descriptor of any other type is an error. Names use the requirement-type pattern; `default` is not a type (docs/architecture/components.md section 2).",
+      "description": "The environment types, declared once: an environment definition or descriptor of any other type is an error. Names use the requirement-type pattern; `default` is not a type (docs/architecture/model.md section 5).",
       "type": "object",
       "x-jd": { "define": "environment type" },
       "minProperties": 1,

@@ -6,7 +6,7 @@ namespace jd.resolver.catalog;
 /// An IT Ops rule (docs/architecture/documents.md section 2, concept 10), bound from a policy document by the <c>policy.*</c> roles and the
 /// criteria of its kind. A node-scope policy (its <see cref="Scope"/> has no value) sets and defaults config fields of every node at which each of
 /// its <see cref="Criteria"/> holds; a workload-scope policy (<see cref="WorkloadScope"/>) sets and defaults fields of the runtime node and makes
-/// every workload it matches require <see cref="Require"/>. Rules: docs/architecture/resolver.md (Policy scope).
+/// every workload it matches require <see cref="Require"/>. Rules: docs/architecture/model.md section 7.
 /// </summary>
 public sealed record Policy
 {

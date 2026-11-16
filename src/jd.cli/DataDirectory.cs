@@ -6,7 +6,7 @@ namespace jd.cli;
 
 /// <summary>
 /// jd's data directory, where it keeps the deployment state, the state's key and the records, so nothing has to be set on the machine
-/// (docs/architecture/connections.md): <c>jd</c> in the local application data folder, or <c>JD_DATA_DIR</c>. The one place it is resolved; what is
+/// (docs/architecture/provisioning.md, Backend and state): <c>jd</c> in the local application data folder, or <c>JD_DATA_DIR</c>. The one place it is resolved; what is
 /// in it is created on first use.
 /// </summary>
 internal sealed class DataDirectory

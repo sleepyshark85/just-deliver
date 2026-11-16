@@ -3,7 +3,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-// The literal guard of docs/architecture/documents.md section 9: no production C# literal names a field the schemas declare. Its allowlist holds
+// The literal guard of docs/architecture/documents.md section 5: no production C# literal names a field the schemas declare. Its allowlist holds
 // section 2's exceptions and the prose false positives only; a stale entry fails.
 public sealed partial class LiteralGuardTests
 {

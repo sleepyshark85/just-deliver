@@ -6,7 +6,7 @@ using Xunit;
 namespace jd.resolver.tests;
 
 // The approval block in the descriptor and the definition (docs/architecture/approvals.md section 3): the schemas and the loader rules, and the
-// catalog's type rules (docs/architecture/components.md section 2, boundary 13): a declared type, and the block on a type with approval: true.
+// catalog's type rules (docs/architecture/model.md section 5, boundary 13): a declared type, and the block on a type with approval: true.
 public class ApprovalEnvironmentTests
 {
     private const string Approver = "11111111-1111-1111-1111-111111111111";

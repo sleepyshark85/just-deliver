@@ -4,7 +4,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-// The binder writes a document from role values (docs/architecture/documents.md section 5), knowing no kind or field: a planted schema binds
+// The binder writes a document from role values (docs/architecture/documents.md section 3), knowing no kind or field: a planted schema binds
 // roles on fields of its own names, in an order of its own, and the binder writes it with no C# change. The shipped kinds are written through
 // the descriptor composer (SubstrateTests) and the release set (ReleaseTests), whose goldens are byte-identical.
 public sealed class BinderWriteTests

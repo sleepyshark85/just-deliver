@@ -4,7 +4,7 @@ using Xunit;
 
 namespace jd.resolver.tests;
 
-// The grant target rule at load (docs/architecture/components.md section 3, security boundaries 1 and 2): a grant node sits in a class
+// The grant target rule at load (docs/architecture/model.md section 7, security boundaries 1 and 2): a grant node sits in a class
 // part or the runtime, its template is listed in grants.yaml, and its target input is exactly ${<node>.<output>} of a node of its own part
 // or the runtime. The graph builder's check after policies is in GraphBuilderTests.
 public class GrantTargetTests

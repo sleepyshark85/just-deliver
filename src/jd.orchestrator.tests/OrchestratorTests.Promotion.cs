@@ -42,7 +42,7 @@ public partial class OrchestratorTests
         Assert.Empty(decision.IgnoredApprovals);
     }
 
-    // Records written before environment types carry a tier, not a type: the qualifying deploy and the approval still count (components.md section 6).
+    // Records written before environment types carry a tier, not a type: the record schemas still accept it, so the qualifying deploy and the approval still count.
     [Fact]
     public async Task Records_written_with_a_tier_before_environment_types_still_qualify_and_approve()
     {

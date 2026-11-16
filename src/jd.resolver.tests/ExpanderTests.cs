@@ -172,7 +172,7 @@ public class ExpanderTests
         Assert.Equal(["cache"], result.Requirements.Select(r => r.Id));
     }
 
-    // The runtime is the environment's offered one, not the catalog's (docs/architecture/components.md section 3).
+    // The runtime is the environment's offered one, not the catalog's (docs/architecture/model.md section 5).
     [Theory]
     [InlineData("", "environment 'dev' offers no runtime, so no workload can deploy on it.")]
     [InlineData("sqldb", "environment 'dev' offers no runtime, so no workload can deploy on it.")]

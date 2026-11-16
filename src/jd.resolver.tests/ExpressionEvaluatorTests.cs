@@ -23,7 +23,7 @@ public class ExpressionEvaluatorTests
         "dev",
         new Dictionary<string, string>
         {
-            // The seed catalog's workload parts read the descriptor by part name (docs/architecture/components.md section 3).
+            // The seed catalog's workload parts read the descriptor by part name (docs/architecture/model.md section 6).
             ["env-group.name"] = "rg-test",
             ["apps-env.id"] = "/cae",
             ["cosmos-account.id"] = "/acct/id",
@@ -45,7 +45,7 @@ public class ExpressionEvaluatorTests
         Dictionary<string, IReadOnlyDictionary<string, string>>? parts = null) =>
         new(roles ?? Roles, naming ?? Naming, Env, new WorkloadOwner(workload, "team-a", image, port), new ExpressionScope(id, new HashSet<string> { "database", "container" }, known ?? [], parts ?? []));
 
-    // An environment run's parts (docs/architecture/components.md section 2): 'account' reads 'group' in place, 'database' (also a node) reads its node.
+    // An environment run's parts (docs/architecture/model.md section 6): 'account' reads 'group' in place, 'database' (also a node) reads its node.
     private static readonly Dictionary<string, IReadOnlyDictionary<string, string>> RunParts = new()
     {
         ["group"] = new Dictionary<string, string> { ["name"] = "${container.resourceGroupName}" },

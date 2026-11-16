@@ -14,7 +14,7 @@ namespace jd.resolver;
 /// object, else the closest object enclosing it, so a value an owner holds counts for each of its parts. A block a part holds below its own
 /// fields (a runtime part's probe and release) is read at any depth inside the part. An absent field binds its schema's <c>default</c>.
 /// Only schema-valid documents are bound. The other direction writes a document of a kind from role values, walking its schema
-/// (<see cref="Write"/>, documents.md section 5).
+/// (<see cref="Write"/>, documents.md section 3).
 /// </summary>
 internal sealed class Binder(SchemaIndex index)
 {
@@ -206,7 +206,7 @@ internal sealed class Binder(SchemaIndex index)
     });
 
     /// <summary>
-    /// A document of <paramref name="kind"/> written from <paramref name="record"/>, its values by role (docs/architecture/documents.md section 5):
+    /// A document of <paramref name="kind"/> written from <paramref name="record"/>, its values by role (docs/architecture/documents.md section 3):
     /// the kind first, then each field the schema binds in the schema's property order. A field whose subschema binds fields of its own is written
     /// from the nested record the role holds, a <c>many</c> role on a list's items writes one item per record of the list it holds, and any other
     /// value is written as given, so a map keeps its order. A null or absent value is not written, nor is a field the schema does not bind, so the
