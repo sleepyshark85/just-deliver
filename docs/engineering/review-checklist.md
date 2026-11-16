@@ -1,7 +1,7 @@
 # Review checklist
 
-Used by the reviewer on every PR, and by the developer before asking for review. Each item maps to
-[standards.md](standards.md), and the [code quality bar](conventions.md#code-quality-bar) applies to every changed line. Review the **diff and the files it touches**, against the **slice brief**.
+The order of the review and its verdict. The reviewer walks every check over the diff and the files it touches, against the
+brief; the developer walks it before handing back. Each check names what blocks; the rule itself is in the linked owner.
 
 ## Verdict format
 
@@ -15,61 +15,25 @@ SUGGESTIONS
 - [rule] path/to/file.cs:10 — ...
 
 CHECKED
-- one line per section below: ok / n/a / see finding
+- one line per check below: ok / n/a / see finding
 ```
 
-Any blocking finding means CHANGES REQUIRED. Findings cite a file and line and the rule broken;
-"could be cleaner" without a rule is a suggestion, never blocking.
+Any blocking finding means CHANGES REQUIRED. A finding names the rule, the file and line, and a fix. Without a rule it is a
+suggestion; suggestions never block, and a broken rule is never a suggestion.
 
-## 1. Correctness — blocking
-- Does it do what the slice brief asks, including edge cases and failure paths?
-- Are errors surfaced with actionable messages; nothing swallowed?
-- Do tests actually exercise the behaviour (not just execute it)? Would they fail if the code broke?
+## Checks
 
-## 2. Nothing hard-coded — blocking
-- Any resource name, region, SKU, role GUID, template name, environment name, URL or id in C#?
-- Any branching on resource type or workload name?
-- Any knowledge that belongs in the catalog, environment descriptor or configuration?
-- Any document structure in C# (standards §1, formats are data): a field or kind name, a location built from field names, a
-  type mirroring a file? A literal the guard allows by file can still hide one; judge role names against documents.md
-  Appendix B and prose in messages yourself.
-
-## 3. Simplicity and no unnecessary code — blocking when clear
-- Is there code the slice does not need: speculative abstractions, unused options, interfaces with a
-  single implementation and no test seam, dead or commented-out code?
-- Is there a simpler approach that meets the brief? Name it.
-- New dependency or project without a stated reason?
-- Does the slice stay inside the phase goal its brief names ([roadmap](../plans/roadmap.md))? Work outside it, or a
-  design choice that makes a later phase's idea harder (roadmap rule 4), is a finding.
-- **Explicit over implicit:** does the change add a resource, grant, default, match rule or policy *addition* the
-  workload did not declare ([conventions](conventions.md#design-rules-that-code-must-keep))? Blocking unless the brief says
-  the user approved it.
-- **Simplification over complication:** does the change add a concept, rule or mechanism where removing or reusing one
-  would do? Name the simpler design. Does it break cohesion (one component's knowledge spread out), bind a consumer to an
-  implementation instead of a contract, make a workload definition vary by environment, or give a resource two owners
-  ([context.md](../context.md#design-principles) 7–11)?
-
-## 4. Architecture and separation of concerns — blocking
-- Dependency direction per standards §3; inner layers free of Pulumi/Azure/CLI.
-- One responsibility per type; side effects isolated behind adapters; logic unit-testable.
-- Consistent with the ADRs and architecture docs. Divergence must be escalated, not merged.
-
-## 5. Code quality — blocking for clear violations
-- Naming, types, methods, errors, async/cancellation, idioms per standards §4 and [csharp.md](csharp.md).
-- Matches surrounding style; comments explain why.
-
-## 6. Tests — blocking
-- Behaviour change without tests? Missing golden test for resolver behaviour?
-- Would each test fail if the behaviour it names broke? Every new branch, guard and error path is noticed by a
-  test (break it and see); a surviving mutation in changed code is blocking ([conventions](conventions.md#tests)).
-- Each required test of the brief exists and proves its boundary; error tests pin which error and what did not happen.
-- Azure tests tagged `Category=Azure`; unit tests offline and deterministic.
-
-## 7. Free tier and Azure safety — blocking
-- Every resource the change can create fits the free-tier rules (standards §6): Cosmos RU/s budget,
-  Container Apps consumption + `minReplicas: 0`, Log Analytics daily cap, nothing paid.
-- Resource groups tagged; teardown path exists; region from configuration.
-- No changes to policies, role definitions, app registrations or sandbox setup.
-
-## 8. Repository hygiene
-- Slice-sized PR; conventional commits; no secrets; docs updated with behaviour.
+1. **Brief.** Something the brief asks is missing or wrong, including edge cases and failure paths; a required test is missing
+   or does not prove its boundary; work outside the phase goal the brief names, or a choice that makes a later phase's idea
+   harder ([roadmap](../plans/roadmap.md#rules-for-work), rules 1 and 4).
+2. **Nothing hard-coded.** Anything [standards §1](standards.md#1-nothing-hard-coded) forbids, including a literal the guard
+   allows that still hides structure.
+3. **Simplicity.** Anything [standards §2](standards.md#2-simplest-thing-that-works) forbids; name the simpler design.
+4. **Architecture.** A dependency, port or responsibility against [standards §3](standards.md#3-architecture-and-separation-of-concerns);
+   a divergence from an ADR or design note ([standards §3](standards.md#3-architecture-and-separation-of-concerns)).
+5. **Design invariants.** A change that breaks one of [standards §4](standards.md#4-design-invariants) or a design principle it
+   points to, unless its design note or ADR was changed first ([standards §4](standards.md#4-design-invariants)).
+6. **C#.** Anything [csharp.md](csharp.md) forbids, beyond its *aim* numbers without a reason.
+7. **Tests.** Anything [standards §5](standards.md#5-tests) forbids; a branch, guard or error path whose mutation survives.
+8. **Free tier and Azure safety.** Anything [standards §6](standards.md#6-azure-and-the-free-tier) forbids.
+9. **Git, docs and formats.** Anything [standards §7](standards.md#7-git-and-prs) forbids.
