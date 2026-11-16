@@ -217,7 +217,7 @@ Newest first. One entry per session: what moved, decisions taken, anything the n
   the lead stopped them. S19 split into S19a (reader, offline) and S19b (`jd promote`); S19a approved in 2 rounds while the gate ran.
 - **2026-10-17 (Azure gate rule)** — The ~2 h Azure suite ran twice per slice (early + after APPROVE) whatever the slice touched. User's
   choice: run it once, only for an Azure-facing slice, before review round 1, and let the next slice be developed while it runs
-  ([conventions](../engineering/conventions.md#how-we-work)). S18b merged on CI alone; its stopped gate's leftover groups were torn down.
+  ([conventions](../engineering/conventions.md#azure-gate)). S18b merged on CI alone; its stopped gate's leftover groups were torn down.
   S18c is in development (brief: approval reader moved to S19 per approvals.md §6, S18c ~150 lines).
 - **2026-10-17 (S18b)** — S18b done in 3 rounds (third trial slice). Findings were code-bar items (duplicated record literals, a crash on an
   unlistable directory, two weak tests), not design; the fixer only partly fixed the literals in round 1, which cost round 2. Three rounds is a
