@@ -30,5 +30,5 @@ for now and for the MVP.
 **Follow-up (open, D22):** whether a Key Vault secret reference is refreshed without a new revision, or rotation implies a revision restart. Decides whether "rotate a secret" is a platform operation or a deployment.
 
 ## Related
-- [0006](0006-infra-deployed-with-app.md), [0012](0012-system-assigned-identity.md), [0014](0014-hook-points.md), [architecture/network.md](../architecture/network.md)
+- [0006](0006-infra-deployed-with-app.md), [0012](0012-system-assigned-identity.md), [0014](0014-hook-points.md), [0018](0018-environment-offers-runtime.md)
 - [open-questions](../open-questions.md): B5, C12, D22, E32, E35

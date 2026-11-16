@@ -17,7 +17,7 @@ and `python3`. Options: `./sandbox.sh --help`.
 | Item | Detail |
 |---|---|
 | Resource providers | `Microsoft.App`, `Microsoft.OperationalInsights`, `Microsoft.Insights`, `Microsoft.DocumentDB`, `Microsoft.ManagedIdentity` |
-| Policy initiative `jd-sandbox-guardrails` (Deny) | Allowed locations (resources and resource groups) = `--region`; not-allowed resource types from [config/not-allowed-resource-types.json](config/not-allowed-resource-types.json); Cosmos DB accounts must enable free tier (which also caps it at one account); Container Apps environments may use Consumption profiles only; Log Analytics workspaces must set a daily cap between 0.01 and `--law-daily-cap` GB, written as a decimal (Azure Policy compares numbers of the same type only, so an integer cap fails evaluation and is denied) |
+| Policy initiative `jd-sandbox-guardrails` (Deny) | The guardrails, at subscription scope; what they enforce: [below](#what-the-guardrails-enforce) |
 | Budget `jd-sandbox-budget` | `--budget` USD/month; email at 50% and 100% actual, 100% forecast. Alerts only — it does not stop spend |
 | App registration + service principal | **Contributor** on the subscription, plus **Role Based Access Control Administrator** restricted by an ABAC condition to assigning only `--grantable-roles` (default: Monitoring Metrics Publisher). Neither role can modify policy, so the guardrails hold against the team |
 | Credentials file | `~/.just-deliver/<subscription>.env` (mode 600): `ARM_*` for Pulumi, `AZURE_*` for `DefaultAzureCredential` (jd needs nothing else: the region is in the environment definition, state and records live in jd's data directory). Secret lifetime `--secret-days` (30); renew with `--rotate-secret` |
@@ -30,24 +30,24 @@ source ~/.just-deliver/<subscription>.env
 az login --service-principal --username "$ARM_CLIENT_ID" --password="$ARM_CLIENT_SECRET" --tenant "$ARM_TENANT_ID"
 ```
 
-The Azure tests (`tools/verify.sh --azure`, Category=Azure) run as this team identity, never as a personal login: they require `ARM_CLIENT_ID`,
-`ARM_CLIENT_SECRET`, `ARM_TENANT_ID` and `ARM_SUBSCRIPTION_ID` in the environment (the credentials file sets them), fail with a message if any
-is missing, and run every `az` command against a temporary `AZURE_CONFIG_DIR` they log in to themselves. They also need a subscription
-without an existing free-tier Cosmos account.
+The Azure tests run as this identity; their rules are in [standards §6](../../docs/engineering/standards.md#6-azure-and-the-free-tier).
+They need a subscription with no existing free-tier Cosmos account (one is the limit; see standards §6).
 
-## Free-tier constraints the team must design for
+## What the guardrails enforce
 
-Verify figures on Azure's pricing pages; grants change.
+The free-tier rules a slice must keep are [standards §6](../../docs/engineering/standards.md#6-azure-and-the-free-tier). `apply`
+enforces only this much of them (Deny, at subscription scope):
 
-| Service | Free allowance | Design consequence |
-|---|---|---|
-| Cosmos DB | 1,000 RU/s + 25 GB on one free-tier account, provisioned throughput only (no serverless) | One shared account; total RU/s across all databases/containers ≤ 1,000 |
-| Container Apps (Consumption) | Monthly per-subscription grant (~180k vCPU-s, 360k GiB-s, 2M requests) | `minReplicas: 0`, smallest CPU/memory size; inactive revisions scale to zero |
-| Log Analytics / App Insights | ~5 GB ingestion/month, 31-day retention | Daily cap enforced by policy; sample telemetry |
-| Container registry | ACR is not free (and denied) | Use a public registry (GHCR / Docker Hub) |
+| Service | Enforced by `apply` |
+|---|---|
+| Cosmos DB | Free tier on, so at most one account per subscription |
+| Container Apps | Consumption workload profiles only |
+| Log Analytics | Daily cap set, between 0.01 GB and `--law-daily-cap` (default 0.15 GB), written as a decimal (Azure Policy compares numbers of the same type only, so an integer cap fails evaluation and is denied) |
+| Container registry, VMs, AKS, SQL, Postgres, Redis, gateways, … | Denied ([not-allowed-resource-types.json](config/not-allowed-resource-types.json)) |
+| Region | `--region` only, for resources and resource groups |
 
-Check Cost Management after the first day of real deployments. The guardrails are a safety net,
-not a guarantee: a Pay-As-You-Go subscription has no spending limit.
+RU/s totals, replica counts, CPU/memory sizes and sampling are not enforced here. The guardrails and the budget are a safety net,
+not a guarantee: a Pay-As-You-Go subscription has no spending limit; check Cost Management after the first day of real deployments.
 
 ## Adding a subscription later
 

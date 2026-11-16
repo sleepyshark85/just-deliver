@@ -4,7 +4,7 @@ Register of everything not yet decided for just-deliver. IDs are stable global l
 
 **Status labels:** `OPEN` = nothing decided · `PARTIAL` = a position exists, gaps remain · `SETTLED` = a position has been written up as an ADR in [decisions/](decisions/).
 
-**Nothing is accepted until reviewed.** Every ADR derived from a `SETTLED` item is "Proposed — pending review"; a `PARTIAL` "leaning" is a working position, not a decision. When an item settles, write an ADR and replace the entry here with a one-line pointer.
+A `PARTIAL` "leaning" is a working position, not a decision. When an item settles (an ADR, or it is built), its entry becomes a one-line pointer. ADR status: [decisions/README.md](decisions/README.md).
 
 ---
 
@@ -17,10 +17,7 @@ These shape everything else.
 Residual open point: registration flow — explicit registration before first deployment or implicit on it, and who may register.
 ### A3. Enforcement posture per environment tier — see [ADR 0008](decisions/0008-enforcement-in-landing-zone.md)
 
-### A4. What must be identical between team environments and platform environments? `OPEN`
-- If team envs permit what prod forbids, teams build on sand and "it worked in my environment" means nothing; if identical in every respect, unaffordable.
-- **Candidate answer:** the *policy set* is identical across tiers; scale, SKU, replica count and data may differ.
-- Already leaned on by ADR 0010 (uniform `protect` incl. dev) and ADR 0014 (hooks uniform across tiers).
+### A4. What must be identical between environments? — principle 10 ([context.md](context.md#design-principles)) and [ADR 0018](decisions/0018-environment-offers-runtime.md): one workload definition everywhere; differences live in the catalog's implementations per environment type
 
 ---
 
@@ -32,7 +29,8 @@ Subscription per environment, or resource group within a shared subscription?
 - **Constrained by E27 ([ADR 0013](decisions/0013-container-apps-runtime.md)):** a Container Apps Environment needs a dedicated subnet whose minimum size depends on the environment type — an IPAM decision before any address space is allocated, or adding environments later means renumbering.
 - Subscription creation needs billing-scope permissions and is capped per billing account.
 - Azure Policy assignment takes time to propagate, so a fresh subscription is effectively unguarded for a window.
-- Tension with [architecture/landing-zone.md](architecture/landing-zone.md), which lists "one landing zone per team" as an anti-pattern. Reconcilable if the real boundary is *criticality tier* rather than team, but must be stated.
+- "One landing zone per team" is a known anti-pattern; a subscription per team environment is reconcilable only if the real boundary is criticality rather than team, and that must be stated.
+- What an environment offers and its type are catalog data ([ADR 0018](decisions/0018-environment-offers-runtime.md)); its physical form is what stays open here.
 
 ### B6. Environment lifecycle: TTL, deletion, provable reprovisionability `OPEN`
 - Without a TTL, dev environments are immortal.
@@ -60,6 +58,18 @@ The shared environment tier (SQL server, Log Analytics workspace, Service Bus na
 
 ### B10. RBAC split inside a team-owned subscription — see [ADR 0009](decisions/0009-rbac-split-team-subscription.md)
 
+### B59. Landing zone shape `OPEN`
+- How a landing zone is defined and provisioned: its definition format, management-group hierarchy, tenant model (one Entra tenant with administrative units, or several), budgets and the policy set per zone. A draft format is `definitions/landing-zone-definition.{json,yaml}`, now referenced by nothing else. Ownership is [ADR 0008](decisions/0008-enforcement-in-landing-zone.md)'s.
+
+### B60. Network topology and address plan `OPEN`
+- Hub-and-spoke per region (Virtual WAN, firewall, private DNS) or something lighter; the CIDR plan allocated up front (a Container Apps environment needs its own subnet, B5); a separate-cloud region such as China (E53).
+
+### B65. Environment-scope resources that vary by environment type `OPEN`
+- An environment-scope part cannot vary by environment type today; whether it must (e.g. a larger shared database in prod).
+
+### B66. `env up` with a missing or stale shared layer `OPEN`
+- Whether `jd env up` of an environment brings up (or refuses on) a shared layer that is missing or older than the catalog, first.
+
 ---
 
 ## C. Resources & dependencies
@@ -68,18 +78,15 @@ The shared environment tier (SQL server, Log Analytics workspace, Service Bus na
 Two prerequisite spikes remain (when `protect` fails; whether Pulumi YAML can drive `options.protect` from config).
 
 ### C12. Shared vs dedicated resources `PARTIAL`
-- **Leaning so far:** shared resources belong to the environment and live and die with it — one database server per environment, one Azure Monitor workspace so telemetry correlates; each workload gets its own database and App Insights component inside them. Three ownership tiers: landing zone → environment → workload; the isolation dial is the *environment*, not the resource.
-- **Settled within this item:** isolation is expressed as `class`, not by naming or `id`. "Dedicated" means its own *server* (noisy-neighbour isolation, compliance boundary, different engine version) — a different substrate tier, expressed by the `class` field ([architecture/model.md](architecture/model.md#1-workload-and-requirements)). Example in [ADR 0011](decisions/0011-requirement-id.md).
+- **Built:** shared resources are named and defined once, and `jd env up` deploys them in the shared or the environment layer; each workload gets its own resources inside them (its container, its App Insights component) ([model.md](architecture/model.md)). The isolation dial is the environment, not the resource.
+- **Settled within this item:** isolation is expressed as `class`, not by naming or `id`. "Dedicated" means its own *server* (noisy-neighbour isolation, compliance boundary, different engine version) — a different substrate tier, expressed by the requirement's `class` ([workload.schema.json](../schemas/workload.schema.json)). Example in [ADR 0011](decisions/0011-requirement-id.md).
 - **Open:** which classes exist per resource type; whether `class: dedicated` in production requires approval given the cost difference.
 
 ### C13. Multiple resources of the same type — see [ADR 0011](decisions/0011-requirement-id.md)
-- **MVP pattern (S01):** `type`, `id` and `class` share `^[a-z][a-z0-9-]{1,14}[a-z0-9]$`. Hyphens are allowed so a hyphenated type can be its own default id; provider-specific name limits (e.g. storage accounts: 24 chars, no hyphens) are the namer's job (S04), and the final id budget is still open under C14.
 
-### C14. Resource naming `OPEN`
-- Global uniqueness (SQL, storage), length limits (storage accounts: 24 chars, lowercase alphanumeric), collisions across environments, name reclaim blocked by soft-delete.
-- Names are generated from workload name plus prefixes/suffixes; the budget must be worked out before it bites.
-- **Tightened by C13:** the name must also hold a resource `id` (~12 chars) plus workload name, environment and type prefix. With `metadata.name` allowing 40 chars, the budget does not close — derive the scheme from the tightest target rather than from the workload name outward. May force tightening the `metadata.name` pattern (H50).
-- **MVP pattern (S01):** `type`/`id`/`class` use `^[a-z][a-z0-9-]{1,14}[a-z0-9]$` (hyphens allowed so a hyphenated type can be its own default id); provider-specific limits (storage accounts: 24 chars, no hyphens) are the namer's job (S04); the final id budget is still open here.
+### C14. Resource naming `PARTIAL`
+- Names are catalog data ([naming.yaml](../catalog/naming.yaml)): a pattern, a maximum length and the allowed characters per target; a name over its target's length is cut and keeps its hash.
+- **Open:** global uniqueness (Cosmos, storage) across deployments; name reclaim blocked by soft-delete (Key Vault, B6).
 
 ### C15. Cost attribution and control `OPEN`
 - Nobody owns cost in the current design.
@@ -93,44 +100,20 @@ A team removes `- type: database` from a prod workload; today the platform delet
 - **`retainOnDelete` kept as a state-surgery tool:** re-homing a resource between stacks (retain in old, `pulumi import` into new) — needed when substrate stacks split from workload stacks or a resource moves between ownership tiers.
 - **Open:** backup semantics per resource type (what "backup" means for a Service Bus namespace or a workspace); retention window before the backup is discarded.
 
-### C52. The resolution layer — mapping definitions to resources `OPEN`
-How `requires: [{type, id, class}]` plus environment, mappings and policies becomes a concrete resource graph. Currently unowned — the most load-bearing component not yet specified, and it constrains the schema. **Proposed design in progress: [architecture/model.md](architecture/model.md).**
+### C61. Explaining a resolution `OPEN`
+- `jd resolve --explain`: each resolved value with its chain (source file, rule, layer); relates to F39's per-field provenance.
 
-**Hard parts**
-1. **A matcher, not a map.** Selection depends on type, class, tier, possibly team or region. Needs a specificity ordering with ties as errors, or the same definition resolves unpredictably.
-2. **Emits a graph, not a list.** Mixed *create* and *reference* nodes (database needs the environment's server; a grant needs an identity and a target). A mapping is three parts: what to look up, what to create, what wiring it produces.
-3. **References resolve in phases:** static → post-infra → post-identity. Principal ids don't exist until the app is created (ADR 0012); a one-pass resolver will need rewriting.
-4. **Pure function, separate from provisioning:** `resolve(definition, environment, mappings, policies) → graph + provenance`. Preview screen, audit chain, approval diff and destructive-change gate all consume the resolved graph *before* anything is applied; resolve-as-you-go makes all four impossible.
+### C62. Catalog checks before a catalog change ships `OPEN`
+- No catalog CI beyond jd's load checks: fleet dry-run (which deployed workloads a catalog change affects, and how) is not built; roadmap phase 2 plans `jd catalog check`.
 
-**Pitfalls**
-- **Overrides applied after policies** — present in the current design ([architecture/model.md](architecture/model.md#1-workload-and-requirements)): a whitelisted override beats a compliance policy.
-- **Shallow merge, no provenance** — two policies touching one field conflict silently. Provenance per field (`{value, source, rule}`), not per stage.
-- **Over-abstraction** — `type: database` breaks when it resolves to an engine the team's driver doesn't expect. The earlier rule was: the type names the interface the code binds to, the class the operational shape the code cannot see (`type: postgres`, `class: dedicated`).
-  **User decision (S12a), overriding that rule:** workloads ask for `database`; the platform team's mapping decides the engine (Cosmos DB SQL API today). To keep the code honest the type exports an `engine` value (`cosmos-sql`, from the mapping's data) that the workload can read. Consequence still open: changing the engine behind a type for an existing workload is a data-moving, breaking change and must later route to approval (F54). C52 is not resolved by this.
-- **Position-based identity** — deriving names from index in `requires` destroys resources on reorder. Identity is `(workload, id, type)` (ADR 0011).
-- **Unversioned mappings** — a deployment must record the mapping version that resolved it, alongside the definition SHA (ADR 0007), or the chain isn't reproducible.
+### C63. Template content in the graph `OPEN`
+- The resolved graph names a template but not a digest of its content, so a template change is invisible in the graph.
 
-**Recommended shape** — matching criteria + lookup + create + wiring, per mapping:
+### C64. Template config keyword `OPEN`
+- Templates spell their inputs `configuration:`; whether to move to Pulumi's `config:`.
 
-```yaml
-match:   { type: postgres, class: standard, tier: protected }
-lookup:  { server: environment.postgres.server }
-create:  { template: azure/postgres-database, config: {...} }
-wiring:
-  env:    { DB_HOST: "${lookup.server.fqdn}", DB_NAME: "${create.name}" }
-  grants: [{ identity: workload.runtime, role: db_datawriter }]
-```
-
-**Fork 1 — mappings as code or data?** Recommend **data**. Code means a mapping change needs a platform release, and audit can only say "resolved by platform build 1.2.7". E51's rollout waves and B7's pinning assume mappings version independently. **Mappings and policies are data; the resolution engine is code**; a plugin interface covers rare dynamic cases. Current docs blur this (mappings shown as TypeScript objects — data wearing code's clothes). Avoid the DSL cost by **replacing conditionals with matching criteria** (two narrow mappings rather than one `if`), substitution only, no logic. Bonus: "mapping `postgres/protected` matched" reads better than "branch 3", and fleet dry-run ("which workloads would this change?") becomes a query.
-
-**Fork 2 — resolve to a graph or straight to stack configs?** Current architecture emits `(template, stack, config)` triples, losing dependency edges. Recommend an explicit graph that the orchestrator topologically sorts; otherwise ordering lives implicitly in the orchestrator loop and breaks on the third resource type needing a parent.
-
-**Review of the first flow sketch** (since deleted; the built flow: [walkthrough.md](walkthrough.md#1-the-flow)). Skeleton is buildable — schemas, Pulumi templates and `IBackEndProvider` exist — with these changes:
-1. **Parse emits a graph with open references, not finished backend yml.** The orchestrator fills each step's inputs from prior outputs (hard part 3), matching the config-passing choice in [architecture/provisioning.md](architecture/provisioning.md).
-2. **The resolver is backend-agnostic.** The sketch put the parser inside the backend provider, making resolution Pulumi-specific and unusable for preview, approval diff and destructive gate. Only rendering a graph node into template + config belongs to the provider.
-3. **The orchestrator is a durable step loop, not one call.** Each step in ADR 0006's order is one queue round trip, checkpointed (E29). A queue session keyed on workload + environment gives E30's serialization. End states: live; degraded (postDeploy failed); failed-partial (infra kept, traffic unchanged, retry re-enters at the failed step — E31).
-4. **Added:** IT Ops policies and the environment as resolver inputs; a preview and approval gate between resolve and deploy (ADR 0007, ADR 0010); recording definition SHA and mapping version with the deployment.
-5. **Backend × cloud-provider frames dropped.** Keep the `IBackEndProvider` seam, build only Pulumi + Azure; don't design for N×M yet.
+### C52. The resolution layer — built: [architecture/model.md](architecture/model.md), [ADR 0017](decisions/0017-catalog-layer-policies-require.md), [ADR 0019](decisions/0019-engine-knows-concepts.md)
+- **Open:** changing the engine behind a component for an existing workload (a workload asks for `database`; the catalog decides the engine and exports it as `engine`) is a data-moving, breaking change that must route to approval (F54).
 
 ---
 
@@ -174,7 +157,7 @@ Where does the data-plane grant step run, as what identity, over what network pa
 
 ### D25. Platform bootstrap `OPEN`
 - What credential provisions the first environment?
-- Where does the Pulumi state encryption key live once state moves to Blob Storage? Locally jd generates a random passphrase into its data directory (`<data>/state.key`, S23); a remote state needs the key kept elsewhere. See [plans/phase-0-bootstrap.md](plans/phase-0-bootstrap.md).
+- Where does the Pulumi state encryption key live once state moves to Blob Storage? Local state is settled: jd generates its key in its data directory ([provisioning.md](architecture/provisioning.md)); a remote state needs the key kept elsewhere.
 
 ### D26. Identity cleanup on deletion `OPEN`
 - **Reduced but not eliminated by D17:** system-assigned identities die with their resource, so no orphaned *identities*.
@@ -185,36 +168,34 @@ Where does the data-plane grant step run, as what identity, over what network pa
 ## E. Deployment process
 
 ### E27. What runs the container? — see [ADR 0013](decisions/0013-container-apps-runtime.md)
-Residual open point: Key Vault secret-reference refresh without a new revision (D22).
+The runtime choice moved to the environment: [ADR 0018](decisions/0018-environment-offers-runtime.md). Residual open point: Key Vault secret-reference refresh without a new revision (D22).
 ### E28. Where does the platform's engine stop? — see [ADR 0014](decisions/0014-hook-points.md)
 
 ### E29. Durable execution `OPEN`
 - A deployment is a long-running, multi-step, resumable workflow; an in-memory loop in a background service loses it if the platform restarts between "infra provisioned" and "workload deployed".
-- Needs checkpointed state, idempotent steps, step-level retry. C52's sketch review proposes one queue round trip per step.
+- Needs checkpointed state, idempotent steps, step-level retry; candidate: one queue round trip per step.
 
 ### E30. Concurrency `OPEN`
-- Two deployments of the same workload and environment at once. Pulumi's state lock errors rather than queues, so a per-(workload, environment) serialization point is needed (C52 suggests a queue session keyed on workload + environment).
+- Two deployments of the same workload and environment at once. Pulumi's state lock errors rather than queues, so a per-(workload, environment) serialization point is needed (candidate: a queue session keyed on workload + environment).
 
 ### E31. Partial failure semantics `OPEN`
 - Pulumi leaves partial state on a failed `up`; there is no transaction. "Deployment failed" ≠ "nothing changed".
 - Needs a defined workload state after mid-sequence failure and re-entrant retry rather than restart-from-scratch.
 - **Raised in priority by A1:** infra and app deploy in one operation, so the clean "provisioning failed, nothing deployed" state no longer exists.
-- C52 proposes end states live / degraded / failed-partial (infra kept, traffic unchanged, retry re-enters at the failed step).
+- Candidate end states: live / degraded / failed-partial (infra kept, traffic unchanged, retry re-enters at the failed step).
 
 ### E32. Rollback `PARTIAL`
 - **Leaning so far:** rollback reverts the app only, via a revision switch; infra is forward-only (ADR 0006 rider 2). Mechanism: multiple-revision mode, so rollback is a traffic-weight change to a warm previous revision (ADR 0013). Migrations are not rolled back, hence expand/contract (ADR 0015).
 - **Open:** infra provisioned by a deployment that then failed at the app step — left in place (consistent with forward-only) or cleaned up?
 - **Open:** how the UI communicates that a rollback restored the app but not the infrastructure deployed alongside it.
-- **Revert (S16c):** going back to an earlier config redeploys it as a new revision (a new suffix, probed and shifted like any other), because Azure rejects a template change whose suffix names an existing revision. The traffic-switch rollback to a retained revision stays open.
-- **User (2026-11-03):** rollback belongs to a later phase; until then an IQ failure exits 1 and leaves the deployment live.
-- **Known limitation (S16):** the release flow never deactivates old revisions. In multiple-revision mode a 0%-traffic revision stays active (scaled to zero, no cost) and deactivation is an API action Pulumi YAML cannot express, so rollback targets any retained revision but the active set only shrinks through `maxInactiveRevisions` once revisions become inactive. See [provisioning.md](architecture/provisioning.md).
+- **Revert:** going back to an earlier config redeploys it as a new revision (a new suffix, probed and shifted like any other), because Azure rejects a template change whose suffix names an existing revision. The traffic-switch rollback to a retained revision stays open.
+- **Known limitation:** the release flow never deactivates old revisions. In multiple-revision mode a 0%-traffic revision stays active (scaled to zero, no cost) and deactivation is an API action Pulumi YAML cannot express, so rollback targets any retained revision but the active set only shrinks through `maxInactiveRevisions` once revisions become inactive. See [provisioning.md](architecture/provisioning.md).
 
 ### E33. Database migrations — see [ADR 0015](decisions/0015-database-migrations.md)
 Residual open points: `timeout` ceiling in protected environments; verifying PITR retention before destructive migrations.
 
-### E34. Promotion between environments `OPEN`
-- Same artifact promoted, or one per environment? Who triggers promotion? Do gates differ per environment? How is environment-specific config handled across the boundary?
-- **Where `postDeploy` gets its teeth (E28):** it runs after traffic shift and can't revert, so its value is gating promotion — a failed post-deploy suite in staging marks the deployment degraded and the promotion gate refuses to advance it to production. Without this link `postDeploy` is fire-and-forget.
+### E34. Promotion between environments — built: [architecture/approvals.md](architecture/approvals.md), `jd promote` ([usage.md](usage.md))
+- **Open:** `postDeploy` results gating promotion (needs hooks, E28, [ADR 0014](decisions/0014-hook-points.md)).
 
 ### E35. Deployment strategy `OPEN`
 - Blue/green, rolling, canary, or immediate cutover? Per workload, per environment, or global policy?
@@ -233,8 +214,9 @@ Residual open points: `timeout` ceiling in protected environments; verifying PIT
 
 ## F. Approvals, audit & governance
 
-### F37. Approval model `OPEN`
-- Unanimous or majority; fate of a rejected release; resubmission unchanged; notification, delegation, out-of-office; time limits and deadlock prevention; comments on rejection.
+### F37. Approval model `PARTIAL`
+- Built: [architecture/approvals.md](architecture/approvals.md) — a gated environment requires a count of approvals from listed identities, each recording who, when and its meaning.
+- **Open:** rejection and resubmission; delegation and out-of-office; time limits and deadlock prevention; notification.
 
 ### F38. Why not Azure DevOps / GitHub environments for gates? `OPEN`
 - They already give timestamped, identity-linked approvals with an audit trail.
@@ -294,13 +276,9 @@ Residual open points: `timeout` ceiling in protected environments; verifying PIT
 
 ### H50. Definition schema evolution `OPEN`
 - How team-authored definitions migrate across `apiVersion` changes, how many versions are supported at once, how validation errors reach teams so they can fix them unaided.
-- **Shaped by A2:** under a push model validation must be available *before* upload (CLI or CI step against their own file), not only as a deployment-time rejection.
-- **Changes to `workload.schema.json`** (1 and 2 applied in S01, the rest pending):
-  1. **Remove `metadata.environment`** (A1, A2) — *applied (S01)*: currently required while its own description says the same definition deploys everywhere. Environment is a deployment parameter. Weaker same argument for `name` and `team` (registration identity; can drift if duplicated in the file).
-  2. **Add `id` and `class` to `requires` items** (C12, C13) — *applied (S01)*: `id` optional, defaults to type name, unique within workload (checked in code), pattern `^[a-z][a-z0-9-]{1,14}[a-z0-9]$`.
-  3. **Add a `hooks` block** (E28, E33): `preDeploy`, `verify`, `postDeploy`, each with `command`, optional `image` (defaults to workload image for `preDeploy`), `timeout` default 10 minutes, optional tier restriction, `destructive` on `preDeploy`.
-  4. *Possible:* tighten the `metadata.name` pattern, since C14's naming budget does not close.
-- C52's "type names the interface" rule was overridden by a user decision (S12a): `database` stays a type, the mapping picks the engine, and an `engine` export tells the code.
+- **Shaped by A2:** under a push model validation must be available *before* upload (`jd validate`), not only as a deployment-time rejection.
+- A format change is a schema change, not a C# change ([ADR 0019](decisions/0019-engine-knows-concepts.md)); `metadata.environment` is gone and requirements carry `id` and `class` (ADR 0011).
+- **Open schema change:** a `hooks` block (E28, E33): `preDeploy`, `verify`, `postDeploy`, each with `command`, optional `image` (defaults to workload image for `preDeploy`), `timeout` default 10 minutes, optional environment-type restriction, `destructive` on `preDeploy`.
 
 ---
 
@@ -309,21 +287,11 @@ Residual open points: `timeout` ceiling in protected environments; verifying PIT
 From [use-cases/viedoc-daybreak.md](use-cases/viedoc-daybreak.md) (2026-10-09). A real regulated suite
 releasing ~40 applications together through 9 environments and 4 regions.
 
-### C53. The unit of release: a pinned set of workloads `OPEN`
-- Viedoc releases one immutable **deployment set** (all pinned versions, one label) and installs the same set
-  everywhere. Our model deploys workloads one at a time (A1, A2).
-- Proposed: a **release set** of workload definitions, image digests and workload-level `dependsOn`, under
-  one label. The orchestrator deploys and switches in dependency order. Per-workload deploys become a set of
-  one, so nothing is lost.
-- Cross-workload *resource* references stay forbidden (D19). Ordering is not access.
-- Open: whether a set may mix teams' workloads freely; how a set relates to a team's own environment.
+### C53. The unit of release: a pinned set of workloads — built: [architecture/release.md](architecture/release.md)
+- **Open:** whether a set may mix teams' workloads freely; how a set relates to a team's own environment.
 
-### E52. Qualification evidence on every deploy `OPEN`
-- Regulated customers need IQ (what is installed equals what was pinned, observed rather than recorded), OQ
-  (each application meets one health contract) and smoke on every deploy; PQ and the regulatory suite on stage.
-- Proposed: IQ = a refresh shows no drift, plus running image digests equal to pinned. The OQ contract is
-  catalog data (the runtime mapping declares the probe). Results go on the release record with machine
-  identity. Relates to E28 (`verify`) and E36.
+### E52. Qualification evidence on every deploy — built (IQ, OQ): [architecture/release-record.md](architecture/release-record.md)
+- **Open:** smoke, PQ and the regulatory suite on stage (E28, E36).
 
 ### E53. Multi-region rollout `OPEN`
 - An environment can have several regional instances (Viedoc: 4 regions, training then production each, China
@@ -331,11 +299,9 @@ releasing ~40 applications together through 9 environments and 4 regions.
   "deploy Monday, switch Japan Thursday" happen.
 - Open: separate-cloud regions (credentials, agents, registry), and whether instances share one resolved graph.
 
-### F54. Approvals with signature meaning `OPEN`
-- Regulated approvals (test lead, PM, QA) must record who, when and what the signature means (21 CFR Part 11),
-  bound to the exact set approved. Extends F37.
-- Proposed: approval policy as data per environment tier (required roles, order). The approval record is
-  immutable on the release record. Identity comes from Entra. Promotion refuses without it.
+### F54. Approvals with signature meaning `PARTIAL` — extends F37
+- Built: who, when and meaning, bound to the exact set approved and kept on the release record; promotion refuses without it ([architecture/approvals.md](architecture/approvals.md)).
+- **Open:** required roles (test lead, PM, QA) instead of listed identities, and their order; approval expiry; delegation; per-person Entra sign-in (the approver today is a service principal); e-signature (21 CFR Part 11).
 
 ### F55. Release documents and evidence packages `OPEN`
 - Viedoc produces 30 documents per release (13 in a customer-facing VIRP), and many need a registry number.
@@ -357,18 +323,3 @@ releasing ~40 applications together through 9 environments and 4 regions.
 - In a GAMP 5 context the platform is a validated computerised system. Catalog CI, golden tests and fleet
   dry-run double as its validation evidence; records and the audit trail must be immutable (F39).
 - Open: change control for catalog and policy changes (a policy edit is a change to a validated system).
-
----
-
-## Suggested order
-
-Blocking items first, then the differentiator, then scope control:
-
-1. **B7** — substrate versioning (in progress; its prerequisite C11 is settled).
-2. **D18** — data-plane grants. The differentiator and the deepest risk (D17 settled).
-3. **B5** — what an environment is physically, including the subnet sizing E27 constrains.
-4. **E31** — partial failure semantics, raised in priority by A1.
-5. **C52** — the resolution layer. Load-bearing, unowned, constrains the schema.
-6. Everything else.
-
-*Settled (ADRs 0006–0016, all pending review): A1, A2, A3, B10, C11, C13, D17, E27, E28, E33, G43. Partial: B7, C12, C16, E32, E36, F41, G42.*

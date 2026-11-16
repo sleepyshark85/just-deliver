@@ -29,9 +29,9 @@ Flow: the team submits a definition → the API parses and validates it → glob
 ## Consequences
 - IT Ops writes a guardrail once and it applies to every new deployment, which supports scaling governance without adding headcount.
 - Teams describe intent, not infrastructure details, consistent with "structured data over free text" ([0005](0005-build-bc-first-design-for-d.md)).
-- Merge semantics (precedence, conflicts between team requests and policy) still need to be specified; see [architecture/resolver.md](../architecture/resolver.md).
+- Merge semantics (precedence, conflicts between team requests and policy) still need to be specified; see [architecture/model.md](../architecture/model.md).
 - Where enforcement lives (platform merge vs landing-zone policy) is covered in [0008](0008-enforcement-in-landing-zone.md).
-- The example syntax above is illustrative; the actual schema is in [architecture/workload-definition.md](../architecture/workload-definition.md).
+- The example syntax above is illustrative; the actual schema is in [architecture/model.md](../architecture/model.md).
 
 ## Related
 - [0001 custom build](0001-custom-build-api-and-clients.md), [0007 definition upload snapshot](0007-definition-upload-snapshot.md)

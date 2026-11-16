@@ -17,7 +17,13 @@ Teams provision their own environments and own everything inside them. The landi
 - **Azure Policy Deny** for dangerous shapes.
 - **Platform-owned resources** in a platform resource group where the team is Reader (see [0009](0009-rbac-split-team-subscription.md)).
 
-The full read/write matrix is in [architecture/landing-zone.md](../architecture/landing-zone.md).
+**Ownership** (wins over anything elsewhere that conflicts):
+
+| Layer | Owner | Team access |
+|---|---|---|
+| Landing zone (Azure Policy, RBAC, quota, network allocation, peering, routing, DNS) | Platform team | Read-only |
+| Platform resource group inside the team subscription | Platform | Reader |
+| Team resource groups / environments | Team | Contributor + RBAC Administrator with an ABAC condition allowlisting assignable data-plane roles |
 
 **User direction, 2026-10-09 (to fold in on review).** Every environment has exactly one owner: a team or
 the platform. A team may own several environments (its dev and test environments, for example).
@@ -35,5 +41,4 @@ Accepted:
 
 ## Related
 - [0009](0009-rbac-split-team-subscription.md), [0016](0016-portal-deep-links.md), [0015](0015-database-migrations.md) (destructive gate only in protected environments, consistent with this)
-- [architecture/landing-zone.md](../architecture/landing-zone.md), [architecture/network.md](../architecture/network.md)
-- [open-questions](../open-questions.md): A4, F41, H47, H48
+- [open-questions](../open-questions.md): A4, B5, B59, B60, F41, H47, H48

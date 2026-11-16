@@ -1,49 +1,44 @@
 # just-deliver docs
 
-Internal Developer Platform for Azure: teams declare what their workload needs, the platform
-provisions and deploys it, IT Ops moves from executor to gatekeeper.
+Internal Developer Platform for Azure: teams declare what their workload needs, the platform provisions and deploys it, IT Ops
+moves from executor to gatekeeper. Each doc owns one thing; a fact lives in its owner and other docs link to it.
 
-## Status legend
+## Why and where
 
-| Label | Meaning |
-|---|---|
-| **Proposed** | A conclusion from investigation, written as an ADR, awaiting review. Nothing is accepted yet. |
-| **Design reference** | Architecture thinking; useful, not binding. |
-| **Open** | An unresolved question, tracked in [open-questions.md](open-questions.md) with a stable ID. |
+- [context.md](context.md) — the problem, stakeholders, goals and design principles
+- [plans/roadmap.md](plans/roadmap.md) — the north star and the phases toward it
+- [open-questions.md](open-questions.md) — what is still undecided
+- [use-cases/viedoc-daybreak.md](use-cases/viedoc-daybreak.md) — a regulated customer's release process and how jd fits it
 
-## Reading order
+## How it works today
 
-1. [context.md](context.md) — why the platform exists, stakeholders, B/C → D path
-2. [decisions/](decisions/README.md) — proposed decisions (ADRs 0001–0016)
-3. [open-questions.md](open-questions.md) — what is still undecided (IDs A1 … H58)
-4. Use cases
-   - [viedoc-daybreak.md](use-cases/viedoc-daybreak.md) — a real regulated suite's release process, and how the design fits it
-5. Architecture
-   - [model.md](architecture/model.md) — how the model works: workload, components, environments, policies, grants, the resolved graph
-   - [provisioning.md](architecture/provisioning.md) — orchestrator, release flow, substrate, Pulumi operation, backend and state
-   - [release.md](architecture/release.md) — the release manifest and release set: pinned workloads in deploy order (C53)
-   - [release-record.md](architecture/release-record.md) — design note: the release record and IQ/OQ qualification (S17)
-   - [approvals.md](architecture/approvals.md) — design note: the `stage` substrate, the protected tier, approval policy and records (S18)
-   - [usage.md](usage.md) — using the `jd` CLI: commands and exit codes
-   - [walkthrough.md](walkthrough.md) — testing `jd` by hand: architecture, the flow, eleven scenarios with the kit in `samples/walkthrough`
-   - [walkthrough.md § The flow](walkthrough.md#1-the-flow) — deployment flow diagram
-   - [landing-zone.md](architecture/landing-zone.md) — landing zone ownership and definition
-   - [network.md](architecture/network.md) — hub-and-spoke network design
-6. Plans
-   - [status.md](plans/status.md) — current work status (read first each session)
-   - [roadmap.md](plans/roadmap.md) — the north star, its concrete ideas and the phases toward it
-   - [mvp.md](plans/mvp.md) — MVP scope and slices
-   - [e2e-evidence.md](plans/e2e-evidence.md) — MVP success criteria 1–9 and the tests that prove them
-   - [phase-0-bootstrap.md](plans/phase-0-bootstrap.md) — manual Azure bootstrap runbook
-7. Engineering
-   - [conventions.md](engineering/conventions.md) — how we work, the code quality bar, tests, design rules
-   - [standards.md](engineering/standards.md) — binding rules for all code
-   - [csharp.md](engineering/csharp.md) — C# conventions: naming, types, methods, errors, async, tests, idioms
-   - [review-checklist.md](engineering/review-checklist.md) — what every review checks
-   - Sandbox subscription setup: [tools/sandbox](../tools/sandbox/README.md)
+- [architecture/model.md](architecture/model.md) — the model: workloads, requirements, components, shared resources, environments, policies, grants, the resolved graph
+- [architecture/documents.md](architecture/documents.md) — documents, schemas and `x-jd` keywords, the binder, errors, the literal guard
+- [architecture/provisioning.md](architecture/provisioning.md) — the orchestrator, the release flow, Pulumi, state
+- [architecture/release.md](architecture/release.md) — the release manifest and release set
+- [architecture/release-record.md](architecture/release-record.md) — the release record, IQ/OQ qualification
+- [architecture/approvals.md](architecture/approvals.md) — approval policy, the gate, "qualified" and "approved"
+- [architecture/application.md](architecture/application.md) — use cases, the thin CLI rules R1–R3, `Connections`
 
-## Conventions
+## Using jd
 
-- A decision lives in exactly one ADR; other docs link to it rather than restate it.
-- Open questions keep their IDs forever; when one settles, it gets an ADR and its entry becomes a pointer.
-- Keep docs short. Background reasoning belongs in the ADR's Context, not in a separate essay.
+- [usage.md](usage.md) — every command: arguments, output, refusals, exit codes; what jd can do today
+- [walkthrough.md](walkthrough.md) — hands-on scenarios with the kit in `samples/walkthrough`
+- [tools/sandbox](../tools/sandbox/README.md) — preparing an Azure subscription with free-tier guardrails
+
+## Decisions
+
+- [decisions/](decisions/README.md) — the ADRs and their status
+
+## Engineering
+
+- [engineering/conventions.md](engineering/conventions.md) — how the team works
+- [engineering/standards.md](engineering/standards.md) — every binding code rule, incl. tests and design invariants
+- [engineering/csharp.md](engineering/csharp.md) — C# idioms
+- [engineering/review-checklist.md](engineering/review-checklist.md) — what every review checks, and the verdict format
+
+## Plans
+
+- [plans/status.md](plans/status.md) — where the work stands (read first each session)
+- [plans/mvp.md](plans/mvp.md) — the MVP's scope and success criteria (done)
+- [plans/e2e-evidence.md](plans/e2e-evidence.md) — which tests prove each MVP success criterion

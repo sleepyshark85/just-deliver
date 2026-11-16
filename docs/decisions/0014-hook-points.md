@@ -23,9 +23,9 @@ Three hook points, each its own persistent job resource, provisioned during the 
 - **`verify` inverts deploy-then-test into test-then-expose.** Each revision has its own FQDN, so the new one is reachable while dark. With [0015](0015-database-migrations.md)'s no-op migration failure, nothing user-visible happens until infra, grants, migration and smoke tests pass. A retrying `verify` also discriminates "grants have not propagated" from "the application is broken", closing D21's ambiguity ([0012](0012-system-assigned-identity.md)'s accepted cost).
 - **Retry policy is per-hook.** `preDeploy` must not auto-retry (partial migrations need human acknowledgement); `verify` must (absorbs propagation); `postDeploy` retrying is pointless.
 - **Grants are derived from declared need, not inherited from the app.** A hook wanting direct data access must declare it; the platform records the request rather than granting silently. Keeps identity count from driving grant count against D20's cap.
-- **`verify` runs against real dependencies** — in production the dark revision holds a live production database connection. In protected environments `verify` is smoke/contract checks: read-mostly, no destructive fixtures, no leftover test data. Fuller suites in team environments. The platform cannot enforce this (same honesty as `destructive`).
+- **`verify` runs against real dependencies** — in production the dark revision holds a live production database connection. In approval-gated environments (an environment type with `approval: true`) `verify` is smoke/contract checks: read-mostly, no destructive fixtures, no leftover test data. Fuller suites in team environments. The platform cannot enforce this (same honesty as `destructive`).
 - **A failed `verify` leaves the revision dark and inspectable** at its FQDN — surface in the UI, not as a bare failure.
-- **Uniform across environments by default**, restrictable by environment *tier* (not name), consistent with `destructive`. Parity (A4) says dev should exercise the same hooks.
+- **Uniform across environments by default**, restrictable by environment *type* (not name), consistent with `destructive`. Parity (A4) says dev should exercise the same hooks.
 - **Rule:** a hook point's only value is the platform guaranteeing *when* it runs relative to platform steps; two hooks at the same moment should be one.
 - **Hook results are captured into the release record** — Azure retains only a bounded number of job executions.
 - No DSL, no conditionals, no fan-out. Hook points can be added later; a DSL cannot be removed.
@@ -33,7 +33,7 @@ Three hook points, each its own persistent job resource, provisioned during the 
 **Deliberately not added:** pre-flight before infra (approval gates do that); `onFailure` (notification is a platform feature; a failing failure-hook sits on the most fragile path); hooks between infra resources (ties hooks to the graph, becomes a DSL). **`preDestroy` deferred** — valuable for exporting data before a drop, but the deletion flow (C16, B6) does not exist yet.
 
 ## Consequences
-- Schema gains a `hooks` block (H50): each hook has `command`, optional `image` (defaults to workload image for `preDeploy`), `timeout` (default 10m), optional tier restriction, `destructive` on `preDeploy`.
+- Schema gains a `hooks` block (H50): each hook has `command`, optional `image` (defaults to workload image for `preDeploy`), `timeout` (default 10m), optional environment-type restriction, `destructive` on `preDeploy`.
 - `postDeploy` gets teeth only via promotion gating (E34); flaky `verify` suites remain a convention problem (E36).
 
 ## Related

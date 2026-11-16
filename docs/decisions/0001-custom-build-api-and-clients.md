@@ -36,5 +36,5 @@ The platform has several user types (Dev, IT Ops, QA, Management), and each work
 ## Related
 - [context.md](../context.md)
 - [0002 Pulumi Automation API](0002-pulumi-automation-api.md), [0004 two-layer definition model](0004-two-layer-definition-model.md), [0005 B/C first](0005-build-bc-first-design-for-d.md)
-- [architecture/workload-definition.md](../architecture/workload-definition.md)
+- [architecture/model.md](../architecture/model.md)
 - [open-questions.md](../open-questions.md)

@@ -21,7 +21,7 @@ three from the `database` exports and the last from the `monitoring` export, whi
 
 | Variable | Meaning |
 |---|---|
-| `COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `COSMOS_CONTAINER` | Where the data lives. The container's partition key must be `/id` (see the `database` mapping). |
+| `COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `COSMOS_CONTAINER` | Where the data lives. The container's partition key must be `/id` (see the `database` component). |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | When set, telemetry goes to Azure Monitor; when absent, nothing is exported. |
 
 ## Run locally

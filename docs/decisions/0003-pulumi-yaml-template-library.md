@@ -31,4 +31,4 @@ Stacks also have to share outputs (for example resource group → app). This can
 
 ## Related
 - [0002 Pulumi Automation API](0002-pulumi-automation-api.md)
-- [architecture/provisioning.md](../architecture/provisioning.md), [architecture/resolver.md](../architecture/resolver.md), [architecture/workload-definition.md](../architecture/workload-definition.md)
+- [architecture/provisioning.md](../architecture/provisioning.md), [architecture/model.md](../architecture/model.md)

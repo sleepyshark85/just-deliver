@@ -28,5 +28,5 @@ Terraform and Bicep can only be driven by a CLI subprocess. HCL is awkward for v
 - The "real code handles dynamic graphs" argument for Pulumi now applies to the orchestrator, not to the resource programs, which are static YAML ([0003](0003-pulumi-yaml-template-library.md)).
 
 ## Related
-- [0003 Pulumi YAML template library](0003-pulumi-yaml-template-library.md), [0004 two-layer definition model](0004-two-layer-definition-model.md)
-- [architecture/provisioning.md](../architecture/provisioning.md), [plans/mvp.md](../plans/mvp.md), [plans/phase-0-bootstrap.md](../plans/phase-0-bootstrap.md)
+- [0003 Pulumi YAML template library](0003-pulumi-yaml-template-library.md), [0017 catalog layer](0017-catalog-layer-policies-require.md)
+- [architecture/provisioning.md](../architecture/provisioning.md), [plans/mvp.md](../plans/mvp.md)

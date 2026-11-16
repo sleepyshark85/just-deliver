@@ -1,7 +1,7 @@
 # 0017. Team definitions over a platform catalog; policies require, never add
 
 - **Status:** Accepted (user, 2026-10-18; recorded 2026-11-03)
-- **Origin:** S21 design ([components.md](../architecture/components.md) section 8); supersedes [0004](0004-two-layer-definition-model.md)
+- **Origin:** S21 design ([model.md](../architecture/model.md)); supersedes [0004](0004-two-layer-definition-model.md)
 
 ## Context
 [0004](0004-two-layer-definition-model.md) split definitions into a team layer and an IT Ops global layer whose policies are merged into
@@ -20,7 +20,7 @@ Two layers remain, but the platform layer is the **catalog**, and it never puts 
   error naming the policy and its reason. A policy cannot add nodes (a policy file with `add` is a load error), nor require a class or a
   count. Policies may still `set` or `default` values on nodes they match.
 - **Implicit resources are few and platform-owned:** the groups, the workspace and the Container Apps environment that the offered
-  components and runtime use, and the workload's own runtime ([components.md](../architecture/components.md) section 2).
+  components and runtime use, and the workload's own runtime ([model.md](../architecture/model.md)).
 
 ## Consequences
 - A guardrail is still written once, but each team sees it as a failed check and adds the requirement itself: what a workload gets, it
@@ -31,4 +31,4 @@ Two layers remain, but the platform layer is the **catalog**, and it never puts 
 
 ## Related
 - [0004](0004-two-layer-definition-model.md) (superseded), [0011](0011-requirement-id.md), [0018](0018-environment-offers-runtime.md)
-- [architecture/components.md](../architecture/components.md), [architecture/resolver.md](../architecture/resolver.md)
+- [architecture/model.md](../architecture/model.md)
