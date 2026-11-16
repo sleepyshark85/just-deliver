@@ -64,6 +64,12 @@ The shared environment tier (SQL server, Log Analytics workspace, Service Bus na
 ### B60. Network topology and address plan `OPEN`
 - Hub-and-spoke per region (Virtual WAN, firewall, private DNS) or something lighter; the CIDR plan allocated up front (a Container Apps environment needs its own subnet, B5); a separate-cloud region such as China (E53).
 
+### B65. Environment-scope resources that vary by environment type `OPEN`
+- An environment-scope part cannot vary by environment type today; whether it must (e.g. a larger shared database in prod).
+
+### B66. `env up` with a missing or stale shared layer `OPEN`
+- Whether `jd env up` of an environment brings up (or refuses on) a shared layer that is missing or older than the catalog, first.
+
 ---
 
 ## C. Resources & dependencies
@@ -93,6 +99,18 @@ A team removes `- type: database` from a prod workload; today the platform delet
 - **`retainOnDelete` is not adopted as policy.** It drops the resource from state but leaves it in Azure, producing billable, untracked orphans that squat on the deterministic name their replacement needs. Broken for replacement too: replacement is delete-first because the new resource can't take a name the old one holds.
 - **`retainOnDelete` kept as a state-surgery tool:** re-homing a resource between stacks (retain in old, `pulumi import` into new) — needed when substrate stacks split from workload stacks or a resource moves between ownership tiers.
 - **Open:** backup semantics per resource type (what "backup" means for a Service Bus namespace or a workspace); retention window before the backup is discarded.
+
+### C61. Explaining a resolution `OPEN`
+- `jd resolve --explain`: each resolved value with its chain (source file, rule, layer); relates to F39's per-field provenance.
+
+### C62. Catalog checks before a catalog change ships `OPEN`
+- No catalog CI beyond jd's load checks: fleet dry-run (which deployed workloads a catalog change affects, and how) is not built; roadmap phase 2 plans `jd catalog check`.
+
+### C63. Template content in the graph `OPEN`
+- The resolved graph names a template but not a digest of its content, so a template change is invisible in the graph.
+
+### C64. Template config keyword `OPEN`
+- Templates spell their inputs `configuration:`; whether to move to Pulumi's `config:`.
 
 ### C52. The resolution layer — built: [architecture/model.md](architecture/model.md), [ADR 0017](decisions/0017-catalog-layer-policies-require.md), [ADR 0019](decisions/0019-engine-knows-concepts.md)
 - **Open:** changing the engine behind a component for an existing workload (a workload asks for `database`; the catalog decides the engine and exports it as `engine`) is a data-moving, breaking change that must route to approval (F54).

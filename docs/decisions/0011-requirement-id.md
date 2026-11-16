@@ -42,5 +42,5 @@ requires:
 - Each generated name is checked against its target's limits by the catalog's naming rules (C14).
 
 ## Related
-- [0017](0017-catalog-layer-policies-require.md), [0010](0010-replacement-protection-classes.md), [architecture/workload-definition.md](../architecture/workload-definition.md), [architecture/resolver.md](../architecture/resolver.md)
+- [0017](0017-catalog-layer-policies-require.md), [0010](0010-replacement-protection-classes.md), [architecture/model.md](../architecture/model.md)
 - [open-questions](../open-questions.md): C12, C14, C16, C52, H50

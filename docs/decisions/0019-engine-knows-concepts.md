@@ -46,6 +46,6 @@ change, and the schemas in `schemas/` were only a first gate in front of a secon
 - Standards §1 no longer allows formats in code ("formats are data").
 
 ## Related
-- [architecture/documents.md](../architecture/documents.md) (design, inventory, roles), [architecture/resolver.md](../architecture/resolver.md)
+- [architecture/documents.md](../architecture/documents.md) (design, inventory, roles), [architecture/model.md](../architecture/model.md)
 - [0003](0003-pulumi-yaml-template-library.md) (templates stay the adapter's), [0007](0007-definition-upload-snapshot.md),
   [0011](0011-requirement-id.md) (the effective id is concept 2's rule on bound values), [0017](0017-catalog-layer-policies-require.md)

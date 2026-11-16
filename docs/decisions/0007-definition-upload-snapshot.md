@@ -25,5 +25,5 @@ The team decides where to author and store the definition; keeping it in the wor
 - **Open:** the registration flow — whether a workload is registered explicitly before its first deployment or created implicitly by it, and who may register one.
 
 ## Related
-- [0017](0017-catalog-layer-policies-require.md), [architecture/workload-definition.md](../architecture/workload-definition.md)
+- [0017](0017-catalog-layer-policies-require.md), [architecture/model.md](../architecture/model.md)
 - [open-questions](../open-questions.md): E51, F39, G42, H50

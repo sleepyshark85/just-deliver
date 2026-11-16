@@ -1,7 +1,7 @@
 # 0018. The environment offers the runtime; the workload names none
 
 - **Status:** Accepted (user, 2026-10-18; recorded 2026-11-03)
-- **Origin:** S21 design ([components.md](../architecture/components.md) sections 2, 8); supersedes the first decision of [0013](0013-container-apps-runtime.md)
+- **Origin:** S21 design ([model.md](../architecture/model.md)); supersedes the first decision of [0013](0013-container-apps-runtime.md)
 
 ## Context
 [0013](0013-container-apps-runtime.md) made the runtime a declared property of the workload, an enum defaulting to Container Apps. With
@@ -24,4 +24,4 @@ under review there.
 
 ## Related
 - [0013](0013-container-apps-runtime.md), [0017](0017-catalog-layer-policies-require.md)
-- [architecture/components.md](../architecture/components.md)
+- [architecture/model.md](../architecture/model.md)
