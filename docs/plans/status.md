@@ -97,7 +97,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S24f | YAML jd writes | done | #101 | 1 | |
 | S24f2 | Release set and manifest reads | done | #102 | 2 | |
 | S24g | Docs and standards | done | #103 | 2 | Phase 1.5 done; ADR 0019 |
-| S27a | Docs: entry, framing, plans, decisions | done | S27a PR | 2 | ADR 0020 drafted; status trimmed |
+| S27a | Docs: entry, framing, plans, decisions | done | S27a PR | 3 | ADR 0020 drafted; status trimmed |
 | S27b | Docs: agent entry and engineering | done | PR #104 | 2 | Each rule once, in its owner |
 | S27c | Docs: model, documents, provisioning | done | PR #106 | 2 | model.md replaces resolver/components/workload-definition/connections |
 | S27d | Docs: release, approvals, application, usage | done | PR #105 | 2 | usage.md is the command reference; flow sketch deleted |
@@ -146,7 +146,7 @@ Take when touching the code named; remove once done.
 Newest first; the last five sessions.
 
 - **2026-11-17 (S27a–d, docs restructure)** — User asked for concise docs, one responsibility each, no repetition. Seven
-  read-only reviews, then four parallel slices (2 rounds each). User decisions: slice history deleted, not archived;
+  read-only reviews, then four parallel slices (2, 2, 2, 3 rounds). User decisions: slice history deleted, not archived;
   landing-zone/network folded into ADR 0008 and deleted; ADR mismatches drafted as Proposed (0020, 0011 note), statuses untouched.
 - **2026-11-16 (S24g, phase 1.5 exit)** — S24g merged (2 rounds) after the user's Azure exit gate (jd.cli.tests 341, 1 h 23 m).
   Phase 1.5 done. ADR 0019 (Proposed) awaits the user. Next: the phase 2 design note.
