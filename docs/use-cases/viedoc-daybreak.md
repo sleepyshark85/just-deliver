@@ -88,31 +88,31 @@ multi-repository work items; keeping dev and integration current (no owner); Con
 
 ## 4. Fit: their needs against our design
 
-✅ covered by design · ◐ partly · ✗ missing. "MVP" means the change is now in the [MVP plan](../plans/mvp.md).
+✅ built · ◐ partly · ✗ missing. Open-question IDs are in [open-questions.md](../open-questions.md).
 
 | # | They need | just-deliver today | Gap → action |
 |---|---|---|---|
-| 1 | **One pinned release set** across many workloads, one label, same set in every environment | ◐ per-workload deploys (ADR [0006](../decisions/0006-infra-deployed-with-app.md), [0007](../decisions/0007-definition-upload-snapshot.md)) | No multi-workload release. **Add a release set** (label + pinned definitions + image digests). New C53. **MVP** |
-| 2 | **Deploy order and blocks**: deploy, verify, switch | ◐ dark revision + traffic shift per workload ([0013](../decisions/0013-container-apps-runtime.md), [0014](../decisions/0014-hook-points.md)) | No ordering across workloads. Declare `dependsOn` at workload level in the set; the orchestrator deploys and switches in dependency order. **MVP** |
-| 3 | **Environment chain and promotion**; production refuses anything unpromoted | ✗ E34 open | Promotion of the same set between environments, gated. **MVP** (2 environments) |
-| 4 | **Approvals as artifacts** (test lead, PM, QA; Entra groups) with signature meaning (Part 11) | ✗ F37 open | Approval policy as data per environment tier. Record identity, time and meaning on the release record. New F54. **MVP** (minimal) |
-| 5 | **Qualify on every deploy** (IQ observed, OQ contract, smoke); PQ and regulatory on stage | ◐ verify/postDeploy hooks; health check | **IQ by observation**: refresh with no drift, plus running image digests equal to pinned. **OQ contract** as catalog data (the runtime mapping declares the probe). Evidence on the record. New E52. **MVP** (IQ + OQ) |
-| 6 | **30 release documents and the VIRP**, generated, final, with machine identity and a numbering registry | ✗ | The release record is the evidence source. Document templates are catalog-like data; a generator renders from the record and from work items. New F55. Post-MVP; the MVP record carries machine identity now |
-| 7 | **Scope from work items**; PR gate on work-item completeness; release notes from work-item fields | ✗ | Work-tracking adapter (Azure DevOps) feeding readiness and documents. New F56. Post-MVP |
-| 8 | **Build contract**: artifacts, migrations, DB hash, test report, SBOM per package | ◐ upload = definition + image ([0007](../decisions/0007-definition-upload-snapshot.md)) | A workload version declares its evidence (test report, SBOM, migrations); readiness checks conformance. Release-set format reserves the fields. Post-MVP |
-| 9 | **DB migrations** with history, hash verification, expand–contract, dev reconcile | ◐ [0015](../decisions/0015-database-migrations.md) (preDeploy job, app image) | Add DB-hash verification as qualification evidence; dev reconcile. Post-MVP |
-| 10 | **~200 secrets and config declared**, no manual gate | ◐ identity-first; D22/D23 open | Secret *names* declared in the definition, values held in Key Vault and set through a controlled path; config from definition variables. Post-MVP |
-| 11 | **IaC in Bicep**, drift detection, infra pinned with receipts | ◐ Pulumi ([0002](../decisions/0002-pulumi-automation-api.md), [0003](../decisions/0003-pulumi-yaml-template-library.md)); drift rider in 0006 | **Decided 2026-10-09: we use Pulumi.** Drift detection and pinned infrastructure come from our model; Bicep is not supported |
-| 12 | **Runtimes**: App Service with slots, Windows VMs (Worker, being migrated), some Container Apps | ◐ Container Apps only ([0013](../decisions/0013-container-apps-runtime.md)) | **Decided 2026-10-09:** App Service can come later as a second runtime implementation; Container Apps for now. VMs are leaving anyway |
-| 13 | **Multi-region rollout**: training then production per region, regions in parallel, China a separate cloud; deploy and release decoupled | ✗ one region per environment | Environment *instances* per region; rollout order as data; deploy-dark-then-switch already decouples deploy from release. New E53. Post-MVP |
-| 14 | **Orchestration**: one trigger, wait for completion, restart only what failed | ✅ durable step loop by design (E29, [flow](../architecture/workload_deployment_flow.html)) | This is their open T82. MVP proves the loop in-process |
-| 15 | **Deployed-state record**; the next release reads it | ✅ resolved graph + deployment record per environment | MVP S17 |
-| 16 | **Dev and integration kept current**; set kinds and guardrails (no feature build on regression or production) | ◐ B5/B6 open | Environment admission policy as data (which set kinds an environment accepts); integration auto-deploys on merge. New B57. Post-MVP |
-| 17 | **Hotfix = same chain, smaller set**; PQ subset rule | ✅ same chain | Subset rule is data. Nothing to add |
-| 18 | **Measurement**: phase timestamps for the 24 h clock | ◐ | Phase stamps on the release record. **MVP** S17 |
-| 19 | **Status everyone can follow** (Teams), observed rather than reported | ◐ G42/G44 | Notifications adapter. Post-MVP |
-| 20 | **The tool itself is validated** (GAMP 5) with a Part 11 audit trail | ◐ F39 open | Catalog CI, golden tests and fleet dry-run double as the platform's validation evidence; records immutable. New H58 |
-| 21 | Developer access to non-dev logs (incl. China) | ✗ H48 | Break-glass / read access is part of the platform. Existing H48 |
+| 1 | **One pinned release set** across many workloads, one label, same set in every environment | ✅ release set: label, pinned definitions, image digests ([release.md](../architecture/release.md)) | — |
+| 2 | **Deploy order and blocks**: deploy, verify, switch | ✅ workload-level `dependsOn` in the set; per workload: dark revision, grants, OQ probe, traffic shift ([provisioning.md](../architecture/provisioning.md)) | — |
+| 3 | **Environment chain and promotion**; production refuses anything unpromoted | ✅ `jd promote` deploys the identical set to an approval-gated environment only when qualified and approved ([approvals.md](../architecture/approvals.md)) | More than two environments in a chain |
+| 4 | **Approvals as artifacts** (test lead, PM, QA; Entra groups) with signature meaning (Part 11) | ◐ approval policy per gated environment; who, when and meaning on the record ([approvals.md](../architecture/approvals.md)) | Roles, order, Entra groups, e-signature (F54) |
+| 5 | **Qualify on every deploy** (IQ observed, OQ contract, smoke); PQ and regulatory on stage | ◐ IQ by observation and the OQ probe on every deploy, on the record ([release-record.md](../architecture/release-record.md)) | Smoke, PQ and regulatory suites (E52, E36) |
+| 6 | **30 release documents and the VIRP**, generated, final, with machine identity and a numbering registry | ✗ (the record carries machine identity) | The record as evidence source; templates as data; a generator (F55) |
+| 7 | **Scope from work items**; PR gate on work-item completeness; release notes from work-item fields | ✗ | Work-tracking adapter (Azure DevOps) feeding readiness and documents (F56) |
+| 8 | **Build contract**: artifacts, migrations, DB hash, test report, SBOM per package | ◐ a set pins definition and image ([0007](../decisions/0007-definition-upload-snapshot.md)) | A workload version declares its evidence; readiness checks conformance |
+| 9 | **DB migrations** with history, hash verification, expand–contract, dev reconcile | ✗ proposed only ([0015](../decisions/0015-database-migrations.md): preDeploy job, app image) | Hooks first (E28); DB-hash verification as evidence; dev reconcile |
+| 10 | **~200 secrets and config declared**, no manual gate | ◐ identity-first, no app secrets; config from definition variables; D22/D23 open | Secret *names* declared, values in Key Vault through a controlled path |
+| 11 | **IaC in Bicep**, drift detection, infra pinned with receipts | ◐ Pulumi ([0002](../decisions/0002-pulumi-automation-api.md), [0003](../decisions/0003-pulumi-yaml-template-library.md)); drift is IQ's refresh | **Decided 2026-10-09: we use Pulumi**; Bicep is not supported |
+| 12 | **Runtimes**: App Service with slots, Windows VMs (Worker, being migrated), some Container Apps | ◐ Container Apps, offered by the environment ([0018](../decisions/0018-environment-offers-runtime.md)) | **Decided 2026-10-09:** App Service later as a second runtime; VMs are leaving anyway |
+| 13 | **Multi-region rollout**: training then production per region, regions in parallel, China a separate cloud; deploy and release decoupled | ✗ one region per environment; deploy-dark-then-switch decouples deploy from release | Environment instances per region; rollout order as data (E53) |
+| 14 | **Orchestration**: one trigger, wait for completion, restart only what failed | ◐ one command walks the set and stops at the first failure; a re-run changes only what differs | Durable, resumable steps (E29) |
+| 15 | **Deployed-state record**; the next release reads it | ✅ release record per environment and label ([release-record.md](../architecture/release-record.md)) | — |
+| 16 | **Dev and integration kept current**; set kinds and guardrails (no feature build on regression or production) | ✗ B5/B6 open | Admission policy as data; integration auto-deploys on merge (B57) |
+| 17 | **Hotfix = same chain, smaller set**; PQ subset rule | ✅ a set of any size takes the same chain | Subset rule is data |
+| 18 | **Measurement**: phase timestamps for the 24 h clock | ✅ step, node, deploy and IQ times on the record ([release-record.md](../architecture/release-record.md)) | — |
+| 19 | **Status everyone can follow** (Teams), observed rather than reported | ◐ G42/G44 | Notifications adapter |
+| 20 | **The tool itself is validated** (GAMP 5) with a Part 11 audit trail | ◐ F39 open | Catalog CI, golden tests and fleet dry-run as validation evidence; records immutable (H58) |
+| 21 | Developer access to non-dev logs (incl. China) | ✗ | Break-glass / read access is part of the platform (H48) |
 
 **Outside the platform** (integration points only): regression testing, translation (Lokalise), Learning,
 release-note authoring, browser matrix.
@@ -131,15 +131,5 @@ People only define, decide and approve:
 | — | Regions roll out in parallel (training then production), each qualified; deployed state recorded; status posted |
 | An **exception** (red qualification, failed step) | The orchestrator stops, points at the step, and retries only it |
 
-What the MVP proves of this: data-driven resolution, a multi-workload release set deployed in order,
+What the MVP proved of this: data-driven resolution, a multi-workload release set deployed in order,
 qualification evidence on every deploy, and promotion between two environments behind a recorded approval.
-
-## 6. Consequences for our design
-
-- **New open questions** C53, E52, E53, F54, F55, F56, B57 and H58 are added to [open-questions.md](../open-questions.md).
-- **User direction, 2026-10-09:** (1) Pulumi stays — no Bicep backend. (2) App Service may be added later
-  as a second runtime; Container Apps for now. (3) Every environment has one owner, a team or the platform;
-  a team may own several; stage and production are platform-owned shared environments. Recorded in ADRs
-  0002, 0013 and 0008. Still open for ADR review: the deployment set as the unit of release (0006/0007, C53).
-- **[MVP](../plans/mvp.md) changes:** release set, workload-level ordering, qualification record,
-  approvals and promotion between two environments, phase timings.
