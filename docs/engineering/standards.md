@@ -122,6 +122,7 @@ privilege (12), prove then extend (13), serve the north star (14). In code:
   `dotnet test` never reaches Azure. The script holds an exclusive per-host, per-user lock
   (`${XDG_RUNTIME_DIR:-/tmp}/just-deliver-azure.lock`) because the subscription has one free-tier Cosmos account; a run from
   another machine on the same subscription is not covered.
+
 ## 6. Azure and the free tier
 
 The test subscription is guarded by policy ([tools/sandbox](../../tools/sandbox/README.md)), but the guardrails are a safety net,
