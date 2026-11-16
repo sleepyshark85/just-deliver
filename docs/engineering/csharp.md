@@ -1,10 +1,9 @@
 # C# conventions
 
-Language-level rules for all C# in this repository: naming, types, methods, errors, async, tests and idioms.
-[standards.md](standards.md) holds the project rules (nothing hard-coded, layers, the free tier, git) and
-[conventions.md](conventions.md#code-quality-bar) the quality bar; this page does not repeat them. Where a tool
-enforces a rule, the tool's settings (`.editorconfig`, `Directory.Build.props`, `tools/verify.sh`) are the source of
-truth and this page explains the rest.
+C# idioms for all code in this repository: naming, types, methods, errors, resources, async, output, tests and comments.
+The project's code rules (nothing hard-coded, simplicity, layers, tests, the free tier) are in [standards.md](standards.md)
+and are not repeated here. Where a tool enforces a rule, the tool's settings (`.editorconfig`, `Directory.Build.props`) are the
+source of truth and this page explains the rest.
 
 **Golden rule:** code is read far more often than it is written. Write for the next reader.
 
@@ -21,20 +20,17 @@ repeated deviations mean this page should change.
 | Style and naming | analyzers in the build (`EnforceCodeStyleInBuild`, `AnalysisLevel` latest) | `.editorconfig` |
 | Warnings | `TreatWarningsAsErrors` | NuGet advisories: low and moderate stay warnings, high and critical fail |
 | Nullability | `Nullable` enabled | — |
-| Layer boundaries | `verify.sh` project-reference checks; `ThinCliTests` IL scan | [standards §3](standards.md#3-architecture-and-separation-of-concerns), [application.md](../architecture/application.md) |
-| Secrets in git | `verify.sh` refuses tracked `.env` and `.pulumi` state | [standards §7](standards.md#7-git-and-prs) |
-| Local gate | Claude Code hook runs `verify.sh` on every commit; `.githooks/pre-push` rejects pushes to `main` | — |
-| CI | `.github/workflows/ci.yml` runs `verify.sh`; `main` requires the `verify` check | — |
 
 A warning is fixed, or suppressed **on its own line** with a reason the reviewer agrees with:
-`#pragma warning disable CA1031 // the probe reports every failure as a result`. Never suppress for a whole file or
-project to make the build pass.
+`#pragma warning disable CA1031 // the probe reports every failure as a result`. "To make the check pass" is not a reason, and
+nothing is suppressed for a whole file or project to make the build pass.
 
 ## 2. Naming
 
 `.editorconfig` enforces PascalCase types, members, constants and static readonly fields, `_camelCase` private
 fields and `I`-prefixed interfaces. Beyond that:
 
+- A name says what a thing is or does.
 - Types are nouns (`ReleaseRecord`); methods are verbs (`ResolveAsync`, `BuildGraph`).
 - Booleans read as a question: `IsProtected`, `HasOutputs`, `CanDeploy`.
 - Names carry units: `timeoutSeconds`, `sizeBytes`, `TimeSpan` where the type can carry them.
@@ -56,32 +52,26 @@ fields and `I`-prefixed interfaces. Beyond that:
 - **Closed sets are enums,** never bare strings or ints. Values the data defines (resource types, kinds, output names)
   are not closed sets: they come from the data ([standards §1](standards.md#1-nothing-hard-coded)).
 - **No `dynamic`.** `object` only with a comment saying why. Casts only at proven-safe boundaries, with a comment.
+- **Smallest visibility.** A type or member is public only when it must be; otherwise internal or private.
 - **Nullability is the contract.** No `!` without a comment saying why it is safe; return a result or throw rather
   than `null` where the caller cannot act on `null`.
-- **Plain values, not file shapes.** A value with rules (an id, a path inside a root, a UTC time) is parsed once at
-  the boundary into a type that keeps them. A file is never mirrored by a C# type: file shapes belong in the schemas
-  and the code reads documents by the names the data gives (user's rule).
+- **Plain values.** A value with rules (an id, a path inside a root, a UTC time) is parsed once at the boundary into a
+  type that keeps them; a file is never mirrored by a type ([standards §1](standards.md#1-nothing-hard-coded)).
 
 ## 4. Design
 
-The quality bar and the design rules in [conventions.md](conventions.md#design-rules-that-code-must-keep) apply; in C#
-that means:
-
-- **Simplest thing that works** ([standards §2](standards.md#2-simplest-thing-that-works)): no speculative
-  abstractions, options or extension points; an interface needs a second implementation or a test seam.
 - **No duplication.** Duplicated logic is extracted the first time it is seen, not on the third copy; two lines that
   only look alike but change for different reasons stay apart.
-- **Functional core, imperative shell.** Parsing, resolution, rules and record building are pure; files, processes,
-  Azure, the clock and delays sit at the edges, behind ports.
 - **Dependencies are injected** through constructors or parameters. No static mutable state, singletons, or
   collaborators constructed deep inside logic. Composition happens in the composition root only.
 - **Command–query separation.** A method either changes state or answers a question, not both.
 - **Law of Demeter.** Talk to collaborators, not their internals (`a.B.C.D()` is a smell).
-- **Explicit over implicit.** No reflection-driven magic, no hidden defaults; optional parameters only where every
+- **No magic.** No reflection-driven behaviour, no hidden defaults; optional parameters only where every
   caller would otherwise pass the same value.
 
 ## 5. Methods
 
+- A method does one thing.
 - *Aim* ≤ 40 lines per method and ≤ 3 levels of nesting; at most 5 parameters, beyond that a record or a smaller seam.
 - Early returns and guard clauses over nested `if`s.
 - No boolean parameter that switches behaviour; write two methods or pass a value that names the choice.
@@ -90,20 +80,23 @@ that means:
 
 ## 6. Errors
 
-- **Expected outcomes are results, not exceptions:** a failed probe, failed IQ, drift, a load error (`LoadError`,
-  `LoadResult<T>`). Exceptions are for bugs and for failures the caller cannot handle. There is no exception
+- **Expected outcomes are results with a reason, not exceptions:** a failed probe, failed IQ, drift, a load error
+  (`LoadError`, `LoadResult<T>`). Exceptions are for bugs and for failures the caller cannot handle. There is no exception
   hierarchy per project; add an exception type only when a caller catches it.
 - **Catch the narrowest type you handle.** `catch (Exception)` only at an outer boundary that reports, with a reason
   on the line. Use `when` filters rather than catch-and-rethrow.
-- **Keep the cause:** wrap with the inner exception, or `throw;` to rethrow; never `throw ex;`.
+- **Never swallow an error or lose its cause:** wrap with the inner exception, or `throw;` to rethrow; never `throw ex;`.
+  A bug is never turned into a silent default.
 - **Translate at the boundary:** SDK, HTTP and OS errors become messages or results in the adapter; the CLI maps
-  results to exit codes and text.
-- Keep `try` blocks around the statement that can fail. Release resources with `using`, not hand-written `finally`.
+  results to exit codes and text. Nothing reaches the user raw (an SDK type, a stack trace, `Retry failed after 4 tries`).
+- **Report once,** where the error is handled; never logged and rethrown.
+- Keep `try` blocks around the statement that can fail.
 - `Debug.Assert` only for internal invariants, never to check input.
-- Messages say what failed, with which input, and what to do next.
+- Messages say what failed, with which input, and what to do next, so a team member can act on them.
 
 ## 7. Data, I/O and resources
 
+- **Resources:** a stream, file, process or client is released on every path, with `using`, not hand-written `finally`.
 - **Time:** `TimeProvider` and `DateTimeOffset` in UTC; never `DateTime.Now`. Format and parse with
   `CultureInfo.InvariantCulture`.
 - **Strings:** `StringComparison.Ordinal` (or `OrdinalIgnoreCase`) for identifiers and keys; culture-sensitive
@@ -114,8 +107,6 @@ that means:
   string concatenation.
 - **Network and processes:** every call has a timeout and a `CancellationToken`. Retry only transient errors, with
   backoff and a cap, in one place. Processes start with `ArgumentList`, never a shell string.
-- **Configuration:** environment variables and options are read once in the composition root, by names declared
-  once ([conventions](conventions.md#code-quality-bar), Literals), and passed in as values.
 
 ## 8. Async
 
@@ -128,27 +119,23 @@ that means:
 
 - Only `jd.cli` writes to the console. Use cases report through their results and the one progress sink
   ([application.md](../architecture/application.md)).
-- An error is reported once, where it is handled, not logged and rethrown.
-- Never write secrets, tokens or full untrusted payloads to output, errors or records.
+- No token or full untrusted payload in output, errors or records (secrets: [standards §4](standards.md#4-design-invariants)).
 
 ## 10. Tests
 
-[conventions.md, Tests](conventions.md#tests) holds the rules (every test can fail, fakes only at boundaries, error
-tests pin the error, offline and fast, goldens on purpose). In C#:
+The rules are in [standards §5](standards.md#5-tests); in C#:
 
 - Arrange, act, assert; one behaviour per test; theories (`[Theory]` with data) for variations of one behaviour.
 - Test through public or internal APIs, never private members or reflection on implementation details.
 - Fakes (small working implementations) over mocking libraries.
-- Every bug fix comes with a test that fails without it.
 - Temporary directories per test, deleted after it; tests run in any order.
-- Azure tests carry `Category=Azure` and never run without `JD_AZURE_TESTS=1`.
 
 ## 11. Documentation and comments
 
-- A public type or member has an XML doc comment saying what it is for (the quality bar; review enforces it while
-  `CS1591` stays off).
-- Comments explain **why**; if code needs a *what* comment, rename or extract instead.
-- No commented-out code; git keeps it.
+- A public type or member of a production project has an XML doc comment saying what it is for (`CS1591`, on for every
+  project under `src/` except `*.tests`).
+- Comments explain **why** (an Azure rule, a design-note section, a residual risk); a comment that restates the code is
+  removed, and code that needs a *what* comment is renamed or extracted instead. Match the surrounding style.
 - A `TODO` names the slice or issue that removes it: `// TODO(S25b2): ...`.
 
 ## 12. Performance
@@ -165,4 +152,3 @@ tests pin the error, offline and fast, goldens on purpose). In C#:
 - `nameof` over string literals for member names.
 - LINQ for queries one level deep; a loop when it reads better or mutates.
 - File-scoped namespaces, one top-level type per file, file named after it.
-- The BCL before a new package ([standards §2](standards.md#2-simplest-thing-that-works)).
