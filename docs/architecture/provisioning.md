@@ -89,7 +89,7 @@ SQL database with 400 RU/s shared throughput, so two environments use 800 of the
 workloads' containers share their environment database's throughput.
 
 `DescriptorComposer` then writes `values.<part>.<export>`: each part's export evaluated with the deployed outputs (`NodeReport.Outputs` holds
-non-secret outputs only, so an export reading a secret fails and nothing is written), merged into the base's values (new keys only), and
+non-secret outputs only, so an export reading a secret fails, [model.md](model.md#5-environments)), merged into the base's values (new keys only), and
 written by the binder through the descriptor schema. The same composition runs once **before** the deploy with the values pending, so every
 error that needs no output is found while nothing exists yet.
 

@@ -37,8 +37,8 @@ means the same in every environment.
 | Engine, SKU, size, throughput, replicas | The component's implementation for the environment's type (section 3) |
 | Compute | The runtime the environment offers ([ADR 0018](../decisions/0018-environment-offers-runtime.md)) |
 | Identity and grants | The runtime's system-assigned identity ([ADR 0012](../decisions/0012-system-assigned-identity.md)) and the grant nodes of the component (section 7) |
-| Resource names | The catalog's naming rules (`name()`, section 5) |
-| Platform rules | Policies (section 6); hard guardrails in the landing zone ([ADR 0008](../decisions/0008-enforcement-in-landing-zone.md)) |
+| Resource names | The catalog's naming rules (`name()`, section 6) |
+| Platform rules | Policies (section 7); hard guardrails in the landing zone ([ADR 0008](../decisions/0008-enforcement-in-landing-zone.md)) |
 | Sign-off | The environment's approval block ([approvals.md](approvals.md)) |
 
 What a team gets, it declares: a policy may *require* a component (monitoring today) but never adds one, and the workload maps the export
@@ -76,7 +76,8 @@ output.
 
 A **part** is a set of **nodes** with one scope, plus the **exports** evaluated from them. A node is `template`, `kind` (`create`, the
 default, or `grant`) and `config` ([part schema](../../schemas/catalog/part.schema.json)). Node names are unique across the parts that share a
-scope, and no node takes a name its part reads as a root. Parts are the shared resources, a component's `environment` part and class parts,
+scope, and no node takes a name its part reads as a root, nor a shared resource's name: a node is read before a part of that name, so it would
+silently replace what `${<resource>.<export>}` reads. Parts are the shared resources, a component's `environment` part and class parts,
 and the runtime.
 
 **Component** ([database](../../catalog/components/database.yaml), [monitoring](../../catalog/components/monitoring.yaml)). Its `exports`
@@ -92,8 +93,9 @@ implementation has one part whose nodes include the node named `runtime` (the wo
 a `probe` and a `release` block that the release flow reads ([provisioning.md](provisioning.md#orchestrator)). The `runtime` node must not set
 the two inputs `release` names (the flow sets them), the probe interval is at most its timeout, and the revision suffix's parts fit its
 declared `maxLength`. Only a runtime declares a node named `runtime`. The workload's variables reach it through the config form
-`{ fn::entries: workload.variables }`, valid only as a top-level field of the `runtime` node; the node deploys them as a list of
-`{name, value}` sorted by name, while the graph keeps one leaf per variable (`variables.<NAME>`) with its own provenance.
+`{ fn::entries: workload.variables }`, valid only as a top-level field of the `runtime` node; the node deploys them as one list
+([provisioning.md](provisioning.md#orchestrator), Config entries), while the graph keeps one leaf per variable (`variables.<NAME>`) with its own
+provenance.
 
 **Shared resource** ([shared/](../../catalog/shared/)). One part with a `scope` (`shared` or `environment`), `uses`, nodes and exports; it
 has no implementations, so it does not vary by environment type.
@@ -106,8 +108,8 @@ has no implementations, so it does not vary by environment type.
 | `environment` | `jd env up` of a definition whose type has `layer: environment` | environment | shared resources of scope `environment`; offered components' `environment` parts |
 | workload | `jd deploy`, `jd release deploy`, `jd promote` | workload | the class part of each requirement; the runtime |
 
-The layers and their deploy order are the `layer` enum of the jd-shipped part schema (`shared` before `environment`); workloads deploy in a
-scope that is no layer. **`uses`** (on components, runtimes and shared resources) lists shared resources only: a resource uses only resources
+The layers and their deploy order are the `layer` enum of the jd-shipped part schema ([documents.md](documents.md#3-annotations-and-the-binder));
+workloads deploy in a scope that is no layer. **`uses`** (on components, runtimes and shared resources) lists shared resources only: a resource uses only resources
 of its own or an earlier layer, and the `uses` graph has no cycles. A workload deploy never expands a shared resource or an `environment`
 part, and an environment never deploys a resource of an earlier layer.
 
@@ -136,7 +138,7 @@ start with `@`), so ids, stacks and `name()` hashes never collide with a workloa
 `approval` is copied. Values have no dotted keys and no key `name`, `region` or `type`. An export that reads a secret output, directly or
 through another part, has no value, so `env up` fails and writes nothing (boundary 12).
 
-**Offers at resolve.** A requirement's component must be among the descriptor's `offers` ("environment dev does not offer database"); the
+**Offers at resolve.** A requirement's component must be among the descriptor's `offers` (`environment 'dev' does not offer database (offers: …)`, the offered names listed); the
 workload's runtime is the one runtime offered, and none offered is an error for every workload.
 
 ## 6. Expressions
@@ -169,7 +171,7 @@ once deployed; a reference becomes a graph edge. The orchestrator evaluates the 
 the descriptor's values resolves at once and is recorded as a part read, which preview shows as `(from cosmos-account.id)`.
 
 **Built-ins**, the only functions:
-- `name('<kind>')` applies the `Naming` rule: substitutes `{workload}`, `{id}` (the requirement's effective id; a runtime node's own
+- `name('<kind>')` applies the `Naming` rule: substitutes `{workload}` (the owner's name; an environment's `@<name>` loses its `@` to `allowed`), `{id}` (the requirement's effective id; a runtime node's own
   name; `substrate` in an environment run), `{env}` and `{hash}`, lowercases, drops characters outside `allowed`, and above `maxLength` keeps
   the first `maxLength - 6` characters plus the hash. `{hash}` is the first 6 hex characters of SHA-256 over `workload|env|id|kind`, so
   `allowed` must accept every hex digit (checked at load).
@@ -221,7 +223,7 @@ A definition must not reach another workload's resources, and the environment's 
 | 9 | Requirement scopes do not read each other; only the `runtime` node reads `resource.*`; no export reads `resource.*` | graph builder; loader |
 | 10 | The owner prefix `@<name>` keeps environment and workload ids apart | expander |
 | 11 | A requirement's component must be offered | expander |
-| 12 | A secret output never reaches the descriptor | `DescriptorComposer` |
+| 12 | A secret output never reaches the descriptor (section 5) | `DescriptorComposer` |
 | 13 | A type with `approval: true` is never written without its block | `EnvironmentTypeCheck` |
 
 ## 9. The resolved graph

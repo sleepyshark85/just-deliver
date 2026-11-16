@@ -25,7 +25,7 @@ The closed list:
 | 2 | **Name and reference**: a namespace, a name defined in it, a reference to it; a requirement's effective id (its id, else its type, unique per workload, ADR 0011) | load integrity | it is the rule itself ("a reference must resolve") |
 | 3 | **Part, node, export**: nodes (`template`, `kind` create\|grant, `config`) and the exports evaluated from them | expansion, graph, ids, stacks, hashes, the backend package | the graph is the engine's output; its node shape and canonical hash are the deploy contract |
 | 4 | **Expression**: the `${…}` grammar, its closed root list ([model.md](model.md#6-expressions)), the built-ins `name()`, `guid()`, the form `fn::entries` | two-phase evaluation, edges | a grammar is an interpreter; binding a field to a role says where a root's value lives, it never creates a root (boundary 4) |
-| 5 | **Scope**: the layers in deploy order, and the workload deploy | who deploys what (boundaries 7, 8), `uses` direction, in-run reads | ownership and deploy order are the engine's lifecycle; the layer names and order are the `layer` enum of the jd-shipped `part.schema.json` |
+| 5 | **Scope**: the layers in deploy order, and the workload deploy | who deploys what (boundaries 7, 8), `uses` direction, in-run reads | ownership and deploy order are the engine's lifecycle; the layer names are the `layer` enum of the jd-shipped `part.schema.json`, its order the deploy order (section 3) |
 | 6 | **Selection**: a map entry chosen by a context value, with a fallback key | implementation by environment type, class by requirement class | exact lookup is an algorithm; the map, the value and the fallback key are data |
 | 7 | **Context value**: a named value an algorithm reads or writes (a role, Appendix B) | the binder fills concept records from them | an algorithm needs named inputs; data says where each lives |
 | 8 | **Contract**: a declared export list every selected part exports exactly | load check | a cross-document equality rule |
@@ -165,7 +165,7 @@ prose in messages ([review checklist](../engineering/review-checklist.md)).
 | Runtime | `probe.path`, `probe.expected-status`, `probe.timeout`, `probe.interval`, `probe.scheme`, `rollout.suffix-input`, `rollout.traffic-input`, `rollout.traffic-output`, `rollout.suffix-output`, `rollout.revision-output`, `rollout.fqdn-output`, `rollout.revision-key`, `rollout.latest-key`, `rollout.weight-key`, `rollout.resource-id-output`, `rollout.suffix-prefix`, `rollout.suffix-config-digits`, `rollout.suffix-salt-digits`, `rollout.suffix-max-length`, `rollout.full-weight` | 20 |
 | Release | `release.label`, `release.created-at`, `release.workloads` *many*, `release.definition`, `release.definition-path`, `release.definition-sha256`, `release.depends-on` | 7 |
 
-The `layer` role's values are ordered: the enum's listed order is the deploy order (`shared` before `environment`).
+The `layer` role's values are ordered (section 3, plain annotations).
 
 Namespaces (`define`/`ref`), spelled as the error messages read them: `part owner`, `component`, `shared resource`, `runtime`, `policy`,
 `environment type`, `naming kind`, `role`, `grant template`, `environment`.

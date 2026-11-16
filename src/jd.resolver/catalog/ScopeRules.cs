@@ -3,7 +3,7 @@ namespace jd.resolver.catalog;
 /// <summary>
 /// Who deploys what (docs/architecture/documents.md section 2, concept 5), over the bound part owners. The layers deploy in their order, so a shared
 /// resource reads only shared resources of its layer or an earlier one, and no reads go round in a cycle. The parts one layer deploys share one
-/// scope (docs/architecture/model.md section 5), so their node names are unique across owners and none takes a shared resource's name. Each
+/// scope (docs/architecture/model.md section 5), so their node names are unique across owners and none takes a shared resource's name (section 3). Each
 /// error is located where the binder read the part's reads or the node.
 /// </summary>
 internal static class ScopeRules
@@ -45,7 +45,7 @@ internal static class ScopeRules
                      from node in part.Nodes
                      select (Owner: owner, Part: part, Name: node.Key, node.Value.Location)).ToList();
 
-        // A run looks up nodes before parts, so the node would silently replace what ${<resource>.<export>} reads (model.md section 6); a
+        // A run looks up nodes before parts, so the node would silently replace what ${<resource>.<export>} reads (model.md section 3); a
         // name the part itself reads is ReadRules'.
         var shadowing = nodes.Where(node => shared.ContainsKey(node.Name) && !node.Part.Reads.Contains(node.Name)).Select(node => new LoadError(
             node.Owner.Source, node.Location, $"node '{node.Name}' takes the name of shared resource '{node.Name}', which a part of the same run reads as ${{{node.Name}.<export>}}."));
