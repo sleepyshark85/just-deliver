@@ -19,7 +19,7 @@ internal sealed record MemberUse(string Type, string Where, TypeName Target, str
 // for a MemberUse.
 internal sealed record TypeMention(string Type, string Where, TypeName Named);
 
-// Decodes every method body of an assembly with System.Reflection.Metadata (docs/architecture/application.md section 4). The members of
+// Decodes every method body of an assembly with System.Reflection.Metadata (docs/architecture/application.md section 2). The members of
 // compiler-generated types (closures, async state machines) are attributed to the type and the source member they were written in, so a finding
 // names code as written.
 internal sealed class IlScan

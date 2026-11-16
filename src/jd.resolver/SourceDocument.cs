@@ -3,7 +3,7 @@ using System.Text;
 namespace jd.resolver;
 
 /// <summary>
-/// A document handed to jd as it was read, so a request can carry it as well as a file can (docs/architecture/application.md section 3). Each kind's
+/// A document handed to jd as it was read, so a request can carry it as well as a file can (docs/architecture/application.md section 1). Each kind's
 /// loader decodes it; a client never does.
 /// </summary>
 /// <param name="Name">The name its errors print: the CLI passes the path as typed, so messages read as they did when the loaders opened files.</param>

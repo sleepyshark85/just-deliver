@@ -1,6 +1,6 @@
 namespace jd.cli.tests;
 
-// The references each thin-CLI rule lets through, by referring type: none since S25g closed the track (application.md section 10). An entry would be
+// The references each thin-CLI rule lets through, by referring type: none (application.md section 2). An entry would be
 // an exception to a rule, which needs the user's decision; a stale entry fails.
 public sealed partial class ThinCliTests
 {

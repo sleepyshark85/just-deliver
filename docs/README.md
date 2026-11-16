@@ -28,7 +28,7 @@ provisions and deploys it, IT Ops moves from executor to gatekeeper.
    - [approvals.md](architecture/approvals.md) — design note: the `stage` substrate, the protected tier, approval policy and records (S18)
    - [usage.md](usage.md) — using the `jd` CLI: commands and exit codes
    - [walkthrough.md](walkthrough.md) — testing `jd` by hand: architecture, the flow, eleven scenarios with the kit in `samples/walkthrough`
-   - [workload_deployment_flow.html](architecture/workload_deployment_flow.html) — deployment flow diagram ([overview svg](architecture/workload_deployment_flow-overview.svg), [steps svg](architecture/workload_deployment_flow-steps.svg))
+   - [walkthrough.md § The flow](walkthrough.md#1-the-flow) — deployment flow diagram
    - [landing-zone.md](architecture/landing-zone.md) — landing zone ownership and definition
    - [network.md](architecture/network.md) — hub-and-spoke network design
 6. Plans

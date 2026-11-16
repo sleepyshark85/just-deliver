@@ -2,7 +2,7 @@ using jd.resolver.workload;
 
 namespace jd.orchestrator.usecases;
 
-/// <summary><c>validate</c>: checks a workload definition against its schema and rules (docs/architecture/application.md section 3).</summary>
+/// <summary><c>validate</c>: checks a workload definition against its schema and rules (docs/architecture/application.md section 1).</summary>
 public static class Validate
 {
     /// <summary>Checks <paramref name="input"/>'s workload; its errors name the document as the input does.</summary>

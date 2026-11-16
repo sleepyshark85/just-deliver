@@ -5,35 +5,7 @@ scenarios build on each other. Command syntax and exit codes: [usage.md](usage.m
 Every expected output below comes from the code and from the Azure test that runs the same steps (`src/jd.cli.tests/EnvUpAzureTests.cs`);
 where a step is not covered by a test, it says so.
 
-## 1. Architecture
-
-| Part | What it is | Depth |
-|---|---|---|
-| Workload definition | What a team declares: image (pinned by digest), variables, ports, `requires` by type (`database`). No Azure detail. | [workload-definition.md](architecture/workload-definition.md) |
-| Catalog (`catalog/`) | The platform's knowledge as data: **components** (the contract and its implementations per environment type: requirement → graph nodes), **runtimes** (the workload's runtime), **templates** (Pulumi YAML), **shared resources** (what an environment offers: shared or per environment), **policies** (IT Ops rules: set, default, require a component), **naming**, **roles**. | [resolver.md](architecture/resolver.md), [provisioning.md](architecture/provisioning.md) |
-| Environment definition → descriptor | `jd env up` provisions an environment's substrate (`shared` once, then `dev`, `stage`) and writes its **descriptor**: the real ids workloads resolve against, and for `stage` the **approval policy**. | [resolver.md](architecture/resolver.md#environment-descriptor), [approvals.md](architecture/approvals.md) |
-| Resolver → graph | Workload + catalog + descriptor → a graph of nodes (template, config with provenance, dependencies, phase). Pure, offline: `jd preview` prints it. | [resolver.md](architecture/resolver.md) |
-| Orchestrator + Pulumi Automation | Deploys the graph node by node, one Pulumi stack each, in order; the runtime node last as a release: dark revision, grants, probe, traffic shift. | [provisioning.md](architecture/provisioning.md#orchestrator) |
-| `jd.azure` | The Azure adapter: who the principal is (claims of an ARM token) and the live revisions of a Container App (for IQ). | [release-record.md](architecture/release-record.md#3-machine-identity) |
-| Release manifest → set | A label plus workloads in dependency order; `jd release create` pins every definition (SHA-256) and image (digest) into an immutable set. | [release.md](architecture/release.md) |
-| Release records | One JSON file per deploy, qualify and approval in jd's data directory (`<data>/records`), never edited: outcome, identity, OQ, IQ, timings. | [release-record.md](architecture/release-record.md) |
-| Approvals, promotion | `jd approve` records that a listed principal approves a qualified set; `jd promote` deploys the set kept on `dev` to `stage` when enough approvals count. | [approvals.md](architecture/approvals.md) |
-
-```mermaid
-flowchart LR
-  W[workload definitions] --> M[release manifest] -->|release create| S[release set<br/>pinned, immutable]
-  ED[environment definitions] -->|env up| D[descriptors<br/>shared, dev, stage + policy]
-  C[catalog<br/>components, runtimes, templates,<br/>policies, naming, roles] --> R
-  S --> R[resolver] 
-  D --> R
-  R -->|graph per workload| O[orchestrator] -->|Pulumi Automation| AZ[(Azure)]
-  O --> REC[(data/records<br/>set.yaml, deploy, qualify,<br/>approve records)]
-  JA[jd.azure: identity,<br/>live revisions] --> O
-  REC -->|qualified? approved?| P[jd approve / jd promote]
-  P --> O
-```
-
-## 2. The flow
+## 1. The flow
 
 ```mermaid
 sequenceDiagram
@@ -65,16 +37,6 @@ sequenceDiagram
   J->>R: stage/1.1.0/set.yaml, …-deploy.json
 ```
 
-| Step | Checks / refuses |
-|---|---|
-| `env up` | Resolves the definition and composes the descriptor before creating anything; `--out` must not exist without `--force`. |
-| `preview` | Validates, resolves, prints every node with provenance. Creates nothing; needs no credentials. |
-| `deploy` | One workload, **no record**. Refused on a gated environment. |
-| `release deploy` | Re-verifies the set, resolves every workload and checks templates before the first node; refuses a different set under a kept label; first failure stops the run; IQ after success. Refused on a gated environment. |
-| `release qualify` | IQ only: no node drifted, every revision with traffic runs the pinned image. Deploys nothing. |
-| `approve` | Label known and qualified on `qualifiedOn`, principal listed, separate from the deployers if required, not a repeat. |
-| `promote` | Qualified on `qualifiedOn` and `required` distinct approvals count, judged from the records now; then the `release deploy` walk with the kept bytes. |
-
 Records layout (after this walkthrough):
 
 ```
@@ -82,18 +44,17 @@ $RECORDS/
   dev/1.1.0/      set.yaml  <time>-deploy.json
   dev/1.2.0/      set.yaml  <time>-deploy.json (one per attempt)  <time>-qualify.json (one per qualify)
   dev/1.3.0-bad/  set.yaml  <time>-deploy.json (outcome failed)
+  dev/1.4.0/      set.yaml  <time>-deploy.json
   stage/1.1.0/    set.yaml (dev's bytes)  <time>-approve.json  <time>-deploy.json
 ```
 
-`<time>` is UTC `yyyyMMddTHHmmssfffZ`. "Qualified" on `dev` means: the newest deploy record of the label succeeded, each workload's OQ in it
-`passed` (or `unchanged` with an earlier deploy of the **same label** that passed it), and the newest record's IQ `passed`.
+`<time>` is UTC `yyyyMMddTHHmmssfffZ`. What makes a label "qualified" on `dev`: [approvals.md §5](architecture/approvals.md#5-what-promote-reads).
 
-## 3. Setup
+## 2. Setup
 
 Prerequisites: .NET SDK, `pulumi` CLI, `az` CLI, `jq`; a subscription with the guardrails of [tools/sandbox](../tools/sandbox/README.md) and **no
-free-tier Cosmos account** yet; a deploying principal. Run everything from the repository root. Nothing else is set: jd keeps its state (and
-the state's generated key) and the records in its data directory (`~/.local/share/jd` on Linux, or `JD_DATA_DIR`), takes the region from each
-environment definition (`southeastasia` in the samples: set it to the sandbox's allowed region) and runs as the Azure CLI sign-in.
+free-tier Cosmos account** yet; a deploying principal. Run everything from the repository root. jd needs nothing set
+([usage.md](usage.md#data-and-identity)); set each environment definition's `region` (`southeastasia` in the samples) to the sandbox's allowed region.
 
 ```bash
 cp samples/walkthrough/env.example.sh ~/jd-walkthrough.env.sh      # outside the repo; fill in JD_WALK
@@ -103,8 +64,8 @@ az account set --subscription "<subscription id>"
 RECORDS="${JD_DATA_DIR:-$HOME/.local/share/jd}/records"             # where the records are read below
 ```
 
-Signed in as a service principal instead (`az login --service-principal …`)? Pulumi's CLI authentication does not cover one: export
-`ARM_TENANT_ID`, `ARM_CLIENT_ID` and `ARM_CLIENT_SECRET` (all three; jd refuses a partial set) and `ARM_SUBSCRIPTION_ID` for Pulumi.
+Signed in as a service principal instead (`az login --service-principal …`)? Pulumi's CLI authentication does not cover one: export the
+`ARM_*` variables ([usage.md](usage.md#data-and-identity)).
 
 Environments (exit 0 each; one node line per substrate node, then the descriptor path; shared has `group`, `workspace` and `cosmos`, dev and
 stage each `group`, `apps`, `logs` (the environment's diagnostic setting) and `database`):
@@ -117,9 +78,7 @@ DEV_RG=$(sed -n '/^  env-group:$/,/^  [^ ]/s/^    name: *//p' "$JD_WALK/dev.env.
 STAGE_RG=$(sed -n '/^  env-group:$/,/^  [^ ]/s/^    name: *//p' "$JD_WALK/stage.env.yaml")
 ```
 
-Each run deploys what the definition's `offers` reach: the shared layer the shared resources, dev and stage their own parts on the shared
-descriptor; the descriptor's `values` are keyed by part (`env-group.name`, `cosmos-account.id`, …). A descriptor written before S21f is
-refused (its layout changed; S21e ones carry `grantable`): re-run the three `jd env up` with `--force`; every node is `unchanged`.
+The descriptor's `values` are keyed by part (`env-group.name`, `cosmos-account.id`, …).
 
 Look at: the Cosmos account is free tier, capped at 1,000 RU/s, refuses keys; `db-dev` and `db-stage` hold 400 RU/s each.
 
@@ -134,9 +93,6 @@ done
 
 Re-running an `env up` (with `--force`) reports every node `unchanged (no changes, …)` and rewrites the same descriptor. `stage` ships with the all-zero
 approver; the scenarios make policy variants with `samples/walkthrough/stage-policy.sh` instead of editing it.
-
-Descriptors written before environment types (they say `tier:`, S21a) no longer load: run the three `env up` again with `--force`; every node is
-`unchanged` and each descriptor is rewritten with its `type`. Release and approval records written before stay readable.
 
 Release sets are created **once** and reused: a set carries its creation time, so creating it again gives other bytes, which a label that already has a
 `set.yaml` refuses.
@@ -157,7 +113,7 @@ newest() { ls "$RECORDS/$1/$2/"*-"$3".json | tail -1; }       # newest <env> <la
 summary() { jq '{activity, outcome, iq: .iq.status, notStarted, workloads: [.workloads[] | {name, oq: .oq.status, nodes: [.run.nodes[]? | .outcome]}]}' "$1"; }
 ```
 
-## 4. Scenarios
+## 3. Scenarios
 
 ### 1. First deploy of `sample-app`; re-run changes nothing
 
@@ -377,7 +333,7 @@ M="Walkthrough scenario 8."
 ### 9. Tampering
 
 Purpose: what an inconsistent record does. The records are **not signed**: the directory is the trust boundary
-([approvals.md §9](architecture/approvals.md#9-out-of-the-mvp-and-the-trust-boundary)). A record edited to another *valid* value (say a failed outcome turned
+([release-record.md §3](architecture/release-record.md#3-identity-and-the-trust-boundary)). A record edited to another *valid* value (say a failed outcome turned
 into `succeeded`), a whole forged record with a consistent hash, or a deleted failed record is **not** detected. What is detected: a record that is not
 valid, not in its place, or pins another set; an approval that names another environment, label, set or `qualifiedOn`. Back up first:
 
@@ -419,26 +375,19 @@ Expected, exit 1 each: ``jd: deploy: environment 'stage' is gated by an approval
 samples/walkthrough/teardown.sh "$JD_WALK/dev.env.yaml" "$JD_WALK/stage.env.yaml"
 ```
 
-Deletes the diagnostic settings of every resource in the three groups, then the `dev` and `stage` groups in parallel, waits, then deletes the shared group (the workspace and the Cosmos account) and lists what is left.
-Expected: `deleted diagnostic setting …` lines (one per environment), `deleting …` lines, then **nothing** from the final `az group list --query "[?tags.project=='just-deliver-mvp'].name"`. Then remove the Pulumi
-state, `<data>/state` and `<data>/state.key` (its stacks describe deleted resources), `$JD_WALK` and `AZURE_CONFIG_DIR`. Keep `<data>/records` if
-the evidence is wanted; nothing in it is a secret. If anything was left: `tools/azure/cleanup.sh --yes --all`.
+Expected: `deleted diagnostic setting …` and `deleting …` lines, then **nothing** from the final `az group list`. Then remove `<data>/state` and
+`<data>/state.key` (its stacks describe deleted resources), `$JD_WALK` and `AZURE_CONFIG_DIR`; keep `<data>/records` if the evidence is wanted.
+If anything was left: `tools/azure/cleanup.sh --yes --all`.
 
-## 5. Gotchas
+## 4. Gotchas
 
-- **Variables:** only the walkthrough's own `JD_WALK` and `AZURE_CONFIG_DIR` (your copy of `env.example.sh`, never committed); optional
-  `JD_DATA_DIR`, `PULUMI_HOME`, `JD_SCRATCH_DIR`; `ARM_TENANT_ID`, `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET` only for a service principal. Change
-  `JD_DATA_DIR` (or delete `<data>/state.key`) between runs and the stacks are lost.
+- **Variables:** the walkthrough's own `JD_WALK` and `AZURE_CONFIG_DIR` (your copy of `env.example.sh`, never committed); jd's: [usage.md](usage.md#data-and-identity).
+  Change `JD_DATA_DIR` (or delete `<data>/state.key`) between runs and the stacks are lost.
 - **Free tier:** one free-tier Cosmos account per subscription, so one walkthrough (or Azure test run) at a time, and not while `tools/verify.sh --azure`
   runs. `dev` and `stage` use 800 of the 1,000 free RU/s; a third environment does not fit.
-- **Labels and sets:** create each set once and reuse the file; a changed release needs a new label. An `unchanged` workload counts towards
-  qualification only if an earlier deploy of the same label passed its OQ (scenario 3).
+- **Labels and sets:** create each set once and reuse the file; a changed release needs a new label (scenario 3 shows why one may not qualify).
 - **Cold starts:** apps scale to zero; the first requests can answer 503 for up to about two minutes (the Azure test retries 12 × 10 s).
 - **Telemetry** takes minutes to reach App Insights (the Azure test waits up to ten).
-- **Durations** (approximate, from [status.md](plans/status.md)): the full Azure gate, which runs these scenarios among other tests, took 1 h 13 m to 1 h 21 m, much of it
-  teardown; `shared` and `dev` up plus their teardown took 49 min in the S12 gate, about 20 of them deleting the Cosmos account; each environment
-  group takes about 27 min to delete (in parallel); the bad release's probe waits 5 min. Single deploys were not timed apart.
-- **Diagnostic settings outlive their group:** `az group delete` leaves them, and the next `env up` fails at `logs` with "cannot create already
-  existing resource" (the ids repeat); `teardown.sh` and `tools/azure/cleanup.sh` delete them first, so tear down with those.
+- **Diagnostic settings outlive their group**, and the next `env up` then fails at `logs`: tear down with `teardown.sh` or `tools/azure/cleanup.sh`, which delete them first.
 - **Second identity:** not needed: scenarios 7 and 8 run with the deployer and policy copies. A second principal is needed only to approve under the
   strict shipped policy (scenario 7's note). `jd approve` and `jd promote` call Entra for the principal even when they refuse.

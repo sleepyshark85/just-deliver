@@ -7,9 +7,9 @@ previews every workload and every release here offline.
 | File | What it is | Scenarios |
 |---|---|---|
 | `env.example.sh` | The walkthrough's variables (jd needs none), placeholders only, and a `jd` shell function (jd built once into `$JD_WALK/jd`) | setup |
-| `workloads/app.yaml` | The sample app, `APP_VERSION: "1"` | 2, 3, 5, 10 |
+| `workloads/app.yaml` | The sample app, `APP_VERSION: "1"`; in every manifest but `bad` | setup (`APP`), 2, 3, 4 (revert), 5, 6, 7, 8, 9, 10 |
 | `workloads/app.bad.yaml` | The app with `COSMOS_CONTAINER` naming a container that does not exist: `/health` answers 503 | 4 |
-| `workloads/worker.v1.yaml`, `worker.v2.yaml`, `worker.v3.yaml` | The worker, `APP_VERSION` `"1"`, `"2"` and `"3"` | 2, 3, 6 (v3) |
+| `workloads/worker.v1.yaml`, `worker.v2.yaml`, `worker.v3.yaml` | The worker, `APP_VERSION` `"1"`, `"2"` and `"3"` | setup (`WORKER`, v1), as their manifests below |
 | `releases/v1.manifest.yaml` | Label `1.1.0`: app + worker v1; the worker depends on the app | 2, 7, 8, 9 |
 | `releases/v2.manifest.yaml` | Label `1.2.0`: the same app + worker v2 | 3, 4 (revert), 6, 10 |
 | `releases/v3.manifest.yaml` | Label `1.4.0`: the same app + worker v3, the recovery from the drift | 6 |

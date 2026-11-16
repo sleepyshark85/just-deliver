@@ -7,7 +7,7 @@ namespace jd.cli;
 
 /// <summary>
 /// <see cref="ITemplates"/> over the Pulumi template library, from a catalog's templates part: its template files, each named by its directory
-/// (docs/architecture/application.md section 5). A part with no documents is a templates directory that is missing, or empty.
+/// (docs/architecture/application.md section 3). A part with no documents is a templates directory that is missing, or empty.
 /// </summary>
 internal sealed class PulumiTemplates : ITemplates
 {

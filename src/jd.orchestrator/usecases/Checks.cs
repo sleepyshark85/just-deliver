@@ -7,8 +7,7 @@ using jd.resolver.graph;
 namespace jd.orchestrator.usecases;
 
 /// <summary>
-/// The checks the runs share, as use-case steps. The commands not yet behind a use case call them here until their own slices move them
-/// (docs/architecture/application.md section 10).
+/// The checks the runs share, as use-case steps (docs/architecture/application.md section 1).
 /// </summary>
 public static class Checks
 {
