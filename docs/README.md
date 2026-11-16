@@ -33,7 +33,7 @@ moves from executor to gatekeeper. Each doc owns one thing; a fact lives in its 
 ## Engineering
 
 - [engineering/conventions.md](engineering/conventions.md) — how the team works
-- [engineering/standards.md](engineering/standards.md) — the binding code rules
+- [engineering/standards.md](engineering/standards.md) — every binding code rule, incl. tests and design invariants
 - [engineering/csharp.md](engineering/csharp.md) — C# idioms
 - [engineering/review-checklist.md](engineering/review-checklist.md) — what every review checks, and the verdict format
 
