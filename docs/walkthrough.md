@@ -375,10 +375,9 @@ Expected, exit 1 each: ``jd: deploy: environment 'stage' is gated by an approval
 samples/walkthrough/teardown.sh "$JD_WALK/dev.env.yaml" "$JD_WALK/stage.env.yaml"
 ```
 
-Deletes the diagnostic settings of every resource in the three groups, then the `dev` and `stage` groups in parallel, waits, then deletes the shared group (the workspace and the Cosmos account) and lists what is left.
-Expected: `deleted diagnostic setting …` lines (one per environment), `deleting …` lines, then **nothing** from the final `az group list --query "[?tags.project=='just-deliver-mvp'].name"`. Then remove the Pulumi
-state, `<data>/state` and `<data>/state.key` (its stacks describe deleted resources), `$JD_WALK` and `AZURE_CONFIG_DIR`. Keep `<data>/records` if
-the evidence is wanted; nothing in it is a secret. If anything was left: `tools/azure/cleanup.sh --yes --all`.
+Expected: `deleted diagnostic setting …` and `deleting …` lines, then **nothing** from the final `az group list`. Then remove `<data>/state` and
+`<data>/state.key` (its stacks describe deleted resources), `$JD_WALK` and `AZURE_CONFIG_DIR`; keep `<data>/records` if the evidence is wanted.
+If anything was left: `tools/azure/cleanup.sh --yes --all`.
 
 ## 4. Gotchas
 
