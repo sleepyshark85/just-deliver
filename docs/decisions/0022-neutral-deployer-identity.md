@@ -18,7 +18,7 @@ A GCP service account has no tenant or object id; its stable key is its unique i
   "read, never written", as `tier` does, and the readers map it to the new one.
 - **Approvers** may be any platform's principal key.
 - **Records gain no platform.** Which environment qualifies a promotion is already explicit data, the approval policy's `qualifiedOn`;
-  whether promotion across platforms is refused is the user's open choice 5 ([multi-cloud.md §13](../architecture/multi-cloud.md#13-open-choices-for-the-user)).
+  promotion across platforms is allowed as the approval policy says (the user, choice 5, [multi-cloud.md §13](../architecture/multi-cloud.md#13-choices)).
 
 ## Consequences
 - Records written before the change keep counting: a legacy record and a new one of the same principal are one deployer.

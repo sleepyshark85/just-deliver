@@ -243,7 +243,9 @@ by the GCP gate; the GCP sandbox's budget showing no charge beyond choice 2's; t
 - **Mixed platforms in one environment** stay possible: the platform is one selection value, and a later design could select per part.
 - **The hosted API (ADR 0001):** `Connections` by platform is what an API host builds too.
 
-## 13. Open choices for the user
+## 13. Choices
+
+**Decided by the user 2026-11-21:** 2 A, 3 Docker Hub, 4 (a), 5 (a), each the recommendation; 1 and 6 taken as recommended (the user did not object). The ADRs stay Proposed until the user reviews them.
 
 | # | Choice | Recommendation |
 |---|---|---|
