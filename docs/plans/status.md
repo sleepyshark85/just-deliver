@@ -10,7 +10,7 @@
 - **Waiting for the user:** ADR 0019 says "approved by the user" but is Proposed; the new ADR 0020 (stack per graph node,
   supersedes 0003 decision 3); ADR 0011's id rule rewritten to the schema's (see its note); CLAUDE.md "work one slice at a time" and conventions'
   "one slice in review at a time" vs the user's "max parallelism".
-- **Waiting for the user (S28):** the six open choices in [multi-cloud.md §13](../architecture/multi-cloud.md#13-open-choices-for-the-user); ADRs 0021–0023 (Proposed); the roadmap 1.7 row's wording, which still says "the same written documents" while §11 lists deliberate exceptions (S28b, S28c, S28i, S28k).
+- **Waiting for the user (S28):** ADRs 0021–0023 (Proposed); the roadmap 1.7 row's wording, which still says "the same written documents" while §11 lists deliberate exceptions (S28b, S28c, S28i, S28k).
 - **Sandbox secret expires 2026-12-14** (renew: `tools/sandbox/sandbox.sh apply … --rotate-secret`, the user as Owner).
 - **Team:** developer Opus from S20 (after a Sonnet trial S17c2–S19b), fixer Sonnet, reviewer Opus.
 
