@@ -31,6 +31,7 @@ Proposed record's wording may be corrected to match what is built.
 | [0020](0020-stack-per-graph-node.md) | One Pulumi stack per graph node, the environment in its name | Proposed | built (S07, S12) |
 | [0021](0021-platform-dimension.md) | The platform is an environment value; implementations selected by platform | Proposed | S28 |
 | [0022](0022-neutral-deployer-identity.md) | A platform-neutral deployer identity | Proposed | S28 |
+| [0023](0023-gcp-runtime-identity.md) | On GCP the runtime identity is a service account of its own part, checked as a grant target | Proposed | S28 |
 
 Origin: an open-question ID ([open-questions.md](../open-questions.md)), a slice ID (its PR and design note are in git history and
 [status.md](../plans/status.md)), or the investigation notes.
