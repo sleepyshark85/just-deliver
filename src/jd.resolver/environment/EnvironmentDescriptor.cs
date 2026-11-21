@@ -2,7 +2,8 @@ namespace jd.resolver.environment;
 
 /// <summary>
 /// An environment (docs/architecture/documents.md section 3): one record for an environment definition, which <c>jd env up</c> provisions, and
-/// for the descriptor it publishes to the workloads deployed on it, bound from either by the <c>env.*</c> roles. <see cref="Offers"/> names the
+/// for the descriptor it publishes to the workloads deployed on it, bound from either by the <c>env.*</c> roles. <see cref="Platform"/> selects
+/// the catalog's implementations before <see cref="Type"/> does, with no fallback (docs/architecture/model.md section 3). <see cref="Offers"/> names the
 /// components and the runtime a workload may get there. <see cref="Values"/> are the deployed parts' exports, keyed by the flattened dot path
 /// <c>&lt;part&gt;.&lt;export&gt;</c>, read as <c>${&lt;part&gt;.&lt;export&gt;}</c>; a definition has none of its own. An environment with an
 /// <see cref="Approval"/> policy is gated: it takes deploys only through <c>jd promote</c> (docs/architecture/approvals.md section 2).
@@ -12,6 +13,7 @@ public sealed record EnvironmentDescriptor(
     string Name,
     string Region,
     string Type,
+    string Platform,
     IReadOnlyDictionary<string, string> Values,
     IReadOnlyList<string> Offers,
     ApprovalPolicy? Approval)
@@ -25,6 +27,6 @@ public sealed record EnvironmentDescriptor(
     /// <summary>Where <paramref name="role"/> was read (<see cref="Locations"/>); empty when the environment was not bound from a document.</summary>
     internal string Location(string role) => Locations.GetValueOrDefault(role, string.Empty);
 
-    /// <summary>The environment a definition is resolved in: the definition's own name, region, type, offers and approval policy, and the base descriptor's values.</summary>
+    /// <summary>The environment a definition is resolved in: the definition's own name, region, type, platform, offers and approval policy, and the base descriptor's values.</summary>
     public EnvironmentDescriptor Over(EnvironmentDescriptor? baseDescriptor) => this with { Values = baseDescriptor?.Values ?? new Dictionary<string, string>() };
 }

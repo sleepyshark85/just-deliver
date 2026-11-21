@@ -8,24 +8,24 @@ namespace jd.resolver.tests;
 // error at the file and location, and the catalog does not load.
 public class CatalogUsesTests
 {
-    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
+    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
 
     // A shared resource with one node (default: the resource's name, prefixed `n-`, so nodes of one scope do not collide), configured
     // `config`, exporting `exports` (default: the node's id).
     private static string Shared(string name, string scope = "shared", string uses = "[]", string? node = null, string config = "{ size: 1 }", string? exports = null)
     {
         node ??= $"n-{name}";
-        return $"kind: SharedResource\nname: {name}\ndescription: d\nscope: {scope}\nuses: {uses}\nnodes:\n  {node}:\n    template: t/x\n    config: {config}\nexports: {exports ?? $"{{ id: '${{{node}.id}}' }}"}\n";
+        return $"kind: SharedResource\nname: {name}\ndescription: d\nplatform: azure\nscope: {scope}\nuses: {uses}\nnodes:\n  {node}:\n    template: t/x\n    config: {config}\nexports: {exports ?? $"{{ id: '${{{node}.id}}' }}"}\n";
     }
 
     // A component alpha-db whose class part has one node `node` (config `config`), optionally with an environment part.
     private static string Component(string uses = "[]", string node = "node", string config = "{ size: 1 }", string? environment = null, string name = "alpha-db") =>
-        $"kind: Component\nname: {name}\ndescription: d\nexports: [endpoint]\nuses: {uses}\nimplementations:\n  default:\n"
-        + (environment is null ? string.Empty : $"    environment: {environment}\n")
-        + $"    classes:\n      standard:\n        nodes:\n          {node}: {{ template: t/x, config: {config} }}\n        exports: {{ endpoint: x }}\n";
+        $"kind: Component\nname: {name}\ndescription: d\nexports: [endpoint]\nimplementations:\n  azure:\n    uses: {uses}\n    types:\n      default:\n"
+        + (environment is null ? string.Empty : $"        environment: {environment}\n")
+        + $"        classes:\n          standard:\n            nodes:\n              {node}: {{ template: t/x, config: {config} }}\n            exports: {{ endpoint: x }}\n";
 
     private static string Runtime(string uses, string config) =>
-        TestCatalog.RuntimeHeader.Replace("implementations:\n", $"uses: {uses}\nimplementations:\n", StringComparison.Ordinal)
+        TestCatalog.RuntimeHeader.Replace("  azure:\n", $"  azure:\n    uses: {uses}\n", StringComparison.Ordinal)
         + TestCatalog.RuntimeImplementation($"nodes:\n  runtime:\n    template: t/rt\n    config: {config}\n");
 
     private static Task<LoadResult<Catalog>> Parse(params (string Path, string Content)[] files) =>
@@ -55,7 +55,7 @@ public class CatalogUsesTests
         Assert.Equal("${shared-group.name}", account.Parts[0].Exports["resourceGroup"]);
         var component = catalog.Components["alpha-db"];
         Assert.Equal(["cosmos-account"], component.Reads);
-        var environment = TestCatalog.PartAt(component, "implementations.default.environment");
+        var environment = TestCatalog.PartAt(component, "implementations.azure.types.default.environment");
         Assert.Equal("${db.name}", environment.Exports["databaseName"]);
         Assert.Equal(["shared-group"], catalog.Runtimes["container-app"].Reads);
     }
@@ -126,7 +126,7 @@ public class CatalogUsesTests
             ("s.yaml", Shared("shared-group")), ("e.yaml", Shared("env-group", scope: "environment", uses: Uses("e.yaml"))), ("c.yaml", Component(uses: Uses("c.yaml"))),
             ("r.yaml", Runtime(Uses("r.yaml"), "{}"))));
 
-        Assert.Equal((file, "uses"), (error.File, error.Location));
+        Assert.Equal((file, file == "e.yaml" ? "uses" : "implementations.azure.uses"), (error.File, error.Location));
         Assert.Equal("'cosmos-acount' is not a shared resource in the catalog (declared: env-group, shared-group).", error.Message);
     }
 
@@ -215,7 +215,7 @@ public class CatalogUsesTests
     [InlineData("s.yaml", "nodes.n-cosmos-account.config.group", "{ group: '${env.shared-group.name}' }", null, null, "env.shared-group.name")]
     [InlineData("c.yaml", TestCatalog.PartPath + ".nodes.node.config.account", null, "{ account: \"${guid(env.cosmos-account.id)}\" }", null, "env.cosmos-account.id")]
     [InlineData("c.yaml", TestCatalog.PartPath + ".nodes.node.config.account", null, "{ account: '${env.region.name}' }", null, "env.region.name")]
-    [InlineData("r.yaml", "implementations.default.nodes.runtime.config.group", null, null, "{ group: '${env.apps-env.id}' }", "env.apps-env.id")]
+    [InlineData("r.yaml", "implementations.azure.types.default.nodes.runtime.config.group", null, null, "{ group: '${env.apps-env.id}' }", "env.apps-env.id")]
     [InlineData("s.yaml", "nodes.n-cosmos-account.config.x", "{ x: '${env.offers}' }", null, null, "env.offers")]
     [InlineData("s.yaml", "nodes.n-cosmos-account.config.x", "{ x: '${env.values}' }", null, null, "env.values")]
     public async Task Env_other_than_name_region_and_type_is_a_load_error(string file, string location, string? shared, string? component, string? runtime, string path)
@@ -233,9 +233,9 @@ public class CatalogUsesTests
     // Every part kind is checked: a shared resource, an environment part, a class part (config and exports, inside a function call) and the runtime.
     [Theory]
     [InlineData("s.yaml", "nodes.n-cosmos-account.config.group", "{ group: '${shared-group.name}' }", null, null, null)]
-    [InlineData("c.yaml", "implementations.default.environment.nodes.db.config.group", null, "{ nodes: { db: { template: t/db, config: { group: '${shared-group.name}' } } } }", null, null)]
+    [InlineData("c.yaml", "implementations.azure.types.default.environment.nodes.db.config.group", null, "{ nodes: { db: { template: t/db, config: { group: '${shared-group.name}' } } } }", null, null)]
     [InlineData("c.yaml", TestCatalog.PartPath + ".nodes.node.config.tags.group", null, null, "{ tags: { group: \"${guid('a', shared-group.name)}\" } }", null)]
-    [InlineData("r.yaml", "implementations.default.nodes.runtime.config.group", null, null, null, "{ group: '${shared-group.name}' }")]
+    [InlineData("r.yaml", "implementations.azure.types.default.nodes.runtime.config.group", null, null, null, "{ group: '${shared-group.name}' }")]
     public async Task A_shared_resource_not_in_uses_cannot_be_read(string file, string location, string? shared, string? environment, string? component, string? runtime)
     {
         var error = SingleError(await Parse(
@@ -293,7 +293,7 @@ public class CatalogUsesTests
     {
         var error = SingleError(await Parse(("r.yaml", Runtime("[]", "{ app: '${container-app.fqdn}' }"))));
 
-        Assert.Equal(("r.yaml", "implementations.default.nodes.runtime.config.app"), (error.File, error.Location));
+        Assert.Equal(("r.yaml", "implementations.azure.types.default.nodes.runtime.config.app"), (error.File, error.Location));
         Assert.Equal("'container-app.fqdn' reads another component or runtime; a part reads only its own nodes, what it uses and, in a class, its own component.", error.Message);
     }
 
@@ -322,7 +322,7 @@ public class CatalogUsesTests
         var environment = "{ nodes: { db: { template: t/db, config: { a: '${alpha-db.databaseName}' } } }, exports: { databaseName: x } }";
         var error = SingleError(await Parse(("c.yaml", Component(environment: environment))));
 
-        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.db.config.a"), (error.File, error.Location));
+        Assert.Equal(("c.yaml", "implementations.azure.types.default.environment.nodes.db.config.a"), (error.File, error.Location));
         Assert.Equal("'alpha-db.databaseName': an environment part cannot read its own component.", error.Message);
     }
 
@@ -344,8 +344,8 @@ public class CatalogUsesTests
     [Fact]
     public async Task A_class_reads_only_the_environment_part_of_its_own_implementation()
     {
-        var stage = "  stage:\n    environment: { nodes: { db: { template: t/db, config: {} } }, exports: { databaseName: x } }\n"
-            + "    classes:\n      standard: { nodes: { node: { template: t/x, config: {} } }, exports: { endpoint: x } }\n";
+        var stage = "      stage:\n        environment: { nodes: { db: { template: t/db, config: {} } }, exports: { databaseName: x } }\n"
+            + "        classes:\n          standard: { nodes: { node: { template: t/x, config: {} } }, exports: { endpoint: x } }\n";
         var error = SingleError(await Parse(("c.yaml", Component(config: "{ database: '${alpha-db.databaseName}' }") + stage)));
 
         Assert.Equal(("c.yaml", $"{TestCatalog.PartPath}.nodes.node.config.database"), (error.File, error.Location));
@@ -402,7 +402,7 @@ public class CatalogUsesTests
 
         Assert.Equal(("s.yaml", "nodes.Bad_Name"), (shared.File, shared.Location));
         Assert.Equal(CatalogLoaderTests.NodeNameMessage, shared.Message);
-        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.Bad_Name", CatalogLoaderTests.NodeNameMessage), (environment.File, environment.Location, environment.Message));
+        Assert.Equal(("c.yaml", "implementations.azure.types.default.environment.nodes.Bad_Name", CatalogLoaderTests.NodeNameMessage), (environment.File, environment.Location, environment.Message));
     }
 
     [Theory]
@@ -423,7 +423,7 @@ public class CatalogUsesTests
         var environment = "{ nodes: { env-group: { template: t/db, config: {} } }, exports: { databaseName: x } }";
         var error = SingleError(await Parse(("a.yaml", Shared("env-group", scope: "environment")), ("c.yaml", Component(environment: environment))));
 
-        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.env-group"), (error.File, error.Location));
+        Assert.Equal(("c.yaml", "implementations.azure.types.default.environment.nodes.env-group"), (error.File, error.Location));
         Assert.Equal("node 'env-group' takes the name of shared resource 'env-group', which a part of the same run reads as ${env-group.<export>}.", error.Message);
     }
 
@@ -442,7 +442,7 @@ public class CatalogUsesTests
         var environment = "{ nodes: { group: { template: t/db, config: {} } }, exports: { databaseName: x } }";
         var error = SingleError(await Parse(("a.yaml", Shared("env-group", scope: "environment", node: "group")), ("c.yaml", Component(environment: environment))));
 
-        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.group"), (error.File, error.Location));
+        Assert.Equal(("c.yaml", "implementations.azure.types.default.environment.nodes.group"), (error.File, error.Location));
         Assert.Contains("is also declared by 'env-group' (a.yaml)", error.Message);
     }
 
@@ -452,7 +452,7 @@ public class CatalogUsesTests
     {
         const string environment = "{ nodes: { database: { template: t/db, config: {} } }, exports: { databaseName: x } }";
         var component = Component(node: "group", environment: environment)
-            + $"  dev:\n    environment: {environment}\n    classes:\n      standard:\n        nodes:\n          group: {{ template: t/x, config: {{}} }}\n        exports: {{ endpoint: x }}\n";
+            + $"      dev:\n        environment: {environment}\n        classes:\n          standard:\n            nodes:\n              group: {{ template: t/x, config: {{}} }}\n            exports: {{ endpoint: x }}\n";
         var result = await Parse(
             ("a.yaml", Shared("shared-group", node: "group")), ("b.yaml", Shared("env-group", scope: "environment", node: "group")), ("c.yaml", component), ("d.yaml", Component(name: "beta-db", node: "group")));
 

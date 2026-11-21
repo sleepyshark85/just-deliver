@@ -12,8 +12,14 @@ public sealed record Part
     /// <summary>The layer that deploys the part, or a scope that is no layer: deployed with each workload.</summary>
     public required string Scope { get; init; }
 
-    /// <summary>The select map entries the part is in, outermost first: its implementation, then its class.</summary>
+    /// <summary>The select map entries the part is in, outermost first: its platform, its implementation, then its class.</summary>
     public required IReadOnlyList<SelectKey> Keys { get; init; }
+
+    /// <summary>
+    /// The platform the part is built on: the key of the <c>env.platform</c> select map entry it is in, else the platform its owner names (a shared
+    /// resource); a part reads only shared resources of its own platform.
+    /// </summary>
+    public required string Platform { get; init; }
 
     /// <summary>The shared resources the part may read as <c>${&lt;name&gt;.&lt;export&gt;}</c>.</summary>
     public required IReadOnlyList<string> Reads { get; init; }

@@ -6,7 +6,7 @@ namespace jd.resolver.tests;
 
 public sealed class CatalogLoaderTests
 {
-    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
+    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
 
     private static string ComponentFile(string name, string exports = "  endpoint: ${db.endpoint}\n", string key = "default") =>
         TestCatalog.Component(name, "[endpoint]", $"nodes:\n  db:\n    template: t/db\n    config: {{ size: 1 }}\nexports:\n{exports}", key);
@@ -28,7 +28,7 @@ public sealed class CatalogLoaderTests
     [InlineData("environmentTypes: { dev: { layer: tenant } }\n", "NotInEnumeration: #/environmentTypes.dev.layer")]
     public async Task Environment_types_are_required_and_well_formed(string declaration, string error)
     {
-        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: \"1\"\n" + declaration));
+        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\n" + declaration));
 
         Assert.Null(result.Value);
         Assert.Contains(error, Assert.Single(result.Errors).ToString());
@@ -52,13 +52,13 @@ public sealed class CatalogLoaderTests
         var component = Assert.Single(catalog.Components).Value;
         Assert.Equal(("alpha-db", "components/a.yaml"), (component.Name, component.Source));
         Assert.Equal(["endpoint"], component.Contract);
-        var part = TestCatalog.PartAt(component, "implementations.default.classes.standard");
+        var part = TestCatalog.PartAt(component, "implementations.azure.types.default.classes.standard");
         Assert.Equal(NodeKind.Create, part.Nodes["db"].Kind);
         Assert.Equal(1, (int)part.Nodes["db"].Config["size"]);
         Assert.Equal("${db.endpoint}", part.Exports["endpoint"]);
         var runtime = Assert.Single(catalog.Runtimes).Value;
-        var implementation = TestCatalog.PartAt(runtime, "implementations.default");
-        Assert.Equal(("container-app", "runtimes/r.yaml", (TestCatalog.Probe, TestCatalog.Release)), (runtime.Name, runtime.Source, catalog.Rollouts[("container-app", "default")]));
+        var implementation = TestCatalog.PartAt(runtime, "implementations.azure.types.default");
+        Assert.Equal(("container-app", "runtimes/r.yaml", (TestCatalog.Probe, TestCatalog.Release)), (runtime.Name, runtime.Source, catalog.Rollouts[("container-app", "implementations.azure.types.default")]));
         Assert.Equal("t/runtime", implementation.Nodes["runtime"].Template);
         var policy = Assert.Single(catalog.Policies);
         Assert.Equal("alpha-db", policy.Require.Value);
@@ -77,7 +77,7 @@ public sealed class CatalogLoaderTests
 
         Assert.Empty(result.Errors);
         var rollouts = Assert.IsType<Catalog>(result.Value).Rollouts;
-        Assert.Equal(("/health", "/ready"), (rollouts[("container-app", "default")].Probe.Path, rollouts[("job-runner", "default")].Probe.Path));
+        Assert.Equal(("/health", "/ready"), (rollouts[("container-app", "implementations.azure.types.default")].Probe.Path, rollouts[("job-runner", "implementations.azure.types.default")].Probe.Path));
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public sealed class CatalogLoaderTests
         var result = await Parse(("catalog.yaml", CatalogFile), ("components/a.yaml", ComponentFile("alpha-db", exports, key)));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("components/a.yaml", $"implementations.{key}.classes.standard.exports"), (error.File, error.Location));
+        Assert.Equal(("components/a.yaml", $"implementations.azure.types.{key}.classes.standard.exports"), (error.File, error.Location));
         Assert.Equal($"must export exactly the contract of component 'alpha-db' (endpoint); {problem}.", error.Message);
         Assert.Null(result.Value);
     }
@@ -164,7 +164,7 @@ public sealed class CatalogLoaderTests
             ("components/a.yaml", TestCatalog.Component("alpha-db", "[endpoint]", "nodes:\n  db:\n    template: t/db\n    config: {}\nexports: {}\n", className: "big.one")));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("components/a.yaml", "implementations.default.classes['big.one'].exports"), (error.File, error.Location));
+        Assert.Equal(("components/a.yaml", "implementations.azure.types.default.classes['big.one'].exports"), (error.File, error.Location));
         Assert.Equal("must export exactly the contract of component 'alpha-db' (endpoint); missing endpoint.", error.Message);
     }
 
@@ -177,7 +177,7 @@ public sealed class CatalogLoaderTests
         var result = await Parse(("catalog.yaml", CatalogFile), (file, content));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal((file, "implementations.stagee"), (error.File, error.Location));
+        Assert.Equal((file, "implementations.azure.types.stagee"), (error.File, error.Location));
         Assert.Equal("'stagee' is not an environment type in the catalog (declared: dev, stage).", error.Message);
     }
 
@@ -190,8 +190,8 @@ public sealed class CatalogLoaderTests
         var result = await Parse(("catalog.yaml", CatalogFile.Replace("environmentTypes: {", "environmentTypes: { shared: { layer: shared },", StringComparison.Ordinal)), (file, content));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal((file, "implementations.shared"), (error.File, error.Location));
-        Assert.Equal("'shared' is a shared-layer environment type; implementations are keyed by environment-layer types or 'default'.", error.Message);
+        Assert.Equal((file, "implementations.azure.types.shared"), (error.File, error.Location));
+        Assert.Equal("'shared' is a shared-layer environment type; types are keyed by environment-layer types or 'default'.", error.Message);
     }
 
     // A catalog file that failed its schema is reported on its own: its types are not read, so no key is judged against them.
@@ -211,12 +211,12 @@ public sealed class CatalogLoaderTests
     public async Task An_implementation_keyed_by_a_shared_layer_type_with_two_classes_is_one_error()
     {
         const string part = "{ nodes: { db: { template: t/db, config: {} } }, exports: { endpoint: x } }";
-        var component = $"kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n  shared:\n    classes: {{ standard: {part}, isolated: {part} }}\n";
+        var component = $"kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n  azure:\n    types:\n      shared:\n        classes: {{ standard: {part}, isolated: {part} }}\n";
         var result = await Parse(("catalog.yaml", CatalogFile.Replace("environmentTypes: {", "environmentTypes: { shared: { layer: shared },", StringComparison.Ordinal)), ("components/a.yaml", component));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("components/a.yaml", "implementations.shared"), (error.File, error.Location));
-        Assert.Equal("'shared' is a shared-layer environment type; implementations are keyed by environment-layer types or 'default'.", error.Message);
+        Assert.Equal(("components/a.yaml", "implementations.azure.types.shared"), (error.File, error.Location));
+        Assert.Equal("'shared' is a shared-layer environment type; types are keyed by environment-layer types or 'default'.", error.Message);
     }
 
     [Fact]
@@ -224,12 +224,12 @@ public sealed class CatalogLoaderTests
     {
         const string part = "{ nodes: { db: { template: t/db, config: {} } }, exports: { endpoint: x } }";
         var component = "kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n"
-            + $"  default:\n    classes: {{ standard: {part} }}\n  stage:\n    classes: {{ standard: {part}, isolated: {part} }}\n";
+            + $"  azure:\n    types:\n      default:\n        classes: {{ standard: {part} }}\n      stage:\n        classes: {{ standard: {part}, isolated: {part} }}\n";
         var result = await Parse(("catalog.yaml", CatalogFile), ("components/a.yaml", component));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("components/a.yaml", "implementations.stage.classes"), (error.File, error.Location));
-        Assert.Equal("declares standard, isolated; every implementation must declare the classes of 'default' (standard).", error.Message);
+        Assert.Equal(("components/a.yaml", "implementations.azure.types.stage.classes"), (error.File, error.Location));
+        Assert.Equal("declares standard, isolated; every implementation must declare the classes of 'azure/default' (standard).", error.Message);
     }
 
     [Fact]
@@ -237,12 +237,12 @@ public sealed class CatalogLoaderTests
     {
         const string part = "{ nodes: { db: { template: t/db, config: {} } }, exports: { endpoint: x } }";
         var component = "kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n"
-            + $"  default:\n    classes: {{ standard: {part}, isolated: {part} }}\n  stage:\n    classes: {{ standard: {part} }}\n";
+            + $"  azure:\n    types:\n      default:\n        classes: {{ standard: {part}, isolated: {part} }}\n      stage:\n        classes: {{ standard: {part} }}\n";
         var result = await Parse(("catalog.yaml", CatalogFile), ("components/a.yaml", component));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("components/a.yaml", "implementations.stage.classes"), (error.File, error.Location));
-        Assert.Equal("declares standard; every implementation must declare the classes of 'default' (standard, isolated).", error.Message);
+        Assert.Equal(("components/a.yaml", "implementations.azure.types.stage.classes"), (error.File, error.Location));
+        Assert.Equal("declares standard; every implementation must declare the classes of 'azure/default' (standard, isolated).", error.Message);
     }
 
     [Fact]
@@ -261,7 +261,7 @@ public sealed class CatalogLoaderTests
         var result = await Parse(("catalog.yaml", CatalogFile), ("components/bad.yaml", TestCatalog.Component("alpha-db", "[]", "nodes:\n  db:\n    template: t\n")));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("components/bad.yaml", "implementations.default"), (error.File, error.Location));
+        Assert.Equal(("components/bad.yaml", "implementations.azure"), (error.File, error.Location));
         Assert.Contains($"#/{TestCatalog.PartPath}.nodes.db.config", error.Message);
     }
 
@@ -345,7 +345,7 @@ public sealed class CatalogLoaderTests
         var componentError = Assert.Single(component.Errors);
         Assert.Equal(("c.yaml", $"{TestCatalog.PartPath}.nodes{located}", NodeNameMessage), (componentError.File, componentError.Location, componentError.Message));
         var runtimeError = Assert.Single(runtime.Errors);
-        Assert.Equal(("r.yaml", $"implementations.default.nodes{located}", NodeNameMessage), (runtimeError.File, runtimeError.Location, runtimeError.Message));
+        Assert.Equal(("r.yaml", $"implementations.azure.types.default.nodes{located}", NodeNameMessage), (runtimeError.File, runtimeError.Location, runtimeError.Message));
     }
 
     internal const string NodeNameMessage = "not a valid node name; use lowercase letters, digits and hyphens, starting with a letter and not ending in a hyphen.";
@@ -361,8 +361,8 @@ public sealed class CatalogLoaderTests
     // A refused node name does not hide the part's other problems (documents.md section 4): each is reported where it is, the one without a
     // message in the validator's text.
     [Theory]
-    [InlineData("nodes:\n  db:\n    config: {}\n", "nodes.db", "AdditionalPropertiesNotValid: #/implementations.default.classes.standard.nodes.db { PropertyRequired: #/implementations.default.classes.standard.nodes.db.template }")]
-    [InlineData("nodes:\n  db:\n    template: t/x\n    config: {}\nprobe: {}\n", "probe", "NoAdditionalPropertiesAllowed: #/implementations.default.classes.standard.probe")]
+    [InlineData("nodes:\n  db:\n    config: {}\n", "nodes.db", "AdditionalPropertiesNotValid: #/implementations.azure.types.default.classes.standard.nodes.db { PropertyRequired: #/implementations.azure.types.default.classes.standard.nodes.db.template }")]
+    [InlineData("nodes:\n  db:\n    template: t/x\n    config: {}\nprobe: {}\n", "probe", "NoAdditionalPropertiesAllowed: #/implementations.azure.types.default.classes.standard.probe")]
     public async Task A_bad_node_name_is_reported_beside_the_parts_other_problems(string part, string location, string violation)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", TestCatalog.Component("alpha-db", "[]", part.Replace("nodes:\n", "nodes:\n  Bad:\n    template: t/x\n    config: {}\n", StringComparison.Ordinal))));
@@ -378,38 +378,38 @@ public sealed class CatalogLoaderTests
         var result = await Parse(("catalog.yaml", CatalogFile), ("c.yaml", TestCatalog.Component("alpha-db", "[]", "nodes: {}\nexports: {}\n")));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("c.yaml", "implementations.default"), (error.File, error.Location));
+        Assert.Equal(("c.yaml", "implementations.azure"), (error.File, error.Location));
         Assert.Contains($"TooFewProperties: #/{TestCatalog.PartPath}.nodes", error.Message);
     }
 
-    private const string RuntimeHead = "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n";
-    private const string RuntimeNode = "    nodes:\n      runtime:\n        template: t/rt\n        config: {}\n";
-    private const string Probe = "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }\n";
-    private const string Release = "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }\n";
-    private const string ComponentHead = "kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n  default:\n";
-    private const string ClassesWith = "    classes:\n      standard:\n        exports: { endpoint: x }\n        nodes:\n          ";
+    private const string RuntimeHead = "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  azure:\n    types:\n      default:\n";
+    private const string RuntimeNode = "        nodes:\n          runtime:\n            template: t/rt\n            config: {}\n";
+    private const string Probe = "        probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }\n";
+    private const string Release = "        release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }\n";
+    private const string ComponentHead = "kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n  azure:\n    types:\n      default:\n";
+    private const string ClassesWith = "        classes:\n          standard:\n            exports: { endpoint: x }\n            nodes:\n              ";
 
     // The schema reports a violation inside an implementation at the implementation, naming the path inside it.
     [Theory]
-    [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      other:\n        template: t/rt\n        config: {}\n", "implementations.default.nodes")]
-    [InlineData(RuntimeHead + Probe + Release + RuntimeNode + "    exports:\n      endpoint: x\n", "implementations.default.exports")]
-    [InlineData(ComponentHead + Probe + ClassesWith + "db: { template: t/db, config: {} }\n", "implementations.default.probe")]
-    [InlineData(RuntimeHead + Probe + RuntimeNode, "implementations.default.release")]
-    [InlineData(RuntimeHead + Release + RuntimeNode, "implementations.default.probe")]
+    [InlineData(RuntimeHead + Probe + Release + "        nodes:\n          other:\n            template: t/rt\n            config: {}\n", "implementations.azure.types.default.nodes")]
+    [InlineData(RuntimeHead + Probe + Release + RuntimeNode + "        exports:\n          endpoint: x\n", "implementations.azure.types.default.exports")]
+    [InlineData(ComponentHead + Probe + ClassesWith + "db: { template: t/db, config: {} }\n", "implementations.azure.types.default.probe")]
+    [InlineData(RuntimeHead + Probe + RuntimeNode, "implementations.azure.types.default.release")]
+    [InlineData(RuntimeHead + Release + RuntimeNode, "implementations.azure.types.default.probe")]
     public async Task The_schema_rules_of_runtimes_and_components_are_enforced(string file, string path)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("f.yaml", file));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("f.yaml", "implementations.default"), (error.File, error.Location));
+        Assert.Equal(("f.yaml", "implementations.azure"), (error.File, error.Location));
         Assert.Contains($"#/{path}", error.Message);
     }
 
     [Theory]
     [InlineData(ComponentHead + ClassesWith + "runtime: { template: t/rt, config: {} }\n", TestCatalog.PartPath + ".nodes.runtime", "'runtime' is the runtime node, declared only by a runtime.")]
-    [InlineData(RuntimeHead + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 6, scheme: https }\n" + Release + RuntimeNode, "implementations.default.probe.intervalSeconds", "must not exceed timeoutSeconds.")]
-    [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      runtime:\n        template: t/rt\n        config: { suffix: x }\n", "implementations.default.nodes.runtime.config.suffix", "the release flow sets this input; the runtime node must not.")]
-    [InlineData(RuntimeHead + Probe + Release + "    nodes:\n      runtime:\n        template: t/rt\n        config: { traffic: [] }\n", "implementations.default.nodes.runtime.config.traffic", "the release flow sets this input; the runtime node must not.")]
+    [InlineData(RuntimeHead + "        probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 6, scheme: https }\n" + Release + RuntimeNode, "implementations.azure.types.default.probe.intervalSeconds", "must not exceed timeoutSeconds.")]
+    [InlineData(RuntimeHead + Probe + Release + "        nodes:\n          runtime:\n            template: t/rt\n            config: { suffix: x }\n", "implementations.azure.types.default.nodes.runtime.config.suffix", "the release flow sets this input; the runtime node must not.")]
+    [InlineData(RuntimeHead + Probe + Release + "        nodes:\n          runtime:\n            template: t/rt\n            config: { traffic: [] }\n", "implementations.azure.types.default.nodes.runtime.config.traffic", "the release flow sets this input; the runtime node must not.")]
     public async Task The_runtime_rules_are_enforced(string file, string location, string message)
     {
         var result = await Parse(("catalog.yaml", CatalogFile), ("f.yaml", file));
@@ -422,7 +422,7 @@ public sealed class CatalogLoaderTests
     [Fact]
     public async Task A_probe_whose_interval_equals_its_timeout_loads()
     {
-        var probe = "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 5, scheme: https }\n";
+        var probe = "        probe: { path: /health, expectedStatus: 200, timeoutSeconds: 5, intervalSeconds: 5, scheme: https }\n";
 
         var result = await Parse(("catalog.yaml", CatalogFile), ("f.yaml", RuntimeHead + probe + Release + RuntimeNode));
 
@@ -443,11 +443,11 @@ public sealed class CatalogLoaderTests
     [InlineData("{ path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https, method: POST }", "probe.method")]
     public async Task A_bad_probe_is_an_error(string probe, string location)
     {
-        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + $"    probe: {probe}\n" + Release + RuntimeNode));
+        var result = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + $"        probe: {probe}\n" + Release + RuntimeNode));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("m.yaml", "implementations.default"), (error.File, error.Location));
-        Assert.Contains($"#/implementations.default.{location}", error.Message);
+        Assert.Equal(("m.yaml", "implementations.azure"), (error.File, error.Location));
+        Assert.Contains($"#/implementations.azure.types.default.{location}", error.Message);
     }
 
     [Theory]
@@ -469,8 +469,8 @@ public sealed class CatalogLoaderTests
         var missing = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + Probe + without + RuntimeNode));
         var blank = await Parse(("catalog.yaml", CatalogFile), ("m.yaml", RuntimeHead + Probe + empty + RuntimeNode));
 
-        Assert.Contains(missing.Errors, e => e.Message.Contains($"#/implementations.default.release.{name}", StringComparison.Ordinal));
-        Assert.Contains($"#/implementations.default.release.{name}", Assert.Single(blank.Errors).Message);
+        Assert.Contains(missing.Errors, e => e.Message.Contains($"#/implementations.azure.types.default.release.{name}", StringComparison.Ordinal));
+        Assert.Contains($"#/implementations.azure.types.default.release.{name}", Assert.Single(blank.Errors).Message);
     }
 
     // A policy requires, it never adds (docs/architecture/model.md section 7): the schema refuses an earlier policy's `add` like any field it
@@ -545,7 +545,7 @@ public sealed class CatalogLoaderTests
         var error = Assert.Single(result.Errors);
         Assert.Equal("catalog.yaml", error.File);
 
-        Assert.Contains("duplicate key 'version' at line 4", error.Message);
+        Assert.Contains("duplicate key 'version' at line 5", error.Message);
     }
 
     [Fact]
@@ -626,7 +626,7 @@ public sealed class CatalogLoaderTests
     [Fact]
     public async Task Schema_invalid_catalog_file_still_counts_as_the_catalog()
     {
-        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: 1\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n"), ("components/a.yaml", ComponentFile("alpha-db")));
+        var result = await Parse(("catalog.yaml", "kind: Catalog\nversion: 1\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n"), ("components/a.yaml", ComponentFile("alpha-db")));
 
         var error = Assert.Single(result.Errors);
         Assert.Equal("catalog.yaml", error.File);

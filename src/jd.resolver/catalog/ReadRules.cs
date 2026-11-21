@@ -6,7 +6,8 @@ namespace jd.resolver.catalog;
 /// <summary>
 /// What a part reads (docs/architecture/documents.md section 2, concepts 3 and 4; security boundaries 3 and 5), over the bound part owners. Every
 /// root an expression in a part's config or exports reads is one of its own nodes, a reserved root, a shared resource the part reads, or, in a
-/// component's class part, its own component, read from that implementation's environment part; a read export is declared. No node takes a name
+/// component's class part, its own component, read from that implementation's environment part; a read export is declared. A shared resource it
+/// uses is of its own platform. No node takes a name
 /// its part reads as a root, and only a runtime declares the runtime node. Each error is located where the binder read the node or the value.
 /// </summary>
 internal static class ReadRules
@@ -35,8 +36,17 @@ internal static class ReadRules
             .. runtimes.SelectMany(runtime => runtime.Parts.Select(part => new Reader(runtime, part, IsRuntime: true, OwnComponent: null, OwnEnvironment: null))),
         ];
         var owners = new Owners(sharedByName, components.Select(owner => owner.Name).ToHashSet(), runtimes.Select(owner => owner.Name).ToHashSet());
-        return [.. readers.SelectMany(NodeNameErrors), .. readers.SelectMany(reader => ReadErrors(reader, owners))];
+        return [.. readers.SelectMany(NodeNameErrors), .. readers.SelectMany(reader => PlatformErrors(reader, sharedByName)).Distinct(), .. readers.SelectMany(reader => ReadErrors(reader, owners))];
     }
+
+    // A part reads only shared resources of its own platform, so an environment, which reaches what its platform's parts use, never deploys
+    // or reads another platform's (ADR 0021); located at the part's uses, once, since the parts of a platform entry share its uses.
+    private static IEnumerable<LoadError> PlatformErrors(Reader reader, IReadOnlyDictionary<string, PartOwner> shared) =>
+        from name in reader.Part.Reads
+        let used = shared.GetValueOrDefault(name)?.Parts[0]
+        where used is not null && used.Platform != reader.Part.Platform
+        select new LoadError(reader.Owner.Source, reader.Part.ReadsLocation,
+            $"'{name}' is a shared resource of platform '{used.Platform}'; a part of platform '{reader.Part.Platform}' uses only its own platform's.");
 
     // The environment part of the implementation a class part is in: the layer part whose selection keys begin the class part's.
     private static Part? EnvironmentOf(PartOwner component, Part part, IReadOnlyList<string> layers) =>

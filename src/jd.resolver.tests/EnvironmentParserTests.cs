@@ -10,6 +10,7 @@ public class EnvironmentParserTests
         name: test-env
         region: testregion
         type: dev
+        platform: azure
         offers: [container-app]
         values:
           resourceGroup: rg-test

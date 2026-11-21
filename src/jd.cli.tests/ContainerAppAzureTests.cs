@@ -28,7 +28,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     // The test catalog; the revision suffix and the traffic (flow YAML) are what the tests vary between deploys.
     private void WriteCatalog(string revisionSuffix, string traffic)
     {
-        Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
+        Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
         Write("catalog/naming.yaml", """
             kind: Naming
             rules:
@@ -40,45 +40,47 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
             name: probe
             description: Test-only component.
             exports: [app]
-            uses: [probe-group]
             implementations:
-              default:
-                classes:
-                  standard:
-                    nodes:
-                      group:
-                        template: azure/resource-group
-                        config:
-                          resourceGroupName: ${probe-group.name}
-                          location: ${env.region}
-                          tags: { project: just-deliver-mvp }
-                      apps:
-                        template: azure/container-apps-environment
-                        config:
-                          resourceGroupName: ${group.resourceGroupName}
-                          location: ${group.location}
-                          environmentName: ${name('cae')}
-                      app:
-                        template: azure/container-app
-                        config:
-                          resourceGroupName: ${group.resourceGroupName}
-                          location: ${group.location}
-                          containerAppsEnvironmentId: ${apps.environmentId}
-                          containerAppName: ${name('ca')}
-                          image: {{Image}}
-                          targetPort: 8080
-                          externalIngress: true
-                          cpu: 0.25
-                          memory: 0.5Gi
-                          minReplicas: 0
-                          maxReplicas: 1
-                          maxInactiveRevisions: 5
-                          revisionSuffix: {{revisionSuffix}}
-                          traffic: {{traffic}}
-                          variables:
-                            - { name: GREETING, value: hello }
-                    exports:
-                      app: ${app.containerAppId}
+              azure:
+                uses: [probe-group]
+                types:
+                  default:
+                    classes:
+                      standard:
+                        nodes:
+                          group:
+                            template: azure/resource-group
+                            config:
+                              resourceGroupName: ${probe-group.name}
+                              location: ${env.region}
+                              tags: { project: just-deliver-mvp }
+                          apps:
+                            template: azure/container-apps-environment
+                            config:
+                              resourceGroupName: ${group.resourceGroupName}
+                              location: ${group.location}
+                              environmentName: ${name('cae')}
+                          app:
+                            template: azure/container-app
+                            config:
+                              resourceGroupName: ${group.resourceGroupName}
+                              location: ${group.location}
+                              containerAppsEnvironmentId: ${apps.environmentId}
+                              containerAppName: ${name('ca')}
+                              image: {{Image}}
+                              targetPort: 8080
+                              externalIngress: true
+                              cpu: 0.25
+                              memory: 0.5Gi
+                              minReplicas: 0
+                              maxReplicas: 1
+                              maxInactiveRevisions: 5
+                              revisionSuffix: {{revisionSuffix}}
+                              traffic: {{traffic}}
+                              variables:
+                                - { name: GREETING, value: hello }
+                        exports:
+                          app: ${app.containerAppId}
             """);
         WriteRuntimeStandIn();
         WriteProbeGroup();
@@ -158,7 +160,7 @@ public sealed class ContainerAppAzureTests : ProbeAzureTest
     // The backend, workload, environment and catalog directory of one probe; the catalog files are written by WriteCatalog.
     private async Task<(IBackEndProvider Backend, string Workload, string Environment, string Catalog)> PrepareAsync()
     {
-        var environment = Write("environment.yaml", $"kind: Environment\nname: s15a-{Suffix}\nregion: {await RegionAsync()}\ntype: dev\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
+        var environment = Write("environment.yaml", $"kind: Environment\nname: s15a-{Suffix}\nregion: {await RegionAsync()}\ntype: dev\nplatform: azure\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
         var workload = Write("workload.yaml", "apiVersion: just-deliver/v1\nkind: Workload\nmetadata: { name: s15a-probe, team: platform-team }\ncontainer:\n  image: example.invalid/probe:1\nrequires:\n  - type: probe\n");
         return (CreateBackend(), workload, environment, Path.Combine(Root, "catalog"));
     }

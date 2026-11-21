@@ -54,9 +54,9 @@
       "description": "The closed role list (documents.md Appendix B), by group.",
       "enum": [
         "owner", "part", "part.nodes", "part.exports", "part.reads", "part.scope", "node.template", "node.kind", "node.config", "contract",
-        "runtime.part", "grant.target-input", "naming.rules", "naming.pattern", "naming.max-length", "naming.allowed", "roles", "catalog.version",
+        "runtime.part", "grant.target-input", "naming.rules", "naming.pattern", "naming.max-length", "naming.allowed", "roles", "catalog.version", "catalog.platforms", "part.platform",
         "environment-type.layer", "environment-type.gated", "layer",
-        "env.name", "env.region", "env.type", "env.offers", "env.values", "env.approval",
+        "env.name", "env.region", "env.type", "env.platform", "env.offers", "env.values", "env.approval",
         "approval.qualified-on", "approval.required", "approval.approvers", "approval.separate",
         "workload.name", "workload.team", "workload.image", "workload.port", "workload.variables",
         "requirement", "requirement.type", "requirement.id", "requirement.class",
@@ -72,7 +72,7 @@
       "x-jd": { "message": "not a role; the roles are the closed list of docs/architecture/documents.md Appendix B." }
     },
     "namespace": {
-      "enum": ["part owner", "component", "shared resource", "runtime", "policy", "environment type", "naming kind", "role", "grant template", "environment"],
+      "enum": ["part owner", "component", "shared resource", "runtime", "policy", "environment type", "platform", "naming kind", "role", "grant template", "environment"],
       "x-jd": { "message": "not a namespace; the namespaces are listed in docs/architecture/documents.md Appendix B." }
     }
   }

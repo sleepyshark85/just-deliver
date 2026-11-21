@@ -6,6 +6,7 @@ kind: EnvironmentDefinition
 name: stage
 region: southeastasia
 type: stage
+platform: azure
 offers: [container-app, database, monitoring]
 approval:
   qualifiedOn: dev                # the environment whose records must show the set qualified

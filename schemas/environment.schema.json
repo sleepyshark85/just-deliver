@@ -2,10 +2,11 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/environment.schema.json",
   "title": "just-deliver environment descriptor",
-  "description": "What an environment publishes to the workloads deployed on it. name, region and type are addressable as env.name, env.region and env.type (the only env.* paths); a deployed part's export is read as ${<part>.<export>} from values. Checked against the catalog, not here: the type is declared, and a type with `approval: true` carries the `approval` block.",
+  "description": "What an environment publishes to the workloads deployed on it. name, region and type are addressable as env.name, env.region and env.type (the only env.* paths); a deployed part's export is read as ${<part>.<export>} from values. Checked against the catalog, not here: the type and the platform are declared, and a type with `approval: true` carries the `approval` block.",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "name", "region", "type", "offers", "values"],
+  "allOf": [{ "required": ["platform"], "x-jd": { "message": "required: a descriptor written by an older jd lacks it; re-run `jd env up` with this environment's definition, which rewrites the descriptor." } }],
   "properties": {
     "kind": { "enum": ["Environment"] },
     "name": {
@@ -16,6 +17,7 @@
     },
     "region": { "type": "string", "minLength": 1, "x-jd": { "is": "env.region" } },
     "type": { "description": "An environment type the catalog declares.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$", "x-jd": { "is": "env.type" } },
+    "platform": { "description": "A platform the catalog declares, copied from the definition; not addressable as env.*.", "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$", "x-jd": { "is": "env.platform" } },
     "offers": {
       "description": "The components and runtime the environment offers, as its definition names them; a shared layer's descriptor offers nothing, so no workload can deploy on it.",
       "type": "array",

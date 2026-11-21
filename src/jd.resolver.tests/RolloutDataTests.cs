@@ -8,7 +8,7 @@ namespace jd.resolver.tests;
 // are the runtime's, required at load, bound per implementation, and the suffix's parts must fit its declared longest length.
 public sealed class RolloutDataTests
 {
-    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment } }\n";
+    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment } }\n";
     private const string Nodes = "nodes:\n  runtime: { template: t/rt, config: {} }\n";
     private const string Suffix = "suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }";
 
@@ -22,9 +22,9 @@ public sealed class RolloutDataTests
 
     // A catalog written for an older jd lacks the fields: it fails at load, located at the missing field, not with a default.
     [Theory]
-    [InlineData(", scheme: https", "implementations.default.probe.scheme")]
-    [InlineData(", " + Suffix, "implementations.default.release.suffix")]
-    [InlineData(", fullWeight: 100", "implementations.default.release.fullWeight")]
+    [InlineData(", scheme: https", "implementations.azure.types.default.probe.scheme")]
+    [InlineData(", " + Suffix, "implementations.azure.types.default.release.suffix")]
+    [InlineData(", fullWeight: 100", "implementations.azure.types.default.release.fullWeight")]
     public async Task A_runtime_without_a_rollout_field_fails_at_load_naming_the_field(string field, string location)
     {
         var result = await Load(Runtime(field, string.Empty));
@@ -44,7 +44,7 @@ public sealed class RolloutDataTests
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
         Assert.Equal(
-            ("runtimes/r.yaml", "implementations.default.release.suffix.maxLength", "the suffix's prefix 'rev' and its 12 + 6 digits take 21 characters, more than the 20 allowed."),
+            ("runtimes/r.yaml", "implementations.azure.types.default.release.suffix.maxLength", "the suffix's prefix 'rev' and its 12 + 6 digits take 21 characters, more than the 20 allowed."),
             (error.File, error.Location, error.Message));
     }
 
@@ -58,22 +58,22 @@ public sealed class RolloutDataTests
 
     // Generic bounds only: no Azure or naming number is in the schema or in code.
     [Theory]
-    [InlineData("prefix: r,", "prefix: 1r,", "implementations.default.release.suffix.prefix")]
-    [InlineData("prefix: r,", "prefix: R,", "implementations.default.release.suffix.prefix")]
-    [InlineData("configDigits: 8", "configDigits: 0", "implementations.default.release.suffix.configDigits")]
-    [InlineData("saltDigits: 6", "saltDigits: 0", "implementations.default.release.suffix.saltDigits")]
-    [InlineData("configDigits: 8", "configDigits: 65", "implementations.default.release.suffix.configDigits")]
-    [InlineData("saltDigits: 6", "saltDigits: 65", "implementations.default.release.suffix.saltDigits")]
-    [InlineData("maxLength: 20", "maxLength: 0", "implementations.default.release.suffix.maxLength")]
-    [InlineData("fullWeight: 100", "fullWeight: 0", "implementations.default.release.fullWeight")]
-    [InlineData("scheme: https", "scheme: 'https:'", "implementations.default.probe.scheme")]
-    [InlineData("maxLength: 20 }", "maxLength: 20, separator: x }", "implementations.default.release.suffix.separator")]
+    [InlineData("prefix: r,", "prefix: 1r,", "implementations.azure.types.default.release.suffix.prefix")]
+    [InlineData("prefix: r,", "prefix: R,", "implementations.azure.types.default.release.suffix.prefix")]
+    [InlineData("configDigits: 8", "configDigits: 0", "implementations.azure.types.default.release.suffix.configDigits")]
+    [InlineData("saltDigits: 6", "saltDigits: 0", "implementations.azure.types.default.release.suffix.saltDigits")]
+    [InlineData("configDigits: 8", "configDigits: 65", "implementations.azure.types.default.release.suffix.configDigits")]
+    [InlineData("saltDigits: 6", "saltDigits: 65", "implementations.azure.types.default.release.suffix.saltDigits")]
+    [InlineData("maxLength: 20", "maxLength: 0", "implementations.azure.types.default.release.suffix.maxLength")]
+    [InlineData("fullWeight: 100", "fullWeight: 0", "implementations.azure.types.default.release.fullWeight")]
+    [InlineData("scheme: https", "scheme: 'https:'", "implementations.azure.types.default.probe.scheme")]
+    [InlineData("maxLength: 20 }", "maxLength: 20, separator: x }", "implementations.azure.types.default.release.suffix.separator")]
     public async Task A_rollout_value_out_of_its_generic_bounds_is_a_schema_error(string from, string to, string path)
     {
         var result = await Load(Runtime(from, to));
 
         var error = Assert.Single(result.Errors);
-        Assert.Equal(("runtimes/r.yaml", "implementations.default"), (error.File, error.Location));
+        Assert.Equal(("runtimes/r.yaml", "implementations.azure"), (error.File, error.Location));
         Assert.Contains($"#/{path}", error.Message, StringComparison.Ordinal);
     }
 
@@ -90,10 +90,10 @@ public sealed class RolloutDataTests
 
         Assert.Empty(result.Errors);
         var rollouts = Assert.IsType<Catalog>(result.Value).Rollouts;
-        Assert.Equal((TestCatalog.Probe, TestCatalog.Release), rollouts[("container-app", "default")]);
+        Assert.Equal((TestCatalog.Probe, TestCatalog.Release), rollouts[("container-app", "implementations.azure.types.default")]);
         Assert.Equal(
             (TestCatalog.Probe with { Scheme = "http" }, TestCatalog.Release with { Suffix = new RevisionSuffix("v", 4, 3), FullWeight = 50 }),
-            rollouts[("container-app", "dev")]);
+            rollouts[("container-app", "implementations.azure.types.dev")]);
     }
 
     [Fact]
@@ -103,6 +103,6 @@ public sealed class RolloutDataTests
 
         var result = await Load(TestCatalog.Runtime(Nodes) + other);
 
-        Assert.Equal("implementations.dev.release.suffix.maxLength", Assert.Single(result.Errors).Location);
+        Assert.Equal("implementations.azure.types.dev.release.suffix.maxLength", Assert.Single(result.Errors).Location);
     }
 }

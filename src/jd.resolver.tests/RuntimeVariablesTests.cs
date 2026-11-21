@@ -14,23 +14,25 @@ namespace jd.resolver.tests;
 public class RuntimeVariablesTests
 {
     private static readonly EnvironmentDescriptor Env =
-        new("dev", "region", "dev", new Dictionary<string, string>(), ["sqldb", "container-app"], null);
+        new("dev", "region", "dev", "azure", new Dictionary<string, string>(), ["sqldb", "container-app"], null);
 
     private const string RuntimeFile = """
         kind: Runtime
         name: container-app
         description: d
         implementations:
-          default:
-            probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }
-            release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }
-            nodes:
-              runtime:
-                template: t/runtime
-                config:
-                  image: ${workload.image}
-                  variables:
-                    fn::entries: workload.variables
+          azure:
+            types:
+              default:
+                probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }
+                release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }
+                nodes:
+                  runtime:
+                    template: t/runtime
+                    config:
+                      image: ${workload.image}
+                      variables:
+                        fn::entries: workload.variables
         """;
 
     // A static export (endpoint), one waiting on a node (dyn), and a node that reads another requirement's export (the D19 case).
@@ -56,7 +58,7 @@ public class RuntimeVariablesTests
     {
         var files = new[]
             {
-                "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
+                "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
                 "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
                 component.Length > 0 ? component : Component(),
                 runtimeFile,
@@ -200,7 +202,7 @@ public class RuntimeVariablesTests
     {
         var files = new[]
         {
-            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
+            "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
             TestCatalog.Component("sqldb", "[endpoint, dyn, lit, quoted, apostrophes, fine, db.url]", "nodes:\n  n: { template: t/n, config: {} }\nexports:\n  endpoint: ${resource.other.x}\n  dyn: ${guid(env.region, resource.other.x)}\n  lit: \"${name('resource.x')}\"\n"
                 + "  quoted: \"'${resource.other.x}'\"\n  apostrophes: \"it's ${resource.other.x} isn't\"\n  fine: \"it's ${env.region} isn't\"\n  db.url: ${resource.other.x}\n"),
         };
@@ -224,14 +226,14 @@ public class RuntimeVariablesTests
             "1", "shop", "crew", null, null,
             [new ResolvedRequirement("db", "sqldb", "standard", "m.yaml", new Dictionary<string, EvalResult> { ["endpoint"] = export }, [])
             {
-                ExportLocations = new Dictionary<string, string> { ["endpoint"] = "implementations.default.classes.standard.exports.endpoint" },
+                ExportLocations = new Dictionary<string, string> { ["endpoint"] = "implementations.azure.types.default.classes.standard.exports.endpoint" },
             }],
             [runtime], [], new Dictionary<string, IReadOnlyDictionary<string, string>>());
 
         var graph = new GraphBuilder(Env, new Dictionary<string, string>()).Build(policy);
 
         var error = Assert.Single(graph.Errors);
-        Assert.Equal(("m.yaml", "implementations.default.classes.standard.exports.endpoint"), (error.File, error.Location));
+        Assert.Equal(("m.yaml", "implementations.azure.types.default.classes.standard.exports.endpoint"), (error.File, error.Location));
     }
 
     // The second pass reports an export where its component's file holds it, carried from the binder through the graph.
@@ -252,7 +254,7 @@ public class RuntimeVariablesTests
 
         var error = Assert.Single(errors);
         // The component's own file (S24g; before: the node id the orchestrator passed).
-        Assert.Equal(("f2.yaml", "implementations.default.classes.standard.exports.dyn"), (error.File, error.Location));
+        Assert.Equal(("f2.yaml", "implementations.azure.types.default.classes.standard.exports.dyn"), (error.File, error.Location));
         Assert.StartsWith("'gone.out' refers to unknown node 'gone'", error.Message);
     }
 
@@ -374,7 +376,7 @@ public class RuntimeVariablesTests
     [Fact]
     public async Task The_form_is_part_of_the_node_hash()
     {
-        var plain = RuntimeFile.Replace("variables:\n            fn::entries: workload.variables", "variables: { A: x }", StringComparison.Ordinal);
+        var plain = RuntimeFile.Replace("variables:\n                fn::entries: workload.variables", "variables: { A: x }", StringComparison.Ordinal);
         Assert.NotEqual(RuntimeFile, plain);
 
         var entries = await ResolveAsync("    A: x\n");

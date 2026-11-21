@@ -30,9 +30,10 @@ public sealed partial class LiteralGuardTests
         // the role names the engine reads (Appendix B), like the expression roots
         ["jd.resolver/Roles.cs"] =
         [
-            "approval.approvers", "approval.qualified-on", "approval.required", "approval.separate", "catalog.version", "contract", "env.approval",
-            "env.name", "env.offers", "env.region", "env.type", "env.values", "environment-type.layer", "layer", "naming.allowed", "naming.pattern",
-            "naming.rules", "node.config", "node.kind", "node.template", "part.exports", "part.nodes", "part.scope", "policy.default", "policy.name",
+            "approval.approvers", "approval.qualified-on", "approval.required", "approval.separate", "catalog.platforms", "catalog.version", "contract",
+            "env.approval", "env.name", "env.offers", "env.platform", "env.region", "env.type", "env.values", "environment-type.layer", "layer",
+            "naming.allowed", "naming.pattern", "naming.rules", "node.config", "node.kind", "node.template", "part.exports", "part.nodes", "part.platform",
+            "part.scope", "policy.default", "policy.name",
             "policy.reason", "policy.require", "policy.runtime", "policy.scope", "policy.set", "probe.expected-status", "probe.interval", "probe.path",
             "probe.scheme", "probe.timeout", "release.created-at", "release.definition", "release.definition-path", "release.definition-sha256",
             "release.depends-on", "release.label", "release.workloads", "requirement.class", "requirement.id", "requirement.type", "roles", "runtime.part",

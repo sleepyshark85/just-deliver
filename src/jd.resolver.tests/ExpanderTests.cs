@@ -14,7 +14,7 @@ public class ExpanderTests
 {
     private static readonly string[] BaseFiles =
     [
-        "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
+        "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
         "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
         "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n",
     ];
@@ -26,12 +26,12 @@ public class ExpanderTests
 
     // A default implementation and one for stage, told apart by their endpoint.
     private const string SqldbForStage =
-        "kind: Component\nname: sqldb\ndescription: d\nexports: [endpoint]\nimplementations:\n"
-        + "  default:\n    classes:\n      standard: { nodes: { n: { template: t/n, config: {} } }, exports: { endpoint: plain } }\n"
-        + "  stage:\n    classes:\n      standard: { nodes: { n: { template: t/n, config: {} } }, exports: { endpoint: guarded } }\n";
+        "kind: Component\nname: sqldb\ndescription: d\nexports: [endpoint]\nimplementations:\n  azure:\n    types:\n"
+        + "      default:\n        classes:\n          standard: { nodes: { n: { template: t/n, config: {} } }, exports: { endpoint: plain } }\n"
+        + "      stage:\n        classes:\n          standard: { nodes: { n: { template: t/n, config: {} } }, exports: { endpoint: guarded } }\n";
 
     private static EnvironmentDescriptor Env(string type = "dev") =>
-        new("dev", "region", type, new Dictionary<string, string>(), ["sqldb", "container-app"], null);
+        new("dev", "region", type, "azure", new Dictionary<string, string>(), ["sqldb", "container-app"], null);
 
     private static async Task<Catalog> LoadAsync(params string[] components)
     {
@@ -87,7 +87,7 @@ public class ExpanderTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[0]"), (error.File, error.Location));
-        Assert.Equal("requirement 'orders': component 'sqldb' has no implementations entry for 'dev' and no 'default' entry (keys: stage).", error.Message);
+        Assert.Equal("requirement 'orders': component 'sqldb' has no types entry for 'dev' and no 'default' entry (keys: stage).", error.Message);
         Assert.Empty(result.Requirements);
     }
 
@@ -208,7 +208,7 @@ public class ExpanderTests
 
         var error = Assert.Single(result.Errors);
         Assert.Null(result.Runtime);
-        Assert.Equal("runtime 'container-app' has no implementations entry for 'dev' and no 'default' entry (keys: stage).", error.Message);
+        Assert.Equal("runtime 'container-app' has no types entry for 'dev' and no 'default' entry (keys: stage).", error.Message);
     }
 
     // An export that cannot be evaluated is reported at the export, as the binder located it (S24c4).
@@ -235,7 +235,7 @@ public class ExpanderTests
 
         var error = Assert.Single(result.Errors);
         Assert.Null(result.Runtime);
-        Assert.Equal((RuntimeFile, "implementations.default.nodes.runtime.config.port"), (error.File, error.Location));
+        Assert.Equal((RuntimeFile, "implementations.azure.types.default.nodes.runtime.config.port"), (error.File, error.Location));
         Assert.Contains("for the runtime: ", error.Message);
         Assert.Contains("workload 'shop' declares no port", error.Message);
     }
@@ -309,6 +309,7 @@ public class ExpanderTests
             "dev",
             "region",
             "dev",
+            "azure",
             new Dictionary<string, string>
             {
                 ["env-group.name"] = "rg",

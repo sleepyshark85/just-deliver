@@ -19,7 +19,7 @@ public sealed class ApprovalRecordTests
 
     private static readonly DateTimeOffset At = new(2026, 10, 17, 3, 4, 5, TimeSpan.Zero);
     private static readonly DeployerIdentity Principal = new("tenant-1", "client-1", Alice);
-    private static readonly EnvironmentDescriptor Stage = new("stage", "region-1", "stage", new Dictionary<string, string>(), [], new ApprovalPolicy("dev", 1, [Alice], true));
+    private static readonly EnvironmentDescriptor Stage = new("stage", "region-1", "stage", "azure", new Dictionary<string, string>(), [], new ApprovalPolicy("dev", 1, [Alice], true));
 
     private readonly MemoryRecordStore _records = new();
 

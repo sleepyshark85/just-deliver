@@ -7,7 +7,7 @@ namespace jd.resolver.expansion;
 
 /// <summary>
 /// Turns each requirement of a validated workload into the nodes of its component's class, in the implementation for the environment's
-/// type, with config and exports evaluated. Pure; the catalog is never modified. Rules: docs/architecture/model.md sections 3 and 5.
+/// platform and type, with config and exports evaluated. Pure; the catalog is never modified. Rules: docs/architecture/model.md sections 3 and 5.
 /// </summary>
 public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 {
@@ -71,6 +71,11 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 
         // The type is checked against the catalog before an environment is resolved (EnvironmentTypeCheck).
         var layer = catalog.EnvironmentTypes[environment.Type].Layer;
+        if (baseDescriptor is not null && baseDescriptor.Platform != environment.Platform)
+        {
+            Fail(environment.Location(Roles.EnvironmentPlatform), $"the environment's platform is '{environment.Platform}', but base descriptor '{baseDescriptor.Name}' is of platform '{baseDescriptor.Platform}'; pass the descriptor of a shared layer of the same platform.");
+        }
+
         var (parts, uses) = Offered(layer, Fail);
         parts.AddRange(SharedParts(layer, uses, baseDescriptor, Fail));
         CheckNew(parts, baseDescriptor, Fail);
@@ -101,12 +106,12 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         {
             if (catalog.Components.TryGetValue(offer, out var component))
             {
-                uses.AddRange(component.Reads);
+                uses.AddRange(UsesOn(component));
                 parts.AddRange(LayerParts(component, layer, $"{OffersLocation}[{index}]", fail));
             }
             else if (catalog.Runtimes.TryGetValue(offer, out var runtime))
             {
-                uses.AddRange(runtime.Reads);
+                uses.AddRange(UsesOn(runtime));
                 runtimes.Add(offer);
             }
             else
@@ -122,6 +127,11 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
 
         return (parts, uses);
     }
+
+    // What an offer uses on the environment's platform: the reads of every part in its platform entry, none without one (a miss LayerParts or a
+    // workload's expansion reports), so the run never reaches another platform's shared resources.
+    private IEnumerable<string> UsesOn(PartOwner offer) =>
+        offer.Select(new Dictionary<string, string> { [Roles.EnvironmentPlatform] = environment.Platform }, _ => true).Parts.SelectMany(part => part.Reads);
 
     // An offered component's parts of the layer: only the last layer, where workloads deploy, deploys a component's environment parts.
     private List<RunPart> LayerParts(PartOwner component, string layer, string location, Action<string, string> fail)
@@ -244,8 +254,8 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         return new ExpandedRequirement(requirement.Id, requirement.Type, requirement.Class, component.Source, nodes, exports) { ExportLocations = part.ExportLocations };
     }
 
-    // What selects a part here: the environment's type; a requirement adds its class.
-    private Dictionary<string, string> Selecting() => new() { [Roles.EnvironmentType] = environment.Type };
+    // What selects a part here: the environment's platform, then its type; a requirement adds its class.
+    private Dictionary<string, string> Selecting() => new() { [Roles.EnvironmentPlatform] = environment.Platform, [Roles.EnvironmentType] = environment.Type };
 
     // Workloads deploy in a scope that is no layer.
     private bool IsWorkloadScope(string scope) => !catalog.Layers.Contains(scope);

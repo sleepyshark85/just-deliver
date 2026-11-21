@@ -17,8 +17,11 @@ internal static class NameRules
         // A second document of a one kind is reported once, by its kind, so its names are not read.
         var named = documents.Except(extras).ToList();
         var (defined, clashes) = Define(index, named);
-        // A document that failed its schema is reported there; its references are not checked as well.
-        return [.. errors, .. clashes, .. Ref(index, set.Name, named.Where(set.Valid.Contains), defined)];
+        // A document that failed its schema is reported there; its references are not checked as well. Nor are the references to what a missing
+        // one document would define: its absence is the one error.
+        var undeclared = set.Kinds.Where(kind => index.NamesOf(kind).IsOne && documents.All(document => document.Kind != kind))
+            .SelectMany(kind => index.NamesOf(kind).Defines.Select(field => field.Namespace)).ToHashSet();
+        return [.. errors, .. clashes, .. Ref(index, set.Name, named.Where(set.Valid.Contains), defined, undeclared)];
     }
 
     /// <summary>The names <paramref name="document"/> defines, each with its location, in the order its kind's fields define them.</summary>
@@ -89,9 +92,9 @@ internal static class NameRules
 
     // Every referring value is a name defined in its namespace; the key a map names its fallback is a key, not a reference.
     private static IEnumerable<LoadError> Ref(
-        SchemaIndex index, string set, IEnumerable<Document> documents, Dictionary<(string Namespace, string Name), string> defined) =>
+        SchemaIndex index, string set, IEnumerable<Document> documents, Dictionary<(string Namespace, string Name), string> defined, IReadOnlySet<string> undeclared) =>
         from document in documents
-        from field in index.NamesOf(document.Kind).Refs
+        from field in index.NamesOf(document.Kind).Refs.Where(field => !undeclared.Contains(field.Namespace))
         from found in Names(document.Body, field.Path)
         where found.Name != field.Fallback && !defined.ContainsKey((field.Namespace, found.Name))
         let declared = defined.Keys.Where(key => key.Namespace == field.Namespace).Select(key => key.Name).Order(StringComparer.Ordinal)
