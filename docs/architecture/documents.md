@@ -138,10 +138,10 @@ formats are typed code (section 2).
 ## 4. Errors
 
 - Every error is `file: location: message` (`LoadError`). Schema errors take their location from the validator's error path.
-- **Locations come from the index:** the binder records where each concept value was read (`implementations.default.classes.standard`,
+- **Locations come from the index:** the binder records where each concept value was read (`implementations.azure.types.default.classes.standard`,
   `requires[0]`), so no check builds a location from field names.
 - **A rule that is data carries its message as data:** a subschema with `message` reports that text; a `ref` failure reads "'x' is not a
-  <namespace> in the catalog (declared: …)"; a `select` miss "<owner> has no <map> entry for <value> and no '<fallback>' entry". Namespace and
+  <namespace> in the catalog (declared: …)"; a `select` miss "<owner>[ on '<selected key>'/…] has no <map> entry for <value>[ and no '<fallback>' entry] (keys: …)". Namespace and
   map names come from the schema.
 - **A rule that is code keeps its message in code**, each field name taken from the binding, not spelled.
 - Error tests pin file, location and the contract part of the message.
