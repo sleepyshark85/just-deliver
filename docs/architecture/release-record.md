@@ -51,12 +51,12 @@ The writer is an allowlist; the schema is the field reference. A record holds:
 ## 3. Identity and the trust boundary
 
 `identity` is `{directory, principal, name}` ([ADR 0022](../decisions/0022-neutral-deployer-identity.md)): `principal` is the stable key and
-the only field a rule compares. On Azure they are the `tid`, `oid` and `appid` claims of an ARM access token obtained in this run through the port
-`IDeployerIdentity` (`jd.core`), adapter `ArmDeployerIdentity` in `jd.azure`. Records written before carry `{tenantId, clientId, objectId}`; the
-schemas keep that shape as read, never written, and the readers (`RecordIdentity`) take it as directory, name and principal. The credential is `ArmCredentials`: the service principal in
-`ARM_TENANT_ID`, `ARM_CLIENT_ID` and `ARM_CLIENT_SECRET` when all three are set, else `AzureCliCredential`, the choice Pulumi's provider makes
-too; a partial set is refused, naming the unset variables. A credential Entra refuses becomes a message that carries neither the SDK's text
-nor any value, and the run stops before the backend is called.
+the only field a rule compares. On Azure they are the `tid`, `oid` and `appid` claims of an ARM access token obtained in this run through
+the port `IDeployerIdentity` (`jd.core`), adapter `ArmDeployerIdentity` in `jd.azure`. Records written before carry `{tenantId, clientId,
+objectId}`; the schemas keep that shape as read, never written, and the readers (`RecordIdentity`) take it as directory, name and principal.
+The credential is `ArmCredentials`: the service principal in `ARM_TENANT_ID`, `ARM_CLIENT_ID` and `ARM_CLIENT_SECRET` when all three are
+set, else `AzureCliCredential`, the choice Pulumi's provider makes too; a partial set is refused, naming the unset variables. A credential
+Entra refuses becomes a message that carries neither the SDK's text nor any value, and the run stops before the backend is called.
 
 Reading the claims without validating the signature is sound: the token came straight from Entra over TLS in this call. No definition,
 catalog, descriptor, set or stack output flows into the identity; the record builder takes the port's result as an argument.

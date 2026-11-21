@@ -114,7 +114,7 @@ internal static class Roles
     /// <summary>How many distinct approvers are needed.</summary>
     public const string ApprovalRequired = "approval.required";
 
-    /// <summary>The object ids that may approve.</summary>
+    /// <summary>The principals that may approve.</summary>
     public const string ApprovalApprovers = "approval.approvers";
 
     /// <summary>Whether an approver must not have deployed the label on the environment the set is qualified on.</summary>
