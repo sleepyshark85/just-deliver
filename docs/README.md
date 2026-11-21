@@ -42,3 +42,4 @@ moves from executor to gatekeeper. Each doc owns one thing; a fact lives in its 
 - [plans/status.md](plans/status.md) — where the work stands (read first each session)
 - [plans/mvp.md](plans/mvp.md) — the MVP's scope and success criteria (done)
 - [plans/e2e-evidence.md](plans/e2e-evidence.md) — which tests prove each MVP success criterion
+- [architecture/multi-cloud.md](architecture/multi-cloud.md) — phase 1.7's design note: the platform in the model, GCP (to build)

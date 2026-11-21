@@ -29,6 +29,8 @@ Proposed record's wording may be corrected to match what is built.
 | [0018](0018-environment-offers-runtime.md) | The environment offers the runtime | Accepted | S21 |
 | [0019](0019-engine-knows-concepts.md) | The engine knows concepts, schemas bind fields | Proposed | S24 |
 | [0020](0020-stack-per-graph-node.md) | One Pulumi stack per graph node, the environment in its name | Proposed | built (S07, S12) |
+| [0021](0021-platform-dimension.md) | The platform is an environment value; implementations selected by platform | Proposed | S28 |
+| [0022](0022-neutral-deployer-identity.md) | A platform-neutral deployer identity | Proposed | S28 |
 
 Origin: an open-question ID ([open-questions.md](../open-questions.md)), a slice ID (its PR and design note are in git history and
 [status.md](../plans/status.md)), or the investigation notes.
