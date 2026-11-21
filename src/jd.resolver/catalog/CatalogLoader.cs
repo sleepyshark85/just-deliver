@@ -78,8 +78,9 @@ public static class CatalogLoader
         var namingFiles = Binding(index, valid, Roles.NamingRules).ConvertAll(document => (document.Source, Rules: binder.ReadNamingRules(document)));
         // A missing or invalid catalog document is reported on its own; checking against its types too would only add noise.
         var declaring = Binding(index, documents, Roles.EnvironmentTypeLayer).FirstOrDefault();
-        (string Version, IReadOnlyDictionary<string, EnvironmentType> Types)? environment =
-            declaring is not null && set.Valid.Contains(declaring) ? (binder.ReadVersion(declaring), binder.ReadEnvironmentTypes(declaring)) : null;
+        (string Version, IReadOnlyDictionary<string, EnvironmentType> Types, IReadOnlyList<string> Platforms)? environment = declaring is not null && set.Valid.Contains(declaring)
+            ? (binder.ReadVersion(declaring), binder.ReadEnvironmentTypes(declaring), binder.ReadPlatforms(declaring))
+            : null;
 
         return new Bound(
             Binding(index, documents, Roles.Owner),
@@ -118,10 +119,11 @@ public static class CatalogLoader
     }
 
     // The catalog the bound collections make; null when no valid document declares the environment types, which no errors rules out: exactly one does.
-    private static Catalog? Build(SchemaIndex index, Bound bound) => bound.Environment is not var (version, types) ? null : new Catalog(
+    private static Catalog? Build(SchemaIndex index, Bound bound) => bound.Environment is not var (version, types, platforms) ? null : new Catalog(
         version,
         index.Layers,
         types,
+        platforms,
         bound.Components.ToDictionary(component => component.Name),
         bound.SharedByName,
         bound.Runtimes.ToDictionary(runtime => runtime.Name),
@@ -160,7 +162,7 @@ public static class CatalogLoader
 
     private sealed record ReadResult(Document? Document, bool Valid, IReadOnlyList<LoadError> Errors);
 
-    // What the valid documents hold, one collection per concept; Environment is the Catalog document's version and environment types, when it is valid.
+    // What the valid documents hold, one collection per concept; Environment is the Catalog document's version, environment types and platforms, when it is valid.
     private sealed record Bound(
         IReadOnlyList<Document> OwnerDocuments,
         IReadOnlyList<PartOwner> Components,
@@ -173,5 +175,5 @@ public static class CatalogLoader
         IReadOnlyDictionary<string, NamingRule> Naming,
         IReadOnlyDictionary<string, string> GrantTargets,
         IReadOnlyDictionary<string, string> RoleDefinitions,
-        (string Version, IReadOnlyDictionary<string, EnvironmentType> Types)? Environment);
+        (string Version, IReadOnlyDictionary<string, EnvironmentType> Types, IReadOnlyList<string> Platforms)? Environment);
 }

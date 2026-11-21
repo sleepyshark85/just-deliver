@@ -1,5 +1,7 @@
 kind: Catalog
 version: "0.1.0"
+# The platforms (clouds), declared once: every implementation and shared resource names one, and an environment gets only its own platform's.
+platforms: [azure]
 # Declared once; an environment definition or descriptor of any other type is an error (docs/architecture/model.md section 5).
 # layer: which `jd env up` layer an environment of the type is (same section): `shared` deploys the shared resources, `environment` the rest.
 environmentTypes:

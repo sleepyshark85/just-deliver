@@ -12,8 +12,8 @@ namespace jd.orchestrator.usecases;
 public static class Checks
 {
     /// <summary>
-    /// The environment's type must be the catalog's, and a type that requires an approval block must carry it (security boundary 13); the errors
-    /// name <paramref name="file"/>.
+    /// The environment's platform and type must be the catalog's, and a type that requires an approval block must carry it (security boundary 13);
+    /// the errors name <paramref name="file"/>.
     /// </summary>
     public static IReadOnlyList<LoadError> EnvironmentType(Catalog catalog, EnvironmentDescriptor environment, string file) =>
         EnvironmentTypeCheck.Check(catalog, environment, file);

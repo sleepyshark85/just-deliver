@@ -21,6 +21,7 @@ public class ExpressionEvaluatorTests
         "dev",
         "testregion",
         "dev",
+        "azure",
         new Dictionary<string, string>
         {
             // The seed catalog's workload parts read the descriptor by part name (docs/architecture/model.md section 6).
@@ -141,7 +142,7 @@ public class ExpressionEvaluatorTests
     [Fact]
     public async Task Env_reads_the_name_region_and_type_a_descriptor_binds()
     {
-        var read = await EnvironmentParser.ParseAsync("env.yaml", "kind: Environment\nname: test-env\nregion: testregion\ntype: dev\noffers: []\nvalues: { part: { a: b } }\n");
+        var read = await EnvironmentParser.ParseAsync("env.yaml", "kind: Environment\nname: test-env\nregion: testregion\ntype: dev\nplatform: azure\noffers: []\nvalues: { part: { a: b } }\n");
 
         Assert.Empty(read.Errors);
         Assert.Equal("test-env/testregion/dev", Resolve("${env.name}/${env.region}/${env.type}", Context() with { Environment = read.Value! }));
@@ -324,9 +325,9 @@ public class ExpressionEvaluatorTests
         Assert.NotNull(catalog);
         Assert.True(YamlSchemaValidator.TryParseYaml(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "samples", "workload.yaml")), out var workload, out var error), error);
         var sampleEndpoint = Assert.IsType<string>((string?)workload["container"]?["variables"]?["COSMOS_ENDPOINT"]);
-        var part = TestCatalog.PartAt(catalog.Components["database"], "implementations.default.classes.standard");
-        var monitoring = TestCatalog.PartAt(catalog.Components["monitoring"], "implementations.default.classes.standard");
-        var runtime = TestCatalog.PartAt(Assert.Single(catalog.Runtimes).Value, "implementations.default");
+        var part = TestCatalog.PartAt(catalog.Components["database"], "implementations.azure.types.default.classes.standard");
+        var monitoring = TestCatalog.PartAt(catalog.Components["monitoring"], "implementations.azure.types.default.classes.standard");
+        var runtime = TestCatalog.PartAt(Assert.Single(catalog.Runtimes).Value, "implementations.azure.types.default");
         var nodeNames = part.Nodes.Keys.Concat(monitoring.Nodes.Keys).ToHashSet();
         var strings = part.Nodes.Values.Concat(monitoring.Nodes.Values).Concat(runtime.Nodes.Values).SelectMany(n => n.Config.Values)
             .Select(t => t.ToString())

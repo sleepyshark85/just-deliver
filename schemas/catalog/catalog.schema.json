@@ -2,11 +2,12 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/catalog/catalog.schema.json",
   "title": "just-deliver catalog descriptor",
-  "description": "Identifies the catalog and declares its environment types. The catalog is versioned as one unit and the version is recorded on every deployment. Exactly one file of this kind per catalog.",
+  "description": "Identifies the catalog and declares its environment types and platforms. The catalog is versioned as one unit and the version is recorded on every deployment. Exactly one file of this kind per catalog.",
   "type": "object",
   "x-jd": { "one": true },
   "additionalProperties": false,
   "required": ["kind", "version", "environmentTypes"],
+  "allOf": [{ "required": ["platforms"], "x-jd": { "message": "required: this jd selects implementations by platform; a catalog written for an older jd lacks it, so add it and key each component's and runtime's implementations by platform (see catalog/catalog.yaml)." } }],
   "properties": {
     "kind": { "enum": ["Catalog"] },
     "version": {
@@ -14,6 +15,14 @@
       "type": "string",
       "minLength": 1,
       "x-jd": { "is": "catalog.version" }
+    },
+    "platforms": {
+      "description": "The platforms (clouds), declared once: an environment definition or descriptor of any other platform is an error, and implementations and shared resources name one of these (docs/architecture/model.md section 3).",
+      "type": "array",
+      "x-jd": { "is": "catalog.platforms", "define": "platform" },
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,14}[a-z0-9]$" }
     },
     "environmentTypes": {
       "description": "The environment types, declared once: an environment definition or descriptor of any other type is an error. Names use the requirement-type pattern; `default` is not a type (docs/architecture/model.md section 5).",

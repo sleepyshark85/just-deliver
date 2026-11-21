@@ -41,7 +41,7 @@ public class SubstrateTests
     // A definition as the loader reads it, so its errors are located as a file's are.
     private static async Task<EnvironmentDescriptor> OfferingAsync(string name, string type, params string[] offers)
     {
-        var text = $"kind: EnvironmentDefinition\nname: {name}\nregion: {Region}\ntype: {type}\noffers: [{string.Join(", ", offers)}]\n";
+        var text = $"kind: EnvironmentDefinition\nname: {name}\nregion: {Region}\ntype: {type}\nplatform: azure\noffers: [{string.Join(", ", offers)}]\n";
         var result = await EnvironmentParser.LoadDefinitionAsync(new SourceDocument("definition.yaml", Encoding.UTF8.GetBytes(text)), CancellationToken.None);
         Assert.Empty(result.Errors);
         return result.Value!;
@@ -180,7 +180,7 @@ public class SubstrateTests
     [Fact]
     public async Task An_environment_built_in_code_resolves_and_its_errors_have_an_empty_location()
     {
-        var environment = new EnvironmentDescriptor("dev", Region, "dev", new Dictionary<string, string>(), ["container-app", "database"], null);
+        var environment = new EnvironmentDescriptor("dev", Region, "dev", "azure", new Dictionary<string, string>(), ["container-app", "database"], null);
 
         var graph = Resolver.ResolveSubstrate("definition.yaml", await CatalogAsync(), environment, null);
 
@@ -229,11 +229,11 @@ public class SubstrateTests
     public async Task An_offered_component_without_an_implementation_for_the_type_is_an_error()
     {
         var catalog = await SeedCatalogWithAsync(("components/cache.yaml",
-            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  stage:\n    classes:\n      standard:\n        nodes: { c: { template: t/c, config: { k: 1 } } }\n        exports: { host: x }\n"));
+            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  azure:\n    types:\n      stage:\n        classes:\n          standard:\n            nodes: { c: { template: t/c, config: { k: 1 } } }\n            exports: { host: x }\n"));
 
         var error = Assert.Single(Errors(await OfferingAsync("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog));
 
-        Assert.Equal(("offers[1]", "component 'cache' has no implementations entry for 'dev' and no 'default' entry (keys: stage)."), (error.Location, error.Message));
+        Assert.Equal(("offers[1]", "component 'cache' on 'azure' has no types entry for 'dev' and no 'default' entry (keys: stage)."), (error.Location, error.Message));
     }
 
     // Only the last layer, where workloads deploy, deploys an offered component's parts; an earlier layer selects none, so a component without an
@@ -242,7 +242,7 @@ public class SubstrateTests
     public async Task An_earlier_layer_selects_no_implementation_of_an_offered_component()
     {
         var catalog = await SeedCatalogWithAsync(("components/cache.yaml",
-            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  stage:\n    classes:\n      standard:\n        nodes: { c: { template: t/c, config: { k: 1 } } }\n        exports: { host: x }\n"));
+            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  azure:\n    types:\n      stage:\n        classes:\n          standard:\n            nodes: { c: { template: t/c, config: { k: 1 } } }\n            exports: { host: x }\n"));
 
         Assert.Empty(Errors(await OfferingAsync("shared", "shared", "container-app", "cache"), null, catalog));
     }
@@ -254,10 +254,10 @@ public class SubstrateTests
     [InlineData("stage", new[] { "c" })]
     public async Task An_environment_deploys_the_environment_part_of_the_implementation_its_type_selects(string key, string[] cache)
     {
-        const string classes = "    classes:\n      standard: { nodes: { s: { template: t/s, config: {} } }, exports: { host: x } }\n";
+        const string classes = "        classes:\n          standard: { nodes: { s: { template: t/s, config: {} } }, exports: { host: x } }\n";
         var catalog = await SeedCatalogWithAsync(("components/cache.yaml",
-            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n"
-            + $"  default:\n    environment: {{ nodes: {{ c: {{ template: t/c, config: {{ k: 1 }} }} }} }}\n{classes}  {key}:\n{classes}"));
+            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  azure:\n    types:\n"
+            + $"      default:\n        environment: {{ nodes: {{ c: {{ template: t/c, config: {{ k: 1 }} }} }} }}\n{classes}      {key}:\n{classes}"));
 
         var (graph, _) = await PrepareAsync(await OfferingAsync("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog);
 
@@ -397,9 +397,9 @@ public class SubstrateTests
     public async Task An_export_named_with_a_dot_fails_the_descriptors_schema_and_no_descriptor_is_written()
     {
         var catalog = await SeedCatalogWithAsync(("components/cache.yaml",
-            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  default:\n"
-            + "    environment: { nodes: { c: { template: t/c, config: {} } }, exports: { a.b: x } }\n"
-            + "    classes:\n      standard: { nodes: { s: { template: t/s, config: {} } }, exports: { host: x } }\n"));
+            "kind: Component\nname: cache\ndescription: d\nexports: [host]\nimplementations:\n  azure:\n    types:\n      default:\n"
+            + "        environment: { nodes: { c: { template: t/c, config: {} } }, exports: { a.b: x } }\n"
+            + "        classes:\n          standard: { nodes: { s: { template: t/s, config: {} } }, exports: { host: x } }\n"));
         var (_, composer) = await PrepareAsync(await OfferingAsync("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog);
 
         var composed = await composer.ComposeAsync(null);
@@ -430,9 +430,9 @@ public class SubstrateTests
     {
         var files = new[]
         {
-            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment } }\n",
+            "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment } }\n",
             "kind: Naming\nrules:\n  rg:\n    pattern: \"rg-{env}-{hash}\"\n    maxLength: 90\n    allowed: \"[a-z0-9-]\"\n",
-            "kind: Component\nname: thing\ndescription: d\nexports: [out]\nimplementations:\n  default:\n    environment:\n      nodes:\n        group:\n          template: t/group\n          config:\n            groupName: ${name('rg')}\n      exports: {}\n    classes:\n      substrate:\n        nodes:\n          group:\n            template: t/group\n            config:\n              groupName: ${name('rg')}\n        exports:\n          out: ${group.groupName}\n",
+            "kind: Component\nname: thing\ndescription: d\nexports: [out]\nimplementations:\n  azure:\n    types:\n      default:\n        environment:\n          nodes:\n            group:\n              template: t/group\n              config:\n                groupName: ${name('rg')}\n          exports: {}\n        classes:\n          substrate:\n            nodes:\n              group:\n                template: t/group\n                config:\n                  groupName: ${name('rg')}\n            exports:\n              out: ${group.groupName}\n",
         }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
         var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
@@ -453,8 +453,8 @@ public class SubstrateTests
     {
         // A part named like a top-level field resolves, but its exports cannot be values (values.region would shadow env.region).
         var catalog = await SeedCatalogWithAsync(
-            ("shared/region.yaml", "kind: SharedResource\nname: region\ndescription: d\nscope: environment\nnodes:\n  spot:\n    template: t/spot\n    config: { v: '${env.region}' }\nexports: { id: '${spot.id}' }\n"),
-            ("components/regional.yaml", "kind: Component\nname: regional\ndescription: d\nexports: [id]\nuses: [region]\nimplementations:\n  default:\n    classes:\n      standard:\n        nodes:\n          thing: { template: t/thing, config: { v: '${region.id}' } }\n        exports: { id: '${thing.id}' }\n"));
+            ("shared/region.yaml", "kind: SharedResource\nname: region\ndescription: d\nplatform: azure\nscope: environment\nnodes:\n  spot:\n    template: t/spot\n    config: { v: '${env.region}' }\nexports: { id: '${spot.id}' }\n"),
+            ("components/regional.yaml", "kind: Component\nname: regional\ndescription: d\nexports: [id]\nimplementations:\n  azure:\n    uses: [region]\n    types:\n      default:\n        classes:\n          standard:\n            nodes:\n              thing: { template: t/thing, config: { v: '${region.id}' } }\n            exports: { id: '${thing.id}' }\n"));
         var definition = await DefinitionAsync("dev.yaml", text => text.Replace("offers: [container-app, database, monitoring]", "offers: [container-app, database, monitoring, regional]"));
         var (_, composer) = await PrepareAsync(definition, await SharedDescriptorAsync(), catalog);
 
@@ -487,7 +487,7 @@ public class SubstrateTests
     {
         var dir = Directory.CreateTempSubdirectory("jd-def").FullName;
         var path = Path.Combine(dir, "d.yaml");
-        await File.WriteAllTextAsync(path, "kind: EnvironmentDefinition\nname: xyz\ntype: dev\nrequires: [{ type: env-substrate }]\nvalues: {}\n");
+        await File.WriteAllTextAsync(path, "kind: EnvironmentDefinition\nname: xyz\ntype: dev\nplatform: azure\nrequires: [{ type: env-substrate }]\nvalues: {}\n");
         var old = await EnvironmentParser.LoadDefinitionAsync(await SourceFiles.ReadAsync(path), CancellationToken.None);
 
         Assert.Contains(old.Errors, e => e.File == path && e.Message.Contains("offers"));
@@ -499,9 +499,9 @@ public class SubstrateTests
     {
         var files = new[]
         {
-            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment } }\n",
-            "kind: SharedResource\nname: thing\ndescription: d\nscope: environment\nnodes:\n  a:\n    template: t/a\n    config: { img: '${workload.image}' }\nexports: {}\n",
-            TestCatalog.Component("user", "[out]", "nodes:\n  b:\n    template: t/b\n    config: { k: 1 }\nexports:\n  out: x\n").Replace("exports: [out]\n", "exports: [out]\nuses: [thing]\n"),
+            "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment } }\n",
+            "kind: SharedResource\nname: thing\ndescription: d\nplatform: azure\nscope: environment\nnodes:\n  a:\n    template: t/a\n    config: { img: '${workload.image}' }\nexports: {}\n",
+            TestCatalog.Component("user", "[out]", "nodes:\n  b:\n    template: t/b\n    config: { k: 1 }\nexports:\n  out: x\n").Replace("  azure:\n", "  azure:\n    uses: [thing]\n"),
         }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
         var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);
@@ -518,9 +518,9 @@ public class SubstrateTests
     {
         var files = new[]
         {
-            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment } }\n",
-            "kind: SharedResource\nname: thing\ndescription: d\nscope: environment\nnodes:\n  a:\n    template: t/a\n    config: { who: '${runtime.principalId}' }\nexports: {}\n",
-            TestCatalog.Component("user", "[out]", "nodes:\n  b:\n    template: t/b\n    config: { k: 1 }\nexports:\n  out: x\n").Replace("exports: [out]\n", "exports: [out]\nuses: [thing]\n"),
+            "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment } }\n",
+            "kind: SharedResource\nname: thing\ndescription: d\nplatform: azure\nscope: environment\nnodes:\n  a:\n    template: t/a\n    config: { who: '${runtime.principalId}' }\nexports: {}\n",
+            TestCatalog.Component("user", "[out]", "nodes:\n  b:\n    template: t/b\n    config: { k: 1 }\nexports:\n  out: x\n").Replace("  azure:\n", "  azure:\n    uses: [thing]\n"),
         }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
         var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. files]));
         Assert.Empty(loaded.Errors);

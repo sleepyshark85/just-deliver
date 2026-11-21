@@ -58,7 +58,7 @@ public partial class OrchestratorTests
 
     // stage's descriptor, gated by a policy over dev that lists Alice, Bob and Carol.
     private static string StageDescriptor(int required = 1, bool separate = true) =>
-        "kind: Environment\nname: stage\nregion: region-1\ntype: stage\noffers: [thing]\nvalues: {}\napproval:\n  qualifiedOn: dev\n"
+        "kind: Environment\nname: stage\nregion: region-1\ntype: stage\nplatform: azure\noffers: [thing]\nvalues: {}\napproval:\n  qualifiedOn: dev\n"
         + $"  required: {required}\n  approvers: [\"{Alice}\", \"{Bob}\", \"{Carol}\"]\n  separateFromDeployer: {(separate ? "true" : "false")}\n";
 
     // dev's records of 1.0.0, deployed by Carol with the given IQ.
@@ -149,7 +149,8 @@ public partial class OrchestratorTests
         var result = await approving.RunAsync("kind: Environment\n");
 
         Assert.Equal((Outcome.Failed, (Problem?)null), (result.Outcome, result.Problem));
-        Assert.Equal("stage.yaml: name: schema violation: PropertyRequired: #/name", result.Errors[0].ToString());
+        Assert.StartsWith("stage.yaml: platform: required: a descriptor written by an older jd lacks it", result.Errors[0].ToString(), StringComparison.Ordinal);
+        Assert.Equal("stage.yaml: name: schema violation: PropertyRequired: #/name", result.Errors[1].ToString());
         Assert.Empty(approving.Built);
     }
 

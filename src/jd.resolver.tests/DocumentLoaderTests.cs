@@ -9,7 +9,7 @@ namespace jd.resolver.tests;
 // The one loader (docs/architecture/documents.md section 2, concept 1): the schema comes from the kind, the kinds from the schemas.
 public sealed class DocumentLoaderTests : IDisposable
 {
-    private const string Descriptor = "kind: Environment\nname: dev\nregion: r1\ntype: dev\noffers: []\nvalues: { a: b }\n";
+    private const string Descriptor = "kind: Environment\nname: dev\nregion: r1\ntype: dev\nplatform: azure\noffers: []\nvalues: { a: b }\n";
 
     private readonly string _temp = Directory.CreateTempSubdirectory("jd-document-tests").FullName;
 
@@ -100,7 +100,7 @@ public sealed class DocumentLoaderTests : IDisposable
     [Fact]
     public async Task A_definition_given_as_a_descriptor_is_refused()
     {
-        var result = await EnvironmentParser.ParseAsync("dev.yaml", "kind: EnvironmentDefinition\nname: dev\nregion: r1\ntype: dev\noffers: []\n");
+        var result = await EnvironmentParser.ParseAsync("dev.yaml", "kind: EnvironmentDefinition\nname: dev\nregion: r1\ntype: dev\nplatform: azure\noffers: []\n");
 
         Assert.Null(result.Value);
         var error = Assert.Single(result.Errors);
@@ -142,7 +142,7 @@ public sealed class DocumentLoaderTests : IDisposable
     [Fact]
     public async Task A_definition_file_given_as_a_descriptor_file_is_refused()
     {
-        var definition = Write("dev.env.yaml", "kind: EnvironmentDefinition\nname: dev\nregion: r1\ntype: dev\noffers: []\n");
+        var definition = Write("dev.env.yaml", "kind: EnvironmentDefinition\nname: dev\nregion: r1\ntype: dev\nplatform: azure\noffers: []\n");
 
         var result = await EnvironmentParser.LoadAsync(await SourceFiles.ReadAsync(definition), CancellationToken.None);
 

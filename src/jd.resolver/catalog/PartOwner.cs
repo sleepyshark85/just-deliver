@@ -18,6 +18,7 @@ public sealed record PartOwner(string Source, string Name, IReadOnlyList<string>
     internal (IReadOnlyList<Part> Parts, SelectMiss? Miss) Select(IReadOnlyDictionary<string, string> values, Func<string, bool> inScope)
     {
         IReadOnlyList<Part> selected = Parts;
+        var within = new List<string>();
         for (var depth = 0; selected.Where(part => part.Keys.Count > depth).ToList() is [var first, ..] level; depth++)
         {
             var map = first.Keys[depth];
@@ -30,10 +31,11 @@ public sealed record PartOwner(string Source, string Name, IReadOnlyList<string>
             var chosen = keys.Contains(value) ? value : map.Fallback;
             if (chosen is null || !keys.Contains(chosen))
             {
-                return ([], new SelectMiss(map.Map, value, map.Fallback, keys));
+                return ([], new SelectMiss(map.Map, value, map.Fallback, keys, within));
             }
 
             selected = [.. selected.Where(part => part.Keys.Count <= depth || part.Keys[depth].Key == chosen)];
+            within.Add(chosen);
         }
 
         return ([.. selected.Where(part => inScope(part.Scope))], null);

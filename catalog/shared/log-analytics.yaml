@@ -1,6 +1,7 @@
 kind: SharedResource
 name: log-analytics
 description: The shared Log Analytics workspace every environment's Container Apps environment and Application Insights report to.
+platform: azure
 scope: shared
 uses: [shared-group]
 nodes:

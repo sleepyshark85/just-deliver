@@ -16,17 +16,17 @@ public class PolicyApplierTests
 
     private static readonly string[] BaseFiles =
     [
-        "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
+        "kind: Catalog\nversion: \"7\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
         "kind: Naming\nrules:\n  thing:\n    pattern: \"{workload}-{id}\"\n    maxLength: 40\n    allowed: \"[a-z0-9-]\"\n",
         "kind: Roles\nroles:\n  reader: 00000000-0000-0000-0000-000000000001\n",
-        "kind: Component\nname: sqldb\ndescription: d\nexports: [endpoint]\nimplementations:\n  default:\n    classes:\n      standard: &part\n        nodes:\n          n:\n            template: t/n\n            config: { size: 400, keep: x, nested: { a: 1, b: 2 } }\n          m:\n            template: t/m\n            config: { size: 1 }\n        exports:\n          endpoint: ${n.out}\n      isolated: *part\n",
+        "kind: Component\nname: sqldb\ndescription: d\nexports: [endpoint]\nimplementations:\n  azure:\n    types:\n      default:\n        classes:\n          standard: &part\n            nodes:\n              n:\n                template: t/n\n                config: { size: 400, keep: x, nested: { a: 1, b: 2 } }\n              m:\n                template: t/m\n                config: { size: 1 }\n            exports:\n              endpoint: ${n.out}\n          isolated: *part\n",
     ];
 
     private static string Policy(string name, string match, string body) =>
         $"kind: Policy\nname: {name}\nreason: because\nmatch: {match}\n{body}";
 
     private static EnvironmentDescriptor Env(string type = "dev") =>
-        new("dev", "region", type, new Dictionary<string, string>(), ["sqldb", "container-app"], null);
+        new("dev", "region", type, "azure", new Dictionary<string, string>(), ["sqldb", "container-app"], null);
 
     private static async Task<PolicyResult> ApplyAsync(string[] policies, string requires = "requires:\n  - type: sqldb\n", string type = "dev", bool expectExpansionErrors = false)
     {
@@ -421,6 +421,7 @@ public class PolicyApplierTests
             "dev",
             "region",
             "dev",
+            "azure",
             new Dictionary<string, string>
             {
                 ["env-group.name"] = "rg",

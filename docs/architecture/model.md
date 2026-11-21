@@ -81,24 +81,28 @@ silently replace what `${<resource>.<export>}` reads. Parts are the shared resou
 and the runtime.
 
 **Component** ([database](../../catalog/components/database.yaml), [monitoring](../../catalog/components/monitoring.yaml)). Its `exports`
-list is the contract; `implementations` is keyed by an environment type (of the `environment` layer) or `default`. Selection is exact lookup,
-never matching: the key equal to the environment's type, else `default`, else an error naming the component and the type; an implementation
-replaces `default` whole. Inside it, `classes` is selected the same way by the requirement's class; every implementation declares the same
-classes, and every class part exports exactly the contract (load errors otherwise). An implementation may also have an `environment` part,
-deployed once per environment that offers the component, which its class parts read by the component's name (`${database.databaseName}`).
-The implementation chooses the engine; an `engine` export tells the workload's code which one it got.
+list is the contract; `implementations` is keyed by a platform ([ADR 0021](../decisions/0021-platform-dimension.md)), and each platform
+entry holds the component's `uses` on that platform and `types`, keyed by an environment type (of the `environment` layer) or `default`.
+Selection is exact lookup, never matching: the platform entry equal to the environment's platform, with no fallback, so one platform's
+implementation never reaches another's environment; then the `types` key equal to the environment's type, else `default`; a miss at either
+is an error naming the component and the value (a types miss, the platform too). An implementation replaces `default` whole. Inside it,
+`classes` is selected the same way by the requirement's class; every implementation declares the same classes, and every class part exports
+exactly the contract (load errors otherwise). An implementation may also have an `environment` part, deployed once per environment that
+offers the component, which its class parts read by the component's name (`${database.databaseName}`). The implementation chooses the
+engine; an `engine` export tells the workload's code which one it got.
 
-**Runtime** ([container-app](../../catalog/runtimes/container-app.yaml)). Not a component: no contract, no classes, never required. Each
-implementation has one part whose nodes include the node named `runtime` (the workload's compute, [ADR 0013](../decisions/0013-container-apps-runtime.md)),
-a `probe` and a `release` block that the release flow reads ([provisioning.md](provisioning.md#orchestrator)). The `runtime` node must not set
-the two inputs `release` names (the flow sets them), the probe interval is at most its timeout, and the revision suffix's parts fit its
-declared `maxLength`. Only a runtime declares a node named `runtime`. The workload's variables reach it through the config form
-`{ fn::entries: workload.variables }`, valid only as a top-level field of the `runtime` node; the node deploys them as one list
-([provisioning.md](provisioning.md#orchestrator), Config entries), while the graph keeps one leaf per variable (`variables.<NAME>`) with its own
-provenance.
+**Runtime** ([container-app](../../catalog/runtimes/container-app.yaml)). Not a component: no contract, no classes, never required. Its
+`implementations` are keyed by platform, then type, as a component's. Each implementation has one part whose nodes include the node named
+`runtime` (the workload's compute, [ADR 0013](../decisions/0013-container-apps-runtime.md)), a `probe` and a `release` block that the
+release flow reads ([provisioning.md](provisioning.md#orchestrator)). The `runtime` node must not set the two inputs `release` names (the
+flow sets them), the probe interval is at most its timeout, and the revision suffix's parts fit its declared `maxLength`. Only a runtime
+declares a node named `runtime`. The workload's variables reach it through the config form `{ fn::entries: workload.variables }`, valid only
+as a top-level field of the `runtime` node; the node deploys them as one list ([provisioning.md](provisioning.md#orchestrator), Config
+entries), while the graph keeps one leaf per variable (`variables.<NAME>`) with its own provenance.
 
-**Shared resource** ([shared/](../../catalog/shared/)). One part with a `scope` (`shared` or `environment`), `uses`, nodes and exports; it
-has no implementations, so it does not vary by environment type.
+**Shared resource** ([shared/](../../catalog/shared/)). One part with a `platform`, a `scope` (`shared` or `environment`), `uses`, nodes and
+exports; it has no implementations, so it does not vary by environment type. Only parts of its platform may use it (a load error otherwise),
+so an environment reaches only its own platform's shared resources.
 
 ## 4. Scopes, layers and `uses`
 
@@ -116,27 +120,29 @@ part, and an environment never deploys a resource of an earlier layer.
 ## 5. Environments
 
 **Environment types** are declared once in [catalog.yaml](../../catalog/catalog.yaml): each has a `layer` and optionally `approval: true`.
-A definition or descriptor of an undeclared type is an error naming the declared ones, and one whose type has `approval: true` must carry an
-`approval` block (`EnvironmentTypeCheck`, run before anything resolves or deploys). Any type may carry a block; the block is what gates.
+So are the **platforms** (`platforms`). A definition or descriptor of an undeclared type or platform is an error naming the declared ones,
+and one whose type has `approval: true` must carry an `approval` block (`EnvironmentTypeCheck`, run before anything resolves or deploys).
+Any type may carry a block; the block is what gates.
 
 **Environment definition** ([schema](../../schemas/environment-definition.schema.json), [samples](../../samples/environments/)): name,
-region, type, `offers` (component and runtime names, at most one runtime) and optional `approval`. `jd env up` resolves what the offers reach
-in the type's layer and deploys it:
+region, type, platform, `offers` (component and runtime names, at most one runtime) and optional `approval`. `jd env up` resolves what the
+offers reach in the type's layer and deploys it:
 
 | Layer | Deploys | Must already exist |
 |---|---|---|
 | `shared` | the `shared`-scope resources the offered components and runtime reach through `uses` | — |
-| `environment` | the offered components' `environment` parts, and the `environment`-scope resources the offers reach | every reached `shared`-scope resource, in the base descriptor (`--base`); otherwise an error before anything is created |
+| `environment` | the offered components' `environment` parts, and the `environment`-scope resources the offers reach | every reached `shared`-scope resource, in the base descriptor (`--base`), which must be of the same platform; otherwise an error before anything is created |
 
-The substrate follows from the offers: nothing offered uses a resource, it is not deployed. A part already in the base's values is an error
-(an environment adds new parts only). All parts of one run expand into one scope, `substrate`; the owner is `@<name>` (a workload name cannot
-start with `@`), so ids, stacks and `name()` hashes never collide with a workload's, and it has no runtime and no team.
+The substrate follows from the offers: nothing offered uses a resource, it is not deployed. An offer reaches what its platform entry uses. A
+part already in the base's values is an error (an environment adds new parts only). All parts of one run expand into one scope, `substrate`;
+the owner is `@<name>` (a workload name cannot start with `@`), so ids, stacks and `name()` hashes never collide with a workload's, and it
+has no runtime and no team.
 
 **Environment descriptor** ([schema](../../schemas/environment.schema.json)): what `jd env up` writes and every resolution reads. `name`,
-`region`, `type` and `offers` come from the definition (a descriptor of an earlier layer offers nothing, so no workload deploys on it);
-`values` holds each deployed part's exports keyed by part, `values.<part>.<export>` (`values.env-group.name`), merged with the base's values;
-`approval` is copied. Values have no dotted keys and no key `name`, `region` or `type`. An export that reads a secret output, directly or
-through another part, has no value, so `env up` fails and writes nothing (boundary 12).
+`region`, `type`, `platform` and `offers` come from the definition (a descriptor of an earlier layer offers nothing, so no workload deploys
+on it); `values` holds each deployed part's exports keyed by part, `values.<part>.<export>` (`values.env-group.name`), merged with the
+base's values; `approval` is copied. Values have no dotted keys and no key `name`, `region` or `type`. An export that reads a secret output,
+directly or through another part, has no value, so `env up` fails and writes nothing (boundary 12).
 
 **Offers at resolve.** A requirement's component must be among the descriptor's `offers` (`environment 'dev' does not offer database (offers: …)`, the offered names listed); the
 workload's runtime is the one runtime offered, and none offered is an error for every workload.

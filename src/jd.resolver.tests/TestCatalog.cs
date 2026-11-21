@@ -37,26 +37,26 @@ internal static class TestCatalog
     public const string GrantsFile = "kind: Grants\ntargets: { t/g: scope }\n";
 
     /// <summary>Where a component's part sits in its file, for <see cref="Component"/>'s defaults: errors in its nodes and exports are reported under it.</summary>
-    public const string PartPath = "implementations.default.classes.standard";
+    public const string PartPath = "implementations.azure.types.default.classes.standard";
 
     /// <summary>
     /// A Component file: <paramref name="part"/> (top-level <c>nodes:</c> and <c>exports:</c> lines) is the class <paramref name="className"/> of
-    /// the implementation <paramref name="key"/>.
+    /// the azure implementation's type <paramref name="key"/>.
     /// </summary>
     public static string Component(string name, string exports, string part, string key = "default", string className = "standard") =>
-        $"kind: Component\nname: {name}\ndescription: d\nexports: {exports}\nimplementations:\n  {key}:\n    classes:\n      {className}:\n{Indent(part, 8)}";
+        $"kind: Component\nname: {name}\ndescription: d\nexports: {exports}\nimplementations:\n  azure:\n    types:\n      {key}:\n        classes:\n          {className}:\n{Indent(part, 12)}";
 
     /// <summary>The part of <paramref name="owner"/> at <paramref name="location"/> in its file.</summary>
     public static Part PartAt(PartOwner owner, string location) => Assert.Single(owner.Parts, part => part.Location == location);
 
-    /// <summary>A Runtime file's lines up to its implementations; append <see cref="RuntimeImplementation"/>s.</summary>
-    public const string RuntimeHeader = "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n";
+    /// <summary>A Runtime file's lines up to its azure implementation's types; append <see cref="RuntimeImplementation"/>s.</summary>
+    public const string RuntimeHeader = "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  azure:\n    types:\n";
 
-    /// <summary>A Runtime file named container-app with one implementation <paramref name="key"/>.</summary>
+    /// <summary>A Runtime file named container-app with one azure type <paramref name="key"/>.</summary>
     public static string Runtime(string body, string key = "default") => RuntimeHeader + RuntimeImplementation(body, key);
 
-    /// <summary>The runtime implementation <paramref name="key"/>: <see cref="ProbeAndRelease"/>, then <paramref name="body"/> (top-level <c>nodes:</c> lines).</summary>
-    public static string RuntimeImplementation(string body, string key = "default") => $"  {key}:\n{Indent(ProbeAndRelease + body, 4)}";
+    /// <summary>The runtime's azure type <paramref name="key"/>: <see cref="ProbeAndRelease"/>, then <paramref name="body"/> (top-level <c>nodes:</c> lines).</summary>
+    public static string RuntimeImplementation(string body, string key = "default") => $"      {key}:\n{Indent(ProbeAndRelease + body, 8)}";
 
     private static string Indent(string text, int spaces) =>
         string.Join('\n', text.TrimEnd('\n').Split('\n').Select(line => line.Length == 0 ? line : new string(' ', spaces) + line)) + "\n";

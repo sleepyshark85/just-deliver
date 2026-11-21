@@ -9,12 +9,12 @@ namespace jd.resolver.tests;
 // or the runtime. The graph builder's check after policies is in GraphBuilderTests.
 public class GrantTargetTests
 {
-    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
+    private const string CatalogFile = "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n";
 
-    private const string SharedGroup = "kind: SharedResource\nname: shared-group\ndescription: d\nscope: shared\nnodes:\n  group: { template: t/x, config: {} }\nexports: { name: '${group.name}' }\n";
+    private const string SharedGroup = "kind: SharedResource\nname: shared-group\ndescription: d\nplatform: azure\nscope: shared\nnodes:\n  group: { template: t/x, config: {} }\nexports: { name: '${group.name}' }\n";
 
     // The account's resourceGroup export chains to another part's node.
-    private const string CosmosAccount = "kind: SharedResource\nname: cosmos-account\ndescription: d\nscope: shared\nuses: [shared-group]\n"
+    private const string CosmosAccount = "kind: SharedResource\nname: cosmos-account\ndescription: d\nplatform: azure\nscope: shared\nuses: [shared-group]\n"
         + "nodes:\n  cosmos: { template: t/x, config: {} }\nexports: { id: '${cosmos.id}', resourceGroup: '${shared-group.name}' }\n";
 
     // A grant node `access` on the target input `scope`; its other input reads what the component uses.
@@ -23,12 +23,12 @@ public class GrantTargetTests
 
     // A component alpha-db with an environment part (exports databaseId) and a class part: a node `container` and the given nodes.
     private static string Component(string classNodes, string environmentNodes = "db: { template: t/db, config: {} }") =>
-        "kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nuses: [cosmos-account]\nimplementations:\n  default:\n"
-        + $"    environment: {{ nodes: {{ {environmentNodes} }}, exports: {{ databaseId: '${{db.id}}' }} }}\n"
-        + $"    classes:\n      standard:\n        nodes: {{ container: {{ template: t/x, config: {{}} }}, {classNodes} }}\n        exports: {{ endpoint: x }}\n";
+        "kind: Component\nname: alpha-db\ndescription: d\nexports: [endpoint]\nimplementations:\n  azure:\n    uses: [cosmos-account]\n    types:\n      default:\n"
+        + $"        environment: {{ nodes: {{ {environmentNodes} }}, exports: {{ databaseId: '${{db.id}}' }} }}\n"
+        + $"        classes:\n          standard:\n            nodes: {{ container: {{ template: t/x, config: {{}} }}, {classNodes} }}\n            exports: {{ endpoint: x }}\n";
 
     private static string Runtime(string extraNodes = "") =>
-        TestCatalog.RuntimeHeader.Replace("implementations:\n", "uses: [cosmos-account]\nimplementations:\n", StringComparison.Ordinal)
+        TestCatalog.RuntimeHeader.Replace("  azure:\n", "  azure:\n    uses: [cosmos-account]\n", StringComparison.Ordinal)
         + TestCatalog.RuntimeImplementation($"nodes:\n  runtime: {{ template: t/rt, config: {{}} }}\n{extraNodes}");
 
     private static Task<LoadResult<Catalog>> Parse(string component, string runtime = "", string sharedGroup = SharedGroup) =>
@@ -89,7 +89,7 @@ public class GrantTargetTests
 
         var result = await Parse(Component("other: { template: t/x, config: {} }"), runtime);
 
-        Assert.Equal(errorFile is null ? [] : [(errorFile, "implementations.default.nodes.access.config.scope")], result.Errors.Select(e => (e.File, e.Location)));
+        Assert.Equal(errorFile is null ? [] : [(errorFile, "implementations.azure.types.default.nodes.access.config.scope")], result.Errors.Select(e => (e.File, e.Location)));
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class GrantTargetTests
     {
         var error = SingleError(await Parse(Component("other: { template: t/x, config: {} }", $"db: {{ template: t/db, config: {{}} }}, {Grant("'${db.id}'")}")));
 
-        Assert.Equal(("c.yaml", "implementations.default.environment.nodes.access"), (error.File, error.Location));
+        Assert.Equal(("c.yaml", "implementations.azure.types.default.environment.nodes.access"), (error.File, error.Location));
         Assert.Contains("not in a part of the environment scope", error.Message);
     }
 

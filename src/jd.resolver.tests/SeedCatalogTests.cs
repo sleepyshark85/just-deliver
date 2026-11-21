@@ -29,7 +29,7 @@ public class SeedCatalogTests
         Assert.Equal("${shared-group.name}", catalog.SharedResources["cosmos-account"].Parts[0].Exports["resourceGroup"]);
         var database = catalog.Components["database"];
         Assert.Equal(["cosmos-account"], database.Reads);
-        var environment = TestCatalog.PartAt(database, "implementations.default.environment");
+        var environment = TestCatalog.PartAt(database, "implementations.azure.types.default.environment");
         Assert.Equal("${cosmos-account.resourceGroup}", (string?)environment.Nodes["database"].Config["resourceGroupName"]);
         Assert.Equal(["databaseName", "databaseId"], environment.Exports.Keys);
     }
@@ -40,7 +40,7 @@ public class SeedCatalogTests
     {
         var result = await CatalogLoader.LoadAsync(new SourceCatalog("catalog",
         [
-            new("catalog.yaml", "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n"u8.ToArray()),
+            new("catalog.yaml", "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n"u8.ToArray()),
             new("templates/azure/Pulumi.yaml", "name: not-a-catalog-document\n"u8.ToArray()),
         ]));
 

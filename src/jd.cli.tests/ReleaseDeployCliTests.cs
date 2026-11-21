@@ -199,8 +199,8 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
         CliTests.CopyDirectory(Catalog, catalog);
         await File.WriteAllTextAsync(
             Path.Combine(catalog, "components", "cache.yaml"),
-            "kind: Component\nname: cache\ndescription: d\nexports: [engine, endpoint, database, container]\nimplementations:\n  default:\n    classes:\n      standard:\n"
-            + "        nodes:\n          n:\n            template: azure/no-such-template\n            config: {}\n        exports: { engine: e, endpoint: e, database: e, container: e }\n");
+            "kind: Component\nname: cache\ndescription: d\nexports: [engine, endpoint, database, container]\nimplementations:\n  azure:\n    types:\n      default:\n        classes:\n          standard:\n"
+            + "            nodes:\n              n:\n                template: azure/no-such-template\n                config: {}\n            exports: { engine: e, endpoint: e, database: e, container: e }\n");
         var set = await CreateSetAsync(app => app.Replace("- type: database", "- type: cache\n    id: database"));
         var environment = Path.Combine(_temp, "dev.env.yaml");
         await File.WriteAllTextAsync(environment, (await File.ReadAllTextAsync(Environment)).Replace("offers: [container-app, database, monitoring]", "offers: [container-app, database, monitoring, cache]"));
@@ -213,7 +213,7 @@ public sealed partial class ReleaseDeployCliTests : IDisposable
         Assert.Empty(stdout);
         // Only the app requires the component: the error is located where the catalog names the template (S24g; before: the app's node id).
         Assert.Contains(
-            $"{Path.Combine(catalog, "components", "cache.yaml")}: implementations.default.classes.standard.nodes.n.template: template 'azure/no-such-template' is not in the template library.",
+            $"{Path.Combine(catalog, "components", "cache.yaml")}: implementations.azure.types.default.classes.standard.nodes.n.template: template 'azure/no-such-template' is not in the template library.",
             stderr);
     }
 

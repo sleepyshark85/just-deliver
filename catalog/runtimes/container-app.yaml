@@ -5,41 +5,43 @@ description: Every workload runs as a Container App on Consumption in the enviro
 # runtime): the infrastructure walk does not deploy it, the release flow does. The release flow owns the revision suffix and the
 # traffic, so the node sets neither; `release` names the template's inputs and outputs it uses, the shape of a traffic item, how a
 # revision suffix is made and the weight of all traffic.
-uses: [env-group, apps-env]
 implementations:
-  default:
-    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 300, intervalSeconds: 5, scheme: https }   # grants may take minutes to propagate; ingress is HTTPS
-    release:
-      suffixInput: revisionSuffix
-      trafficInput: traffic
-      trafficOutput: traffic
-      suffixOutput: revisionSuffix
-      revisionOutput: latestRevisionName
-      fqdnOutput: latestRevisionFqdn
-      revisionKey: revisionName
-      latestKey: latestRevision
-      weightKey: weight
-      resourceIdOutput: containerAppId
-      # A revision suffix is lowercase letters, digits and '-', starting with a letter, and the revision name <app>--<suffix> takes at most 54
-      # characters: 54 - 32 (the 'ca' rule's maxLength, naming.yaml) - 2 (the '--') = 20. The suffix is the prefix, 8 hex digits of the config
-      # and 6 of a salt: 15 characters.
-      suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }
-      fullWeight: 100                                 # all traffic to one revision
-    nodes:
-      runtime:
-        template: azure/container-app
-        config:
-          resourceGroupName: ${env-group.name}
-          location: ${env.region}
-          containerAppsEnvironmentId: ${apps-env.id}
-          containerAppName: ${name('ca')}
-          image: ${workload.image}
-          targetPort: ${workload.port}
-          externalIngress: true
-          cpu: 0.25
-          memory: 0.5Gi
-          minReplicas: 0
-          maxReplicas: 1
-          maxInactiveRevisions: 5                     # free tier hygiene: inactive revisions are kept to a few
-          variables:                                  # the workload's variables, deployed as a list of {name, value} sorted by name
-            fn::entries: workload.variables
+  azure:
+    uses: [env-group, apps-env]
+    types:
+      default:
+        probe: { path: /health, expectedStatus: 200, timeoutSeconds: 300, intervalSeconds: 5, scheme: https }   # grants may take minutes to propagate; ingress is HTTPS
+        release:
+          suffixInput: revisionSuffix
+          trafficInput: traffic
+          trafficOutput: traffic
+          suffixOutput: revisionSuffix
+          revisionOutput: latestRevisionName
+          fqdnOutput: latestRevisionFqdn
+          revisionKey: revisionName
+          latestKey: latestRevision
+          weightKey: weight
+          resourceIdOutput: containerAppId
+          # A revision suffix is lowercase letters, digits and '-', starting with a letter, and the revision name <app>--<suffix> takes at most 54
+          # characters: 54 - 32 (the 'ca' rule's maxLength, naming.yaml) - 2 (the '--') = 20. The suffix is the prefix, 8 hex digits of the config
+          # and 6 of a salt: 15 characters.
+          suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }
+          fullWeight: 100                                 # all traffic to one revision
+        nodes:
+          runtime:
+            template: azure/container-app
+            config:
+              resourceGroupName: ${env-group.name}
+              location: ${env.region}
+              containerAppsEnvironmentId: ${apps-env.id}
+              containerAppName: ${name('ca')}
+              image: ${workload.image}
+              targetPort: ${workload.port}
+              externalIngress: true
+              cpu: 0.25
+              memory: 0.5Gi
+              minReplicas: 0
+              maxReplicas: 1
+              maxInactiveRevisions: 5                     # free tier hygiene: inactive revisions are kept to a few
+              variables:                                  # the workload's variables, deployed as a list of {name, value} sorted by name
+                fn::entries: workload.variables

@@ -26,7 +26,7 @@ The closed list:
 | 3 | **Part, node, export**: nodes (`template`, `kind` create\|grant, `config`) and the exports evaluated from them | expansion, graph, ids, stacks, hashes, the backend package | the graph is the engine's output; its node shape and canonical hash are the deploy contract |
 | 4 | **Expression**: the `${…}` grammar, its closed root list ([model.md](model.md#6-expressions)), the built-ins `name()`, `guid()`, the form `fn::entries` | two-phase evaluation, edges | a grammar is an interpreter; binding a field to a role says where a root's value lives, it never creates a root (boundary 4) |
 | 5 | **Scope**: the layers in deploy order, and the workload deploy | who deploys what (boundaries 7, 8), `uses` direction, in-run reads | ownership and deploy order are the engine's lifecycle; the layer names are the `layer` enum of the jd-shipped `part.schema.json`, its order the deploy order (section 3) |
-| 6 | **Selection**: a map entry chosen by a context value, with a fallback key | implementation by environment type, class by requirement class | exact lookup is an algorithm; the map, the value and the fallback key are data |
+| 6 | **Selection**: a map entry chosen by a context value, with or without a fallback key | implementation by platform (no fallback), then environment type, class by requirement class | exact lookup is an algorithm; the map, the value and the fallback key are data |
 | 7 | **Context value**: a named value an algorithm reads or writes (a role, Appendix B) | the binder fills concept records from them | an algorithm needs named inputs; data says where each lives |
 | 8 | **Contract**: a declared export list every selected part exports exactly | load check | a cross-document equality rule |
 | 9 | **Grant**: a node kind whose target input is named by data and must be the workload's own node | boundaries 1, 2 | a security rule must not be switchable off by data |
@@ -81,12 +81,14 @@ instance paths with the enclosing `select`s and scopes; namespace → defining a
 { "x-jd": { "is": "owner" }, "properties": {
     "name":    { "x-jd": { "define": ["part owner", "component"] } },
     "exports": { "x-jd": { "is": "contract" } },
-    "uses":    { "x-jd": { "is": "part.reads", "ref": "shared resource" } },
-    "implementations": { "x-jd": { "ref": "environment type", "select": "env.type", "fallback": "default" },
+    "implementations": { "x-jd": { "ref": "platform", "select": "env.platform" },     // no fallback
       "additionalProperties": { "properties": {
-        "environment": { "$ref": "part.schema.json", "x-jd": { "scope": "environment" } },
-        "classes": { "x-jd": { "select": "requirement.class" },
-                     "additionalProperties": { "$ref": "part.schema.json", "x-jd": { "scope": "workload" } } } } } } } }
+        "uses":  { "x-jd": { "is": "part.reads", "ref": "shared resource" } },
+        "types": { "x-jd": { "ref": "environment type", "select": "env.type", "fallback": "default" },
+          "additionalProperties": { "properties": {
+            "environment": { "$ref": "part.schema.json", "x-jd": { "scope": "environment" } },
+            "classes": { "x-jd": { "select": "requirement.class" },
+                         "additionalProperties": { "$ref": "part.schema.json", "x-jd": { "scope": "workload" } } } } } } } } } } }
 // part.schema.json, shared by Component, Runtime and SharedResource:
 { "x-jd": { "is": "part" }, "properties": {
     "nodes":   { "x-jd": { "is": "part.nodes" }, "patternProperties": { "<node name>": { "properties": {
@@ -96,8 +98,8 @@ instance paths with the enclosing `select`s and scopes; namespace → defining a
     "exports": { "x-jd": { "is": "part.exports" } } } }
 ```
 
-The binder finds `database.yaml`'s class part by `select` (`env.type`, then `requirement.class`), checks it against `contract`, and lets it
-read `cosmos-account` because `part.reads` names it.
+The binder finds `database.yaml`'s class part by `select` (`env.platform`, `env.type`, then `requirement.class`), checks it against `contract`,
+and lets it read `cosmos-account` because `part.reads` names it and the shared resource's `part.platform` is the part's platform.
 
 ### Annotated: an environment definition and a workload
 
@@ -105,6 +107,7 @@ read `cosmos-account` because `part.reads` names it.
 // environment-definition.schema.json (environment.schema.json, the descriptor, binds the same roles plus values as env.values)
 { "properties": {
     "name": { "x-jd": { "is": "env.name" } }, "region": { "x-jd": { "is": "env.region" } }, "type": { "x-jd": { "is": "env.type" } },
+    "platform": { "x-jd": { "is": "env.platform" } },
     "offers": { "x-jd": { "is": "env.offers" } }, "approval": { "$ref": "approval.schema.json", "x-jd": { "is": "env.approval" } } } }
 // workload.schema.json
 { "properties": {
@@ -117,8 +120,8 @@ read `cosmos-account` because `part.reads` names it.
 ```
 
 These kinds carry only `is`: they are not catalog documents, so names in them are checked against the catalog in code.
-`EnvironmentTypeCheck` checks the type is declared and the approval coupling; the `Expander` checks that offers name components or runtimes
-(at most one runtime) and that a requirement's type is an offered component. `env.offers`, `env.values` and `env.approval` are roles, not
+`EnvironmentTypeCheck` checks the type and the platform are declared and the approval coupling; the `Expander` checks that offers name components or runtimes
+(at most one runtime) and that a requirement's type is an offered component. `env.platform`, `env.offers`, `env.values` and `env.approval` are roles, not
 expression roots: `${env.values.cosmos-account.id}` and `${env.offers}` are errors.
 
 **Binding completeness.** A security boundary reads only what a schema binds, so `SchemaIndex.CheckBindings` runs when the catalog or a workload is loaded: a kind
@@ -135,10 +138,10 @@ formats are typed code (section 2).
 ## 4. Errors
 
 - Every error is `file: location: message` (`LoadError`). Schema errors take their location from the validator's error path.
-- **Locations come from the index:** the binder records where each concept value was read (`implementations.default.classes.standard`,
+- **Locations come from the index:** the binder records where each concept value was read (`implementations.azure.types.default.classes.standard`,
   `requires[0]`), so no check builds a location from field names.
 - **A rule that is data carries its message as data:** a subschema with `message` reports that text; a `ref` failure reads "'x' is not a
-  <namespace> in the catalog (declared: …)"; a `select` miss "<owner> has no <map> entry for <value> and no '<fallback>' entry". Namespace and
+  <namespace> in the catalog (declared: …)"; a `select` miss "<owner>[ on '<selected key>'/…] has no <map> entry for <value>[ and no '<fallback>' entry] (keys: …)". Namespace and
   map names come from the schema.
 - **A rule that is code keeps its message in code**, each field name taken from the binding, not spelled.
 - Error tests pin file, location and the contract part of the message.
@@ -154,12 +157,12 @@ prose in messages ([review checklist](../engineering/review-checklist.md)).
 
 ## Appendix B. Roles (the closed list)
 
-`one` unless marked *many*; 74 roles, the meta-schema's `role` enum.
+`one` unless marked *many*; 77 roles, the meta-schema's `role` enum.
 
 | Group | Roles | # |
 |---|---|---|
-| Structure | `owner`, `part` *many*, `part.nodes`, `part.exports`, `part.reads`, `part.scope`, `node.template`, `node.kind`, `node.config`, `contract`, `runtime.part`, `grant.target-input`, `naming.rules`, `naming.pattern`, `naming.max-length`, `naming.allowed`, `roles`, `catalog.version`, `environment-type.layer`, `environment-type.gated`, `layer` | 21 |
-| Environment | `env.name`, `env.region`, `env.type`, `env.offers`, `env.values`, `env.approval`, `approval.qualified-on`, `approval.required`, `approval.approvers`, `approval.separate` | 10 |
+| Structure | `owner`, `part` *many*, `part.nodes`, `part.exports`, `part.reads`, `part.scope`, `part.platform`, `node.template`, `node.kind`, `node.config`, `contract`, `runtime.part`, `grant.target-input`, `naming.rules`, `naming.pattern`, `naming.max-length`, `naming.allowed`, `roles`, `catalog.version`, `catalog.platforms`, `environment-type.layer`, `environment-type.gated`, `layer` | 23 |
+| Environment | `env.name`, `env.region`, `env.type`, `env.platform`, `env.offers`, `env.values`, `env.approval`, `approval.qualified-on`, `approval.required`, `approval.approvers`, `approval.separate` | 11 |
 | Workload | `workload.name`, `workload.team`, `workload.image`, `workload.port`, `workload.variables`, `requirement` *many*, `requirement.type`, `requirement.id`, `requirement.class` | 9 |
 | Policy | `policy.name`, `policy.reason`, `policy.scope`, `policy.runtime`, `policy.set`, `policy.default`, `policy.require` (criteria use `match:` with the roles above) | 7 |
 | Runtime | `probe.path`, `probe.expected-status`, `probe.timeout`, `probe.interval`, `probe.scheme`, `rollout.suffix-input`, `rollout.traffic-input`, `rollout.traffic-output`, `rollout.suffix-output`, `rollout.revision-output`, `rollout.fqdn-output`, `rollout.revision-key`, `rollout.latest-key`, `rollout.weight-key`, `rollout.resource-id-output`, `rollout.suffix-prefix`, `rollout.suffix-config-digits`, `rollout.suffix-salt-digits`, `rollout.suffix-max-length`, `rollout.full-weight` | 20 |
@@ -168,4 +171,4 @@ prose in messages ([review checklist](../engineering/review-checklist.md)).
 The `layer` role's values are ordered (section 3, plain annotations).
 
 Namespaces (`define`/`ref`), spelled as the error messages read them: `part owner`, `component`, `shared resource`, `runtime`, `policy`,
-`environment type`, `naming kind`, `role`, `grant template`, `environment`.
+`environment type`, `platform`, `naming kind`, `role`, `grant template`, `environment`.

@@ -11,13 +11,13 @@ public sealed class ReleaseResolverTests
     private const string SetFile = "dir/set.yaml";
     private const string Digest = "registry.example/app@sha256:267b1385d6102da0d5693506e740d509a40b654e6daa2a99c1169938d182cab9";
 
-    private static readonly EnvironmentDescriptor Env = new("dev", "region", "dev", new Dictionary<string, string>(), ["thing", "container-app"], null);
+    private static readonly EnvironmentDescriptor Env = new("dev", "region", "dev", "azure", new Dictionary<string, string>(), ["thing", "container-app"], null);
 
     private static async Task<Catalog> CatalogAsync()
     {
         var files = new[]
         {
-            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
+            "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
             TestCatalog.Component("thing", "[out]", "nodes:\n  n:\n    template: t/n\n    config: { k: 1 }\nexports:\n  out: x\n"),
             TestCatalog.RuntimeFile,
         };

@@ -5,13 +5,15 @@ namespace jd.resolver.catalog;
 /// (docs/architecture/documents.md section 3), each filled from the documents whose kind binds the concept's role (<see cref="CatalogLoader"/>):
 /// a component holds a contract, a shared resource its scope, a runtime its runtime part. Formats: schemas/catalog/*.schema.json. Expressions (${...}) and config values are kept exactly as written;
 /// the expression evaluator interprets them later. Source is the catalog-relative file a record came from. <see cref="Layers"/>: the layers in deploy order, from the schemas.
-/// <see cref="Rollouts"/>: each runtime part's probe and release block, by the runtime's name and the part's selection key.
+/// <see cref="Platforms"/>: the platforms declared, which an environment's platform must be one of.
+/// <see cref="Rollouts"/>: each runtime part's probe and release block, by the runtime's name and the part's location.
 /// <see cref="GrantTargets"/>: grant template to the input naming the resource the grant is on (catalog/grants.yaml).
 /// </summary>
 public sealed record Catalog(
     string Version,
     IReadOnlyList<string> Layers,
     IReadOnlyDictionary<string, EnvironmentType> EnvironmentTypes,
+    IReadOnlyList<string> Platforms,
     IReadOnlyDictionary<string, PartOwner> Components,
     IReadOnlyDictionary<string, PartOwner> SharedResources,
     IReadOnlyDictionary<string, PartOwner> Runtimes,
@@ -21,6 +23,6 @@ public sealed record Catalog(
     IReadOnlyDictionary<string, NamingRule> Naming,
     IReadOnlyDictionary<string, string> Roles)
 {
-    /// <summary>The key of <see cref="Rollouts"/> for <paramref name="part"/> of <paramref name="runtime"/>: the runtime's name and the part's one selection key.</summary>
-    internal static (string Runtime, string Key) RolloutKey(PartOwner runtime, Part part) => (runtime.Name, part.Keys.Single().Key);
+    /// <summary>The key of <see cref="Rollouts"/> for <paramref name="part"/> of <paramref name="runtime"/>: the runtime's name and where the part is in its file.</summary>
+    internal static (string Runtime, string Key) RolloutKey(PartOwner runtime, Part part) => (runtime.Name, part.Location);
 }

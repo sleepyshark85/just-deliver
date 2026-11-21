@@ -2,6 +2,7 @@ kind: Environment
 name: stage
 region: region-1
 type: stage
+platform: azure
 offers:
 - container-app
 - database

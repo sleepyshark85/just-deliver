@@ -67,8 +67,11 @@ descriptor ([schema](../schemas/environment-definition.schema.json); layering: [
 
 - `--base` is the descriptor of the layer below (`shared` under `dev` and `stage`); the written descriptor is the base's values plus this run's.
 - `--out` must not exist unless `--force` is given, checked before anything else (exit 2).
-- Before anything is created: the definition's type, and the base's, must be declared in `catalog.yaml`, and a type with `approval: true` needs an
-  `approval` block; the definition must resolve and the descriptor compose with its values pending. Any error: exit 1, nothing deployed.
+- Before anything is created: the definition's type and platform, and the base's, must be declared in `catalog.yaml`, the base must be of the
+  definition's platform, and a type with `approval: true` needs an `approval` block; the definition must resolve and the descriptor compose with
+  its values pending. Any error: exit 1, nothing deployed.
+- A descriptor written by a jd older than its `platform` field is refused wherever it is read; re-running `jd env up` with its definition
+  rewrites it.
 - Prints the node lines of `deploy`, then `<out>: environment <name> (<region>, <type>) written.` A failed deploy writes nothing; running again resumes.
 
 ```

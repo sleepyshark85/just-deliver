@@ -5,4 +5,5 @@ kind: EnvironmentDefinition
 name: shared
 region: southeastasia
 type: shared
+platform: azure
 offers: [container-app, database, monitoring]
