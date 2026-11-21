@@ -53,14 +53,19 @@ public class PlatformTests
         Assert.Contains(graph.Errors, error => error.Message == "runtime 'container-app' has no implementations entry for 'gcp' (keys: azure).");
     }
 
-    [Fact]
-    public async Task An_environment_of_another_platform_reaches_none_of_the_shared_resources_another_platform_uses()
+    [Theory]
+    [InlineData("shared", "database", "component 'database'")]
+    [InlineData("shared", "monitoring", "component 'monitoring'")]
+    [InlineData("shared", "container-app", "runtime 'container-app'")]
+    [InlineData("dev", "container-app", "runtime 'container-app'")]
+    public async Task An_offer_with_no_entry_for_the_environments_platform_is_refused_by_name_in_every_layer(string type, string offer, string owner)
     {
         var catalog = await LoadAsync(TwoPlatforms());
 
-        var graph = Resolver.ResolveSubstrate("shared.yaml", catalog, Environment("shared", "gcp", ["container-app", "database", "monitoring"]), null);
+        var graph = Resolver.ResolveSubstrate("env.yaml", catalog, Environment(type, "gcp", [offer]), null);
 
-        Assert.Empty(graph.Errors);
+        var error = Assert.Single(graph.Errors);
+        Assert.Equal(("[0]", $"{owner} has no implementations entry for 'gcp' (keys: azure)."), (error.Location, error.Message));
         Assert.Empty(graph.Nodes);
     }
 

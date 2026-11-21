@@ -104,14 +104,18 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         var runtimes = new List<string>();
         foreach (var (offer, index) in environment.Offers.Select((offer, index) => (offer, index)))
         {
+            var location = $"{OffersLocation}[{index}]";
             if (catalog.Components.TryGetValue(offer, out var component))
             {
-                uses.AddRange(UsesOn(component));
-                parts.AddRange(LayerParts(component, layer, $"{OffersLocation}[{index}]", fail));
+                if (UsesOn(component, $"component '{offer}'", location, fail) is { } used)
+                {
+                    uses.AddRange(used);
+                    parts.AddRange(LayerParts(component, layer, location, fail));
+                }
             }
             else if (catalog.Runtimes.TryGetValue(offer, out var runtime))
             {
-                uses.AddRange(UsesOn(runtime));
+                uses.AddRange(UsesOn(runtime, $"runtime '{offer}'", location, fail) ?? []);
                 runtimes.Add(offer);
             }
             else
@@ -128,10 +132,19 @@ public sealed class Expander(Catalog catalog, EnvironmentDescriptor environment)
         return (parts, uses);
     }
 
-    // What an offer uses on the environment's platform: the reads of every part in its platform entry, none without one (a miss LayerParts or a
-    // workload's expansion reports), so the run never reaches another platform's shared resources.
-    private IEnumerable<string> UsesOn(PartOwner offer) =>
-        offer.Select(new Dictionary<string, string> { [Roles.EnvironmentPlatform] = environment.Platform }, _ => true).Parts.SelectMany(part => part.Reads);
+    // What an offer uses on the environment's platform: the reads of every part in its platform entry, so the run never reaches another platform's
+    // shared resources. An offer with no entry for the platform is reported here, once, in every layer, and null is returned.
+    private IReadOnlyList<string>? UsesOn(PartOwner offer, string owner, string location, Action<string, string> fail)
+    {
+        var (parts, miss) = offer.Select(new Dictionary<string, string> { [Roles.EnvironmentPlatform] = environment.Platform }, _ => true);
+        if (miss is null)
+        {
+            return [.. parts.SelectMany(part => part.Reads)];
+        }
+
+        fail(location, miss.Message(owner));
+        return null;
+    }
 
     // An offered component's parts of the layer: only the last layer, where workloads deploy, deploys a component's environment parts.
     private List<RunPart> LayerParts(PartOwner component, string layer, string location, Action<string, string> fail)

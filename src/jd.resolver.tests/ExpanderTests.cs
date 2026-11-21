@@ -87,7 +87,7 @@ public class ExpanderTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[0]"), (error.File, error.Location));
-        Assert.Equal("requirement 'orders': component 'sqldb' has no types entry for 'dev' and no 'default' entry (keys: stage).", error.Message);
+        Assert.Equal("requirement 'orders': component 'sqldb' on 'azure' has no types entry for 'dev' and no 'default' entry (keys: stage).", error.Message);
         Assert.Empty(result.Requirements);
     }
 
@@ -100,7 +100,7 @@ public class ExpanderTests
 
         var error = Assert.Single(result.Errors);
         Assert.Equal(("workload.yaml", "requires[0]"), (error.File, error.Location));
-        Assert.Equal("requirement 'orders': component 'sqldb' has no classes entry for 'isolated' (keys: standard).", error.Message);
+        Assert.Equal("requirement 'orders': component 'sqldb' on 'azure'/'default' has no classes entry for 'isolated' (keys: standard).", error.Message);
         Assert.Empty(result.Requirements);
     }
 
@@ -208,7 +208,7 @@ public class ExpanderTests
 
         var error = Assert.Single(result.Errors);
         Assert.Null(result.Runtime);
-        Assert.Equal("runtime 'container-app' has no types entry for 'dev' and no 'default' entry (keys: stage).", error.Message);
+        Assert.Equal("runtime 'container-app' on 'azure' has no types entry for 'dev' and no 'default' entry (keys: stage).", error.Message);
     }
 
     // An export that cannot be evaluated is reported at the export, as the binder located it (S24c4).

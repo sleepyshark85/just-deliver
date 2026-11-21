@@ -233,7 +233,7 @@ public class SubstrateTests
 
         var error = Assert.Single(Errors(await OfferingAsync("dev", "dev", "container-app", "cache"), await SharedDescriptorAsync(), catalog));
 
-        Assert.Equal(("offers[1]", "component 'cache' has no types entry for 'dev' and no 'default' entry (keys: stage)."), (error.Location, error.Message));
+        Assert.Equal(("offers[1]", "component 'cache' on 'azure' has no types entry for 'dev' and no 'default' entry (keys: stage)."), (error.Location, error.Message));
     }
 
     // Only the last layer, where workloads deploy, deploys an offered component's parts; an earlier layer selects none, so a component without an
