@@ -4,11 +4,13 @@
 
 ## Now
 
-- **Phase 1.5 done** (2026-11-16, Azure exit gate green). Next: the phase 2 design note ([roadmap](roadmap.md)) for the user.
+- **Phase 1.7 (multi-cloud: GCP) inserted before phase 2** by the user (2026-11-21, "GCP as soon as possible"). S28 design note merged ([multi-cloud.md](../architecture/multi-cloud.md), 3 rounds). Next: S28a, the GCP spike (lead), once the user has the GCP project; S28b–S28d (no GCP needed) may start before it.
+- **Needed from the user before any GCP slice reaches GCP:** a GCP project (billing linked, free tier) and a deployer service account or workload identity federation.
 - **Docs restructure done** (S27a–S27d, user, 2026-11-17): one owner per fact; `model.md` replaces five notes; usage.md is the command reference.
 - **Waiting for the user:** ADR 0019 says "approved by the user" but is Proposed; the new ADR 0020 (stack per graph node,
   supersedes 0003 decision 3); ADR 0011's id rule rewritten to the schema's (see its note); CLAUDE.md "work one slice at a time" and conventions'
   "one slice in review at a time" vs the user's "max parallelism".
+- **Waiting for the user (S28):** the six open choices in [multi-cloud.md §13](../architecture/multi-cloud.md#13-open-choices-for-the-user); ADRs 0021–0023 (Proposed); the roadmap 1.7 row's wording, which still says "the same written documents" while §11 lists deliberate exceptions (S28b, S28c, S28i, S28k).
 - **Sandbox secret expires 2026-12-14** (renew: `tools/sandbox/sandbox.sh apply … --rotate-secret`, the user as Owner).
 - **Team:** developer Opus from S20 (after a Sonnet trial S17c2–S19b), fixer Sonnet, reviewer Opus.
 
@@ -101,6 +103,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S27b | Docs: agent entry and engineering | done | PR #104 | 2 | Each rule once, in its owner |
 | S27c | Docs: model, documents, provisioning | done | PR #106 | 2 | model.md replaces resolver/components/workload-definition/connections |
 | S27d | Docs: release, approvals, application, usage | done | PR #105 | 2 | usage.md is the command reference; flow sketch deleted |
+| S28 | Multi-cloud: GCP (design) | done | #108 | 3 | Phase 1.7; ADRs 0021–0023 drafted; slices S28a–S28l |
 
 ## Open items
 
@@ -145,6 +148,7 @@ Take when touching the code named; remove once done.
 
 Newest first; the last five sessions.
 
+- **2026-11-21 (S28, multi-cloud design)** — User: jd is multi-cloud, GCP as soon as possible; phase 1.7 inserted before phase 2. S28 design note merged (3 rounds: platform match dropped, ADR 0023 runtime identity, monitoring contract slice moved before the GCP catalog). Waiting for the user: §13 choices, a GCP project and deployer.
 - **2026-11-17 (S27a–d, docs restructure)** — User asked for concise docs, one responsibility each, no repetition. Seven
   read-only reviews, then four parallel slices (2, 2, 2, 3 rounds). User decisions: slice history deleted, not archived;
   landing-zone/network folded into ADR 0008 and deleted; ADR mismatches drafted as Proposed (0020, 0011 note), statuses untouched.
