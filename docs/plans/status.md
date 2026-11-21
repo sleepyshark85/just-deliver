@@ -4,7 +4,8 @@
 
 ## Now
 
-- **Phase 1.5 done** (2026-11-16, Azure exit gate green). Next: the phase 2 design note ([roadmap](roadmap.md)) for the user.
+- **Phase 1.7 (multi-cloud: GCP) inserted before phase 2** by the user (2026-11-21, "GCP as soon as possible"). S28, its design note, in progress.
+- **Needed from the user before any GCP slice reaches GCP:** a GCP project (billing linked, free tier) and a deployer service account or workload identity federation.
 - **Docs restructure done** (S27a–S27d, user, 2026-11-17): one owner per fact; `model.md` replaces five notes; usage.md is the command reference.
 - **Waiting for the user:** ADR 0019 says "approved by the user" but is Proposed; the new ADR 0020 (stack per graph node,
   supersedes 0003 decision 3); ADR 0011's id rule rewritten to the schema's (see its note); CLAUDE.md "work one slice at a time" and conventions'
@@ -101,6 +102,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S27b | Docs: agent entry and engineering | done | PR #104 | 2 | Each rule once, in its owner |
 | S27c | Docs: model, documents, provisioning | done | PR #106 | 2 | model.md replaces resolver/components/workload-definition/connections |
 | S27d | Docs: release, approvals, application, usage | done | PR #105 | 2 | usage.md is the command reference; flow sketch deleted |
+| S28 | Multi-cloud: GCP (design) | in-progress | | | Phase 1.7 |
 
 ## Open items
 
