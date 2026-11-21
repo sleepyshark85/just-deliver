@@ -18,7 +18,7 @@ GCP slice is that spike, run by the lead.
 [ADR 0021](../decisions/0021-platform-dimension.md) holds the decision and the rejected alternatives. Built as:
 
 - `catalog.yaml` gains `platforms`, a name each, referred to as `environmentTypes` are (a definition naming an undeclared one is an error
-  listing the declared ones). The seed declares `azure`; S28i adds `gcp`. The environment definition's `platform` is required; `jd env up`
+  listing the declared ones). The seed declares `azure`; S28j adds `gcp`. The environment definition's `platform` is required; `jd env up`
   copies it to the descriptor, and a `--base` descriptor of another platform is an error.
 - Selection is the existing `select` annotation nested once more: `implementations` gets `select: env.platform` with no `fallback` around
   today's `select: env.type, fallback: default` ([documents.md](documents.md) §3). New role `env.platform`, new namespace `platform`. A miss
@@ -56,7 +56,7 @@ adapters; C1), so jd stays stateless. On GCP the shared and environment layers d
   namespace: role names differ per cloud anyway, and a GCP part reading an Azure GUID fails at deploy, never widening access.
 - **The grant target rule is unchanged** ([model.md §7](model.md#7-policies-and-grants)). GCP grants use resource-level IAM (`…IamMember`
   on the bucket, service, topic). Where GCP has none (Firestore, C10), the grant template takes the owned resource as its target and binds
-  the role on the project **with an IAM condition naming that resource**; the condition is the template's job, and S28i has a required test
+  the role on the project **with an IAM condition naming that resource**; the condition is the template's job, and S28j has a required test
   that the rendered binding carries it.
 - The GCP deployer may grant only the roles the sandbox lists (C11), as the Azure sandbox's ABAC condition does.
 
@@ -101,8 +101,8 @@ most per database, and the free quota covers one database per project (C9). The 
 | C. Cloud SQL, a database and user per workload | `engine: postgres`, the instance's host, the database, a schema | Per database user, outside IAM grants | No free tier: about USD 7+/month for the smallest instance |
 | D. A Cloud Storage bucket per workload (`bucket`, `engine: gcs`), `storage.objectUser` on it, a resource-level grant | `engine: gcs`, `endpoint: ${bucket.url}`, `database: ${bucket.name}`, `container`: an object prefix from data | Same as Azure | Free in `us-east1`, `us-west1`, `us-central1` only (5 GB) |
 
-No option changes the contract, the schemas or any Azure input; each is GCP catalog data (S28i), and the sample app gains the engine's
-client (S28j). **Recommendation: A**, with the user's cost approval and the budget as backstop: the same boundary as Azure and a document
+No option changes the contract, the schemas or any Azure input; each is GCP catalog data (S28j), and the sample app gains the engine's
+client (S28k). **Recommendation: A**, with the user's cost approval and the budget as backstop: the same boundary as Azure and a document
 database like Cosmos, through the conditioned project binding of §3. D is the free alternative if the user prefers no paid service, at the
 price of a store that is not a database. B is listed only to be refused.
 
@@ -112,9 +112,9 @@ owns. The user decides (open choice 4):
 
 | Option | GCP class part | Contract and Azure inputs |
 |---|---|---|
-| **(a) An owned log bucket and route, no grant** | `logs` (`gcp/logging-bucket`, 30-day retention, inside the free ingestion) and `route` (`gcp/logging-sink`, the service's entries into `logs`; reads `${runtime.serviceName}`, so it deploys `AfterRuntime`). No grant: Cloud Run writes stdout with no role (C14), and a sink into a bucket of its own project needs no writer grant (C15). The app writes JSON to stdout | The contract becomes `[engine, destination]`: Azure `engine: application-insights`, `destination: ${appinsights.connectionString}`; GCP `engine: cloud-logging`, `destination: ${logs.id}`. Changes every definition's `${resource.monitoring.connectionString}`: S28j, an input change (§11) |
+| **(a) An owned log bucket and route, no grant** | `logs` (`gcp/logging-bucket`, 30-day retention, inside the free ingestion) and `route` (`gcp/logging-sink`, the service's entries into `logs`; reads `${runtime.serviceName}`, so it deploys `AfterRuntime`). No grant: Cloud Run writes stdout with no role (C14), and a sink into a bucket of its own project needs no writer grant (C15). The app writes JSON to stdout | The contract becomes `[engine, destination]`: Azure `engine: application-insights`, `destination: ${appinsights.connectionString}`; GCP `engine: cloud-logging`, `destination: ${logs.id}`. Changes every definition's `${resource.monitoring.connectionString}`: S28i, an input change (§11) |
 | (b) Project-level telemetry roles (the app sends traces and metrics) | as (a), plus a grant of `cloudtrace.agent` and `monitoring.metricWriter` on the project | As (a). GCP has no resource-level IAM for these, so the grant's target is the project: an exception to principle 12 and to the grant target rule, an ADR and the user's |
-| (c) `enforce-monitoring` on Azure only; GCP offers no monitoring | none | Workload-scope policies gain a `platform` match key (S28i, with a code cap), because a workload-scope `match` cannot name a template. The sample definitions declare monitoring, so GCP refuses them: two definitions, principle 10 broken |
+| (c) `enforce-monitoring` on Azure only; GCP offers no monitoring | none | Workload-scope policies gain a `platform` match key (S28j, with a code cap), because a workload-scope `match` cannot name a template. The sample definitions declare monitoring, so GCP refuses them: two definitions, principle 10 broken |
 
 ## 6. Identity, records and approvals
 
@@ -213,9 +213,10 @@ The cap counts production C# lines; catalog data, templates, schemas and scripts
 | S28f | `jd.gcp` adapters | identity and live revisions with offline tests at the transport seam and GCP tests (C7, C8 re-shown), wired into §7's table; §7's "`jd.gcp` in the rules"; errors carry no SDK text or value | 200 |
 | S28g | Dark tag (only if C3 needs it) | `tagKey`/`darkTag` in the `release` block; dark traffic starts with the tagged item; Azure snapshot unchanged | 60 |
 | S28h | Runtime identity rule | §4's `identityInput` (ADR 0023) in the runtime schema, checked by the loader and the graph builder after policies; Azure snapshot unchanged. Required tests: a literal identity is refused; one reading a shared or environment resource, another part, `env.*`, `role.*` or the `runtime` node itself is refused; a policy `set` or `default` of the input is refused; a runtime node without its declared input is refused | 60 |
-| S28i | GCP catalog | `gcp` platform; `cloud-run`; `gcp` implementations of `database` (choice 2) and `monitoring` (choice 4); GCP sample environments; `deployed-config-gcp.json`. Required tests, on the GCP snapshot: the service runs as its own `identity` node's account, never the default compute account; under A the Firestore binding carries the condition naming the workload's own database; no GCP grant binds on the project without a condition | 0 |
-| S28j | Sample workloads on both platforms | choices 3 and 4 applied: the monitoring contract change (choice 4), the sample app picks its store and telemetry by `engine`; one definition for both clouds; the Azure snapshot regenerated on purpose (§11) and the Azure gate run | 0 (samples ~200) |
-| S28k | E2E on GCP, exit | the exit evidence below; architecture docs as-built; this note reduced to what is not yet elsewhere | 50 |
+| S28i | Monitoring contract (only under choice 4 (a) or (b); under (c) the contract stays) | The `monitoring` component's exports become `[engine, destination]` (§5); the Azure implementation's exports follow (`engine: application-insights`, `destination: ${appinsights.connectionString}`), because `ContractRules` refuses a class part whose exports differ from the contract; the sample definitions' monitoring reference and the neutral variable names (`DATABASE_*`, `MONITORING_*`), which the sample app reads; the Azure snapshot regenerated on purpose (§11) and the Azure gate run. Placed before S28j, which loads the GCP implementation against this contract and whose GCP snapshot resolves the same definitions | 0 (samples ~50) |
+| S28j | GCP catalog | `gcp` platform; `cloud-run`; `gcp` implementations of `database` (choice 2) and `monitoring` (choice 4); GCP sample environments; `deployed-config-gcp.json`. Required tests, on the GCP snapshot: the service runs as its own `identity` node's account, never the default compute account; under A the Firestore binding carries the condition naming the workload's own database; no GCP grant binds on the project without a condition | 0 |
+| S28k | Sample workloads on both platforms | choice 3 applied (the image reference), the sample app picks its store and telemetry by `engine`; one definition for both clouds; the Azure snapshot regenerated on purpose if the image reference changes (§11) and the Azure gate run | 0 (samples ~200) |
+| S28l | E2E on GCP, exit | the exit evidence below; architecture docs as-built; this note reduced to what is not yet elsewhere | 50 |
 
 ## 11. Exit evidence
 
@@ -229,7 +230,8 @@ by the GCP gate; the GCP sandbox's budget showing no charge beyond choice 2's; t
 |---|---|---|
 | S28b | Every descriptor `jd env up` writes carries `platform`; catalog and definitions move to the platform shape (inputs; the snapshot stays byte-identical) | A descriptor without `platform` is refused until `jd env up` rewrites it; nothing is deployed |
 | S28c | New release and approval records write `identity: {directory, principal, name}` (and `environment.platform` only if choice 5 is (c)) | Read as before, never rewritten |
-| S28j | The sample definitions' monitoring reference and variable names (choices 3, 4): Azure inputs change, so the Azure snapshot changes, by the Azure gate | — |
+| S28i | The `monitoring` contract, the Azure implementation's exports, the sample definitions' monitoring reference and variable names (choice 4): Azure inputs change, so the Azure snapshot changes, by the Azure gate; skipped under choice 4 (c) | — |
+| S28k | The sample definitions' image reference (choice 3): an Azure input changes, so the Azure snapshot changes, by the Azure gate | — |
 
 ## 12. Later phases stay open
 
@@ -248,6 +250,6 @@ by the GCP gate; the GCP sandbox's budget showing no charge beyond choice 2's; t
 | 1 | The platform as an environment value with nested selection ([ADR 0021](../decisions/0021-platform-dimension.md)), vs types per platform or a catalog per platform | The ADR |
 | 2 | Database isolation on GCP (§5) | A, a Firestore database per workload, approving its per-use cost |
 | 3 | Image registry: move the sample images to Docker Hub (one reference everywhere; Container Apps pulls it too), or an Artifact Registry remote repository (a GCP-only reference, which breaks one definition everywhere, principle 10) | Docker Hub |
-| 4 | Monitoring on GCP (§5): (a) an owned log bucket and route, no grant; (b) project-level telemetry roles, an exception to principle 12; (c) `enforce-monitoring` Azure only | (a); the sample definitions' variable names become neutral (`DATABASE_*`, `MONITORING_*`) in S28j |
-| 5 | Promotion across platforms (qualified on Azure, promoted to GCP): (a) allowed as the approval policy says: `qualifiedOn` is explicit data its owner chose, so records gain no platform field, readers no legacy mapping and `promote` no check; (b) refused by `promote` comparing the two environments' descriptors, still no record field; (c) refused from the records, which gain `environment.platform`, the legacy value in the record schema | (a), the simplest; (b) if the user wants cross-cloud promotion refused |
+| 4 | Monitoring on GCP (§5): (a) an owned log bucket and route, no grant; (b) project-level telemetry roles, an exception to principle 12; (c) `enforce-monitoring` Azure only | (a); the sample definitions' variable names become neutral (`DATABASE_*`, `MONITORING_*`) in S28i, which changes the contract before the GCP catalog (S28j) loads against it |
+| 5 | Promotion across platforms (qualified on Azure, promoted to GCP): (a) allowed as the approval policy says: `qualifiedOn` is explicit data its owner chose, so records gain no platform field, readers no legacy mapping and `promote` no check; (b) refused by `promote` comparing the two environments' descriptors, still no record field (`promote` gains the `qualifiedOn` environment's descriptor as an input; today `PromoteInput(Label, Target, Catalog)` has none); (c) refused from the records, which gain `environment.platform`, the legacy value in the record schema | (a), the simplest; (b) if the user wants cross-cloud promotion refused |
 | 6 | The GCP deployer credential: a service-account key file (as the Azure secret, rotated; C16), or workload identity federation (no key; needs a CI issuer) | A key file for the sandbox now; federation with the hosted API |
