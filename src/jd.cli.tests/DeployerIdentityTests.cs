@@ -32,8 +32,8 @@ public sealed class DeployerIdentityAzureTests
 
         var identity = await Composition.Connect(System.Environment.GetEnvironmentVariable).Identity().GetAsync(CancellationToken.None);
 
-        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), identity.ClientId);
-        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_TENANT_ID"), identity.TenantId);
-        Assert.False(string.IsNullOrEmpty(identity.ObjectId));
+        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), identity.Name);
+        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_TENANT_ID"), identity.Directory);
+        Assert.False(string.IsNullOrEmpty(identity.Principal));
     }
 }

@@ -3,11 +3,11 @@ namespace jd.resolver.environment;
 /// <summary>
 /// Who may approve a release set for a gated environment and how many must (docs/architecture/approvals.md section 3), bound from the
 /// <c>approval.*</c> roles of an environment's approval block (schemas/approval.schema.json). The two rules are pure;
-/// they take the principals' object ids, which whoever reads the records supplies. Ids compare without regard to case.
+/// they take the principals' keys (<c>DeployerIdentity.Principal</c>), which whoever reads the records supplies. Ids compare without regard to case.
 /// </summary>
 /// <param name="QualifiedOn">The environment whose records must show the set qualified.</param>
 /// <param name="Required">How many distinct approvers are needed.</param>
-/// <param name="Approvers">Entra object ids that may approve.</param>
+/// <param name="Approvers">The principals that may approve.</param>
 /// <param name="SeparateFromDeployer">An approver may not be a principal that deployed the label on <paramref name="QualifiedOn"/>.</param>
 public sealed record ApprovalPolicy(string QualifiedOn, int Required, IReadOnlyList<string> Approvers, bool SeparateFromDeployer)
 {
@@ -15,7 +15,7 @@ public sealed record ApprovalPolicy(string QualifiedOn, int Required, IReadOnlyL
     public bool Counts(string approver, IReadOnlyCollection<string> deployers) =>
         Approvers.Contains(approver, StringComparer.OrdinalIgnoreCase) && !(SeparateFromDeployer && deployers.Contains(approver, StringComparer.OrdinalIgnoreCase));
 
-    /// <summary>The distinct principals among <paramref name="approvals"/> (the object id of each approval) whose approval counts.</summary>
+    /// <summary>The distinct principals among <paramref name="approvals"/> (the principal of each approval) whose approval counts.</summary>
     internal IReadOnlyList<string> Counting(IEnumerable<string> approvals, IReadOnlyCollection<string> deployers) =>
         approvals.Where(a => Counts(a, deployers)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 

@@ -17,9 +17,10 @@ public sealed class ArmDeployerIdentity(TokenCredential credential) : IDeployerI
     // constant inside an Azure adapter (standards section 1); the MVP is public cloud only, other clouds need configuration (E53).
     private const string ArmScope = "https://management.azure.com/.default";
 
-    private const string TenantClaim = "tid";
-    private const string ClientClaim = "appid";
-    private const string ObjectClaim = "oid";
+    // Entra's claims for the neutral identity (ADR 0022): the tenant is the directory, the object id the principal, the application (client) id the name.
+    private const string DirectoryClaim = "tid";
+    private const string PrincipalClaim = "oid";
+    private const string NameClaim = "appid";
 
     /// <summary>Throws <see cref="InvalidOperationException"/>, fit to show a person, when Entra refuses the credential or the token cannot be read.</summary>
     public async Task<DeployerIdentity> GetAsync(CancellationToken cancellationToken)
@@ -37,7 +38,7 @@ public sealed class ArmDeployerIdentity(TokenCredential credential) : IDeployerI
         }
 
         using var payload = Payload(token.Token);
-        return new DeployerIdentity(Claim(payload, TenantClaim), Claim(payload, ClientClaim), Claim(payload, ObjectClaim));
+        return new DeployerIdentity(Claim(payload, DirectoryClaim), Claim(payload, PrincipalClaim), Claim(payload, NameClaim));
     }
 
     private static JsonDocument Payload(string jwt)

@@ -1,10 +1,10 @@
 namespace jd.core.identity;
 
 /// <summary>The principal a run authenticates with, as the identity provider reports it (not as any file or environment claims).</summary>
-/// <param name="TenantId">The directory the principal belongs to.</param>
-/// <param name="ClientId">The principal's application (client) id.</param>
-/// <param name="ObjectId">The principal's object id in the directory.</param>
-public sealed record DeployerIdentity(string TenantId, string ClientId, string ObjectId);
+/// <param name="Directory">Where the principal lives: an Entra tenant, a cloud project.</param>
+/// <param name="Principal">The principal's stable key, the only field any rule compares (ADR 0022).</param>
+/// <param name="Name">The principal's name, for people.</param>
+public sealed record DeployerIdentity(string Directory, string Principal, string Name);
 
 /// <summary>
 /// Names the principal the deploy runs as. The only input is the credential the process holds: no definition, catalog, descriptor,

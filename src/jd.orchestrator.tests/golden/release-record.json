@@ -4,9 +4,9 @@
   "startedAt": "2026-10-17T08:00:00Z",
   "finishedAt": "2026-10-17T08:01:30Z",
   "identity": {
-    "tenantId": "tenant-1",
-    "clientId": "client-1",
-    "objectId": "object-1"
+    "directory": "tenant-1",
+    "principal": "object-1",
+    "name": "client-1"
   },
   "environment": {
     "name": "dev",

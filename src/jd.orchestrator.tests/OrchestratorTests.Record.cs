@@ -18,7 +18,7 @@ public partial class OrchestratorTests
     private const string SetSha = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     private static readonly DateTimeOffset RecordStart = new(2026, 10, 17, 8, 0, 0, TimeSpan.Zero);
-    private static readonly DeployerIdentity Principal = new("tenant-1", "client-1", "object-1");
+    private static readonly DeployerIdentity Principal = new("tenant-1", "object-1", "client-1");
 
     private static ReleaseSet SetOf(params string[] workloads) => new(
         "1.0.0",
@@ -198,13 +198,13 @@ public partial class OrchestratorTests
     {
         var (_, graphs, runs) = await ReleaseRunAsync(new FakeBackend(), null, "shop");
         var set = SetOf("shop");
-        var lying = set with { Workloads = [set.Workloads[0] with { Definition = "metadata:\n  name: shop\nidentity: { tenantId: evil, clientId: evil, objectId: evil }\n" }] };
+        var lying = set with { Workloads = [set.Workloads[0] with { Definition = "metadata:\n  name: shop\nidentity: { directory: evil, principal: evil, name: evil }\n" }] };
 
-        var record = Parse(Record(lying, graphs, runs, new DeployerIdentity("the-tenant", "the-client", "the-object")));
+        var record = Parse(Record(lying, graphs, runs, new DeployerIdentity("the-tenant", "the-object", "the-client")));
 
-        Assert.Equal("the-tenant", (string?)record["identity"]!["tenantId"]);
-        Assert.Equal("the-client", (string?)record["identity"]!["clientId"]);
-        Assert.Equal("the-object", (string?)record["identity"]!["objectId"]);
+        Assert.Equal("the-tenant", (string?)record["identity"]!["directory"]);
+        Assert.Equal("the-object", (string?)record["identity"]!["principal"]);
+        Assert.Equal("the-client", (string?)record["identity"]!["name"]);
         Assert.DoesNotContain("evil", record.ToString(), StringComparison.Ordinal);
     }
 

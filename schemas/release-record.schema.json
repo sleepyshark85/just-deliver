@@ -43,15 +43,30 @@
       }
     },
     "identity": {
-      "description": "The principal the run authenticated with, as Entra reports it, never as any file or variable claims.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["tenantId", "clientId", "objectId"],
-      "properties": {
-        "tenantId": { "type": "string", "minLength": 1 },
-        "clientId": { "type": "string", "minLength": 1 },
-        "objectId": { "type": "string", "minLength": 1 }
-      }
+      "description": "The principal the run authenticated with, as its platform reports it, never as any file or variable claims.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["directory", "principal", "name"],
+          "properties": {
+            "directory": { "description": "Where the principal lives (Entra: the tenant id).", "type": "string", "minLength": 1 },
+            "principal": { "description": "The principal's stable key, the only field a rule compares (Entra: the object id).", "type": "string", "minLength": 1 },
+            "name": { "description": "The principal's name, for people (Entra: the application id).", "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "description": "In records written before the neutral identity (ADR 0022); read, never written. Read as directory, principal and name.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tenantId", "clientId", "objectId"],
+          "properties": {
+            "tenantId": { "type": "string", "minLength": 1 },
+            "clientId": { "type": "string", "minLength": 1 },
+            "objectId": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
     },
     "environment": {
       "type": "object",

@@ -23,7 +23,7 @@ public sealed class ReleaseStartTests
     // The dev environment of WorkloadUseCaseTests, which System.Environment would hide.
     private const string Dev = WorkloadUseCaseTests.Environment;
 
-    private static readonly DeployerIdentity Deployer = new("tenant-1", "client-1", "object-1");
+    private static readonly DeployerIdentity Deployer = new("tenant-1", "object-1", "client-1");
 
     private readonly FakeBackend _backend = new();
     private readonly MemoryRecordStore _records = new();

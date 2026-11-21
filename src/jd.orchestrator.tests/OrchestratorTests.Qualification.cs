@@ -47,7 +47,7 @@ public partial class OrchestratorTests
         public async Task<string> DeployAsync(int minute, IqResult? iq, string objectId = "object-1", bool failed = false)
         {
             var finished = RecordStart.AddMinutes(minute);
-            var identity = new DeployerIdentity("tenant-1", "client-1", objectId);
+            var identity = new DeployerIdentity("tenant-1", objectId, "client-1");
             var json = ReleaseRecordBuilder.Build(new(_set, SetSha256, Env, _graphs, identity, finished.AddSeconds(-90), finished), failed ? _failed : _passed, TimeSpan.FromSeconds(42.5), iq);
             return await ReleaseRecordFile.WriteAsync(Records, "dev", "1.0.0", finished, ReleaseRecordFile.DeployActivity, json);
         }
@@ -395,7 +395,7 @@ public partial class OrchestratorTests
         await ledger.DeployAsync(3, PassingIq, "object-2");
         await ledger.QualifyAsync(4, PassingIq);
         var qualifier = await ledger.QualifyAsync(5, PassingIq);
-        ledger.Forge(qualifier, r => r["identity"]!["objectId"] = "object-3");
+        ledger.Forge(qualifier, r => r["identity"]!["principal"] = "object-3");
 
         var result = await ledger.ReadAsync();
 

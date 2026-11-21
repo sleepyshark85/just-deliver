@@ -51,16 +51,16 @@ alone carries it. Fields and their constraints: [`approval.schema.json`](../../s
 
 - `qualifiedOn`: the environment whose records must show the set qualified; not the environment's own name.
 - `required`: distinct approvals needed, 1 to the number of `approvers` (a policy that can never be met is an error at `env up`).
-- `approvers`: the Entra object ids (unique GUIDs) that may approve.
+- `approvers`: the principals that may approve: Entra object ids (lower-case GUIDs) or GCP service accounts' unique ids (digits).
 - `separateFromDeployer` (**required**, no default, since a silent default would be a silent weakening): an approver may not be a principal that
   deployed the label on `qualifiedOn`.
 
 **Evaluation** is two pure functions of `ApprovalPolicy` (`jd.resolver`): `Counts(approver, deployers)` (listed, and not a deployer when
-separation is on) and `Evaluate(approvals, deployers)` (distinct `objectId`s that count, against `required`). `jd approve` uses `Counts` to
-refuse early; `jd promote` uses `Evaluate` on the records: one rule, one code. **Deployers** are the distinct `identity.objectId` of every
+separation is on) and `Evaluate(approvals, deployers)` (distinct principals that count, against `required`). `jd approve` uses `Counts` to
+refuse early; `jd promote` uses `Evaluate` on the records: one rule, one code. **Deployers** are the distinct `identity.principal` (`objectId` in older records) of every
 `deploy` record of the label on `qualifiedOn`, failed attempts included; `qualify` records do not count.
 
-**Why not the catalog:** the catalog is shared across subscriptions and tenants; environment names and object ids are per installation. The catalog
+**Why not the catalog:** the catalog is shared across subscriptions and tenants; environment names and principals are per installation. The catalog
 says whether a type must carry a policy; the definition holds its values.
 
 The sample `stage.yaml` ships with the all-zero GUID, which matches no principal: nothing can be promoted until the operator lists real ones.

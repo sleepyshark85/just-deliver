@@ -19,14 +19,13 @@ public static class ApprovalRecord
     private const string Kind = "ApprovalRecord";
 
     // The record's fields, in file order, camelCase as the schema spells them: Build writes it and ReadAsync reads it (after the schema has vouched for it), so the keys are named once.
-    private sealed record Stored(string Kind, string ApprovedAt, StoredEnvironment Environment, StoredRelease Release, string QualifiedOn, StoredIdentity Identity, string Meaning);
+    // Identity is RecordIdentity's block, which keeps its two shapes.
+    private sealed record Stored(string Kind, string ApprovedAt, StoredEnvironment Environment, StoredRelease Release, string QualifiedOn, JObject Identity, string Meaning);
 
     // Type is null in a record written before environment types (it has a tier, which nothing reads).
     private sealed record StoredEnvironment(string Name, string? Type);
 
     private sealed record StoredRelease(string Label, string SetSha256);
-
-    private sealed record StoredIdentity(string TenantId, string ClientId, string ObjectId);
 
     private sealed record Expected(string Environment, string Label, string SetSha256, string QualifiedOn);
 
@@ -43,7 +42,7 @@ public static class ApprovalRecord
                 new StoredEnvironment(target.Name, target.Type),
                 new StoredRelease(label, setSha256),
                 Policy(target).QualifiedOn,
-                new StoredIdentity(identity.TenantId, identity.ClientId, identity.ObjectId),
+                RecordIdentity.Of(identity),
                 meaning),
             Formatting.Indented,
             Settings) + "\n";
@@ -80,7 +79,7 @@ public static class ApprovalRecord
             }
             else
             {
-                approvers.Add(stored.Identity.ObjectId);
+                approvers.Add(RecordIdentity.Read(stored.Identity).Principal);
             }
         }
 

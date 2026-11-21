@@ -70,7 +70,7 @@ public static class ReleaseRecordBuilder
         ["activity"] = activity,
         ["startedAt"] = Time(head.StartedAt),
         ["finishedAt"] = Time(head.FinishedAt),
-        ["identity"] = new JObject { ["tenantId"] = head.Identity.TenantId, ["clientId"] = head.Identity.ClientId, ["objectId"] = head.Identity.ObjectId },
+        ["identity"] = RecordIdentity.Of(head.Identity),
         ["environment"] = new JObject
         {
             ["name"] = head.Environment.Name,

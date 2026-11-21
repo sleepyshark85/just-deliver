@@ -20,10 +20,10 @@ public sealed partial class LiteralGuardTests
         ["jd.orchestrator/ConfigFiller.cs"] = ["name"], // an fn::entries item
         ["jd.orchestrator/ReleaseRecordBuilder.cs"] =
         [
-            "activity", "attempts", "catalogVersion", "changes", "checks", "clientId", "contract", "createdAt", "definitionSha256", "dependsOn",
+            "activity", "attempts", "catalogVersion", "changes", "checks", "contract", "createdAt", "definitionSha256", "dependsOn",
             "deploySeconds", "detail", "elapsedSeconds", "environment", "expectedStatus", "failure", "finishedAt", "graph", "hash", "id", "identity",
-            "image", "iq", "kind", "label", "message", "name", "node", "nodes", "notStarted", "objectId", "oq", "outcome", "path", "phase", "region",
-            "release", "run", "setSha256", "sha256", "stack", "startedAt", "status", "step", "steps", "subject", "team", "template", "tenantId",
+            "image", "iq", "kind", "label", "message", "name", "node", "nodes", "notStarted", "oq", "outcome", "path", "phase", "region",
+            "release", "run", "setSha256", "sha256", "stack", "startedAt", "status", "step", "steps", "subject", "team", "template",
             "type", "workload", "workloads",
         ],
         ["jd.resolver/DocumentLoader.cs"] = ["kind"], // the bootstrap field
@@ -55,9 +55,10 @@ public sealed partial class LiteralGuardTests
         ["jd.resolver/release/ApprovalRecord.cs"] = ["environment", "label", "qualifiedOn", "set"],
         ["jd.resolver/release/QualificationReader.cs"] =
         [
-            "activity", "environment", "finishedAt", "identity", "iq", "label", "name", "objectId", "oq", "outcome", "release", "setSha256", "status",
+            "activity", "environment", "finishedAt", "identity", "iq", "label", "name", "oq", "outcome", "release", "setSha256", "status",
             "workloads",
         ],
+        ["jd.resolver/release/RecordIdentity.cs"] = ["clientId", "directory", "name", "objectId", "principal", "tenantId"],
         ["jd.resolver/release/ReleaseRecordFile.cs"] = ["set.yaml"], // the local record store's layout (concept 11)
     };
 

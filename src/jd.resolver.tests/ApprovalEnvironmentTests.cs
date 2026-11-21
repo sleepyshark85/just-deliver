@@ -141,12 +141,33 @@ public class ApprovalEnvironmentTests
         Assert.Null(definition.Value);
     }
 
+    // Security boundary: an approver is a principal key of a platform, an Entra object id or a GCP service account's unique id (ADR 0022).
+    [Fact]
+    public async Task An_approver_may_be_an_entra_object_id_or_a_gcp_unique_id_in_the_descriptor_and_the_definition()
+    {
+        const string GcpApprover = "123456789012345678901";
+        var block = Block.Replace($"[\"{Approver}\"]", $"[\"{Approver}\", \"{GcpApprover}\"]", StringComparison.Ordinal);
+        Assert.NotEqual(Block, block);
+
+        var descriptor = await EnvironmentParser.ParseAsync("env.yaml", Descriptor(approval: block));
+        var definition = await LoadDefinitionAsync(Definition(approval: block));
+
+        Assert.Empty(descriptor.Errors);
+        Assert.Empty(definition.Errors);
+        Assert.Equal([Approver, GcpApprover], descriptor.Value!.Approval!.Approvers);
+        Assert.Equal([Approver, GcpApprover], definition.Value!.Approval!.Approvers);
+    }
+
     [Theory]
     [InlineData("required: 1", "required: 0", "approval.required")]
     [InlineData("required: 1", "required: 1.5", "approval.required")]
     [InlineData("qualifiedOn: dev", "qualifiedOn: Dev", "approval.qualifiedOn")]
     [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: []", "approval.approvers")]
     [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: [not-a-guid]", "approval.approvers[0]")]
+    [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: [\"AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA\"]", "approval.approvers[0]")] // a GUID in upper case
+    [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: [\"1234567890a\"]", "approval.approvers[0]")] // digits and a letter
+    [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: [\"-1234567890\"]", "approval.approvers[0]")]
+    [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: [\"\"]", "approval.approvers[0]")]
     [InlineData("approvers: [\"11111111-1111-1111-1111-111111111111\"]", "approvers: [\"11111111-1111-1111-1111-111111111111\", \"11111111-1111-1111-1111-111111111111\"]", "approval.approvers")]
     [InlineData("  separateFromDeployer: true\n", "", "approval.separateFromDeployer")]
     [InlineData("separateFromDeployer: true", "separateFromDeployer: \"yes\"", "approval.separateFromDeployer")]

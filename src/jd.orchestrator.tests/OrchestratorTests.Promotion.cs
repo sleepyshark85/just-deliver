@@ -21,7 +21,7 @@ public partial class OrchestratorTests
     private static async Task ApproveAsync(Ledger ledger, string objectId, int minute, string? setSha256 = null)
     {
         var at = RecordStart.AddMinutes(minute);
-        var json = ApprovalRecord.Build(Stage(), "1.0.0", setSha256 ?? ledger.SetSha256, new DeployerIdentity("tenant-1", "client-1", objectId), "ready", at);
+        var json = ApprovalRecord.Build(Stage(), "1.0.0", setSha256 ?? ledger.SetSha256, new DeployerIdentity("tenant-1", objectId, "client-1"), "ready", at);
         await ReleaseRecordFile.WriteAsync(ledger.Records, "stage", "1.0.0", at, ReleaseRecordFile.ApproveActivity, json);
     }
 
@@ -56,7 +56,7 @@ public partial class OrchestratorTests
         var ledger = await Ledger.CreateAsync();
         ledger.Forge(await ledger.DeployAsync(1, PassingIq), r => Untyped(r, "team"));
         var at = RecordStart.AddMinutes(2);
-        var approval = JObject.Parse(ApprovalRecord.Build(Stage(), "1.0.0", ledger.SetSha256, new DeployerIdentity("tenant-1", "client-1", Alice), "ready", at));
+        var approval = JObject.Parse(ApprovalRecord.Build(Stage(), "1.0.0", ledger.SetSha256, new DeployerIdentity("tenant-1", Alice, "client-1"), "ready", at));
         Untyped(approval, "protected");
         await ReleaseRecordFile.WriteAsync(ledger.Records, "stage", "1.0.0", at, ReleaseRecordFile.ApproveActivity, approval.ToString());
 

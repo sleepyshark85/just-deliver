@@ -66,9 +66,9 @@ public static class Approve
             progress?.Invoke(new Ignored(ignored));
         }
 
-        if (earlier.Approvers.Contains(approver.ObjectId, StringComparer.OrdinalIgnoreCase))
+        if (earlier.Approvers.Contains(approver.Principal, StringComparer.OrdinalIgnoreCase))
         {
-            return Refused(new AlreadyApproved(approver.ObjectId, label, target.Name));
+            return Refused(new AlreadyApproved(approver.Principal, label, target.Name));
         }
 
         var approvedAt = connections.Time().GetUtcNow();
@@ -97,12 +97,12 @@ public static class Approve
             return new NotQualified(label, policy.QualifiedOn, qualification.Reasons);
         }
 
-        if (!policy.Counts(approver.ObjectId, []))
+        if (!policy.Counts(approver.Principal, []))
         {
-            return new NotApprover(approver.ObjectId, target.Name);
+            return new NotApprover(approver.Principal, target.Name);
         }
 
-        return policy.Counts(approver.ObjectId, qualification.Deployers) ? null : new NotSeparate(approver.ObjectId, label, policy.QualifiedOn, target.Name);
+        return policy.Counts(approver.Principal, qualification.Deployers) ? null : new NotSeparate(approver.Principal, label, policy.QualifiedOn, target.Name);
     }
 
     private static ApproveResult Invalid(Problem problem) => new([], problem, Outcome.InvalidInput, null, null, 0, null);

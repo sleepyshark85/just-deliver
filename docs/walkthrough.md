@@ -280,7 +280,7 @@ Purpose: the gate. One principal is enough with a relaxed copy of the policy (`s
 principal, see the note. `1.1.0` is promoted: its records on `dev` qualify it (scenario 2), whatever `dev` runs now.
 
 ```bash
-ME=$(jq -r .identity.objectId "$(newest dev 1.1.0 deploy)")      # the deployer's object id, as Entra reported it
+ME=$(jq -r .identity.principal "$(newest dev 1.1.0 deploy)")     # the deployer's object id, as Entra reported it
 samples/walkthrough/stage-policy.sh "$JD_WALK/stage.env.yaml" "$JD_WALK/stage.relaxed.env.yaml" 1 false "$ME"
 jd promote 1.1.0 --to "$JD_WALK/stage.relaxed.env.yaml" --catalog catalog; echo "exit $?"
 ```

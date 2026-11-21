@@ -10,7 +10,8 @@ using Xunit;
 namespace jd.resolver.tests;
 
 // The approval record of docs/architecture/approvals.md section 4: its schema and committed golden, that nothing typed can change a field,
-// and the reader of approval files (section 5, step 3): files written by the real builder and forged by editing them, as someone with the records could. Regenerate the golden with JD_UPDATE_GOLDEN=1 and review the diff.
+// and the reader of approval files (section 5, step 3): files written by the real builder and forged by editing them, as someone with the records could. Regenerate the golden with JD_UPDATE_GOLDEN=1 and review the diff;
+// its legacy twin (the identity jd wrote before ADR 0022) is written by hand, since nothing writes that shape any more.
 public sealed class ApprovalRecordTests
 {
     private const string Alice = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -18,7 +19,7 @@ public sealed class ApprovalRecordTests
     private const string Other = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 
     private static readonly DateTimeOffset At = new(2026, 10, 17, 3, 4, 5, TimeSpan.Zero);
-    private static readonly DeployerIdentity Principal = new("tenant-1", "client-1", Alice);
+    private static readonly DeployerIdentity Principal = new("tenant-1", Alice, "client-1");
     private static readonly EnvironmentDescriptor Stage = new("stage", "region-1", "stage", new Dictionary<string, string>(), [], new ApprovalPolicy("dev", 1, [Alice], true));
 
     private readonly MemoryRecordStore _records = new();
@@ -37,6 +38,14 @@ public sealed class ApprovalRecordTests
         return (await new YamlSchemaValidator().ValidateTokenAsync(schema, record)).IsValid;
     }
 
+    // Security boundary: an identity is exactly one shape, the neutral one or the one before ADR 0022; both at once, neither, or half of each is refused.
+    private static JObject IdentityOf(string shape) => shape switch
+    {
+        "bothShapes" => new() { ["directory"] = "tenant-1", ["principal"] = Alice, ["name"] = "client-1", ["tenantId"] = "tenant-1", ["clientId"] = "client-1", ["objectId"] = Alice },
+        "noShape" => [],
+        _ => new() { ["directory"] = "tenant-1", ["clientId"] = "client-1", ["objectId"] = Alice },
+    };
+
     private static string GoldenSource([CallerFilePath] string testFile = "") => Path.Combine(Path.GetDirectoryName(testFile)!, "golden", "approval-record.json");
 
     [Fact]
@@ -53,22 +62,55 @@ public sealed class ApprovalRecordTests
         Assert.Equal(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", "approval-record.json")), record);
     }
 
+    // Security boundary: an approval recorded in the identity shape before ADR 0022 is the same principal as its twin in the neutral shape, so it
+    // counts (and is refused, and separated) as that principal.
+    [Theory]
+    [InlineData("approval-record.json")]
+    [InlineData("approval-record-legacy.json")]
+    public async Task The_golden_approval_and_its_legacy_twin_are_valid_and_read_to_the_same_principal(string golden)
+    {
+        var record = Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", golden)));
+        await ReleaseRecordFile.WriteAsync(_records, "stage", "1.0.0", At, ReleaseRecordFile.ApproveActivity, record.ToString(Formatting.Indented));
+
+        var reading = await ApprovalRecord.ReadAsync(_records, Stage, "1.0.0", Set);
+
+        Assert.True(await IsValidAsync(record));
+        Assert.Equal([Alice], reading.Approvers);
+        Assert.Empty(reading.Ignored);
+        Assert.Equal(new DeployerIdentity("tenant-1", Alice, "client-1"), RecordIdentity.Read(record["identity"]!));
+    }
+
+    [Fact]
+    public async Task The_legacy_twin_differs_from_the_golden_approval_only_in_the_shape_of_its_identity()
+    {
+        var golden = Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", "approval-record.json")));
+        var legacy = Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", "approval-record-legacy.json")));
+
+        Assert.Equal(new JObject { ["tenantId"] = "tenant-1", ["clientId"] = "client-1", ["objectId"] = Alice }.ToString(), legacy["identity"]!.ToString());
+        golden.Remove("identity");
+        legacy.Remove("identity");
+        Assert.Equal(golden.ToString(), legacy.ToString());
+    }
+
     [Fact]
     public async Task Text_that_looks_like_json_or_an_identity_stays_one_string_and_changes_no_field()
     {
-        const string Meaning = "\",\"identity\":{\"tenantId\":\"x\",\"clientId\":\"x\",\"objectId\":\"evil\"},\"x\":\"";
+        const string Meaning = "\",\"identity\":{\"directory\":\"x\",\"principal\":\"evil\",\"name\":\"x\"},\"x\":\"";
 
         var record = Parse(Record(Meaning));
 
         Assert.True(await IsValidAsync(record));
         Assert.Equal(Meaning, (string?)record["meaning"]);
         Assert.Equal(["kind", "approvedAt", "environment", "release", "qualifiedOn", "identity", "meaning"], record.Properties().Select(p => p.Name));
-        Assert.Equal(["tenant-1", "client-1", Alice], record["identity"]!.Select(v => (string?)v));
+        Assert.Equal(["tenant-1", Alice, "client-1"], record["identity"]!.Select(v => (string?)v));
     }
 
     [Theory]
     [InlineData("extra")]
     [InlineData("identity")]
+    [InlineData("bothShapes")]
+    [InlineData("noShape")]
+    [InlineData("mixedShape")]
     [InlineData("setSha256")]
     [InlineData("type")]
     [InlineData("noType")]
@@ -83,6 +125,7 @@ public sealed class ApprovalRecordTests
         {
             case "extra": record["approver"] = "someone"; break;
             case "identity": record.Remove("identity"); break;
+            case "bothShapes": case "noShape": case "mixedShape": record["identity"] = IdentityOf(defect); break;
             case "setSha256": record["release"]!["setSha256"] = "abc"; break;
             case "type": record["environment"]!["type"] = "Not A Type"; break;
             case "noType": ((JObject)record["environment"]!).Remove("type"); break;
@@ -114,7 +157,7 @@ public sealed class ApprovalRecordTests
     private async Task<string> WriteApprovalAsync(string objectId, int second, Action<JObject>? forge = null, string environment = "stage", string label = "1.0.0")
     {
         var at = At.AddSeconds(second);
-        var record = Parse(ApprovalRecord.Build(Stage, "1.0.0", Set, new DeployerIdentity("tenant-1", "client-1", objectId), "ready", at));
+        var record = Parse(ApprovalRecord.Build(Stage, "1.0.0", Set, new DeployerIdentity("tenant-1", objectId, "client-1"), "ready", at));
         forge?.Invoke(record);
         return Path.GetFileName(await ReleaseRecordFile.WriteAsync(_records, environment, label, at, ReleaseRecordFile.ApproveActivity, record.ToString(Formatting.Indented)));
     }
@@ -189,7 +232,10 @@ public sealed class ApprovalRecordTests
     [Theory]
     [InlineData("extra")]
     [InlineData("identity")]
-    [InlineData("objectType")]
+    [InlineData("principalType")]
+    [InlineData("bothShapes")]
+    [InlineData("noShape")]
+    [InlineData("mixedShape")]
     [InlineData("emptyMeaning")]
     public async Task An_approval_that_fails_the_schema_is_ignored_and_reported(string defect)
     {
@@ -199,7 +245,8 @@ public sealed class ApprovalRecordTests
             {
                 case "extra": record["approver"] = "someone"; break;
                 case "identity": record.Remove("identity"); break;
-                case "objectType": record["identity"]!["objectId"] = new JObject(); break;
+                case "principalType": record["identity"]!["principal"] = new JObject(); break;
+                case "bothShapes": case "noShape": case "mixedShape": record["identity"] = IdentityOf(defect); break;
                 default: record["meaning"] = string.Empty; break;
             }
         });

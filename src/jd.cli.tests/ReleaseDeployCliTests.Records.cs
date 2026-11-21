@@ -10,7 +10,7 @@ namespace jd.cli.tests;
 // A principal that answers without Entra; a test can make it fail instead.
 internal sealed class FakeIdentity : IDeployerIdentity
 {
-    public DeployerIdentity Value { get; set; } = new("tenant-1", "client-1", "object-1");
+    public DeployerIdentity Value { get; set; } = new("tenant-1", "object-1", "client-1");
     public Exception? Failure { get; set; }
     public int Calls { get; private set; }
 
@@ -77,7 +77,7 @@ public sealed partial class ReleaseDeployCliTests
     public async Task A_deploy_writes_one_record_naming_the_principal_the_set_and_the_oq_of_each_workload()
     {
         var set = await CreateSetAsync();
-        _identity.Value = new DeployerIdentity("the-tenant", "the-client", "the-object");
+        _identity.Value = new DeployerIdentity("the-tenant", "the-object", "the-client");
 
         var (code, stdout, _) = await RunAsync(new RecordingBackend(), Deploy(set));
 
@@ -87,7 +87,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.EndsWith("-deploy.json", file, StringComparison.Ordinal);
         var record = Read(file);
         Assert.Equal("succeeded", (string?)record["outcome"]);
-        Assert.Equal(new JObject { ["tenantId"] = "the-tenant", ["clientId"] = "the-client", ["objectId"] = "the-object" }.ToString(), record["identity"]?.ToString());
+        Assert.Equal(new JObject { ["directory"] = "the-tenant", ["principal"] = "the-object", ["name"] = "the-client" }.ToString(), record["identity"]?.ToString());
         Assert.Equal([Worker, App], record["workloads"]!.Select(w => (string?)w["name"]));
         Assert.All(record["workloads"]!, w =>
         {

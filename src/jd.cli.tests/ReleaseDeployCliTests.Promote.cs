@@ -77,7 +77,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Contains($"record: {Path.Combine(StageDirectory, "")}", stdout);
         Assert.Equal(hash, (string?)record["release"]!["setSha256"]);
         Assert.Equal("stage", (string?)record["environment"]!["name"]);
-        Assert.Equal(Dave, (string?)record["identity"]!["objectId"]);
+        Assert.Equal(Dave, (string?)record["identity"]!["principal"]);
         Assert.Equal(1, _identity.Calls - identityCalls); // asked once, before the check, and not again by the walk
         Assert.Equal("succeeded", (string?)record["outcome"]);
         Assert.Equal("passed", (string?)record["iq"]!["status"]);

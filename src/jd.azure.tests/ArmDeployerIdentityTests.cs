@@ -38,7 +38,7 @@ public sealed class ArmDeployerIdentityTests
 
         var identity = await IdentityOf(string.Empty, credential);
 
-        Assert.Equal(new DeployerIdentity("tenant-1", "client-1", "object-1"), identity);
+        Assert.Equal(new DeployerIdentity("tenant-1", "object-1", "client-1"), identity);
         Assert.Single(credential.Requests);
         Assert.Single(credential.Requests[0]);
         Assert.EndsWith("/.default", credential.Requests[0][0], StringComparison.Ordinal);

@@ -12,7 +12,7 @@ namespace jd.resolver.release;
 public static class QualificationReader
 {
     // Every body read below passed the release-record schema first (LoadAsync), so each field the schema requires is there, and each '!' on a body
-    // read relies on it: environment.name, release.label and release.setSha256, identity.objectId, a deploy's workloads, each one's name and
+    // read relies on it: environment.name, release.label and release.setSha256, identity, a deploy's workloads, each one's name and
     // oq.status, and iq.status.
     private sealed record Entry(string Name, string Activity, JObject Body);
 
@@ -69,7 +69,7 @@ public static class QualificationReader
             reasons.AddRange(Judge(entries));
         }
 
-        var deployers = entries.Where(r => r.Activity == ReleaseRecordFile.DeployActivity).Select(r => (string)r.Body["identity"]!["objectId"]!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var deployers = entries.Where(r => r.Activity == ReleaseRecordFile.DeployActivity).Select(r => RecordIdentity.Read(r.Body["identity"]!).Principal).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         return new Qualification(setSha256, reasons, deployers);
     }
 

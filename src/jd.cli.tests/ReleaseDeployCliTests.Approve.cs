@@ -17,7 +17,7 @@ public sealed partial class ReleaseDeployCliTests
 
     private string[] ApprovalFiles => Directory.Exists(StageDirectory) ? Directory.GetFiles(StageDirectory) : [];
 
-    private void Act(string objectId) => _identity.Value = new DeployerIdentity("tenant-1", "client-1", objectId);
+    private void Act(string objectId) => _identity.Value = new DeployerIdentity("tenant-1", objectId, "client-1");
 
     // The sample set deployed on dev by deployer, with IQ passed unless the live revisions say otherwise.
     private async Task DeployedAsync(string deployer = "object-1", Func<string, string>? changeApp = null)
@@ -82,7 +82,7 @@ public sealed partial class ReleaseDeployCliTests
     {
         await DeployedAsync();
         var stage = await StageAsync();
-        _identity.Value = new DeployerIdentity("the-tenant", "the-client", Alice);
+        _identity.Value = new DeployerIdentity("the-tenant", Alice, "the-client");
         var devFiles = Directory.GetFiles(LabelDirectory).Length;
 
         var (code, stdout, stderr) = await ApproveAsync(stage, "Reviewed it; ready.");
@@ -101,7 +101,7 @@ public sealed partial class ReleaseDeployCliTests
         Assert.Equal("1.0.0", (string?)record["release"]!["label"]);
         Assert.Equal(Sha256(Path.Combine(_records, "dev", "1.0.0", "set.yaml")), (string?)record["release"]!["setSha256"]);
         Assert.Equal("dev", (string?)record["qualifiedOn"]);
-        Assert.Equal(["the-tenant", "the-client", Alice], record["identity"]!.Select(v => (string?)v));
+        Assert.Equal(["the-tenant", Alice, "the-client"], record["identity"]!.Select(v => (string?)v));
         Assert.Equal("Reviewed it; ready.", (string?)record["meaning"]);
         Assert.Equal(devFiles, Directory.GetFiles(LabelDirectory).Length);
     }
@@ -112,7 +112,7 @@ public sealed partial class ReleaseDeployCliTests
         await DeployedAsync(changeApp: app => app.Replace("LOG_LEVEL: info", "LOG_LEVEL: '\",\"identity\":{\"objectId\":\"evil-definition\"}'", StringComparison.Ordinal));
         var stage = await StageAsync();
         Act(Alice);
-        const string Meaning = "\",\"identity\":{\"tenantId\":\"x\",\"clientId\":\"x\",\"objectId\":\"evil-meaning\"},\"x\":\"";
+        const string Meaning = "\",\"identity\":{\"directory\":\"x\",\"principal\":\"evil-meaning\",\"name\":\"x\"},\"x\":\"";
 
         var (code, _, stderr) = await ApproveAsync(stage, Meaning);
 
@@ -120,7 +120,7 @@ public sealed partial class ReleaseDeployCliTests
         var file = Assert.Single(ApprovalFiles);
         var record = Read(file);
         Assert.Equal(["kind", "approvedAt", "environment", "release", "qualifiedOn", "identity", "meaning"], record.Properties().Select(p => p.Name));
-        Assert.Equal(Alice, (string?)record["identity"]!["objectId"]);
+        Assert.Equal(Alice, (string?)record["identity"]!["principal"]);
         Assert.Equal(Meaning, (string?)record["meaning"]);
         Assert.DoesNotContain("evil-definition", await File.ReadAllTextAsync(file), StringComparison.Ordinal);
         Assert.Contains("evil-definition", await File.ReadAllTextAsync(Path.Combine(_records, "dev", "1.0.0", "set.yaml")), StringComparison.Ordinal);

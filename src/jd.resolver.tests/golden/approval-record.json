@@ -11,9 +11,9 @@
   },
   "qualifiedOn": "dev",
   "identity": {
-    "tenantId": "tenant-1",
-    "clientId": "client-1",
-    "objectId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    "directory": "tenant-1",
+    "principal": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    "name": "client-1"
   },
   "meaning": "Reviewed the test evidence; ready for stage."
 }

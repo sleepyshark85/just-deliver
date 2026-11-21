@@ -24,7 +24,7 @@ public partial class OrchestratorTests
     private sealed class FakeIdentity(string objectId, Exception? failure = null) : IDeployerIdentity
     {
         public Task<DeployerIdentity> GetAsync(CancellationToken cancellationToken) =>
-            failure is null ? Task.FromResult(new DeployerIdentity("tenant-1", "client-1", objectId)) : throw failure;
+            failure is null ? Task.FromResult(new DeployerIdentity("tenant-1", objectId, "client-1")) : throw failure;
     }
 
     // An approval run: its records, the factories it invoked in order, and the progress it reported.
@@ -80,7 +80,7 @@ public partial class OrchestratorTests
 
         Assert.Equal((Outcome.Succeeded, (Problem?)null), (result.Outcome, result.Problem));
         Assert.Empty(result.Errors);
-        Assert.Equal(("stage", Alice, 1, ApprovalKey), (result.Environment?.Name, result.Approver?.ObjectId, result.Counted, result.Record));
+        Assert.Equal(("stage", Alice, 1, ApprovalKey), (result.Environment?.Name, result.Approver?.Principal, result.Counted, result.Record));
         Assert.Equal([ApprovalKey], approving.Written);
         Assert.Equal(["identity", "records", "time"], approving.Built);
         Assert.Empty(approving.Progress);

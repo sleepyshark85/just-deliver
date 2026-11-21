@@ -25,7 +25,7 @@ public sealed class ReleaseUseCaseRunTests
 
     private sealed class FakeIdentity : IDeployerIdentity
     {
-        public Task<DeployerIdentity> GetAsync(CancellationToken cancellationToken) => Task.FromResult(new DeployerIdentity("tenant-1", "client-1", "object-1"));
+        public Task<DeployerIdentity> GetAsync(CancellationToken cancellationToken) => Task.FromResult(new DeployerIdentity("tenant-1", "object-1", "client-1"));
     }
 
     // Records that keep the set but refuse every record, as a full disk or a read-only mount would.

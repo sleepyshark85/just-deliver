@@ -398,8 +398,8 @@ public sealed class EnvUpAzureTests : IDisposable
         // The deploy left a record naming the principal the run authenticated with (as Entra reports it) and a passed OQ for each workload.
         var firstRecord = Assert.Single(RecordsOf("1.0.0"));
         Assert.Equal("succeeded", firstRecord.GetProperty("outcome").GetString());
-        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), firstRecord.GetProperty("identity").GetProperty("clientId").GetString());
-        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_TENANT_ID"), firstRecord.GetProperty("identity").GetProperty("tenantId").GetString());
+        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), firstRecord.GetProperty("identity").GetProperty("name").GetString());
+        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_TENANT_ID"), firstRecord.GetProperty("identity").GetProperty("directory").GetString());
         Assert.Equal(["passed", "passed"], [Oq(firstRecord, 0), Oq(firstRecord, 1)]);
         Assert.Equal("passed", Iq(firstRecord)); // the deploy qualified itself: no drift, the pinned digest live
         // The set's second workload changed nothing of the first: IQ, after both were deployed, refreshed each of the worker's five nodes against Azure and found no drift.
@@ -533,12 +533,12 @@ public sealed class EnvUpAzureTests : IDisposable
         var qualified = Assert.Single(QualifyRecordsOf("1.0.0"));
         Assert.Equal("qualify", qualified.GetProperty("activity").GetString());
         Assert.Equal("passed", qualified.GetProperty("iq").GetProperty("status").GetString());
-        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), qualified.GetProperty("identity").GetProperty("clientId").GetString());
+        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), qualified.GetProperty("identity").GetProperty("name").GetString());
 
         // Approval: the stage policy names the renamed dev and the principal that ran the deploys. An unknown label is refused; under the strict policy the
         // principal is refused as the deployer of the set; under the relaxed copy it is approved, the record names the deployer's own identity and the hash of dev's
         // set.yaml, and a repeat is refused. (Separation between different principals is proved offline: the sandbox has one.)
-        var principal = RecordsOf("1.0.0")[0].GetProperty("identity").GetProperty("objectId").GetString()!;
+        var principal = RecordsOf("1.0.0")[0].GetProperty("identity").GetProperty("principal").GetString()!;
         var strictStage = StagePolicy(stageDescriptor, "strict.stage.env.yaml", principal, separate: true);
         var relaxedStage = StagePolicy(stageDescriptor, "relaxed.stage.env.yaml", principal, separate: false);
         var (unknownCode, unknownOutput) = await ApproveAsync("9.9.9", relaxedStage);
@@ -556,8 +556,8 @@ public sealed class EnvUpAzureTests : IDisposable
         Assert.True(approvedCode == 0, approvedOutput);
         Assert.Contains($"approved 1.0.0 for {StageName} (1 of 1)", approvedOutput, StringComparison.Ordinal);
         using var approval = JsonDocument.Parse(File.ReadAllText(Assert.Single(Directory.GetFiles(Path.Combine(Records, StageName, "1.0.0"), "*-approve.json"))));
-        Assert.Equal(principal, approval.RootElement.GetProperty("identity").GetProperty("objectId").GetString());
-        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), approval.RootElement.GetProperty("identity").GetProperty("clientId").GetString());
+        Assert.Equal(principal, approval.RootElement.GetProperty("identity").GetProperty("principal").GetString());
+        Assert.Equal(System.Environment.GetEnvironmentVariable("ARM_CLIENT_ID"), approval.RootElement.GetProperty("identity").GetProperty("name").GetString());
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(Records, DevName, "1.0.0", "set.yaml")))), approval.RootElement.GetProperty("release").GetProperty("setSha256").GetString());
         var (repeatCode, repeatOutput) = await ApproveAsync("1.0.0", relaxedStage);
         Assert.Equal(1, repeatCode);
