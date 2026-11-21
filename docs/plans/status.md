@@ -103,7 +103,7 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S27b | Docs: agent entry and engineering | done | PR #104 | 2 | Each rule once, in its owner |
 | S27c | Docs: model, documents, provisioning | done | PR #106 | 2 | model.md replaces resolver/components/workload-definition/connections |
 | S27d | Docs: release, approvals, application, usage | done | PR #105 | 2 | usage.md is the command reference; flow sketch deleted |
-| S28 | Multi-cloud: GCP (design) | done | S28 PR | 3 | Phase 1.7; ADRs 0021–0023 drafted; slices S28a–S28l |
+| S28 | Multi-cloud: GCP (design) | done | #108 | 3 | Phase 1.7; ADRs 0021–0023 drafted; slices S28a–S28l |
 
 ## Open items
 
