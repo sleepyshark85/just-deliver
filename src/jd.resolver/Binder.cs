@@ -46,6 +46,9 @@ internal sealed class Binder(SchemaIndex index)
     /// <summary>The catalog version <paramref name="document"/> holds (<see cref="Roles.CatalogVersion"/>); empty when it holds none.</summary>
     public string ReadVersion(Document document) => Text(ValuesOf(document).Nearest(Roles.CatalogVersion, document.Body));
 
+    /// <summary>The platforms <paramref name="document"/> declares (<see cref="Roles.CatalogPlatforms"/>); empty when it declares none.</summary>
+    public IReadOnlyList<string> ReadPlatforms(Document document) => Strings(ValuesOf(document).Nearest(Roles.CatalogPlatforms, document.Body));
+
     /// <summary>
     /// The environment types <paramref name="document"/> declares, by name: each object that holds an <see cref="Roles.EnvironmentTypeLayer"/>,
     /// named by the key it is held under, gated when it holds a true <see cref="Roles.EnvironmentTypeGated"/>.
@@ -86,6 +89,7 @@ internal sealed class Binder(SchemaIndex index)
             Text(Read(Roles.EnvironmentName)),
             Text(Read(Roles.EnvironmentRegion)),
             Text(Read(Roles.EnvironmentType)),
+            Text(Read(Roles.EnvironmentPlatform)),
             new Dictionary<string, string>(Flatten(Read(Roles.EnvironmentValues), string.Empty)),
             Strings(Read(Roles.EnvironmentOffers)),
             Read(Roles.EnvironmentApproval) is JObject block ? ReadApproval(values, block) : null)
@@ -176,6 +180,7 @@ internal sealed class Binder(SchemaIndex index)
         [Roles.EnvironmentName] = environment.Name,
         [Roles.EnvironmentRegion] = environment.Region,
         [Roles.EnvironmentType] = environment.Type,
+        [Roles.EnvironmentPlatform] = environment.Platform,
         [Roles.EnvironmentOffers] = new JArray(environment.Offers),
         [Roles.EnvironmentValues] = values,
         [Roles.EnvironmentApproval] = environment.Approval is { } approval
@@ -282,11 +287,13 @@ internal sealed class Binder(SchemaIndex index)
     {
         var exports = values.Nearest(Roles.PartExports, part) as JObject;
         var reads = values.Nearest(Roles.PartReads, part);
+        List<SelectKey> keys = [.. field.Selects.Select(select => ReadKey(values.Body, select, part))];
         return new Part
         {
             Location = part.Path,
             Scope = field.Scope ?? Text(values.Nearest(Roles.PartScope, part)),
-            Keys = [.. field.Selects.Select(select => ReadKey(values.Body, select, part))],
+            Keys = keys,
+            Platform = keys.FirstOrDefault(key => key.Role == Roles.EnvironmentPlatform)?.Key ?? Text(values.Nearest(Roles.PartPlatform, part)),
             Reads = Strings(reads),
             ReadsLocation = reads?.Path ?? part.Path,
             Nodes = Entries(values.Nearest(Roles.PartNodes, part)).ToDictionary(node => node.Name, node => ReadNode(values, node.Value)),

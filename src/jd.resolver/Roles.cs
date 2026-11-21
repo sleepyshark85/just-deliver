@@ -27,6 +27,9 @@ internal static class Roles
     /// <summary>A part's scope, when the schema does not state it with <c>scope</c>.</summary>
     public const string PartScope = "part.scope";
 
+    /// <summary>The platform a part is built on, when no select map entry it is in says it: a shared resource's.</summary>
+    public const string PartPlatform = "part.platform";
+
     /// <summary>A node's template.</summary>
     public const string NodeTemplate = "node.template";
 
@@ -44,6 +47,9 @@ internal static class Roles
 
     /// <summary>The catalog's version, recorded with every deployment.</summary>
     public const string CatalogVersion = "catalog.version";
+
+    /// <summary>The platforms the catalog declares.</summary>
+    public const string CatalogPlatforms = "catalog.platforms";
 
     /// <summary>A declared environment type's layer; the object holding it is the type, named by the key it is held under.</summary>
     public const string EnvironmentTypeLayer = "environment-type.layer";
@@ -98,6 +104,9 @@ internal static class Roles
 
     /// <summary>The environment's type, which selects an implementation.</summary>
     public const string EnvironmentType = "env.type";
+
+    /// <summary>The environment's platform, which selects an implementation before its type does, with no fallback; not an expression root.</summary>
+    public const string EnvironmentPlatform = "env.platform";
 
     /// <summary>The components and the runtime the environment offers, by name.</summary>
     public const string EnvironmentOffers = "env.offers";

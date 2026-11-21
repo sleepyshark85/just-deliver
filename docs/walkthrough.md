@@ -54,7 +54,8 @@ $RECORDS/
 
 Prerequisites: .NET SDK, `pulumi` CLI, `az` CLI, `jq`; a subscription with the guardrails of [tools/sandbox](../tools/sandbox/README.md) and **no
 free-tier Cosmos account** yet; a deploying principal. Run everything from the repository root. jd needs nothing set
-([usage.md](usage.md#data-and-identity)); set each environment definition's `region` (`southeastasia` in the samples) to the sandbox's allowed region.
+([usage.md](usage.md#data-and-identity)); set each environment definition's `region` (`southeastasia` in the samples) to the sandbox's allowed region. The definitions name
+`platform: azure`, the one platform the seed catalog declares.
 
 ```bash
 cp samples/walkthrough/env.example.sh ~/jd-walkthrough.env.sh      # outside the repo; fill in JD_WALK

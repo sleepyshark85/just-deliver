@@ -145,11 +145,11 @@ public sealed partial class ReleaseDeployCliTests
             $"{Path.Combine(catalog, "templates")}: template directory not found.\n" + string.Concat(
                 from node in new (string File, string Location, string Template)[]
                 {
-                    ("components/database.yaml", "implementations.default.classes.standard.nodes.container.template", "cosmos-sql-container"),
-                    ("components/monitoring.yaml", "implementations.default.classes.standard.nodes.appinsights.template", "application-insights"),
-                    ("runtimes/container-app.yaml", "implementations.default.nodes.runtime.template", "container-app"),
-                    ("components/database.yaml", "implementations.default.classes.standard.nodes.access.template", "cosmos-sql-role-assignment"),
-                    ("components/monitoring.yaml", "implementations.default.classes.standard.nodes.access.template", "role-assignment"),
+                    ("components/database.yaml", "implementations.azure.types.default.classes.standard.nodes.container.template", "cosmos-sql-container"),
+                    ("components/monitoring.yaml", "implementations.azure.types.default.classes.standard.nodes.appinsights.template", "application-insights"),
+                    ("runtimes/container-app.yaml", "implementations.azure.types.default.nodes.runtime.template", "container-app"),
+                    ("components/database.yaml", "implementations.azure.types.default.classes.standard.nodes.access.template", "cosmos-sql-role-assignment"),
+                    ("components/monitoring.yaml", "implementations.azure.types.default.classes.standard.nodes.access.template", "role-assignment"),
                 }
                 select $"{Path.Combine(catalog, node.File)}: {node.Location}: template 'azure/{node.Template}' is not in the template library.\n"));
         Assert.Empty(backend.Calls);

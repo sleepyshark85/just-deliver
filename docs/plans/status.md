@@ -4,7 +4,7 @@
 
 ## Now
 
-- **Phase 1.7 (multi-cloud: GCP) inserted before phase 2** by the user (2026-11-21, "GCP as soon as possible"). S28 design note merged ([multi-cloud.md](../architecture/multi-cloud.md), 3 rounds). Next: S28a, the GCP spike (lead), once the user has the GCP project; S28b–S28d (no GCP needed) may start before it.
+- **Phase 1.7 (multi-cloud: GCP) inserted before phase 2** by the user (2026-11-21, "GCP as soon as possible"). S28 design note merged ([multi-cloud.md](../architecture/multi-cloud.md), 3 rounds). Next: S28a, the GCP spike (lead), once the user has the GCP project; S28b done; S28c approved, waiting for its Azure gate; next S28d (after S28c), S28h.
 - **Needed from the user before any GCP slice reaches GCP:** a GCP project (billing linked, free tier) and a deployer service account or workload identity federation.
 - **Docs restructure done** (S27a–S27d, user, 2026-11-17): one owner per fact; `model.md` replaces five notes; usage.md is the command reference.
 - **Waiting for the user:** ADR 0019 says "approved by the user" but is Proposed; the new ADR 0020 (stack per graph node,
@@ -104,6 +104,8 @@ States: `todo` · `in-progress` · `in-review` · `changes-requested` · `done` 
 | S27c | Docs: model, documents, provisioning | done | PR #106 | 2 | model.md replaces resolver/components/workload-definition/connections |
 | S27d | Docs: release, approvals, application, usage | done | PR #105 | 2 | usage.md is the command reference; flow sketch deleted |
 | S28 | Multi-cloud: GCP (design) | done | #108 | 3 | Phase 1.7; ADRs 0021–0023 drafted; slices S28a–S28l |
+| S28b | Platform in the model | done | #110 | 3 | Snapshot byte-identical; descriptors gain `platform`; `types:` level under each platform; no Azure gate |
+| S28c | Neutral identity | in-review | | 2 | Approved; waits for the Azure gate (`jd.azure` changed), which needs the user to run it |
 
 ## Open items
 
@@ -148,7 +150,7 @@ Take when touching the code named; remove once done.
 
 Newest first; the last five sessions.
 
-- **2026-11-21 (S28, multi-cloud design)** — User: jd is multi-cloud, GCP as soon as possible; phase 1.7 inserted before phase 2. S28 design note merged (3 rounds: platform match dropped, ADR 0023 runtime identity, monitoring contract slice moved before the GCP catalog). Waiting for the user: §13 choices, a GCP project and deployer.
+- **2026-11-21 (S28, multi-cloud design)** — User: jd is multi-cloud, GCP as soon as possible; phase 1.7 inserted before phase 2. S28 design note merged (3 rounds: platform match dropped, ADR 0023 runtime identity, monitoring contract slice moved before the GCP catalog). User decided the §13 choices. S28b merged (3 rounds); S28c approved (2 rounds), its Azure gate blocked: the lead may not load the sandbox credentials, so the user runs it. Waiting for the user: a GCP project and deployer.
 - **2026-11-17 (S27a–d, docs restructure)** — User asked for concise docs, one responsibility each, no repetition. Seven
   read-only reviews, then four parallel slices (2, 2, 2, 3 rounds). User decisions: slice history deleted, not archived;
   landing-zone/network folded into ADR 0008 and deleted; ADR mismatches drafted as Proposed (0020, 0011 note), statuses untouched.

@@ -14,10 +14,11 @@ internal static class ContractRules
     public static IReadOnlyList<LoadError> CheckSameClasses(IEnumerable<PartOwner> components) =>
         [.. components.SelectMany(component =>
         {
-            // The class map's keys are the inner select keys of the class parts, grouped by the implementation they are in.
-            var implementations = component.Parts.Where(part => part.Keys.Count > 1).GroupBy(part => part.Keys[0].Key)
-                .Select(implementation => (implementation.Key, Location: implementation.First().Keys[1].MapLocation,
-                    Classes: implementation.Select(part => part.Keys[1].Key).ToList())).ToList();
+            // The class map's keys are the innermost select keys of the class parts, grouped by the implementation (the outer keys) they are in.
+            var implementations = component.Parts.Where(part => part.Keys[^1].Role == Roles.RequirementClass)
+                .GroupBy(part => string.Join('/', part.Keys.SkipLast(1).Select(key => key.Key)))
+                .Select(implementation => (implementation.Key, Location: implementation.First().Keys[^1].MapLocation,
+                    Classes: implementation.Select(part => part.Keys[^1].Key).ToList())).ToList();
             var first = implementations[0];
             return implementations.Where(implementation => !implementation.Classes.ToHashSet().SetEquals(first.Classes)).Select(implementation => new LoadError(
                 component.Source, implementation.Location,

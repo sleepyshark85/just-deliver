@@ -1,6 +1,7 @@
 kind: SharedResource
 name: apps-env
 description: The environment's Container Apps environment, which the runtime deploys every workload into; its logs go to the shared workspace through a diagnostic setting.
+platform: azure
 scope: environment
 uses: [env-group, log-analytics]
 nodes:

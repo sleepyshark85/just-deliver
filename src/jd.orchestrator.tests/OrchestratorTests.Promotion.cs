@@ -15,7 +15,7 @@ public partial class OrchestratorTests
 
     // stage, gated by a policy over dev. The default deployer of the Ledger ("object-1") is listed so a test can make the deployer approve.
     private static EnvironmentDescriptor Stage(int required = 1, bool separate = true) =>
-        new("stage", "region-1", "stage", new Dictionary<string, string>(), [], new ApprovalPolicy("dev", required, [Alice, Bob, "object-1"], separate));
+        new("stage", "region-1", "stage", "azure", new Dictionary<string, string>(), [], new ApprovalPolicy("dev", required, [Alice, Bob, "object-1"], separate));
 
     // An approval by objectId at the given minute, written through the store into stage's directory for the label, as `jd approve` would.
     private static async Task ApproveAsync(Ledger ledger, string objectId, int minute, string? setSha256 = null)

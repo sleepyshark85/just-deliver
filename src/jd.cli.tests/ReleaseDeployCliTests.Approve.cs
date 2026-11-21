@@ -227,7 +227,8 @@ public sealed partial class ReleaseDeployCliTests
 
         Assert.Equal((2, string.Empty, $"jd: cannot read '{absent}': not found or not a file.\n"), (missing.Code, missing.Out, missing.Err.ReplaceLineEndings("\n")));
         Assert.Equal(
-            (1, string.Empty, string.Concat(new[] { "name", "region", "type", "offers", "values" }.Select(field => $"{invalid}: {field}: schema violation: PropertyRequired: #/{field}\n"))),
+            (1, string.Empty, $"{invalid}: platform: required: a descriptor written by an older jd lacks it; re-run `jd env up` with this environment's definition, which rewrites the descriptor.\n"
+                + string.Concat(new[] { "name", "region", "type", "offers", "values" }.Select(field => $"{invalid}: {field}: schema violation: PropertyRequired: #/{field}\n"))),
             (error.Code, error.Out, error.Err.ReplaceLineEndings("\n")));
         Assert.Equal(0, _identity.Calls);
     }

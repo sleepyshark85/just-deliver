@@ -312,17 +312,17 @@ public partial class TemplateLibraryTests
     {
         var sources = new[]
         {
-            "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
-            "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n"
-                + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }\n"
-                + "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffixOut, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }\n"
-                + "    nodes:\n      runtime:\n        template: t/rt\n        config: { image: i }\n",
+            "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
+            "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  azure:\n    types:\n      default:\n"
+                + "        probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }\n"
+                + "        release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffixOut, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }\n"
+                + "        nodes:\n          runtime:\n            template: t/rt\n            config: { image: i }\n",
             $"kind: Policy\nname: pol\nreason: r\nmatch: {{ kind: runtime }}\n{layer}: {{ runtime.{input}: from-policy }}\n",
         }.Select((content, i) => new SourceDocument($"f{i}.yaml", Encoding.UTF8.GetBytes(content)));
         var loaded = await CatalogLoader.LoadAsync(new SourceCatalog("catalog", [.. sources]));
         Assert.Empty(loaded.Errors);
         var workload = (await WorkloadFile.ParseAsync("workload.yaml", "apiVersion: just-deliver/v1\nkind: Workload\nmetadata: { name: shop, team: crew }\ncontainer:\n  image: reg/app:1\nrequires: []\n")).Value!;
-        var graph = jd.resolver.Resolver.Resolve(workload, "workload.yaml", loaded.Value!, new EnvironmentDescriptor("dev", "region-1", "dev", new Dictionary<string, string>(), ["container-app"], null));
+        var graph = jd.resolver.Resolver.Resolve(workload, "workload.yaml", loaded.Value!, new EnvironmentDescriptor("dev", "region-1", "dev", "azure", new Dictionary<string, string>(), ["container-app"], null));
         Assert.Empty(graph.Errors);
 
         var error = Assert.Single(RuntimeLibrary().Check(graph));

@@ -2,45 +2,47 @@ kind: Component
 name: database
 description: A database for the workload. The platform's implementation decides the engine (today a container in the environment's shared Cosmos DB, SQL API); the `engine` export tells the code which one it got.
 exports: [engine, endpoint, database, container]     # the contract: every class of every implementation exports exactly these
-uses: [cosmos-account]
 implementations:
-  default:                                           # every environment type without its own key
-    # Once per environment that offers database, deployed by its `jd env up`; the class below reads it as ${database.<export>}.
-    environment:
-      nodes:
-        database:
-          template: azure/cosmos-sql-database
-          config:
-            resourceGroupName: ${cosmos-account.resourceGroup}
-            accountName: ${cosmos-account.name}
-            databaseName: ${name('db')}
-            throughput: 400                         # shared by the environment's containers; two environments use 800 of the free 1000
-      exports:
-        databaseName: ${database.databaseName}
-        databaseId: ${database.databaseId}
-    classes:
-      standard:
-        # The account (cosmos-account, which this component uses) and the shared-throughput database (this component's environment part)
-        # are deployed by env up and read from the descriptor; a workload adds a container and a grant on it.
-        nodes:
-          container:
-            template: azure/cosmos-sql-container
-            config:
-              accountId: ${cosmos-account.id}
-              databaseName: ${database.databaseName}
-              containerName: ${name('cosmos-container')}
-              partitionKeyPath: /id
-          access:
-            kind: grant                                   # surfaced in the approval diff
-            template: azure/cosmos-sql-role-assignment
-            config:
-              accountId: ${cosmos-account.id}             # not the target: a grant may read what the component uses
-              scope: ${container.scope}                   # the target (grants.yaml): this container only, not the account
-              principalId: ${runtime.principalId}         # this reference alone orders it after the revision step
-              roleGuid: ${role.cosmos-data-contributor}
-              roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
-        exports:
-          engine: cosmos-sql                              # a literal from data: what the code is talking to
-          endpoint: ${cosmos-account.endpoint}
-          database: ${database.databaseName}
-          container: ${container.containerName}
+  azure:
+    uses: [cosmos-account]
+    types:
+      default:                                           # every environment type without its own key
+        # Once per environment that offers database, deployed by its `jd env up`; the class below reads it as ${database.<export>}.
+        environment:
+          nodes:
+            database:
+              template: azure/cosmos-sql-database
+              config:
+                resourceGroupName: ${cosmos-account.resourceGroup}
+                accountName: ${cosmos-account.name}
+                databaseName: ${name('db')}
+                throughput: 400                         # shared by the environment's containers; two environments use 800 of the free 1000
+          exports:
+            databaseName: ${database.databaseName}
+            databaseId: ${database.databaseId}
+        classes:
+          standard:
+            # The account (cosmos-account, which this component uses) and the shared-throughput database (this component's environment part)
+            # are deployed by env up and read from the descriptor; a workload adds a container and a grant on it.
+            nodes:
+              container:
+                template: azure/cosmos-sql-container
+                config:
+                  accountId: ${cosmos-account.id}
+                  databaseName: ${database.databaseName}
+                  containerName: ${name('cosmos-container')}
+                  partitionKeyPath: /id
+              access:
+                kind: grant                                   # surfaced in the approval diff
+                template: azure/cosmos-sql-role-assignment
+                config:
+                  accountId: ${cosmos-account.id}             # not the target: a grant may read what the component uses
+                  scope: ${container.scope}                   # the target (grants.yaml): this container only, not the account
+                  principalId: ${runtime.principalId}         # this reference alone orders it after the revision step
+                  roleGuid: ${role.cosmos-data-contributor}
+                  roleAssignmentId: ${guid(container.scope, runtime.principalId, 'data-contributor')}
+            exports:
+              engine: cosmos-sql                              # a literal from data: what the code is talking to
+              endpoint: ${cosmos-account.endpoint}
+              database: ${database.databaseName}
+              container: ${container.containerName}

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://just-deliver/schemas/catalog/component.schema.json",
   "title": "just-deliver catalog component",
-  "description": "What a workload asks for by name (for example 'database'): one contract, and an implementation per environment type. Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across shared resources, components and runtimes.",
+  "description": "What a workload asks for by name (for example 'database'): one contract, and an implementation per platform and environment type. Expressions (${...}) are kept as raw strings by the loader and evaluated later. Unique by name across shared resources, components and runtimes.",
   "type": "object",
   "x-jd": { "is": "owner" },
   "additionalProperties": false,
@@ -23,36 +23,50 @@
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1 }
     },
-    "uses": {
-      "description": "The shared resources its parts may read as ${<name>.<export>} (checked by the resolver).",
-      "type": "array",
-      "x-jd": { "is": "part.reads", "ref": "shared resource" },
-      "uniqueItems": true,
-      "items": { "type": "string", "minLength": 1 }
-    },
+    "uses": { "not": {}, "x-jd": { "message": "uses belongs in each platform entry of implementations, since what a component uses depends on how it is built; a catalog written for an older jd has it here, so move it (see catalog/components/database.yaml)." } },
     "implementations": {
-      "description": "Environment type (declared in the Catalog file) or 'default' -> implementation. An environment uses its type's implementation, else 'default'; every implementation declares the same classes (checked by the resolver).",
+      "description": "Platform (declared in the Catalog file) -> what the component is on it. An environment uses its platform's entry, with no fallback: a component without one is not offered on that platform.",
       "type": "object",
-      "x-jd": { "ref": "environment type", "select": "env.type", "fallback": "default" },
+      "x-jd": { "ref": "platform", "select": "env.platform" },
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["classes"],
+        "required": ["types"],
         "properties": {
-          "environment": {
-            "description": "The nodes deployed once per environment that offers the component, and their exports; its class parts read them as ${<component>.<export>}.",
-            "$ref": "part.schema.json",
-            "x-jd": { "scope": "environment" }
+          "uses": {
+            "description": "The shared resources of this platform its parts may read as ${<name>.<export>} (checked by the resolver).",
+            "type": "array",
+            "x-jd": { "is": "part.reads", "ref": "shared resource" },
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
           },
-          "classes": {
-            "description": "Class (what a workload may request with 'class') -> the nodes each requiring workload gets and its exports.",
+          "types": {
+            "description": "Environment type (declared in the Catalog file) or 'default' -> implementation. An environment uses its type's implementation, else 'default'; every implementation declares the same classes (checked by the resolver).",
             "type": "object",
-            "x-jd": { "select": "requirement.class" },
+            "x-jd": { "ref": "environment type", "select": "env.type", "fallback": "default" },
             "minProperties": 1,
-            "additionalProperties": { "$ref": "part.schema.json", "x-jd": { "scope": "workload" } }
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["classes"],
+              "properties": {
+                "environment": {
+                  "description": "The nodes deployed once per environment that offers the component, and their exports; its class parts read them as ${<component>.<export>}.",
+                  "$ref": "part.schema.json",
+                  "x-jd": { "scope": "environment" }
+                },
+                "classes": {
+                  "description": "Class (what a workload may request with 'class') -> the nodes each requiring workload gets and its exports.",
+                  "type": "object",
+                  "x-jd": { "select": "requirement.class" },
+                  "minProperties": 1,
+                  "additionalProperties": { "$ref": "part.schema.json", "x-jd": { "scope": "workload" } }
+                }
+              }
+            }
           }
-        }
+        },
+        "additionalProperties": { "not": {}, "x-jd": { "message": "not a field of a platform entry (uses, types); a catalog written for an older jd keys implementations by environment type, so put them under a platform's types (see catalog/components/database.yaml)." } }
       }
     }
   }

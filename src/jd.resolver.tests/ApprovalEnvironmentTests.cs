@@ -14,10 +14,10 @@ public class ApprovalEnvironmentTests
     private const string Block = $"approval:\n  qualifiedOn: dev\n  required: 1\n  approvers: [\"{Approver}\"]\n  separateFromDeployer: true\n";
 
     private static string Descriptor(string type = "stage", string? approval = Block, string name = "stage") =>
-        $"kind: Environment\nname: {name}\nregion: r1\ntype: {type}\noffers: []\nvalues: {{ a: b }}\n{approval}";
+        $"kind: Environment\nname: {name}\nregion: r1\ntype: {type}\nplatform: azure\noffers: []\nvalues: {{ a: b }}\n{approval}";
 
     private static string Definition(string type = "stage", string? approval = Block) =>
-        $"kind: EnvironmentDefinition\nname: stage\nregion: region-1\ntype: {type}\noffers: [database]\n{approval}";
+        $"kind: EnvironmentDefinition\nname: stage\nregion: region-1\ntype: {type}\nplatform: azure\noffers: [database]\n{approval}";
 
     private static Task<LoadResult<EnvironmentDescriptor>> LoadDefinitionAsync(string text) =>
         EnvironmentParser.LoadDefinitionAsync(new SourceDocument("definition.yaml", Encoding.UTF8.GetBytes(text)), CancellationToken.None);
@@ -102,7 +102,7 @@ public class ApprovalEnvironmentTests
     [Fact]
     public async Task An_environment_built_in_code_is_checked_with_an_empty_location()
     {
-        var environment = new EnvironmentDescriptor("dev", "region-1", "protected", new Dictionary<string, string>(), [], null);
+        var environment = new EnvironmentDescriptor("dev", "region-1", "protected", "azure", new Dictionary<string, string>(), [], null);
 
         var error = Assert.Single(EnvironmentTypeCheck.Check(await SeedCatalogAsync(), environment, "env.yaml"));
 

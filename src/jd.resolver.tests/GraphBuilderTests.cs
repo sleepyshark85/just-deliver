@@ -16,11 +16,11 @@ public class GraphBuilderTests
 
     private static readonly string[] BaseFiles =
     [
-        "kind: Catalog\nversion: \"7\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
+        "kind: Catalog\nversion: \"7\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n",
     ];
 
     private static readonly EnvironmentDescriptor Env =
-        new("dev", "region", "dev", new Dictionary<string, string> { ["cosmos-account.id"] = "/acct" }, ["sqldb", "container-app"], null);
+        new("dev", "region", "dev", "azure", new Dictionary<string, string> { ["cosmos-account.id"] = "/acct" }, ["sqldb", "container-app"], null);
 
     // One component node as YAML; config is a flow mapping body, written as it would be in the catalog.
     private static string N(string name, string config, string kind = "create", string template = "")

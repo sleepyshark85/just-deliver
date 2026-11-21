@@ -239,15 +239,15 @@ public sealed class CliTests : IDisposable
     public async Task Preview_reports_a_component_export_that_references_a_resource_instead_of_failing()
     {
         var catalog = Path.Combine(_temp, "catalog");
-        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
-        WriteTemp("catalog/components/database.yaml", "kind: Component\nname: database\ndescription: d\nexports: [endpoint]\nimplementations:\n  default:\n    classes:\n      standard:\n        nodes:\n          n: { template: t/n, config: {} }\n        exports:\n          endpoint: ${resource.other.endpoint}\n");
+        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
+        WriteTemp("catalog/components/database.yaml", "kind: Component\nname: database\ndescription: d\nexports: [endpoint]\nimplementations:\n  azure:\n    types:\n      default:\n        classes:\n          standard:\n            nodes:\n              n: { template: t/n, config: {} }\n            exports:\n              endpoint: ${resource.other.endpoint}\n");
 
         var (code, stdout, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", catalog);
 
         Assert.Equal(1, code);
         Assert.Empty(stdout);
         Assert.Contains(Path.Combine(catalog, "components/database.yaml"), stderr);
-        Assert.Contains("implementations.default.classes.standard.exports.endpoint", stderr);
+        Assert.Contains("implementations.azure.types.default.classes.standard.exports.endpoint", stderr);
         Assert.Contains("an export cannot reference", stderr);
     }
 
@@ -255,7 +255,7 @@ public sealed class CliTests : IDisposable
     public async Task Preview_prints_resolver_errors_with_file_and_location()
     {
         var catalog = Path.Combine(_temp, "catalog");
-        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
+        WriteTemp("catalog/catalog.yaml", "kind: Catalog\nversion: 1.0.0\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
         WriteTemp("catalog/components/oops.yaml", "kind: Component\nname: oops\n");
 
         var (code, stdout, stderr) = await RunAsync("preview", Workload, "--env", Environment, "--catalog", catalog);

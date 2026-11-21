@@ -88,6 +88,7 @@ public abstract class ProbeAzureTest : IDisposable
             kind: SharedResource
             name: probe-group
             description: Test-only; its name is the descriptor's value.
+            platform: azure
             scope: environment
             nodes:
               stand-in:
@@ -110,13 +111,15 @@ public abstract class ProbeAzureTest : IDisposable
             name: test-runtime
             description: Test-only runtime stand-in.
             implementations:
-              default:
-                probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }
-                release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }
-                nodes:
-                  runtime:
-                    template: test/runtime-stand-in
-                    config: {}
+              azure:
+                types:
+                  default:
+                    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }
+                    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }
+                    nodes:
+                      runtime:
+                        template: test/runtime-stand-in
+                        config: {}
             """);
         Write("catalog/templates/test/runtime-stand-in/Pulumi.yaml", """
             name: runtime-stand-in

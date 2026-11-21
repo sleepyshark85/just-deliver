@@ -1,6 +1,7 @@
 kind: SharedResource
 name: cosmos-account
 description: The one free-tier Cosmos DB account (SQL API); each environment that offers database adds its own database to it.
+platform: azure
 scope: shared
 uses: [shared-group]
 # Deployed by the shared layer when an offered component uses it (see shared-group.yaml). Free-tier budget (docs/engineering/standards.md section 6): Azure allows

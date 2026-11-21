@@ -24,21 +24,21 @@ public sealed class WorkloadUseCaseTests
           - type: thing
         """;
 
-    internal const string Environment = "kind: Environment\nname: dev\nregion: region-1\ntype: dev\noffers: [container-app, thing]\nvalues: {}\n";
+    internal const string Environment = "kind: Environment\nname: dev\nregion: region-1\ntype: dev\nplatform: azure\noffers: [container-app, thing]\nvalues: {}\n";
 
     internal const string Approval = "approval:\n  qualifiedOn: test\n  required: 1\n  approvers: [\"00000000-0000-0000-0000-000000000000\"]\n  separateFromDeployer: true\n";
 
     internal static readonly SourceCatalog Catalog = new("cat",
     [
-        Document("catalog.yaml", "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment, approval: false }, stage: { layer: environment, approval: true } }\n"),
+        Document("catalog.yaml", "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment, approval: false }, stage: { layer: environment, approval: true } }\n"),
         Document("components/thing.yaml",
-            "kind: Component\nname: thing\ndescription: d\nexports: [out]\nimplementations:\n  default:\n    classes:\n      standard:\n"
-            + "        nodes:\n          group:\n            template: t/group\n            config: { k: 1 }\n        exports:\n          out: x\n"),
+            "kind: Component\nname: thing\ndescription: d\nexports: [out]\nimplementations:\n  azure:\n    types:\n      default:\n        classes:\n          standard:\n"
+            + "            nodes:\n              group:\n                template: t/group\n                config: { k: 1 }\n            exports:\n              out: x\n"),
         Document("runtimes/container-app.yaml",
-            "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  default:\n"
-            + "    probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }\n"
-            + "    release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }\n"
-            + "    nodes:\n      runtime:\n        template: t/runtime\n        config: { k: 1 }\n"),
+            "kind: Runtime\nname: container-app\ndescription: d\nimplementations:\n  azure:\n    types:\n      default:\n"
+            + "        probe: { path: /health, expectedStatus: 200, timeoutSeconds: 60, intervalSeconds: 5, scheme: https }\n"
+            + "        release: { suffixInput: suffix, trafficInput: traffic, trafficOutput: traffic, suffixOutput: suffix, revisionOutput: revision, fqdnOutput: fqdn, revisionKey: revisionName, latestKey: latestRevision, weightKey: weight, resourceIdOutput: appId, suffix: { prefix: r, configDigits: 8, saltDigits: 6, maxLength: 20 }, fullWeight: 100 }\n"
+            + "        nodes:\n          runtime:\n            template: t/runtime\n            config: { k: 1 }\n"),
         Document("templates/t/group/Pulumi.yaml", "name: group\n"),
     ]);
 

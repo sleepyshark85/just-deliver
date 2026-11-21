@@ -12,13 +12,13 @@ public sealed class EnvUpTests
     private const string DefinitionName = "envs/dev.yaml";
     private const string BaseName = "envs/shared.env.yaml";
 
-    private const string Definition = "kind: EnvironmentDefinition\nname: dev\nregion: region-1\ntype: dev\noffers: [thing]\n";
+    private const string Definition = "kind: EnvironmentDefinition\nname: dev\nregion: region-1\ntype: dev\nplatform: azure\noffers: [thing]\n";
 
-    private const string Base = "kind: Environment\nname: shared\nregion: region-1\ntype: dev\noffers: []\nvalues: { shared-part: { id: s-1 } }\n";
+    private const string Base = "kind: Environment\nname: shared\nregion: region-1\ntype: dev\nplatform: azure\noffers: []\nvalues: { shared-part: { id: s-1 } }\n";
 
     // The environment-scope part the offered component uses: two nodes, the second reading the first, so the walk has an order.
     private const string Part =
-        "kind: SharedResource\nname: group\ndescription: d\nscope: environment\nnodes:\n  a:\n    template: t/a\n    config: { k: 1 }\n"
+        "kind: SharedResource\nname: group\ndescription: d\nplatform: azure\nscope: environment\nnodes:\n  a:\n    template: t/a\n    config: { k: 1 }\n"
         + "  b:\n    template: t/b\n    config: { v: '${a.id}' }\nexports: { id: '${b.id}' }\n";
 
     private readonly FakeBackend _backend = new();
@@ -29,11 +29,11 @@ public sealed class EnvUpTests
     // The catalog with the part, which the offered component uses by the name it is given.
     private static SourceCatalog Catalog(string part = Part, string partName = "group") => new("cat",
     [
-        Document("catalog.yaml", "kind: Catalog\nversion: \"1\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n"),
+        Document("catalog.yaml", "kind: Catalog\nversion: \"1\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n"),
         Document("shared/group.yaml", part),
         Document("components/thing.yaml",
-            $"kind: Component\nname: thing\ndescription: d\nexports: [out]\nuses: [{partName}]\nimplementations:\n  default:\n    classes:\n      standard:\n"
-            + "        nodes:\n          n:\n            template: t/n\n            config: { k: 1 }\n        exports:\n          out: x\n"),
+            $"kind: Component\nname: thing\ndescription: d\nexports: [out]\nimplementations:\n  azure:\n    uses: [{partName}]\n    types:\n      default:\n        classes:\n          standard:\n"
+            + "            nodes:\n              n:\n                template: t/n\n                config: { k: 1 }\n            exports:\n              out: x\n"),
         Document("templates/t/a/Pulumi.yaml", "name: a\n"),
     ]);
 
@@ -55,7 +55,7 @@ public sealed class EnvUpTests
         Assert.Empty(result.Errors);
         Assert.Equal(("dev", "region-1", "dev"), (result.Environment?.Name, result.Environment?.Region, result.Environment?.Type));
         Assert.Equal(
-            "kind: Environment\nname: dev\nregion: region-1\ntype: dev\noffers:\n- thing\nvalues:\n  shared-part:\n    id: s-1\n  group:\n    id: id-_dev.dev.substrate.b\n",
+            "kind: Environment\nname: dev\nregion: region-1\ntype: dev\nplatform: azure\noffers:\n- thing\nvalues:\n  shared-part:\n    id: s-1\n  group:\n    id: id-_dev.dev.substrate.b\n",
             Encoding.UTF8.GetString(result.Descriptor!.Value.Span)); // no byte-order mark: GetString would keep one as U+FEFF
         Assert.Equal(["templates cat/templates t/a/Pulumi.yaml", "backend"], _connections.Built);
     }

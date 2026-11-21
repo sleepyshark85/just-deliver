@@ -17,40 +17,42 @@ public sealed class DeployAzureTests : ProbeAzureTest
     public async Task Deploy_creates_a_group_and_a_workspace_in_it_and_a_second_deploy_changes_nothing()
     {
         var catalog = Path.Combine(Root, "catalog");
-        Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
+        Write("catalog/catalog.yaml", "kind: Catalog\nversion: \"test\"\nplatforms: [azure]\nenvironmentTypes: { dev: { layer: environment }, stage: { layer: environment, approval: true } }\n");
         Write("catalog/naming.yaml", "kind: Naming\nrules:\n  law:\n    pattern: \"law-{env}-{hash}\"\n    maxLength: 63\n    allowed: \"[a-z0-9-]\"\n");
         Write("catalog/components/probe.yaml", """
             kind: Component
             name: probe
             description: Test-only component.
             exports: [workspace]
-            uses: [probe-group]
             implementations:
-              default:
-                classes:
-                  standard:
-                    nodes:
-                      group:
-                        template: azure/resource-group
-                        config:
-                          resourceGroupName: ${probe-group.name}
-                          location: ${env.region}
-                          tags: { project: just-deliver-mvp }
-                      workspace:
-                        template: azure/log-analytics
-                        config:
-                          resourceGroupName: ${group.resourceGroupName}
-                          location: ${group.location}
-                          workspaceName: ${name('law')}
-                          dailyQuotaGb: 0.15
-                    exports:
-                      workspace: ${workspace.workspaceName}
+              azure:
+                uses: [probe-group]
+                types:
+                  default:
+                    classes:
+                      standard:
+                        nodes:
+                          group:
+                            template: azure/resource-group
+                            config:
+                              resourceGroupName: ${probe-group.name}
+                              location: ${env.region}
+                              tags: { project: just-deliver-mvp }
+                          workspace:
+                            template: azure/log-analytics
+                            config:
+                              resourceGroupName: ${group.resourceGroupName}
+                              location: ${group.location}
+                              workspaceName: ${name('law')}
+                              dailyQuotaGb: 0.15
+                        exports:
+                          workspace: ${workspace.workspaceName}
             """);
         WriteRuntimeStandIn();
         WriteProbeGroup();
         CopyTemplates("resource-group", "log-analytics");
 
-        var environment = Write("environment.yaml", $"kind: Environment\nname: s11-{Suffix}\nregion: {await RegionAsync()}\ntype: dev\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
+        var environment = Write("environment.yaml", $"kind: Environment\nname: s11-{Suffix}\nregion: {await RegionAsync()}\ntype: dev\nplatform: azure\noffers: [probe, test-runtime]\nvalues:\n  probe-group: {{ name: {ResourceGroup} }}\n");
         var workload = Write("workload.yaml", "apiVersion: just-deliver/v1\nkind: Workload\nmetadata: { name: s11-probe, team: platform-team }\ncontainer:\n  image: example.invalid/probe:1\nrequires:\n  - type: probe\n");
 
         var backend = CreateBackend();
